@@ -1,0 +1,207 @@
+(def element ShortSseTaskConditionTooltip (	_isTask:bool,
+											_headerText:str,
+											_sseConditionId:number = null,
+											_descriptionText:str = '',
+											_hasMouseInstruction:bool = false,
+											_conditionId:number = null,
+											_rewards:array = [],
+											_conditionText:str = '',
+											_stepsNumber:number = null,
+											_nation:str = '',
+											_shipType:str = '')
+	(scope
+		(var shipAcesSeasonEntity:gfx = "$datahub.getSingleEntity(CC.shipAcesSeason)")
+		(var shipAcesSeasonComponent:gfx = "shipAcesSeasonEntity.shipAcesSeason")
+		(var activeSprintId:number = "shipAcesSeasonComponent.activeSprintId" (event "shipAcesSeasonComponent.evChanged"))
+
+		(var shipAcesSprintEntityDH:gfx = "$datahub.getEntity(_sseConditionId)")
+		(var sprintId:number = "shipAcesSprintEntityDH.shipAcesSprint.sprintId" (event "shipAcesSprintEntityDH.shipAcesSprint.evChanged"))
+		(var shipAcesSprintEntity:gfx = "$datahub.getPrimaryEntity(CC.shipAcesSprint, sprintId)")
+
+		(var primaryReward:str = "shipAcesSeasonComponent.primaryReward" (event "shipAcesSeasonComponent.evChanged"))
+		(var secondaryReward:str = "shipAcesSeasonComponent.secondaryReward" (event "shipAcesSeasonComponent.evChanged"))
+
+		(var shipAcesSprintComponent:gfx= "shipAcesSprintEntity.shipAcesSprint")
+		(var incomeCurrencyTotal:number = "shipAcesSprintComponent.incomeTotal" (event "shipAcesSprintComponent.evChanged"))
+		(var incomeSecondaryTotal:number = "shipAcesSprintComponent.incomeSecondaryTotal" (event "shipAcesSprintComponent.evChanged"))
+		(var bestResult:number = "shipAcesSprintComponent.bestResult" (event "shipAcesSprintComponent.evChanged"))
+		(var taskTotal:number = "shipAcesSprintComponent.taskTotal" (event "shipAcesSprintComponent.evChanged"))
+		(var isPreviousSprint:bool = "sprintId < activeSprintId")
+		(var isSprintMissed:bool = "taskTotal == 0 && isPreviousSprint")
+		(var isResultVisible:bool = "!_isTask && !isSprintMissed")
+		(var hasResult:bool = "incomeCurrencyTotal > 0")
+
+		(macro SERVER_TIME_SCOPE)
+		(var startSprintTime:number = "shipAcesSprintComponent.startTime ?: 0" (event "shipAcesSprintComponent.evChanged"))
+		(macro COUNTDOWN_SCOPE "'formattedStartSprintTime'" "startSprintTime" "'HIGHEST,WITH_DAYS'")
+		(var nextSprintTime:number = "shipAcesSprintComponent.nextSprintTime ?: 0" (event "shipAcesSprintComponent.evChanged"))
+		(macro COUNTDOWN_SCOPE "'formattedFinishSprintTime'" "nextSprintTime" "'HIGHEST,WITH_DAYS'")
+
+		(var timeLeftNext:number = "nextSprintTime - serverTime")
+		(var daysUntilShipAcesSprintFinish:number = "floor(timeLeftNext / DAY_IN_SEC)")
+
+		(var isSprintActive:bool = "sprintId == activeSprintId")
+		(var isSprintLocked:bool = "sprintId > activeSprintId")
+
+		(var statusTextSprintTimeLeft:str = "isSprintActive	? subst('IDS_SUBST_SHIP_ACES_TIME_STATUS_FINISHING_SPRINT', [], { timeLeft: formattedFinishSprintTime })
+															: isSprintLocked ? subst('IDS_SUBST_SHIP_ACES_TIME_STATUS_START', [], { timeLeft: formattedStartSprintTime })
+	 														: 'IDS_SUBST_SHIP_ACES_TIME_STATUS_FINISHED_SPRINT'")
+		
+		(var unifiedStatusTimeLeft:str = "daysUntilShipAcesSprintFinish	? SC.Ui_styles.UNIFIED_STATUS.DATE : SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION")
+		(var unifiedStatusSprint:str = "isSprintActive	? unifiedStatusTimeLeft :
+	 									isSprintLocked	? SC.Ui_styles.UNIFIED_STATUS.DATE
+	 													: SC.Ui_styles.UNIFIED_STATUS.CHECK")
+
+		(var finishTime:number = "nextSprintTime - startSprintTime")
+		(var formattedFinishTime:str = "formatTime(finishTime, 'HIGHEST', '', false)")
+
+		(var shipAcesRewardsData:array = "[	{subtype: primaryReward,	amount: incomeCurrencyTotal},
+	 										{subtype: secondaryReward,	amount: incomeSecondaryTotal},
+	 										{subtype: 'task_total',		amount: taskTotal, isAdditionalLine: true},
+	 										{subtype: 'best_result',	amount: bestResult, isAdditionalLine: true}]")
+		
+		(var shipAcesRewardsDataSliced:array = "hasResult	? shipAcesRewardsData
+															: [shipAcesRewardsData[0]]")
+	)
+	(style (width = 340px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "_headerText"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "_isTask")
+				(args
+					_descriptionText = "_descriptionText"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isTask")
+				(args
+					_unifiedStatus = "unifiedStatusSprint"
+					_text = "statusTextSprintTimeLeft"
+				)
+			)
+		)
+			
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!_isTask && isSprintLocked"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isTask && isSprintLocked")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DATE"
+					_text =	"subst('IDS_SUBST_SHIP_ACES_TIME_STATUS_DURATION_SPRINT', [], {timeLeft: formattedFinishTime})"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_conditionId"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemSseConditions'
+				(bind enabled "_conditionId")
+				(args
+					_conditionId = "_conditionId"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isSprintMissed"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isSprintMissed")
+				(args
+					_text = 'IDS_SHIP_ACES_SPRINT_TOOLTIP_STATUS_SPRINT_MISSED'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isTask"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDHRewards'
+				(bind enabled "_isTask")
+				(args
+					_rewardsTitle = 'IDS_SSE_TASK_REWARD_COLON'
+					_rewards = "_rewards"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isResultVisible"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemSecondaryHeaderText'
+				(bind enabled "isResultVisible")
+				(args
+					_headerText = 'IDS_SHIP_ACES_SPRINT_TOOLTIP_TITLE_RESULTS'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isResultVisible"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemRewardsList'
+				(bind enabled "isResultVisible")
+				(args
+					_rewards = "shipAcesRewardsDataSliced"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_hasMouseInstruction"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_hasMouseInstruction")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text = "_isTask ? 'IDS_SHIP_ACES_DETAILED_INFO_MOUSE_INSTRUCTION' : 'IDS_HINT_LEFT_CLICK_FOR_FURTHER_INFO'"
+				)
+			)
+		)
+	)
+)

@@ -1,0 +1,267 @@
+(def constant CAPTURE_POINT_ANIM_DURATION 0.25)
+(def constant CAPTURE_POINT_FX_ANIM_DURATION 0.15)
+(def constant CAPTURE_POINT_ASSETS_PATH 'swf:../battle_hud/markers/capture_point/capture_point.swf:')
+(def constant CAPTURE_POINT_LABEL_COLORS {
+	RED: 0xFF3300,
+	GREEN: 0x4CE8AA,
+	WHITE: 0xFFFFFF
+})
+
+(def element WorldCapturePointMarker (_markerEntity:gfx)
+	(scope
+		(macro SCOPE_HIGHLIGHT_MARKER_ON_WORLD_MOUSE_OVER)
+	)
+	
+	(block
+		(style
+			(position = "absolute")
+			(bottom = 36px)
+		)
+		(element TargetAnimationItem "_markerEntity")
+	)
+
+	(element CapturePointIndicator "_markerEntity"
+		(style
+			(marginLeft = "-50%") (marginTop = "-50%")
+			(pivotX = "50%") (pivotY = "50%")
+		)
+		(macro EFFECT_HIGHLIGHT_MARKER_ON_MOUSE_OVER)
+	)
+)
+
+
+(def element CapturePointIndicator (_markerEntity:gfx, _isBattleStatsElement:bool=false)
+	(scope
+		(event evSetStartPose)
+		(macro GET_MARKER_ENTITY_COMPONENT 'capturePoint')
+		(macro GET_MARKER_ENTITY_COMPONENT 'progress')
+		(macro GET_MARKER_ENTITY_COMPONENT 'relation')
+		(macro VAR_RELATION "_markerEntity")
+		(macro BATTLE_TIMER_SCOPE)
+
+		(var pointType:number = "capturePointComponent ? capturePointComponent.type : 0")
+		(var isFlagPoint:bool = "isIn(pointType, [SC.Battle.CONTROL_POINT_TYPE.BASE_WITH_POINTS, SC.Battle.CONTROL_POINT_TYPE.BASE])")
+
+		(var capturePointLabel:str = "capturePointComponent.label ?: ''")
+		(var isCapturePointActive:bool = "toBool(capturePointComponent.active)" (event "capturePointComponent.evActiveChanged"))
+		(var capturePointTimerName:str = "capturePointComponent.timerName ?: ''" (event "_markerEntity.evAdded"))
+		(var bothInside:bool = "capturePointComponent && capturePointComponent.bothInside" (event "capturePointComponent.evBothInsideChanged"))
+
+		(var captureProgress:number = "progressComponent.value ?: 0" (event "progressComponent.evChanged"))
+		(var isCaptured:bool = "captureProgress == 0")
+
+		(var linkedTimerTaskEntity:dhEntity = "_isBattleStatsElement ? $dh.getPrimaryEntity(CC.task, capturePointTimerName) : null")
+		(var timeoutComponent:dhComponent = "linkedTimerTaskEntity.timeout" (event "linkedTimerTaskEntity.evAdded") (event "linkedTimerTaskEntity.evRemoved"))
+		(var linkedTimerValue:number = "timeoutComponent.time ?: 0" (event "timeoutComponent.evTimeChanged") (event "timeoutComponent.evRunningChanged"))
+		(var timeLeftToCapturePointActivation:number = "linkedTimerValue > currentTime ? linkedTimerValue - currentTime : 0")
+
+		
+		(var invaderRelation:number = "capturePointComponent ? capturePointComponent.invaderRelation : 0" (event "capturePointComponent.evInvaderChanged"))
+		(var relationValue:number = "relationComponent ? relationComponent.value : SC.Battle.PLAYER_RELATION.SELF" (event "relationComponent.evChanged"))
+		(var barRelation:number = "isCaptured ? relationValue : invaderRelation")
+		(var isAlly:bool = "relationValue == SC.Battle.PLAYER_RELATION.ALLY")
+		(var isEnemy:bool = "relationValue == SC.Battle.PLAYER_RELATION.ENEMY")
+		(var isNeutral:bool = "relationValue == SC.Battle.PLAYER_RELATION.NEUTRAL")
+
+		
+		(var isCaptureInProgress:bool = "bothInside || captureProgress > 0" (event "progressComponent.evChanged") (event "capturePointComponent.evBothInsideChanged"))
+		(var progressInvertion:number = "isNeutral ? 1 : -1")
+		(var indicatorProgress:number = "isCaptureInProgress	? captureProgress == 0  ? 360 
+																						: 360 * captureProgress * progressInvertion
+																: 0")
+
+		
+		(var capturedBarSymbol:str = "isAlly ? 'capture_point_progressbar_ally' : 'capture_point_progressbar_enemy'")
+		(var capturedBarPath:str = "CAPTURE_POINT_ASSETS_PATH + capturedBarSymbol")
+
+		(var invaderBarSymbol:str = "isCaptureInProgress	?	barRelation == SC.Battle.PLAYER_RELATION.ALLY	? 'capture_point_progressbar_ally'
+																												: 'capture_point_progressbar_enemy'
+															: ''")
+		(var invaderBarPath:str = "invaderBarSymbol ? CAPTURE_POINT_ASSETS_PATH + invaderBarSymbol : ''")
+
+		(var labelTextColorTransform:dict = "	isAlly		? TWO_TEAMS_COLOR_TRANSFORMS['ally'] :
+												isEnemy		? TWO_TEAMS_COLOR_TRANSFORMS['enemy']
+															: TWO_TEAMS_COLOR_TRANSFORMS['white'] ")
+
+		(var startCaptureRotation:number = "isNeutral ? 45 : -45")
+		(var pointRelationHistory:number = "relationValue" watch=false init=false)
+		(bind pointRelationHistory "relationValue" watch=false init=false (bind enabled "isCaptureInProgress"))
+		(var endingCaptureRotation:number = "	pointRelationHistory == SC.Battle.PLAYER_RELATION.NEUTRAL	?	isNeutral	? 45
+																															: -45 :
+												pointRelationHistory == SC.Battle.PLAYER_RELATION.ALLY		?	isAlly		? -45
+																															: 45
+																											:	isEnemy		? -45
+																															: 45")
+	)
+
+	(dispatch evSetStartPose on='addedToStage')
+
+	
+	
+	
+
+	(block
+		(style
+			(bind alpha "isCapturePointActive ? 1 : 0.5")
+			(width = 40px) (height = 40px) 
+			(pivotX = "50%") (pivotY = "50%")
+			(align = "center|middle")
+			(rotation = 0)
+		)
+
+		(controller $Animation
+			(bindcall play	duration="CAPTURE_POINT_ANIM_DURATION"
+							to="{rotation: startCaptureRotation}"
+							(bind enabled "isCaptureInProgress")
+							(event "evSetStartPose")
+			)
+
+			(bindcall play	duration="CAPTURE_POINT_ANIM_DURATION"
+							from="{rotation: endingCaptureRotation}"
+							to="{rotation: 0}"
+							(bind enabled "!isCaptureInProgress")
+							(event "evSetStartPose")
+			)
+		)
+
+		
+		
+		
+		(block
+			(style
+				(bind backgroundImage "CAPTURE_POINT_ASSETS_PATH + 'capture_point_frame'")
+				(backgroundSize = "autosize")
+			)
+
+			
+			
+			
+			(block
+				(class $FullsizeAbsolute)
+				(bind visible "!isNeutral")
+				(style 
+					(bind backgroundImage "capturedBarPath")
+				)
+			)
+
+			
+			
+			
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(align = "center|middle")
+				)
+
+				(block
+					(controller $Sector
+						(bind arc "indicatorProgress")
+						(bind offset "isNeutral ? -135 : -45")
+						(radius = "23")
+					)
+					(isMask = true)
+				)
+
+				(block
+					(class $FullsizeAbsolute)
+					(style
+						(bind backgroundImage "invaderBarPath")
+					)
+				)
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(alpha = 0)
+					(bind backgroundImage "CAPTURE_POINT_ASSETS_PATH + 'capture_point_contest'")
+				)
+				(controller $Animation
+					(bindcall play
+						repeatCount=-1
+						keyframes="[{time: 0.01, to:{alpha:0}},
+									{time: 0.35, to:{alpha:1}},
+									{time: 0.45, to:{alpha:1.1}},
+									{time: 1.05, to:{alpha:0}}
+									]" 
+						(bind enabled "bothInside")
+						(event "evSetStartPose")
+					)
+
+					(bindcall play
+						duration="0.25"
+						to="{alpha: 0}"
+						action="killAll"
+						(bind enabled "!bothInside")
+						(event "evSetStartPose")
+					)
+				)
+			)
+		)
+	)
+
+	
+	
+	
+	(block
+		(bind visible "!_isBattleStatsElement || isCapturePointActive")
+
+		(class $MiddleVHAbsolutely)
+
+		(style
+			(width = 28px)
+			(height = 28px)
+		)
+
+		(block
+			(bind visible "!isFlagPoint")
+			(class $FullsizeAbsolute)
+			(style
+				(bind backgroundImage "CAPTURE_POINT_ASSETS_PATH + 'capture_point_' + toLower(capturePointLabel) + '_outline'")
+			)
+			(block
+				(class $Fullsize)
+				(style
+					(bind backgroundImage "CAPTURE_POINT_ASSETS_PATH + 'capture_point_' + toLower(capturePointLabel)")
+				)
+				(bind colorTransform "labelTextColorTransform")
+			)
+		)
+
+		(block
+			(bind visible "isFlagPoint")
+			(style
+				(bind backgroundImage "CAPTURE_POINT_ASSETS_PATH + 'capture_base_flag_' + relation")
+				(backgroundSize = "autosize")
+			)
+		)
+	)
+
+	(block $enabled = "_isBattleStatsElement"
+		(bind visible "!isCapturePointActive && timeLeftToCapturePointActivation > 0")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "NO_COLOR")
+			(align = "middle")
+			(width = 40px)
+			(paddingLeft = 5px)
+		)
+		
+		(controller $Tooltip (renderer = 'SimpleStatusTooltip')
+			(args 
+				_unifiedStatus="SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_text="'IDS_TIME_TILL_CAPTURE_POINT_ACTIVATION'"
+			)
+			(align="bottom|center")
+			(position="border")
+			(offset=[0, 6])
+			(screenBoundsOffset={left:10, top:10, right:10, bottom:10})
+			(macro SIMPLE_TOOLTIP_ANIMATION)
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(bind text "countdownFormat(timeLeftToCapturePointActivation, 0, true, true)")
+		)
+	)
+)

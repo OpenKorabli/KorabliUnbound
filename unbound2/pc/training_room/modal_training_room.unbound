@@ -1,0 +1,1487 @@
+(def constant TRAINING_ROOMS_MAP "{
+	SC.Ui_windows.ROUTE.TRAINING_ROOM_MAIN:			'TrainingRoomMainInset',
+	SC.Ui_windows.ROUTE.TRAINING_ROOM_SETTINGS:		'TrainingRoomSettingsInset'
+}")
+
+(def constant FILL_BOTS_INFOTIP_BUTTON_ALPHA  "{
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.5,
+	SC.Ui_styles.BUTTON_STATE.OVER		: TA,
+	SC.Ui_styles.BUTTON_STATE.UP		: TC
+}")
+
+(def constant DEFAULT_TEAM_MIN_WIDTH	340px)
+(def constant DEFAULT_TEAM_MAX_WIDTH	420px)
+(def constant OTHER_TEAM_MIN_WIDTH		290px)
+
+(def constant DEFAULT_TEAM_MIN_HEIGHT	460px)
+(def constant DEFAULT_TEAM_MAX_HEIGHT	666px)
+
+(def constant OBSERVER_TEAM_MIN_HEIGHT	230px)
+(def constant OBSERVER_TEAM_MAX_HEIGHT	333px)
+
+(def element ModalWindowTrainingRoom ()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(macro USER_PREF_DATA)
+		(var renderElement:str = "trainingRoomActiveChild ? TRAINING_ROOMS_MAP[trainingRoomActiveChild] : ''")
+	)
+	(class $Fullsize)
+	
+	(block
+		(class $FullsizeAbsolute)
+	
+		
+		(controller $Animation
+			(bindcall play
+				duration = 0.3
+				to = "{alpha: 0}"
+				action = "kill"
+				(event "startHide")
+			)
+			(bindcall play
+				duration = 0.01
+				to = "{alpha: 1}"
+				action = "kill"
+				(event "startShow")
+			)
+		)
+
+		(element AnimatedBackground _selectedCategory="'training_room'" _type = "SC.Ui_styles.ANIMATED_BG.DEFAULT")
+	)
+
+	(block
+		(class $Fullsize)
+		
+		(controller $Instance
+			(bind renderer "renderElement")
+			(bind enabled "renderElement")
+			(args _label = "windowInsetLabel")
+		)
+	)
+)
+
+(def element TrainingRoomMainInset (_label:str)
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(macro USER_PREF_DATA)
+		(macro CAROUSEL_HEIGHT_SCOPE)
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro CALCULATE_PORT_HEADER_ELEM_SIDE_PADDING)
+		
+		(var roomMapId:number = "trainingRoomEntity.trainingRoom.mapId" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+		(var mapInfoEntity:gfx = "$datahub.getPrimaryEntity(CC.mapInfo, roomMapId)")
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+
+		(var isSelfPlayerCommander:bool = "preBattlePlayerSimpleComponent.isCommander" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+		(var selfTeamId:number = "preBattlePlayerSimpleComponent.teamId ?: 0" (event "preBattlePlayerSimpleComponent.evTeamIdChanged"))
+		(var isSpectatorsTeam:bool = "selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+		
+		(var commanderPostfix:str = "isSelfPlayerCommander ? '_COMMANDER' : ''")
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['createRestrictionsSubCollection', { componentId: trainingRoomEntity.shipListRestrictions.id }]" init=false watch=false on='addedToStage')
+	
+	(class $Fullsize)
+
+	(block
+		(class $Fullsize)
+		(style (bind paddingBottom "carouselAreaHeight"))
+
+		(block
+			(style
+				(width = 100%)
+				(flow = "horizontal")
+				(align = "center")
+				(height = 60px)
+			)
+			(alpha = 0)
+
+			(controller $Animation
+				(bindcall play  delay = 0.175
+								duration = 0.15
+								from="{ alpha: 0 }"
+								to="{ alpha: 1 }"
+								easing = "Easing.quad_out"
+								action = "killAll"
+								on='addedToStage'
+				)
+				(bindcall play  delay = 0.055
+								duration = 0.15
+								to="{ alpha: 0 }"
+								easing = "Easing.quad_in"
+								action = "killAll"
+								(event "startHide")
+				)
+			)
+
+			
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(backgroundColor = "PORT_HEADER_BACKGROUND_COLOR")
+					(alpha = "!isHighContrast ? 0.6 : 1")
+				)
+
+				(controller $Animation
+					(bindcall play
+						duration = 0.15
+						from	 = "{ alpha: 1 }"
+						to		 = "{ alpha: 0.8 }"
+						easing	 = "Easing.quad_out"
+						action	 ="kill"
+						reverse = "isHighContrast"
+						(bind trigger "isHighContrast")
+					)
+				)
+			)
+			
+
+			(block
+				(class $MiddleAlignedAbsolutely)
+				(style
+					(width = 1280px)
+					(height = 60px)
+					(backgroundImage = 'url:../panel_background/dock_menu_bg.png')
+				)
+			)
+
+			(hblock
+				(style (position = "absolute"))
+
+				(element SettingsButtonPort)
+			)
+			(block
+				(style (align = "center") (height = 60px))
+
+				(block
+					(style (marginTop = "S"))
+
+					(controller $Instance renderer='StartBattleButtonBig'
+						(bind enabled "isSelfPlayerCommander || isSpectatorsTeam")
+					)
+
+					(controller $Instance renderer='BigReadyForFormationBattleButton'
+						(bind enabled "!isSelfPlayerCommander && !isSpectatorsTeam")
+						(args
+							_isTrainingRoom = true
+						)
+					)
+				)
+
+				(block
+					(style
+						(position = "absolute")
+						(marginLeft = -100%)
+					)
+
+					(element TrainingRoomPlayerState)
+				)
+
+				(block
+					(style
+						(position = "absolute")
+						(left = 100%)
+						(bind marginLeft "PORT_HEADER_CONTROL_DEFAULT_PADDING + PORT_HEADER_START_BATTLE_BTN_SIDE_MARGIN")
+					)
+
+					(element TrainingRoomManagementButton)
+				)
+			)
+			(block
+				(style (position = "absolute") (top = 21px) (right = 19px))
+				(element ModalWindowCloseIcon
+					_tooltipText = "'IDS_LEAVE_ROOM_CREATED' + commanderPostfix"
+				)
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(style (align = "center|middle"))
+			
+			(element TrainingRoomMainInsetContent)
+		)
+	)
+)
+
+(def element TrainingRoomMainInsetContent ()
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var observersAvailable:bool = "trainingRoomEntity.trainingRoom.observersAvailable" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+		(var isSpawnSwapped:bool = "trainingRoomEntity.trainingRoom.isSpawnSwapped" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+	)
+	(style (flow = "horizontal"))
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+		(style (marginRight = "{ 1280:XS, 1920:LS }"))
+		(element TrainingRoomInfo)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = "{ 1280:DEFAULT_TEAM_MIN_WIDTH, 1920:DEFAULT_TEAM_MAX_WIDTH }")
+			(height = "{ 720:DEFAULT_TEAM_MIN_HEIGHT, 1080:DEFAULT_TEAM_MAX_HEIGHT }")
+			(marginRight = "XS")
+		)
+		
+		(element TeamMainElement
+			_teamId = "SC.Common.TRAINING_ROOM_TEAMS_IDS.SELF_TEAM"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style (height = "{ 720:DEFAULT_TEAM_MIN_HEIGHT, 1080:DEFAULT_TEAM_MAX_HEIGHT }"))
+		
+		(block
+			(style
+				(width = "{ 1280:OTHER_TEAM_MIN_WIDTH, 1920:DEFAULT_TEAM_MAX_WIDTH }")
+				(height = 100%)
+			)
+			
+			(element TeamMainElement
+				_teamId = "SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM"
+			)
+		)
+		(block
+			(bind visible "observersAvailable")
+			(style
+				(width = "{ 1280:OTHER_TEAM_MIN_WIDTH, 1920:DEFAULT_TEAM_MAX_WIDTH }")
+				(height = "{ 720:OBSERVER_TEAM_MIN_HEIGHT, 1080:OBSERVER_TEAM_MAX_HEIGHT }"))
+			
+			(controller $Instance renderer='TeamMainElement'
+				(bind enabled "observersAvailable")
+				(args
+					_teamId = "SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM"
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style (width = "{ 1280:DEFAULT_TEAM_MIN_WIDTH, 1920:DEFAULT_TEAM_MAX_WIDTH }") (height = "{ 720:DEFAULT_TEAM_MIN_HEIGHT, 1080:DEFAULT_TEAM_MAX_HEIGHT }") (marginLeft = "XS"))
+
+		(element TeamMainElement
+			_teamId = "SC.Common.TRAINING_ROOM_TEAMS_IDS.OTHER_TEAM"
+		)
+	)
+)
+
+(def element TrainingRoomInfo ()
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var trainingRoomComponent:gfx = "trainingRoomEntity.trainingRoom")
+
+		(var roomMapId:number =	"trainingRoomComponent.mapId" 			(event "trainingRoomComponent.evUpdate"))
+		(var scenario:str = 	"trainingRoomComponent.scenario" 		(event "trainingRoomComponent.evUpdate"))
+		(var duration:number = 	"trainingRoomComponent.duration ?: 0" 	(event "trainingRoomComponent.evUpdate"))
+		(var teamSize:number = 	"trainingRoomComponent.teamSize ?: 0" 	(event "trainingRoomComponent.evUpdate"))
+		(var battleTime:number = "duration / 60")
+
+		(var isClosed:bool = 				"trainingRoomComponent.isClosed"				(event "trainingRoomComponent.evUpdate"))
+		(var isObserversAvailable:bool = 	"trainingRoomComponent.observersAvailable" 		(event "trainingRoomComponent.evUpdate"))
+		(var isEnemyShipsHidden:bool = 		"trainingRoomComponent.hideShips" 				(event "trainingRoomComponent.evUpdate"))
+		(var isFogOfWar:bool = 				"trainingRoomComponent.isFogOfWar" 				(event "trainingRoomComponent.evUpdate"))
+		(var isViewShipInfoDisabled:bool = 	"trainingRoomComponent.isViewShipInfoDisabled" 	(event "trainingRoomComponent.evUpdate"))
+		(var isSpawnSwapped:bool = 			"trainingRoomEntity.trainingRoom.isSpawnSwapped" (event "trainingRoomComponent.evUpdate"))
+
+		(var mapInfoEntity:gfx = "$datahub.getPrimaryEntity(CC.mapInfo, roomMapId)")
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:dhComponent = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isSelfPlayerOwner:bool = "preBattlePlayerSimpleComponent.isCommander"	(event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+
+		(event evSpawnSwapDispatched)
+		(event evSpawnSwapReceived)
+		(event evSpawnSwapAnimated)
+		(var isSpawnSwapBlocked:bool = "false")
+		(bind isSpawnSwapBlocked "true" init=false (event "evSpawnSwapDispatched"))
+		(bind isSpawnSwapBlocked "false" init=false (event "evSpawnSwapReceived"))
+		(var isSpawnSwapEnabled:bool = "isSelfPlayerOwner && !isSpawnSwapBlocked")
+
+		(macro STAGE_SIZE)
+		(var stageRelativeWidth:number = "min(stageWidth, 1920)")
+		(var stageRelativeHeight:number = "min(stageHeight, 1080)")
+
+		
+		(var mapSize:number = "stageRelativeWidth / stageRelativeHeight	< 16 / 9	? (372 - 274) * (stageRelativeWidth - 1280) / WIDTH_RATIO + 274
+																					: (372 - 274) * (stageRelativeHeight - 720) / HEIGHT_RATIO + 274")
+		(var isHDScreen:bool = "stageWidth < 1920 || stageHeight < 1080")
+	)
+
+	(dispatch evSpawnSwapReceived delay=1  dir="EventDirection.DOWN" (event "trainingRoomComponent.evUpdate")) 
+	(dispatch evSpawnSwapAnimated dir="EventDirection.DOWN" (event "evSpawnSwapDispatched"))
+
+	(style
+		(width = "{ 1280:OTHER_TEAM_MIN_WIDTH, 1920:DEFAULT_TEAM_MAX_WIDTH }")
+		(height = "{ 720:DEFAULT_TEAM_MIN_HEIGHT, 1080:DEFAULT_TEAM_MAX_HEIGHT }")
+		(backgroundColor = 0x50000000)
+		(align = "center")
+
+		(paddingTop = "{ 720:SXS, 1080:MS }")
+		(paddingLeft = "{ 1280:S, 1920:MS }")
+		(paddingRight = "{ 1280:S, 1920:MS }")
+		(paddingBottom = "{ 720:S, 1080:MS }")
+	)
+
+	
+	(hblock
+		(style (width = 100%) (align = "middle"))
+
+		(block
+			(style (width = 100%))
+			
+			(tf
+				(class $TextDefaultBold19NM)
+				(style (width = 100%) (alpha = "TA") (wordWrap = false) (elideMode = true))
+				(bind text "tr('IDS_' + mapInfoEntity.mapInfo.name)")
+			)
+		)
+
+		(hblock
+			(style (height = 1px) (align = "middle"))
+			(block
+				(name = 'icon_hide_enemy_ships')
+
+				(bind visible "isEnemyShipsHidden")
+				(style
+					(width = 24px) (height = 24px)
+					(backgroundImage = 'url:../service_kit/training_room/icon_ship_not_detected.png')
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = "isFogOfWar ? 'IDS_FOG_OF_WAR_IN_TRAINING' : 'IDS_ENEMY_SHIPS_ARE_HIDDEN'"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+			(block
+				(bind visible "isObserversAvailable")
+				(style
+					(width = 24px) (height = 24px)
+					(marginLeft = "XS")
+					(backgroundImage = 'url:../service_kit/training_room/icon_observer.png')
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_TRAINING_ROOM_SPECTATORS_IS_ENABLED'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+			(block
+				(bind visible "isClosed")
+				(style
+					(width = 24px) (height = 24px)
+					(marginLeft = "XS")
+					(backgroundImage = 'url:../service_kit/training_room/icon_locked_room.png')
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_PRIVATE_TRAINING_ROOM'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+		)
+	)
+	(block
+		(style (width = 100%) (marginTop = "SXS"))
+		(tf
+			(class $TextDefault17NM)
+			(style (alpha = "TC") (width = 100%) (wordWrap = false) (elideMode = true))
+			(bind text "scenario != '' ? tr('IDS_SCENARIO_' + toUpper(scenario)) : ''")
+		)
+	)
+
+	(block
+		(name = 'trainingRoomInfo')
+		(style
+			(bind width "mapSize")
+			(bind height "mapSize")
+
+			(marginTop = "{ 720:SXS, 1080:MS }")
+		)
+
+		(element MinimapBackgroundBlock
+			_minimapWaterPath = "mapInfoEntity.mapInfo.minimapWaterPath"
+			_minimapPath = "mapInfoEntity.mapInfo.minimapPath"
+			_isShowSpawn = true
+		)
+
+		(controller $Tooltip
+			(renderer = 'TrainingRoomTooltip')
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			(args
+				_trainingRoomComponent = "trainingRoomComponent"
+			)
+		)
+	)
+	
+	(hblock
+		(style (width = 100%) (marginTop = "{ 720:SXS, 1080:M }"))
+		
+		(block
+			(style (width = 100%))
+			(tf
+				(class $TextDefault17NM)
+				(style (alpha = 0.6))
+				(text = 'IDS_TRAINING_BATTLE_TIME')
+			)
+		)
+		(tf
+			(name = 'TooltipDuration')
+			(class $TextDefaultBold17NM)
+			(style (alpha = "TC"))
+			(bind text "toString(battleTime) + ' ' + trPlural('IDS_PL_MINUTE_FULL', battleTime)")
+		)
+	)
+
+	(hblock
+		(style (width = 100%) (marginTop = "{ 720:SXS, 1080:M }"))
+		(block
+			(style (width = 100%))
+			(tf
+				(class $TextDefault17NM)
+				(style (width = 100%) (alpha = 0.6))
+				(text = 'IDS_TRAINING_PLAYERS_COUNT')
+			)
+		)
+
+		(tf
+			(name = 'TooltipPlayers')
+			(class $TextDefaultBold17NM)
+			(style (alpha = "TC"))
+			(bind text "toString(teamSize) + 'x' + toString(teamSize)")
+		)
+	)
+
+	(hblock
+		(bind visible "isEnemyShipsHidden")
+		(style (width = 100%) (marginTop = "{ 720:SXS, 1080:M }"))
+
+		(block
+			(style (width = 100%))
+			(tf
+				(class $TextDefault17NM)
+				(style (width = 100%) (alpha = 0.6))
+				(text = 'IDS_FOG_OF_WAR')
+			)
+		)
+
+		(tf
+			(name = 'fog_of_war')
+			(class $TextDefaultBold17NM)
+			(style (alpha = "TC"))
+			(bind text "isFogOfWar ? 'IDS_FOG_OF_WAR_IN_TRAINING_ENABLED' : 'IDS_FOG_OF_WAR_IN_TRAINING_DISABLED'")
+		)
+	)
+
+	(hblock
+		(bind visible "isSelfPlayerOwner")
+
+		(class $Fullsize)
+		(style (align = "center|bottom"))
+
+		(element DefaultButton
+			_width = 50%
+			_size = "isHDScreen ? SIZE.SMALL : SIZE.MEDIUM"
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_label = 'IDS_SWAP_SPAWN'
+			_enabled = "isSpawnSwapEnabled"
+			_tooltipText = "isSpawnSwapEnabled ? 'IDS_SWAP_SPAWN_TOOLTIP' : 'IDS_SWAP_SPAWN_WAITING'"
+			_focusIndex = 2
+			_dispatchedEv = 'evSpawnSwapDispatched'
+			_methods = "[{	type: 'inputMapping.onAction',
+							name: isSelfPlayerOwner ? 'spawnSwap' : '',
+							args: {isSpawnSwapped: isSpawnSwapped}
+						}]"
+		)
+
+		(block (style (width = "{720:S, 1080:SXS}")))
+
+		(element DefaultButton
+			_width = 50%
+			_size = "isHDScreen ? SIZE.SMALL : SIZE.MEDIUM"
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_label = 'IDS_CHANGE_TRAINING_ROOM_SETTINGS'
+			_enabled = "isSelfPlayerOwner"
+			_tooltipText = 'IDS_CHANGE_TRAINING_ROOM_SETTINGS_TOOLTIP'
+			_focusIndex = 2
+			_methods = "[{	type: 'inputMapping.onAction',
+							name: isSelfPlayerOwner ? 'navigateTo' : '',
+							args: {route: SC.Ui_windows.ROUTE.TRAINING_ROOM_SETTINGS}
+						}]"
+		)
+	)
+)
+
+(def element TeamMainElement (_teamId:number)
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimple:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+
+		(var selfPreBattleId:number = "preBattlePlayerSimple.preBattleId ?: 0"	(event "preBattlePlayerSimple.evPreBattleIdChanged"))
+		(var selfTeamId:number = "preBattlePlayerSimple.teamId ?: 0"			(event "preBattlePlayerSimple.evTeamIdChanged"))
+		(var isSelfPlayerOwner:bool = "preBattlePlayerSimple.isCommander"		(event "preBattlePlayerSimple.evIsCommanderChanged"))
+		
+		(var selfTrainingRoomPlayer:gfx = "selfPlayerEntity.trainingRoomPlayer" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isSelfPlayerCommander:bool = "selfTrainingRoomPlayer.isCommander" (event "selfTrainingRoomPlayer.evUpdate"))
+		(var isTeamCommander:bool = "isSelfPlayerCommander && selfTeamId == _teamId")
+
+		(var isBotsEnabled:bool = "trainingRoomEntity.trainingRoom.isBotsEnabled" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+		
+		(var isSpectatorsTeam:bool = "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+		(var isTeamManagementAvailable:bool = "	(isSelfPlayerOwner || isTeamCommander) && 
+												windowState == SC.Ui_styles.TRAINING_ROOM_STATE.CREATED && 
+												_teamId != SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM &&
+												!isSpectatorsTeam &&
+												isBotsEnabled")
+
+		(var isSpawnSwapped:bool = "trainingRoomEntity.trainingRoom.isSpawnSwapped" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+		(var notDistributedTeam:bool = "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM")
+		(var isAllyTeam:bool = "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.SELF_TEAM")
+		(var isEnemyTeam:bool = "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OTHER_TEAM")
+		(var headerColor:number = "	isAllyTeam 	? C_ALPHA_TEAM :
+									isEnemyTeam ? C_BRAVO_TEAM
+												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var headerAlpha:number = "	isAllyTeam 	? 0.55 :
+									isEnemyTeam ? 0.5
+												: 0.3")
+
+		(var isEnemyShipsHidden:bool = "trainingRoomEntity.trainingRoom.hideShips" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+		(var isSelfTeam:bool = "selfTeamId == _teamId")
+		(var isHidedShipsBlockVisible:bool = "!isSelfTeam && isEnemyShipsHidden")
+
+		(var preBattlePlayerCollection:gfx = "isSelfTeam ? null : $datahub.getCollection(CC.preBattlePlayerSimple)")
+		(var teamPlayersCollection:gfx = "preBattlePlayerCollection.getChildByPath('byPreBattleAndTeam.' + selfPreBattleId + '_' + _teamId)" (event "preBattlePlayerCollection.evChildAdded") (event "preBattlePlayerCollection.evChildRemoved"))
+		(var teamReadyPlayersCollection:gfx = "teamPlayersCollection.getChildByPath('readyPlayers')"	(event "preBattlePlayerCollection.evChildAdded") (event "preBattlePlayerCollection.evChildRemoved"))
+		(var teamPlayersLength:number = "teamPlayersCollection.items.length ?: 0"	(event "teamPlayersCollection.evAdded")		(event "teamPlayersCollection.evRemoved"))
+		(var teamReadyPlayersLength:number = "teamReadyPlayersCollection.items.length ?: 0" (event "teamReadyPlayersCollection.evAdded") (event "teamReadyPlayersCollection.evRemoved"))
+	)
+	(class $Fullsize)
+	(style (backgroundColor = 0x50000000))
+
+	
+	(block
+		(style 
+			(width = 100%)
+			(height = 30px)
+			(align = "center|middle")
+		)
+		(bind name "'TeamHeader_' + _teamId")
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "headerColor")
+				(alpha = "headerAlpha")
+			)
+		)
+
+		(block
+			(style (position = "absolute") (height = 100%))
+
+			(controller $Instance renderer='FillBotsButton'
+				(bind enabled "isTeamManagementAvailable && isEnemyTeam")
+				(args
+					_teamId = "_teamId"
+				)
+			)
+		)
+
+		(element FormationHeader
+			_isTrainingRoom = true
+			_isSpectatorsTeam = "isSpectatorsTeam"
+			_teamId = "_teamId"
+		)
+
+		(block
+			(style (position = "absolute") (height = 100%) (right = 0px))
+
+			(controller $Instance renderer='FillBotsButton'
+				(bind enabled "isTeamManagementAvailable && isAllyTeam")
+				(args
+					_teamId = "_teamId"
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isSpectatorsTeam && !notDistributedTeam && !isHidedShipsBlockVisible")
+		(bind name "'lbl_ships_classes_' + _teamId")
+		(style 
+			(width = 100%) (height = 30px)  (align = "center|middle")
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/pbs/alphablack.png') (scale9grid = 2)
+		)
+
+		(controller $Instance renderer='FormationShipClassesStatus'
+			(bind enabled "!isSpectatorsTeam && !notDistributedTeam")
+			(args
+				_preBattleId = "selfPreBattleId"
+				_teamId = "_teamId"
+			)
+		)
+	)
+
+	(hblock
+		(bind visible "!isSpectatorsTeam && !notDistributedTeam && isHidedShipsBlockVisible")
+		(style 
+			(width = 100%) (height = 30px)  (align = "center|middle")
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/pbs/alphablack.png') (scale9grid = 2)
+		)
+		(block
+			(style
+				(width = "SHIP_ICON_SIZE.WIDTH")
+				(height = "SHIP_ICON_SIZE.HEIGHT")
+				(marginTop = 2px)
+				(bind backgroundImage "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:not_detected'")
+			)
+		)
+		(element DefaultDividedCounter
+			_curValueTextClass = "'$TextDefaultBold17NM'"
+			_curValue = "teamReadyPlayersLength"
+			_maxValue = "teamPlayersLength"
+			_doNotHideOnZeroMaxValue = true
+			_doNotAlphaOnZeroCurValue = true
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style (paddingTop = "S"))
+		
+		(element FormationMainElement
+			_isTrainingRoom = true
+			_teamId = "_teamId"
+			_formationPlayerClass = 'TrainingRoomPlayerItem'
+		)
+	)
+)
+
+(def element FillBotsButton (_teamId:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var fillBotsInfotipIsVisible:bool = false)
+
+		(var state:number = "	mouseDown || fillBotsInfotipIsVisible	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver								? SC.Ui_styles.BUTTON_STATE.OVER
+																		: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var fillBotsInfotipButtonAlpha:number = "FILL_BOTS_INFOTIP_BUTTON_ALPHA[state]")
+	)
+	(bind name "'BotsMenu_' + _teamId")
+	(style
+		(height = 100%)
+		(backgroundColor = 0x01000000)
+		(alpha = "FILL_BOTS_INFOTIP_BUTTON_ALPHA[SC.Ui_styles.BUTTON_STATE.UP]")
+		(bind hitTest "!fillBotsInfotipIsVisible")
+	)
+
+	(hblock
+		(style
+			(height = 100%)
+			(paddingLeft = "S")
+			(paddingRight = "S")
+			(align = "middle")
+		)
+
+		(block
+			(bind visible "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OTHER_TEAM")
+			(style
+				(width = 16px)
+				(height = 16px)
+				(marginRight = "XXS")
+				(backgroundImage = 'url:../service_kit/buttons/navigate_arrow/left.png')
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold17NM)
+			(style (alpha = "TA"))
+			(text = 'IDS_BOTS')
+		)
+
+		(block
+			(bind visible "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.SELF_TEAM")
+			(style
+				(width = 16px)
+				(height = 16px)
+				(marginLeft = "XXS")
+				(backgroundImage = 'url:../service_kit/buttons/navigate_arrow/right.png')
+			)
+		)
+	)
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger	= "state"
+		_alpha		= "fillBotsInfotipButtonAlpha"
+	)
+	(macro MOUSE_HANDLER
+		_soundSet = "'dropdown'"
+		_methods = "[{
+						type:	'inputMapping.onRequest',
+						name:	'updateSuitableShipsForBot',
+						args:	{ teamId: _teamId }
+					}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'FillBotsInfotip')
+		(args _teamId="_teamId")
+		(macro FILL_BOTS_INFOTIP_BEHAVIOUR)
+
+		(pinLeft = 'InfotipPinLeft')
+		(pinRight = 'InfotipPinRight')
+		(pinOffset = "{across: 0px, along: XS}")
+
+		(bind align "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.SELF_TEAM ? right|innerTop : left|innerTop")
+
+		(bind fillBotsInfotipIsVisible "true" init=false on='evStartShow')
+		(bind fillBotsInfotipIsVisible "false" init=false on='evHide')
+	)
+)
+
+(def element FillBotsInfotip (_teamId:number)
+	(scope
+		(event evActiveBotsClicked)
+		(event evArmedBotsClicked)
+		(event ItemChooser_aiLevelSelected)
+
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var trainingRoomTeamSize:number = "trainingRoomEntity.trainingRoom.teamSize" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+		(var isBotsAIEnabled:bool = "trainingRoomEntity.trainingRoom.isBotsAIEnabled" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+
+		(var trainingRoomBotsSettings:gfx = "$datahub.getSingleComponent(CC.trainingRoomBotsSettings)")
+		(var isActiveBots:bool = "trainingRoomBotsSettings.isActive" (event "trainingRoomBotsSettings.evIsActiveChanged"))
+		(var isArmedBots:bool = "trainingRoomBotsSettings.isArmed" (event "trainingRoomBotsSettings.evIsArmedChanged"))
+		(var botLevel:number = "trainingRoomBotsSettings.AILevel" (event "trainingRoomBotsSettings.evAILevelChanged"))
+		(var botLevelIndex:number = "indexOf(botLevel, SC.Common.BOT_AI_LEVELS.ALL)")
+
+		(event evNationRadioButtonClicked)
+		(var filteredBotNationCollection:gfx = "$datahub.getCollection(CC.botTrainingNation).getChildByPath('filtered.sorted')")
+		(var nations:array = "filteredBotNationCollection.items ?: []" (event "filteredBotNationCollection.evAdded") (event "filteredBotNationCollection.evRemoved"))
+
+		(var activeNationIndex:number = "trainingRoomBotsSettings.selectedNationIndex" (event "trainingRoomBotsSettings.evSelectedNationIndexChanged"))
+		(var activeNationEntity:gfx = "nations[activeNationIndex]")
+		(var activeNation:str = "activeNationEntity.botTrainingNation.nation")
+
+		(event evShipTypeRadioButtonClicked)
+		(var filteredBotShipsTypes:gfx = "$datahub.getCollection(CC.botTrainingShipType).getChildByPath('filtered.sorted')")
+		(var shipTypes:array = "filteredBotShipsTypes.items ?: []" (event "filteredBotShipsTypes.evAdded") (event "filteredBotShipsTypes.evRemoved"))
+
+		(var activeShipTypeIndex:number = "trainingRoomBotsSettings.selectedShipTypeIndex" (event "trainingRoomBotsSettings.evSelectedShipTypeIndexChanged"))
+		(var activeShipTypeEntity:gfx = "shipTypes[activeShipTypeIndex]")
+		(var activeShipType:str = "activeShipTypeEntity.botTrainingShipType.shipType")
+
+		(var isAvaliableNationList:bool = "nations.length > 0 && activeNationIndex != -1")
+		(var isAvaliableShipTypesList:bool = "shipTypes.length > 0 && activeShipTypeIndex != -1")
+		(var isAvaliableShipFilters:bool = "isAvaliableNationList && isAvaliableShipTypesList")
+
+		(var shipsCollection:gfx = "isAvaliableShipFilters	?	$datahub.getCollection(CC.ship).getChildByPath('allShipsForBots.suitable.byCountryAndShipType.' + activeNation + ',' + activeShipType)
+															:	null")
+		(var activeShipList:array = "shipsCollection.items ?: []" (event "shipsCollection.evAdded") (event "shipsCollection.evRemoved"))
+		(var hasAvailableShips:bool = "isAvaliableShipTypesList && activeNation.length > 0")
+		
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimple:gfx ="selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var selfPreBattleId:number = "preBattlePlayerSimple.preBattleId" (event "preBattlePlayerSimple.evPreBattleIdChanged"))
+
+		
+		(var otherTeamId:number = "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.SELF_TEAM	? SC.Common.TRAINING_ROOM_TEAMS_IDS.OTHER_TEAM
+																							: SC.Common.TRAINING_ROOM_TEAMS_IDS.SELF_TEAM")
+		
+		(var preBattlePlayerCollection:gfx = "$datahub.getCollection(CC.preBattlePlayerSimple)")
+
+		(var selfTeamCollection:gfx = "preBattlePlayerCollection.getChildByPath('byPreBattleAndTeam.' + selfPreBattleId + '_' + _teamId)" (event "preBattlePlayerCollection.evChildAdded") (event "preBattlePlayerCollection.evChildRemoved"))
+		(var otherTeamCollection:gfx = "preBattlePlayerCollection.getChildByPath('byPreBattleAndTeam.' + selfPreBattleId + '_' + otherTeamId)" (event "preBattlePlayerCollection.evChildAdded") (event "preBattlePlayerCollection.evChildRemoved"))
+
+		(var selfTeamBotsCollection:gfx = "selfTeamCollection.getChildByPath('bots')"					(event "preBattlePlayerCollection.evChildAdded") (event "preBattlePlayerCollection.evChildRemoved"))
+		(var selfTeamReadyPlayersCollection:gfx = "selfTeamCollection.getChildByPath('readyPlayers')"	(event "preBattlePlayerCollection.evChildAdded") (event "preBattlePlayerCollection.evChildRemoved"))
+		(var otherTeamReadyPlayersCollection:gfx = "otherTeamCollection.getChildByPath('readyPlayers')"	(event "preBattlePlayerCollection.evChildAdded") (event "preBattlePlayerCollection.evChildRemoved"))
+
+		(var selfTeamBots:array = "selfTeamBotsCollection.items		?: []"	(event "selfTeamBotsCollection.evAdded")	(event "selfTeamBotsCollection.evRemoved"))
+		(var selfTeamPlayers:array = "selfTeamCollection.items		?: []"	(event "selfTeamCollection.evAdded")		(event "selfTeamCollection.evRemoved"))
+		(var otherTeamPlayers:array = "otherTeamCollection.items	?: []"	(event "otherTeamCollection.evAdded")		(event "otherTeamCollection.evRemoved"))
+
+		(var selfTeamReadyPlayers:array = "selfTeamReadyPlayersCollection.items		?: []" (event "selfTeamReadyPlayersCollection.evAdded") (event "selfTeamReadyPlayersCollection.evRemoved"))
+		(var otherTeamReadyPlayers:array = "otherTeamReadyPlayersCollection.items	?: []" (event "otherTeamReadyPlayersCollection.evAdded") (event "otherTeamReadyPlayersCollection.evRemoved"))
+
+		
+		(var isFillBotsEnabled:bool = "isAvaliableShipFilters && trainingRoomTeamSize - selfTeamPlayers.length > 0")
+		(var isMirrorFillEnabled:bool = "isAvaliableShipFilters && selfTeamReadyPlayers.length < otherTeamReadyPlayers.length")
+		(var isRemoveAllBotsEnabled:bool = "selfTeamBots.length > 0")
+
+		(var isTeamFull:bool = "trainingRoomTeamSize - selfTeamPlayers.length == 0")
+	)
+	(bindcall externalCall 'direct.action' "['training.changeNation', [ $event.index ]]" init=false watch=false (event "evNationRadioButtonClicked"))
+	(bindcall externalCall 'direct.action' "['training.changeShipType', [ $event.index ]]" init=false watch=false (event "evShipTypeRadioButtonClicked"))
+	(bindcall externalCall 'direct.action' "['training.changeIsActiveBot', []]" init=false watch=false (event "evActiveBotsClicked"))
+	(bindcall externalCall 'direct.action' "['training.changeIsArmedBot', []]" init=false watch=false (event "evArmedBotsClicked"))
+	(bindcall externalCall 'direct.action' "['training.changeAIBotLevel', [SC.Common.BOT_AI_LEVELS.ALL[$event.selectedIndex]]]" init=false watch=false (event "ItemChooser_aiLevelSelected"))
+
+	(bind name "'TeamMainElementInfotip_' + _teamId")
+	(style (width = 353px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND "true")
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(block
+			(bind visible "isBotsAIEnabled")
+			(style (width = 100%))
+
+			(hblock
+				(style (marginBottom = "S") (marginTop = "S") (width = 100%))
+				(element DropdownLabel _label = 'IDS_AI_LEVEL')
+
+				(block
+					(style (paddingTop = -9px) (paddingBottom = -10px) (paddingRight = "-S"))
+
+					(element ItemChooser
+						_items = "SC.Common.BOT_AI_LEVELS.ALL"
+						_choosedItemRenderer = 'AILevelChoosedItemRenderer'
+						_listItemRenderer = 'AILevelListItemRenderer'
+						_onItemSelectedEvent = 'aiLevelSelected'
+						_selectedMaxWidth = 240
+						_dropDownWidth = 140
+						_curIndex = "botLevelIndex"
+						_name = 'ItemChooserBotLevelAI'
+					)
+				)
+			)
+
+			(element InfotipFillBotsSwitcherLine
+				_label = 'IDS_BOTS_ACTIVE'
+				_state = "isActiveBots"
+				_name = 'botActiveSwitch'
+				_dispatchedEv = 'evActiveBotsClicked'
+				_tooltipText = 'IDS_BOTS_ACTIVE_TOOLTIP'
+			)
+
+			(element InfotipFillBotsSwitcherLine
+				_label = 'IDS_BOTS_ARMED'
+				_state = "isArmedBots"
+				_name = 'botArmedSwitch'
+				_dispatchedEv = 'evArmedBotsClicked'
+				_tooltipText = 'IDS_BOTS_ARMED_TOOLTIP'
+			)
+		)
+
+		(hblock
+			(style (width = 100%) (align = "center") (marginTop = "M"))
+			(block
+				(style (marginRight = "S"))
+				(element DefaultButton
+					_width = 156px
+					_size = "SIZE.SMALL"
+					_label = 'IDS_FILL'
+					_enabled = "isFillBotsEnabled"
+					_focusIndex = 1
+					_name = 'fill_with_bots'
+					_methods = "[	{	type: 'direct.action',
+										name: 'training.fillBotsWithSettings',
+										args: [	_teamId, false ]
+									}]"
+				)
+			)
+
+			(element DefaultButton
+				_width = 156px
+				_size = "SIZE.SMALL"
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_enabled = "isRemoveAllBotsEnabled"
+				_label = 'IDS_REMOVE_ALL_BOTS'
+				_focusIndex = 2
+				_methods = "[{	type: 'inputMapping.onRequest',
+								name: 'kickAllBotsFromTeam',
+								args: {	teamId: _teamId,
+										subtitle: 'IDS_MODAL_EXCLUDE_BOT_OUT_OF_TEAM_OF_TRAINING_ROOM' }
+							}]"
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "nations.length > 0"))
+		)
+		(htile
+			(style (width = 100%))
+
+			(controller $Repeat renderer='FillBotsNationRadioButton'
+				(bind count "nations.length")
+				(args
+					_enabled = "isAvaliableNationList"
+					_selected = "isAvaliableNationList && activeNationIndex == $index"
+					_renderElement = 'RadioNationButton'
+					_renderArgs = " { _shipCountry: nations[$index].botTrainingNation.nation }"
+					_dispatchedEv = 'evNationRadioButtonClicked'
+					_dispatchParams = "{ index: $index }"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "shipTypes.length > 0"))
+		)
+		(htile
+			(style (width = 100%))
+
+			(controller $Repeat renderer='FillBotsShipTypeRadioButton'
+				(bind count "shipTypes.length")
+				(args
+					_enabled = "isAvaliableShipTypesList"
+					_selected = "isAvaliableShipTypesList && activeShipTypeIndex == $index"
+					_renderElement = 'RadioShipTypeButton'
+					_renderArgs = " { _shipType: shipTypes[$index].botTrainingShipType.shipType, _nation: activeNation }"
+					_dispatchedEv = 'evShipTypeRadioButtonClicked'
+					_dispatchParams = "{ index: $index }"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(block
+			(style (width = 100%) (height = "{ 720:280px, 1080:DEFAULT_TEAM_MAX_WIDTH }") (marginTop = "-SXS") (paddingLeft = "-M") (paddingRight = "-M") (marginBottom = "-SXS"))
+			(scrollArea
+				(bind visible "hasAvailableShips")
+				(class $Fullsize)
+
+				(verticalSlider = 'ScrollBarVLight')
+				(hscrollPolicy = 'off')
+				(vscrollPolicy = 'auto')
+				(repeatController = 'FillBotsShipContainer')
+				(scrollPerItem = true)
+
+				(wheelScrollSpeed = 1.0)
+				(wheelScrollAcceleration = 0.9)
+				(maxScrollingAnimatedDistance = 150)
+
+				(activeControlsAlpha = 1)
+				(inactiveControlsAlpha = 0.5)
+				(animationDuration = 0.2)
+				(animationEasing = "Easing.cubic_out")
+
+				(content
+					(style (width = 100%))
+
+					(controller $DynamicRepeat renderer='InfotipFillBotsShipLine' name='FillBotsShipContainer'
+						(bind count "activeShipList.length")
+						(args
+							_activeShipList = "activeShipList"
+							_teamId = "_teamId"
+							_isTeamFull = "isTeamFull"
+						)
+
+						(itemWidth = 100%)
+						(itemHeight = 28px)
+						(itemOffset = 56px)
+					)
+				)
+				(bindcall scrollToBegin animated=false (event "evNationRadioButtonClicked") (event "evShipTypeRadioButtonClicked"))
+			)
+
+			(block
+				(bind visible "!hasAvailableShips")
+				(class $Fullsize)
+				(style (align = "center|middle"))
+				(tf
+					(class $TextDefault17NM)
+					(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+					(text = 'IDS_NO_SUITABLE_SHIPS')
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element DefaultButton
+			_width = 321px
+			_size = "SIZE.SMALL"
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_label = "toUpper('IDS_FILL_MIRRORED')"
+			_enabled = "isMirrorFillEnabled"
+			_focusIndex = 2
+			_name = 'mirrorFillCb'
+			_methods = "[	{	type: 'direct.action',
+								name: 'training.fillBotsWithSettings',
+                                args: [	_teamId, true ]
+							}]"
+		)
+	)
+)
+
+(def element FillBotsNationRadioButton (_selected:bool=false, _renderElement:str='', _enabled:bool=true, _renderArgs:dict={}, _dispatchedEv:str='', _dispatchParams:gfx={})
+	(style (bind marginRight "($index + 1) % 7 == 0 ? 0px : S") (marginTop = "XXS") (marginBottom = "XXS"))
+
+	(element ImageRadioButton
+		_selected = "_selected"
+		_enabled = "_enabled"
+		_renderElement = "_renderElement"
+		_renderArgs = "_renderArgs"
+		_dispatchedEv = "_dispatchedEv"
+		_dispatchParams = "_dispatchParams"
+	)
+)
+
+(def element FillBotsShipTypeRadioButton (_selected:bool=false, _renderElement:str='', _enabled:bool=true, _renderArgs:dict={}, _dispatchedEv:str='', _dispatchParams:gfx={})
+	(scope
+		(var shipsCollection:gfx = "$datahub.getCollection(CC.ship).getChildByPath('allShipsForBots.suitable.byCountryAndShipType.' + _renderArgs._nation + ',' + _renderArgs._shipType)")
+		(var shipList:array = "shipsCollection.items ?: []" (event "shipsCollection.evAdded") (event "shipsCollection.evRemoved"))
+	)
+	(style (bind marginRight "($index + 1) % 7 == 0 ? 0px : S") (marginTop = "XXS") (marginBottom = "XXS"))
+
+	(element ImageRadioButton
+		_selected = "_selected"
+		_enabled = "shipList.length > 0 && _enabled"
+		_renderElement = "_renderElement"
+		_renderArgs = "_renderArgs"
+		_dispatchedEv = "_dispatchedEv"
+		_dispatchParams = "_dispatchParams"
+	)
+)
+
+(def element RadioNationButton (_args:dict)
+	(element NationFlagsTiny
+		_shipCountry = "_args._shipCountry"
+	)
+)
+
+(def element RadioShipTypeButton (_args:dict)
+	(style (marginTop = 1px))
+	(element ShipIcon
+		_shipType = "_args._shipType"
+	)
+)
+
+(def element InfotipFillBotsShipLine(_activeShipList:array, _teamId:number, _isTeamFull:bool=false)
+	(scope
+		(var shipInfo:gfx = "_activeShipList[$index].ship")
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var state:number = "	mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP ")
+	)
+	(style (width = 100%) (height = 28px) (bind alpha "_isTeamFull ? TS : 1"))
+	(name = 'addBotBtn')
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element DockSubmenuItem
+			_selected = false
+			_enabled = "!_isTeamFull"
+			_methods = "[ {
+							type:	'direct.action',
+							name:	'training.addBotWithSettings',
+							args:	[ shipInfo.id, _teamId ]
+						}]"
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style (align = "middle") (hitTest = false) (paddingLeft = "M") (paddingRight = "M"))
+
+		(block
+			(style (width = 100%))
+
+			(element ShipLineItemNM
+				_shipId = "shipInfo.id"
+				_withFlag = false
+				_isFullName = true
+				_hideUpgradableStatus = true
+			)
+		)
+		(block
+			(style
+				(width = 14px)
+				(height = 14px)
+				(backgroundImage = 'url:../service_kit/icons/icon_invite.png')
+				(backgroundSize = "cover")
+				(alpha = "MENU_ITEM_BACKGROUND[state]")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger = "state"
+				_alpha = "MENU_ITEM_BACKGROUND[state]"
+			)
+		)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+)
+
+(def element InfotipFillBotsSwitcherLine (_label:str, _state:bool, _dispatchedEv:str, _tooltipText:str='', _enabled:bool=true, _name:str='')
+	(style (flow = "horizontal") (width = 100%) (marginTop = "S") (marginBottom = "S"))
+
+	(block
+		(style (width = 100%))
+		(tf
+			(class $TextDefault17NM)
+			(style (alpha = "TC"))
+			(bind text "_label")
+		)
+	)
+
+	(element SwitchWithoutLabel
+		_state = "_state"
+		_name = "_name"
+		_enabled = "_enabled"
+		_dispatchedEv = "_dispatchedEv"
+	)
+
+	(controller $Tooltip
+		(bind enabled "_tooltipText")
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_tooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element AILevelChoosedItemRenderer (_item:gfx, _choosedItemRendererParams:gfx, _labelMaxWidth:number)
+	(element DefaultItemChooserPickedItemRenderer
+		_item = "tr('IDS_AI_LEVEL_' + _item)"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+(def element AILevelListItemRenderer (_item:gfx, _curItemIndex:number, _listItemRendererData:gfx, _isInactive:bool)
+	(bind name "'AILevelListItemRenderer_' + _item")
+	(style (width = 100%))
+	
+	(element TextListItemRenderer
+		_item = "tr('IDS_AI_LEVEL_' + _item)"
+		_curItemIndex = "_curItemIndex"
+		_isInactive = "_isInactive"
+	)
+)
+
+(def element TrainingRoomTooltip (_trainingRoomComponent:gfx)
+	(scope
+		(var ownerNameDH:str = "_trainingRoomComponent.ownerName ?: ''"		(event "_trainingRoomComponent.evUpdate"))
+		(var descriptionDH:str = "_trainingRoomComponent.description ?: ''"	(event "_trainingRoomComponent.evUpdate"))
+		(var mapId:number = "_trainingRoomComponent.mapId"					(event "_trainingRoomComponent.evUpdate"))
+		(var scenario:str = "_trainingRoomComponent.scenario ?: ''"			(event "_trainingRoomComponent.evUpdate"))
+		
+		(var isClosed:bool = 				"_trainingRoomComponent.isClosed"				(event "_trainingRoomComponent.evUpdate"))
+		(var isCommandersManagement:bool = 	"_trainingRoomComponent.commandersManagement" 	(event "_trainingRoomComponent.evUpdate"))
+		(var isEnemyShipsHidden:bool = 		"_trainingRoomComponent.hideShips"				(event "_trainingRoomComponent.evUpdate"))
+		(var isFogOfWar:bool = 				"_trainingRoomComponent.isFogOfWar" 			(event "_trainingRoomComponent.evUpdate"))
+		(var isViewShipInfoDisabled:bool = 	"_trainingRoomComponent.isViewShipInfoDisabled" (event "_trainingRoomComponent.evUpdate"))
+		(var isObserversAvailable:bool = 	"_trainingRoomComponent.observersAvailable" 	(event "_trainingRoomComponent.evUpdate"))
+		
+		(var mapInfoComponent:gfx = "$datahub.getPrimaryEntity(CC.mapInfo, mapId).mapInfo")
+	)
+	(style (width = 380px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(name = 'trainingRoomTooltip')
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(bind name "'TooltipMapInfo::' + scenario + '::' + mapInfoComponent.name")
+
+		(element TooltipSystemImageContainer
+			_path = "'url:../bg/training_room_maps_preview/' + mapInfoComponent.gpName + '.jpg'"
+			_imgHeight = 160
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "tr(toUpper('IDS_' + mapInfoComponent.name))"
+			_subheaderText = "scenario != '' ? tr('IDS_SCENARIO_' + toUpper(scenario)) : ''"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemParamTextLine
+			_text = 'IDS_TOOLTIP_TRAINING_ORGANIZER'
+			_value = "ownerNameDH"
+			_valueClass = '$TextDefaultBoldNM'
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isClosed"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isClosed")
+				(args
+					_text = 'IDS_PRIVATE_TRAINING_ROOM'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.LOCK"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isObserversAvailable"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isObserversAvailable")
+				(args
+					_text = 'IDS_TRAINING_ROOM_SPECTATORS_IS_ENABLED'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.OBSERVER"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isCommandersManagement"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isCommandersManagement")
+				(args
+					_text = 'IDS_COMMANDERS_MANAGEMENT_ENABLED'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.COMMANDER_NOT_READY"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isEnemyShipsHidden"))
+		)
+		(block
+			(bind name "isFogOfWar ? 'tooltip_fog_of_war' : 'tooltip_enemy_ships_are_hidden'")
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isEnemyShipsHidden")
+				(args
+					_text = "isFogOfWar ? 'IDS_FOG_OF_WAR_IN_TRAINING' : 'IDS_ENEMY_SHIPS_ARE_HIDDEN'"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isViewShipInfoDisabled"))
+		)
+		(block
+			(name = 'tooltip_ship_info_hidden')
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isViewShipInfoDisabled")
+				(args
+					_text = 'IDS_SHIP_INFO_HIDDEN_IN_TRAINING'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_INFO_HIDDEN"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "descriptionDH"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "descriptionDH")
+				(args
+					_descriptionText = "descriptionDH"
+				)
+			)
+		)
+	)
+)
+
+(def element TrainingRoomManagementButton ()
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro CALCULATE_PORT_HEADER_ELEM_SIDE_PADDING)
+
+		(var state:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var iconAlpha:number = "PORT_HEADER_BATTLE_TYPE_CHOOSER_ICON_ALPHA[state]")
+		(var mainLabelAlpha:number = "PORT_HEADER_MAIN_TEXT_ALPHA[state]")
+		(var subTextAlpha:number = "PORT_HEADER_SUBTEXT_ALPHA[state]")
+
+		
+		(var ctRollOver:dict = "{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								  redOffset: 15,	greenOffset: 15,	blueOffset: 15,		alphaOffset: 0 }")
+		(var ctDown:dict = "	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								  redOffset: 0,		greenOffset: 0,		blueOffset: 0,		alphaOffset: 0 }")
+		
+	)
+	(style
+		(bind paddingLeft "-PORT_HEADER_CONTROL_DEFAULT_PADDING")
+		(bind paddingRight "-PORT_HEADER_CONTROL_DEFAULT_PADDING")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = 0x01000000))
+
+		(element DockHeaderControlBackground
+			_state = "state"
+		)
+
+		(macro MOUSE_HANDLER
+			_soundSet = "'button_battle_type'"
+			_methods = "[{
+							type: 'direct.action',
+							name: 'trainingRoom.navigateToManagement',
+							args: []
+						}]"
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(flow = "horizontal")
+			(height = 60px)
+			(bind paddingLeft "PORT_HEADER_CONTROL_DEFAULT_PADDING")
+			(bind paddingRight "PORT_HEADER_CONTROL_DEFAULT_PADDING")
+		)
+
+		(block
+			(bind colorTransform "	mouseDown	? ctDown :
+									rollOver	? ctRollOver
+												: CT_NONE")
+			(style
+				(marginTop = "SXS")
+				(marginRight = "S")
+				(width = 35px)
+				(height = 35px)
+				(marginLeft = -5px)
+				(backgroundSize = "cover")
+				(backgroundImage = 'url:../service_kit/training_room/icon_management.png')
+			)
+		)
+
+		(block
+			(style
+				(align = "middle")
+				(height = 100%)
+			)
+
+			(block
+			    (name = 'toEquipmentBtn')
+				(tf
+					(class $TextDefaultBold17NM)
+					(style
+						(wordWrap = false)
+						(alpha = "mainLabelAlpha")
+					)
+
+					(text = 'IDS_MODULES')
+
+					(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+						_trigger	= "state"
+						_alpha		= "mainLabelAlpha"
+					)
+				)
+			)
+
+			(tf
+				(class $TextDefault13NM)
+				(style
+					(marginTop = "S")
+					(wordWrap = false)
+					(bind alpha "subTextAlpha" watch=false)
+				)
+
+				(text = 'IDS_TRAINING_ROOM_MANAGEMENT_HINT')
+
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+					_trigger	= "state"
+					_alpha		= "subTextAlpha"
+				)
+			)
+		)
+	)
+)
+
+(def element TrainingRoomPlayerState ()
+	(scope
+		(macro CALCULATE_PORT_HEADER_ELEM_SIDE_PADDING)
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattleSelfPlayerSimple:gfx ="selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+
+		(var isSelfPlayerOwner:bool = "preBattleSelfPlayerSimple.isCommander" (event "preBattleSelfPlayerSimple.evIsCommanderChanged"))
+
+		(var selfTrainingRoomPlayer:gfx = "selfPlayerEntity.trainingRoomPlayer" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isSelfPlayerCommander:bool = "selfTrainingRoomPlayer.isCommander" (event "selfTrainingRoomPlayer.evUpdate"))
+		(var isCommander:bool = "isSelfPlayerCommander || isSelfPlayerOwner")
+
+		(var selfTeamId:number = "preBattleSelfPlayerSimple.teamId" (event "preBattleSelfPlayerSimple.evTeamIdChanged"))
+
+		(var isTrainingNeutral:bool = "selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM")
+		(var isTrainingObserver:bool = "selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+
+		(var isIconVisible:bool = "!isTrainingObserver")
+
+		(var label:str = "	isTrainingNeutral		? 'IDS_TRAINING_ROOM_PLAYER_STATE_NEUTRAL' :
+							isTrainingObserver		? 'IDS_TRAINING_ROOM_PLAYER_STATE_OBSERVER' :
+							isCommander				? 'IDS_TRAINING_ROOM_PLAYER_STATE_COMMANDER'
+													: 'IDS_TRAINING_ROOM_PLAYER_STATE_DEFAULT'")
+	)
+	(style
+		(flow = "horizontal")
+		(bind marginRight "PORT_HEADER_CONTROL_DEFAULT_PADDING + PORT_HEADER_START_BATTLE_BTN_SIDE_MARGIN")
+		(height = 60px)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(align = "right|middle")
+			(height = 100%)
+		)
+
+		(hblock
+			(block
+				(bind visible "isIconVisible")
+
+				(style
+					(marginTop = "-XXS")
+					(marginRight = 6px)
+				)
+
+				(element DHFormationPlayerIcon
+					_entityId = "selfPlayerEntity.id"
+				)
+			)
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (textColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW"))
+				(bind text "label")
+
+			)
+		)
+	)
+)

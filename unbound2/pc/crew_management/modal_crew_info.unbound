@@ -1,0 +1,543 @@
+(def element ModalWindowCrewInfo (_crewId:number)
+	(macro MODAL_WINDOW_INIT)
+
+	(scope
+		(event evShowSkills)
+		(event evCrewInfoModalHideInfotips)
+
+		(macro MOUSE_HANDLER_SCOPE "'freeExp_'")
+
+		(macro USER_PREF_DATA)
+		(var isSmallPanel:bool = "stageHeight < 760")
+
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+
+		(var classificationId:number =	"crew.component.classificationId")
+		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel" (event "crew.component.evLevelUp"))
+
+		(var eliteCrewLearning:dhComponent =	"crew.entity.eliteCrewLearning"				(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+		(var exploredSkillsTotal:number =		"eliteCrewLearning.exploredSkillsTotal"		(event "eliteCrewLearning.evChanged"))
+
+		(var shipId:number = "crew.component.shipID > 0 ? crew.component.shipID : crew.component.specializationID")
+		(macro PULL_SHIP_SCOPE "shipId" "'shipEntity'" "'shipInfo'")
+
+		(var selectedShipClass:str = "	userPrefs.crewInfoActiveShipClass != '' && userPrefs.crewInfoActiveShipClass != null	? userPrefs.crewInfoActiveShipClass :
+										isIn(shipInfo.subtype, SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES)							? shipInfo.subtype
+																																: SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES[0]")
+
+		(var skillTreeEntity:dhEntity =			"getPrimaryEntity(CC.skillTree, toString(_crewId + '_' + selectedShipClass))")
+		(var skillTreeComponent:dhComponent =	"skillTreeEntity.skillTree")
+		(var freeSkillPoints:number =			"skillTreeComponent.freeSkillPoints" (event "skillTreeComponent.evFreeSkillPointsChanged"))
+
+		(var hasAnyTalentsAndVanities:bool = "(crew.component.uniqueSkillSet.length + crew.component.vanitiesSet.length) > 0")
+		(var isTalentsAndVanitiesVisible:bool = "hasAnyTalentsAndVanities || isCrewElite")
+
+		(var freeSkillPointsText:str = "freeSkillPoints == 0 && isMaxLevel	? tr('IDS_ALL_SKILLPOINTS_DISTRIBUTED_FOR_' + toUpper(selectedShipClass))
+																			: (tr('IDS_FREE_SKILLPOINTS_LEFT_FOR_' + toUpper(selectedShipClass)) + ' ' + freeSkillPoints)")
+
+		(var crewInfoDescription:array = "[{ paragraphText: 'IDS_INSTRUCTION_CREW_PERKS_0' }, { paragraphText: 'IDS_INSTRUCTION_CREW_PERKS_1' }]")
+
+		(var hasCrewEntity:bool = "crew.entity != null")
+
+		(var eliteCrewNewItemComponent:dhComponent =	"crew.entity.newItem" (event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+		(var isEliteMentorshipNew:bool =				"eliteCrewNewItemComponent != null")
+
+		(macro FEATURES "5")
+		(var isFreeExpNew:bool = "feature_5 == 'new'")
+	)
+
+	
+	(bindcall externalCall "hasCrewEntity ? '' : 'inputMapping.onRequest'" "['closeModalWindowCrewInfo', { }]"			watch=false (bind trigger "hasCrewEntity"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'crewInfoActiveShipClass', value: '' }]"	watch=false on='addedToStage')
+	(dispatch evShowSkills dir="EventDirection.NONE" delay="0.2" reset=true (bind trigger "selectedShipClass"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['featureSeen', { featureIndex: 5 }]" watch=false (event "freeExp_evClicked"))
+
+	(dispatch evCrewInfoModalHideInfotips dir="EventDirection.DOWN" (event "startHide"))
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.3
+				to = "{alpha: 0}"
+				action = "kill"
+				(event "startHide")
+			)
+			(bindcall play
+				duration = 0.01
+				to = "{alpha: 1}"
+				action = "kill"
+				(event "startShow")
+			)
+		)
+
+		(element AnimatedBackground
+			_selectedCategory=	'default'
+			_type =				"SC.Ui_styles.ANIMATED_BG.ALMANAC_AND_SNOWFLAKES"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_MODAL_WINDOW_CREW_PERSONAL_FILE'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+		)
+
+		(hblock
+			(style
+				(position = "absolute")
+				(bottom = "XXS")
+				(right = "XLM")
+			)
+
+			(block
+				(name = 'crewEliteXp')
+
+				(element DockResourcesWidget
+					_name =		'eliteXPBalance'
+					_currency =	"SC.Common.CURRENCIES.ELITE_XP"
+					_label =	'IDS_CURRENCY_ELITE_XP'
+					_height =	47px
+				)
+			)
+
+			(block
+				(bind visible "feature_5 != 'locked'")
+
+				(macro MOUSE_EVENTS_DISPATCHER "'freeExp_'")
+				(name = 'buttonConvertExp')
+
+				(element DockResourcesWidget
+					_name = 'freeExpBalance'
+					_currency = "SC.Common.CURRENCIES.FREE_XP"
+					_label = 'IDS_CONVERT_FREE_EXPERIENCE'
+					_height = 47px
+					_isMarkerVisible = "isFreeExpNew"
+				)
+			)
+		)
+	)
+
+	(hblock
+		(style
+			(align = "center")
+			(marginTop = "L")
+			(width = 100%)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (width = 220px))
+
+			(block
+				(style (width = 100%))
+
+				(element CrewPanelContent
+					_crewId =					"_crewId"
+					_shipId =					"crew.component.shipID"
+					_isCrewInfoModalWindow =	true
+					_isSmallPanel =				"isSmallPanel"
+				)
+			)
+
+			(block
+				(bind visible "isCrewElite")
+
+				(style
+					(bind marginTop "isSmallPanel ? S : SXS")
+					(width = 100%)
+				)
+
+				(block
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "isCrewElite && !isMaxLevel")
+						(args
+							_textClass =		'$TextDefaultBold17NM'
+							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.LOCK"
+							_text =				'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP'
+						)
+					)
+
+					(hblock
+						(bind visible "isMaxLevel")
+
+						(bindcall externalCall "isEliteMentorshipNew ? 'inputMapping.onAction' : ''" "['makeSeen', { entityId: crew.entity.id }]" watch=false on='rollOver')
+
+						(style (backgroundColor = "NO_COLOR"))
+
+						(tf
+							(class $TextDefaultBold17NM)
+							(style
+								(hitTest = false)
+								(alpha = "TA")
+							)
+							(text = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP')
+						)
+
+						(block
+							(style
+								(hitTest = false)
+								(width = 19px)
+								(height = 19px)
+								(marginTop = -3px)
+								(marginLeft = "XS")
+								(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png')
+							)
+						)
+
+						(block
+							(style (position = "absolute") (right = 0px) (top = -9px))
+
+							(block
+								(macro DEFAULT_CONTROL_MARKER_ANIMATION "isEliteMentorshipNew")
+								(style (position = "absolute"))
+								
+								(element MarkerNew)
+							)
+						)
+					)
+
+					(controller $Tooltip
+						(renderer = 'CrewEliteMentorshipTooltipInfo')
+						(args
+							_crewId = "_crewId"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+
+				(hblock
+					(bind visible "isMaxLevel")
+
+					(style
+						(width = 100%)
+						(marginTop = "S")
+					)
+
+					(tf
+						(class $TextDefaultNM)
+						(style
+							(marginTop = 1px)
+							(marginRight = "S")
+							(alpha = "TA")
+						)
+
+						(text = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_SKILLS_UNLOCKED_COUNT')
+					)
+
+					(tf
+						(class $TextDefaultBoldNM)
+						(style
+							(marginTop = 1px)
+							(marginRight = -6px)
+							(alpha = "TA")
+						)
+
+						(bind text "exploredSkillsTotal")
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(align = "center")
+				(marginLeft = "LM")
+				(width = "{ 1280: 820px, 1920: 900px }")
+			)
+
+			(block
+				(bind visible "isTalentsAndVanitiesVisible")
+
+				(style (width = 100%))
+
+				(controller $Instance renderer='CrewTalentsAndVanities'
+					(bind enabled "isTalentsAndVanitiesVisible")
+					(args
+						_crewId =					"_crewId"
+						_selectedShipClass =		"selectedShipClass"
+						_isCrewInfoModalWindow =	true
+					)
+				)
+			)
+
+			(hblock
+				(style
+					(width = 100%)
+					(bind marginTop "isTalentsAndVanitiesVisible ? CREW_MANAGEMENT_HEADER_SPACING_TOP : 0")
+					(marginBottom = "CREW_MANAGEMENT_HEADER_SPACING_BOTTOM")
+				)
+
+				(tf
+					(class $TextDefaultBold17NM)
+					(style
+						(width = 100%)
+						(alpha = "TA")
+					)
+
+					(text = 'IDS_CREW_INFO_SKILLS_MATRIX_TITLE')
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginTop = 1px)
+						(marginRight = -6px)
+						(alpha = "TA")
+					)
+
+					(bind text "freeSkillPointsText")
+				)
+			)
+
+			(element CrewSkillsInfoTabButtons
+				_selectedShipClass = "selectedShipClass"
+			)
+
+			(block
+				(style
+					(marginBottom = "{ 720: SXS, 1080: M }")
+					(width = 100%)
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+				)
+
+				(block
+					(style
+						(width = 100%)
+						(bind alpha "0" init=true watch=false (bind trigger "selectedShipClass"))
+					)
+					(element CrewAbilitiesMatrix
+						_crewId =					"_crewId"
+						_selectedShipClass =		"selectedShipClass"
+						_isCrewInfoModalWindow =	true
+					)
+
+					(controller $Animation
+						(bindcall play
+							init = true
+							duration = "0.1"
+							from = "{ alpha: 0 }"
+							to = "{ alpha: 1 }"
+							easing = "Easing.quad_out"
+							action = "kill"
+							(event "evShowSkills")
+						)
+					)
+				)
+				(element HorizontalDividerTwoPx)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+				(style
+					(align = "center")
+					(width = 100%)
+				)
+
+				(element StatusLine
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.INFO"
+					_text =				"shipInfo.subtype == selectedShipClass	? 'IDS_MOUSE_INSTRUCTION_GO_TO_SKILLS_TO_LEARN'
+																				: 'IDS_MOUSE_INSTRUCTION_ASSIGN_TO_THIS_CLASS_TO_LEARN'"
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+		(style
+			(align = "center")
+			(marginTop = "{ 720: MS, 1080: XL }")
+			(width = 100%)
+		)
+
+		(element DefaultButton
+			_width =			140px
+			_focusIndex =		0
+			_defaultFocused =	true
+			_label =			'IDS_CLOSE_UPPER_CASE'
+			_name =				'btn_cancel'
+		)
+	)
+)
+
+(def element MatrixUpgradedSkillsCounter (_crewId:number, _selectedShipClass:str)
+	(scope
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+
+		(var eliteCrewLearning:dhComponent = "crew.entity.eliteCrewLearning"	(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+
+		(var exploredSkillsCountByShipType:dict =		"eliteCrewLearning.exploredSkillsCountByShipType"	(event "eliteCrewLearning.evChanged"))
+		(var unlockedSkillsForShipClassCount:number =	"exploredSkillsCountByShipType[_selectedShipClass]")
+
+		(var maxSkillsForShipClassKey:str = "toUpper(_selectedShipClass) + '_EPIC_SKILLS_MAX'")
+		(var maxSkillsForClassCount:number = "SC.Common.ELITE_CREW_LEARNING_LIMITS[maxSkillsForShipClassKey]")
+		(var isMaxSkillsCountUnlockedForShipClass:bool = "unlockedSkillsForShipClassCount >= maxSkillsForClassCount")
+
+		(var upgradedSkillsCountForShipClass:str = "tr('IDS_UPGRADED_SKILLS_COUNT_FOR_' + toUpper(_selectedShipClass))")
+	)
+
+	(style
+		(flow = "horizontal")
+		(align = "center")
+		(width = 100%)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(alpha = "TC")
+			(marginRight = 6px)
+		)
+
+		(bind text "upgradedSkillsCountForShipClass")
+	)
+
+	(element DefaultDividedCounter
+		_curValueTextClass =		'$TextDefaultBold17NM'
+		_curValue =					"unlockedSkillsForShipClassCount"
+		_maxValue = 				"maxSkillsForClassCount"
+		_doNotAlphaOnZeroCurValue =	true
+	)
+)
+
+(def element CrewEliteMentorshipTooltipInfo (_crewId:number)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+
+		(var eliteCrewLearning:dhComponent =	"crew.entity.eliteCrewLearning"				(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+		(var exploredSkillsTotal:number =		"eliteCrewLearning.exploredSkillsTotal"		(event "eliteCrewLearning.evChanged"))
+
+		(var isMaxLevel:bool =					"crew.component.isMaxLevel" (event "crew.component.evLevelUp"))
+		(var isMaxPerksReceived:bool =			"exploredSkillsTotal >= SC.Common.ELITE_CREW_LEARNING_LIMITS.TOTAL_SKILLS_TO_UNLOCK")
+
+		(struct crewSkillUnlockPrice0 =	PULL_PRICE(_entityId = "SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[0]"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(struct crewSkillUnlockPrice1 =	PULL_PRICE(_entityId = "SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[1]"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(struct crewSkillUnlockPrice2 =	PULL_PRICE(_entityId = "SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[2]"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(struct crewTalentUnlockPrice =	PULL_PRICE(_entityId = "TALENT_RESEARCH_ENTITY_PK_KEY"						_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+	)
+
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isMaxPerksReceived || !isMaxLevel")
+				(args
+					_unifiedStatus =	"!isMaxLevel	? SC.Ui_styles.UNIFIED_STATUS.LOCK
+														: SC.Ui_styles.UNIFIED_STATUS.INFO"
+					_text =				"!isMaxLevel	? 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_NOT_MAX_LEVEL_STATUS_LINE'
+														: 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_MAX_PERKS_UNLOCKED_STATUS_LINE'"
+				)
+			)
+
+			(controller $Instance renderer='TooltipSystemCounterLine'
+				(bind enabled "!isMaxPerksReceived && isMaxLevel")
+				(args
+					_title =			'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_SKILLS_UNLOCKED_COUNT'
+					_count =			"exploredSkillsTotal"
+					_isAutoWidth =		true
+					_isCounterBold =	true
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "!isMaxPerksReceived")
+			)
+		)
+		(block
+			(bind visible "!isMaxPerksReceived")
+
+			(style (width = 100%))
+
+			(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
+			(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="!isMaxPerksReceived"
+				(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+					(element TooltipSystemSecondaryHeaderText
+						_headerText = 'IDS_COST_TO_RECEIVE_COLON'
+					)
+				)
+
+				(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+					(element TooltipSystemPriceTagLine
+						_title =		'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_COSTS_TALENT'
+						_priceInfo =	"crewTalentUnlockPrice.info"
+					)
+				)
+
+				(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+					(element TooltipSystemPriceTagLine
+						_title =		'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_COSTS_SKILLS_1'
+						_priceInfo =	"crewSkillUnlockPrice0.info"
+					)
+				)
+
+				(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+					(element TooltipSystemPriceTagLine
+						_title =		'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_COSTS_SKILLS_2'
+						_priceInfo =	"crewSkillUnlockPrice1.info"
+					)
+				)
+
+				(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+					(element TooltipSystemPriceTagLine
+						_title =		'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_COSTS_SKILLS_3'
+						_priceInfo =	"crewSkillUnlockPrice2.info"
+					)
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText
+					_headerText = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_TALENT_HEADER'
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_TALENT_DESCRIPTION'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText
+					_headerText = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_EPIC_SKILLS_HEADER'
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_EPIC_SKILLS_DESCRIPTION'
+				)
+			)
+		)
+	)
+)

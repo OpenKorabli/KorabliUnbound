@@ -1,0 +1,664 @@
+(def element ModalWindowAlmanacs ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evChangeStageID)
+
+		(event evClaimButtonPressed)
+		(event evStartLootAnimation)
+		(event evHideFx)
+		(event evHideRewardLooted)
+		(event evSelectTomorrowReward)
+
+		(macro USER_PREF_DATA)
+		(var showLoginRewardsOnDockEnter:bool = "userPrefs.showLoginRewardsOnDockEnter")
+		(var hasShowLoginRewardsOnDockEnterNeverBeenSet:bool = "userPrefs.showLoginRewardsOnDockEnter == null")
+
+		(var selectedStageID:number = 1)
+		(bind selectedStageID "$event.value" init=false watch=false (event "evChangeStageID"))
+
+		(var almanacStagesCollection:gfx =	"$datahub.getCollection(CC.almanacStageState)")
+		(var almanacStagesItems:array =		"almanacStagesCollection.items ?: []" (event "almanacStagesCollection.evAdded") (event "almanacStagesCollection.evRemoved"))
+
+		(var almanacStateEntity:gfx =	"$datahub.getSingleEntity(CC.almanacState)")
+		(var almanacState:gfx =			"almanacStateEntity.almanacState")
+		(var daysLeft:number =			"almanacState.daysLeft"			(event "almanacState.evChanged"))
+		(var currentStage:number =		"almanacState.currentStage"		(event "almanacState.evChanged"))
+		(var almanacStateBg:str =		"almanacState.background"		(event "almanacState.evChanged"))
+		(var almanacBg:str =			"almanacStateBg ? almanacStateBg : 'default'")
+
+
+		(var almanacStageStateEntityCurrent:gfx =	"$datahub.getPrimaryEntity(CC.almanacStageState, currentStage)")
+		(var almanacStageStateCurrent:gfx =			"almanacStageStateEntityCurrent.almanacStageState")
+		(var currentStageID:number =				"almanacStageStateCurrent.stageID"		(event "almanacStageStateCurrent.evStageUpdated"))
+		(var isCurrentLooted:bool =					"almanacStageStateCurrent.isLooted"		(event "almanacStageStateCurrent.evStageUpdated"))
+
+		(var almanacStageStateEntityLast:gfx =		"almanacStagesItems[almanacStagesItems.length - 1]")
+		(var almanacStageStateLast:gfx =			"almanacStageStateEntityLast.almanacStageState")
+		(var lastStageID:number =					"almanacStageStateLast.stageID"			(event "almanacStageStateLast.evStageUpdated"))
+
+		(var isPostProgressReward:bool =			"lastStageID == selectedStageID")
+
+		(var almanacStageStateEntityNext:gfx =		"$datahub.getPrimaryEntity(CC.almanacStageState, currentStage + 1)")
+		(var almanacStageStateNext:gfx =			"almanacStageStateEntityNext.almanacStageState")
+		(var nextStageID:number =					"almanacStageStateNext.stageID"			(event "almanacStageStateNext.evStageUpdated"))
+
+		(var isExtraRewardStage:bool =			"currentStageID == lastStageID")
+		(var isExtraRewardNextStage:bool =		"nextStageID == lastStageID")
+		(var almanacWindowDescription:str =		"isExtraRewardStage || isCurrentLooted && isExtraRewardNextStage	? 'IDS_DAILY_EXTRA_REWARD_WINDOW_DESCRIPTION'
+																													: 'IDS_DAILY_REWARD_WINDOW_DESCRIPTION'")
+
+		(var isTinyScreen:bool = "stageHeight < 820")
+	)
+
+	(bindcall externalCall "hasShowLoginRewardsOnDockEnterNeverBeenSet ? 'inputMapping.onAction' : ''" "['setUserPref', { name: 'showLoginRewardsOnDockEnter', value: true }]" init=false watch=false on='addedToStage')
+
+	(dispatch evStartLootAnimation		dir="EventDirection.DOWN"				(event "evClaimButtonPressed") (bind enabled "!isPostProgressReward"))
+	(dispatch evHideFx					dir="EventDirection.DOWN" delay=0.7		(event "evStartLootAnimation"))
+	(dispatch evHideRewardLooted		dir="EventDirection.DOWN"				(event "evHideFx"))
+	(dispatch evSelectTomorrowReward	dir="EventDirection.DOWN" delay=0.4		(event "evHideRewardLooted"))
+
+	(class $Fullsize)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element AnimatedBackground
+			_selectedCategory =	"almanacBg"
+			_type =				"SC.Ui_styles.ANIMATED_BG.ALMANAC_AND_SNOWFLAKES"
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.3
+				duration = 0.15
+				from = "{ alpha: 1 }"
+				to = "{ alpha: 0 }"
+				easing = "Easing.line"
+				action = "killAll"
+				(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(element ModalWindowHeaderFullSize
+			_windowName =		'IDS_MODAL_WINDOW_ALMANAC_HEADER'
+			_paddingRight =		"M"
+			_paddingLeft =		"M"
+			_backButtonText =	'IDS_RETURN_TO_DOCK'
+			_methods =			"[{ type: 'inputMapping.onRequest', name: 'closeModalAlmanacs', args: {} }]"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(top = "{720:64, 1080:140}")
+			(width = 100%)
+		)
+
+		(element DailyRewardsHintBlock
+			_almanacWindowDescription =	"almanacWindowDescription"
+			_isLooted =					"isCurrentLooted"
+			_isTinyScreen =				"isTinyScreen"
+		)
+	)
+
+	(block
+		(style
+			(align = "center")
+			(marginTop = "{720:70, 1080:188}")
+			(width = 100%)
+		)
+
+		(hblock
+			(style (bind height "isTinyScreen ? 552px : 600px"))
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+				(style
+					(marginRight = "MS")
+					(width = 360px)
+					(height = 100%)
+				)
+
+				(element BigDailyRewardItem
+					_selectedStageID =		"selectedStageID"
+					_isPostProgressReward =	"isPostProgressReward"
+				)
+			)
+
+			(htile
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+
+				(style
+					(bind width "isTinyScreen ? 552px : 600px")
+					(height = 100%)
+					(padding = "-SXS")
+				)
+
+				(controller $Repeat renderer='SmallDailyRewardItem'
+					(bind count "almanacStagesItems.length")
+					(args
+						_stageEntity =			"almanacStagesItems[$index]"
+						_selectedStageID =		"selectedStageID"
+						_isPostProgressReward =	"$index == almanacStagesItems.length - 1"
+						_isTinyScreen =			"isTinyScreen"
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+
+		(style
+			(position = "absolute")
+			(right = "{1280:24,1920:48}")
+			(bottom = "{720:16,1080:36}")
+		)
+
+		(element CheckBox
+			_maxTfWidth =	800
+			_label =		'IDS_CHECKBOX_ALMANAC_DO_NOT_OPEN_UPON_LOGIN'
+			_isChecked =	"showLoginRewardsOnDockEnter"
+			_methods =		"[{ type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'showLoginRewardsOnDockEnter', value: !showLoginRewardsOnDockEnter } }]"
+		)
+	)
+)
+
+(def element DailyRewardsHintBlock (_almanacWindowDescription:str, _isLooted:bool, _isTinyScreen:bool=false)
+	(scope
+		(var almanacStateEntity:gfx =	"$datahub.getSingleEntity(CC.almanacState)")
+		(var almanacState:gfx =			"almanacStateEntity.almanacState")
+		(var daysLeft:number =			"almanacState.daysLeft"		(event "almanacState.evChanged"))
+		(var currentStage:number =		"almanacState.currentStage"	(event "almanacState.evChanged"))
+
+		(var almanacStageStateEntity:gfx =	"$datahub.getPrimaryEntity(CC.almanacStageState, currentStage)")
+		(var almanacStageState:gfx =		"almanacStageStateEntity.almanacStageState")
+		(var isLooted:bool =				"almanacStageState.isLooted"	(event "almanacStageState.evStageUpdated"))
+
+		(var isTimeRunningUp:bool =	"daysLeft < 5")
+		(var timeLeftStatus:str =	"daysLeft < 2		? 'IDS_ALMANAC_WINDOW_LAST_DAY_STATUS' :
+									 isTimeRunningUp	? subst('IDS_PL_ALMANAC_WINDOW_WARNING_STATUS',			[], { timeUntilAlmanacEnd: daysLeft }, daysLeft)
+														: subst('IDS_PL_ALMANAC_WINDOW_DEFAULT_TIME_STATUS',	[], { durationAlmanac: daysLeft }, daysLeft)")
+	)
+
+	(style (width = 100%))
+
+	(tf
+		(bind class "_isTinyScreen ? '$TextDefault17NM' : '$TextDefault21NM'")
+		(style
+			(width = 100%)
+			(textAlign = "center")
+			(alpha = "TA")
+		)
+
+		(bind text "_almanacWindowDescription")
+	)
+
+	(block
+		(bind visible "!(daysLeft == 1 && isLooted)")
+
+		(style
+			(align = "center")
+			(marginTop = "{720:SXS, 1080:M}")
+			(width = 100%)
+			(alpha = 0)
+			(visualOffsetY = 10px)
+		)
+
+		(element StatusLine
+			_unifiedStatus =	"isTimeRunningUp ? SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION : SC.Ui_styles.UNIFIED_STATUS.DATE"
+			_text =				"timeLeftStatus"
+			_textClass =		"_isTinyScreen ? '$TextDefaultNM' : '$TextDefault17NM'"
+		)
+
+		(controller $Animation
+			(play
+				delay = "0.15"
+				duration = "0.15"
+				from = "{ alpha: 0, visualOffsetY: 10 }"
+				to = "{ alpha: 1, visualOffsetY: 0 }"
+				easing = "Easing.quad_out"
+				action = "kill"
+			)
+		)
+	)
+)
+
+(def element SmallDailyRewardItem (_stageEntity:gfx, _selectedStageID:number, _isPostProgressReward:bool=false, _isTinyScreen:bool=false)
+	(scope
+		(event evChangeStageID)
+
+		(event evStartLootAnimation)
+		(event evSelectTomorrowReward)
+
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var almanacStageState:gfx =	"_stageEntity.almanacStageState")
+		(var stageID:number =			"almanacStageState.stageID"		(event "almanacStageState.evStageUpdated"))
+		(var isLooted:bool =			"almanacStageState.isLooted"	(event "almanacStageState.evStageUpdated"))
+		(var isCurrent:bool =			"almanacStageState.isCurrent"	(event "almanacStageState.evStageUpdated"))
+		(var rewards:array =			"almanacStageState.rewards"		(event "almanacStageState.evStageUpdated"))
+
+		(var almanacStateEntity:gfx =	"$datahub.getSingleEntity(CC.almanacState)")
+		(var almanacState:gfx =			"almanacStateEntity.almanacState")
+		(var currentStage:number =		"almanacState.currentStage"	(event "almanacState.evChanged"))
+
+		(var almanacCurrentStageStateEntity:gfx =		"$datahub.getPrimaryEntity(CC.almanacStageState, currentStage)")
+		(var almanacCurrentStageStateComponent:gfx =	"almanacCurrentStageStateEntity.almanacStageState")
+		(var isCurrentStageLooted:bool =				"almanacCurrentStageStateComponent.isLooted"	(event "almanacCurrentStageStateComponent.evStageUpdated"))
+
+		(var isTomorrowStageID:bool = "stageID == currentStage + 1")
+
+		
+		(var rewardEntity:gfx =		"$datahub.getEntity(rewards[0])")
+		(var rewardComponent:gfx =	"rewardEntity.rewardComponent")
+		(var rewardPath:str =		"rewardComponent.category")
+
+		
+
+		(var isSelected:bool = "_selectedStageID == stageID")
+
+		(var isLootAnimation:bool = false)
+		(bind isLootAnimation "true"	init=false	(event "evStartLootAnimation"))
+		(bind isLootAnimation "false"	init=false	(event "evSelectTomorrowReward"))
+	)
+
+	(dispatch evChangeStageID	dir="EventDirection.UP"		args="{ value: stageID }" on='addedToStage' (bind enabled "(isCurrentStageLooted && isTomorrowStageID) || isCurrent"))
+
+	(style
+		(margin = "SXS")
+		(bind width "_isTinyScreen ? 72px : 80px")
+		(bind height "_isTinyScreen ? 72px : 80px")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	)
+
+	(block
+		(bind visible "_isPostProgressReward")
+		(style
+			(position = "absolute")
+			(top = "XXS") (left = "XXS")
+			(backgroundImage = 'url:../service_kit/unified_status_icons/icon_update.png')
+		)
+	)
+	(block
+		(class $MiddleVHAbsolutely)
+		(style (hitTest = false))
+		(element RewardCategory
+			_rewardCategory = "rewardPath"
+			_isUnavailable = "isLooted"
+			_isRewardActive = "isCurrent && !isLooted"
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style (align = "center|middle") (hitTest = false))
+
+			(block
+				(style
+					(width = 48px) (height = 48px)
+					(pivotX = 50%) (pivotY = 50%)
+					(backgroundImage = 'url:../reward_categories/icon_check.png')
+				)
+				(alpha = "isLooted ? 1 : 0")
+
+				(controller $Animation
+					(bindcall play  duration = 0.5
+									delay = 0.2
+									from = "{ visualScaleX: 2, visualScaleY: 2, alpha: 0 }"
+									to = "{ visualScaleX: 1, visualScaleY: 1, alpha: 1 }"
+									(bind enabled "isLooted")
+									(bind trigger "isLooted")
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (padding = -1px))
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(bind alpha	"	isSelected	? 0.5 :
+								rollOver	? 0.2
+											: 0")
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(scale9grid = 2)
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SmallDailyRewardTooltip')
+		(args
+			_stageID =				"stageID"
+			_isSelected =			"isSelected"
+			_isPostProgressReward =	"_isPostProgressReward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled = "!isLootAnimation"
+		_soundSet = "'button_secondary'"
+		_dispatchedEv = "'evChangeStageID'"
+		_dispatchParams = "{ value: stageID }"
+	)
+)
+
+(def element BigDailyRewardItem (_selectedStageID:number, _isPostProgressReward:bool=false)
+	(scope
+		(event evChangeStageID)
+		(event evHideRewardLooted)
+		(event evClaimButtonPressed)
+		(event evHideFx)
+		(event evSelectTomorrowReward)
+
+		(var almanacStageStateEntity:gfx =	"$datahub.getPrimaryEntity(CC.almanacStageState, _selectedStageID)")
+		(var almanacStageState:gfx =		"almanacStageStateEntity.almanacStageState")
+		(var isLooted:bool =				"almanacStageState.isLooted"		(event "almanacStageState.evStageUpdated"))
+		(var isUnattainable:bool =			"almanacStageState.isUnattainable"	(event "almanacStageState.evStageUpdated"))
+		(var isCurrent:bool =				"almanacStageState.isCurrent"		(event "almanacStageState.evStageUpdated"))
+		(var rewards:array =				"almanacStageState.rewards"			(event "almanacStageState.evStageUpdated"))
+
+		(var almanacStateEntity:gfx =	"$datahub.getSingleEntity(CC.almanacState)")
+		(var almanacState:gfx =			"almanacStateEntity.almanacState")
+		(var currentStage:number =		"almanacState.currentStage" (event "almanacState.evChanged"))
+
+		(var almanacCurrentStageStateEntity:gfx =	"$datahub.getPrimaryEntity(CC.almanacStageState, currentStage)")
+		(var almanacCurrentStageState:gfx =			"almanacCurrentStageStateEntity.almanacStageState")
+		(var isCurrentStageLooted:bool =			"almanacCurrentStageState.isLooted" (event "almanacCurrentStageState.evStageUpdated"))
+
+		(var isLootButtonVisible:bool =	"isCurrent && !isLooted")
+		(var isLockStatus:bool =		"!isCurrent && !isLooted && !isUnattainable")
+
+		(var almanacStateTimeLeft:number =	"_selectedStageID - currentStage")
+		(var daysTillRewardStatus:str =		"almanacStateTimeLeft == 1 ? 'IDS_AVAILABLE_TOMORROW' : 'IDS_TOOLTIP_AVAILABLE_LATER'")
+
+		(var isShowLootFx:bool = "false")
+		(bind isShowLootFx "true" init=false (event "evClaimButtonPressed"))
+		(bind isShowLootFx "false" init=false (event "evHideFx"))
+	)
+
+	(dispatch evClaimButtonPressed	dir="EventDirection.UP"		(bind enabled "isCurrent && isCurrentStageLooted") (bind trigger "isCurrentStageLooted"))
+	(dispatch evChangeStageID		dir="EventDirection.UP"		args="{ value: _isPostProgressReward ? _selectedStageID : _selectedStageID + 1 }" (event "evSelectTomorrowReward"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['reward', 'receive']" init=false watch=false (bind enabled "isShowLootFx") (bind trigger "isShowLootFx"))
+
+	(class $Fullsize)
+	(style
+		(align = "center")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	)
+
+	(block
+		(style
+			(marginTop = "{720:80,1080:92}")
+			(bind alpha "0" init=false watch=false (bind trigger "_selectedStageID"))
+		)
+
+		(element RewardItemBig
+			_rewardEntityId = "rewards[0]"
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from = "{ alpha: 1, visualOffsetY: 0 }"
+				to = "{ alpha: 0, visualOffsetY: -10 }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(event "evHideRewardLooted")
+			)
+
+			(bindcall play
+				watch = false
+				delay = "isShowLootFx ? 0.075 : 0.375"
+				duration = 0.15
+				from = "{ alpha: 0, visualOffsetY: 10 }"
+				to = "{ alpha: 1, visualOffsetY: 0 }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(bind trigger "_selectedStageID")
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginTop = "MS")
+			(bind alpha "0" init=false watch=false (bind trigger "_selectedStageID"))
+		)
+
+		(block
+			(style
+				(alpha = 0)
+				(visualOffsetY = 10px)
+			)
+
+			(class $MiddleAlignedAbsolutely)
+
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "isLooted")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text =				'IDS_ALMANAC_BUTTON_REWARD_LOOTED'
+					_textClass =		'$TextDefault17NM'
+				)
+			)
+
+			(controller $Animation
+				(bindcall play
+					init=true
+					duration = "0.15"
+					from = "{ alpha: 0, visualOffsetY: 10 }"
+					to = "{ alpha: 1, visualOffsetY: 0 }"
+					easing = "Easing.quad_out"
+					action = "kill"
+					(bind enabled "!isLootButtonVisible")
+				)
+
+				(bindcall play
+					delay = "0.15"
+					duration = "0.15"
+					from = "{ alpha: 1, visualOffsetY: 0 }"
+					to = "{ alpha: 0, visualOffsetY: -10 }"
+					easing = "Easing.quad_out"
+					action = "kill"
+					(bind enabled "isLootButtonVisible")
+				)
+			)
+		)
+
+		(block
+			(class $MiddleAlignedAbsolutely)
+
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "isLockStatus")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.LOCK"
+					_text =				"daysTillRewardStatus"
+					_textClass =		'$TextDefault17NM'
+				)
+			)
+		)
+
+		(block
+			(class $MiddleAlignedAbsolutely)
+
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "isUnattainable")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+					_text =				'IDS_ALMANAC_REWARD_UNAVAILABLE'
+					_textClass =		'$TextDefault17NM'
+				)
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.225
+				duration = 0.15
+				from = "{ alpha: 1, visualOffsetY: 0 }"
+				to = "{ alpha: 0, visualOffsetY: -10 }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(event "evHideRewardLooted")
+			)
+
+			(bindcall play
+				watch = false
+				delay = "isShowLootFx ? 0.3 : 0.6"
+				duration = 0.15
+				from = "{ alpha: 0, visualOffsetY: 10 }"
+				to = "{ alpha: 1, visualOffsetY: 0 }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(bind trigger "_selectedStageID")
+			)
+		)
+	)
+
+	(block
+		(visible = "isLootButtonVisible")
+
+		(style
+			(bind alpha "0" init=false watch=false (bind trigger "_selectedStageID"))
+			(visualOffsetY = 10px)
+		)
+
+		(element DefaultButton
+			_enabled =			true
+			_label =			'IDS_TO_TAKE_SINGLE_REWARD'
+			_width =			180
+			_size =				"SIZE.LARGE"
+			_focusIndex =		0
+			_defaultFocused =	true
+			_methods =			"isLootButtonVisible ? [{ type: 'inputMapping.onAction', name: 'AlmanacComponentProxy.getReward', args: { stageID: _selectedStageID } }] : []"
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.45
+				duration = 0.15
+				from = "{ alpha: 0, visualOffsetY: 10, visible: false }"
+				to = "{ alpha: 1, visualOffsetY: 0, visible: true }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(bind enabled "isLootButtonVisible")
+			)
+
+			(bindcall play
+				duration = 0.15
+				to = "{ alpha: 0, visualOffsetY: -10, visible: false }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(event "evHideRewardLooted")
+			)
+
+			(bindcall play
+				duration = 0.01
+				to = "{ alpha: 0, visualOffsetY: -10, visible: false }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(bind trigger "_selectedStageID")
+				(bind enabled "!isLootButtonVisible")
+			)
+		)
+	)
+)
+
+(def element SmallDailyRewardTooltip (_stageID:number, _isSelected:bool, _isPostProgressReward:bool=false)
+	(scope
+		(var almanacStageStateEntity:gfx =	"$datahub.getPrimaryEntity(CC.almanacStageState, _stageID)")
+		(var almanacStageState:gfx =		"almanacStageStateEntity.almanacStageState")
+		(var isLooted:bool =				"almanacStageState.isLooted"		(event "almanacStageState.evStageUpdated"))
+		(var isUnattainable:bool =			"almanacStageState.isUnattainable"	(event "almanacStageState.evStageUpdated"))
+		(var isCurrent:bool =				"almanacStageState.isCurrent"		(event "almanacStageState.evStageUpdated"))
+		(var rewards:array =				"almanacStageState.rewards ?: []"	(event "almanacStageState.evStageUpdated"))
+
+		(var almanacStateEntity:gfx =	"$datahub.getSingleEntity(CC.almanacState)")
+		(var almanacState:gfx =			"almanacStateEntity.almanacState")
+		(var currentStage:number =		"almanacState.currentStage" (event "almanacState.evChanged"))
+
+		(var daysTillReward:number = "_stageID - currentStage")
+		(var tooltipStatus:dict = "	isLooted				? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,		text: 'IDS_TOOLTIP_REWARD_TAKEN' } :
+									isUnattainable			? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,	text: 'IDS_ALMANAC_REWARD_UNAVAILABLE_TOOLTIP_DESCRIPTION' } :
+									isCurrent				? null :
+									daysTillReward == 1		? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		text: 'IDS_AVAILABLE_TOMORROW' }
+															: { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		text: 'IDS_TOOLTIP_AVAILABLE_LATER' }")
+	)
+
+	(style (hitTest = false) (width = 350px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText =		"_isPostProgressReward ? 'IDS_POSTPROGRESS_REWARD_TOOLTIP_HEADER' : 'IDS_DAILY_REWARD_TOOLTIP_HEADER'"
+			_unifiedStatus =	"isLooted ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "tooltipStatus != null"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "tooltipStatus != null")
+				(args
+					_unifiedStatus =	"tooltipStatus.unifiedStatus"
+					_text =				"tooltipStatus.text"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isPostProgressReward"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isPostProgressReward")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.UPDATE"
+					_text =				'IDS_POSTPROGRESS_REWARD_TOOLTIP_DESCRIPTION'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemDHRewards
+			_rewards = "rewards"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!_isSelected"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isSelected")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text =				'IDS_SHOW_REWARD_TOOLTIP_MOUSE_INSTRUCTION'
+				)
+			)
+		)
+	)
+)

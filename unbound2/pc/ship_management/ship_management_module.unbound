@@ -1,0 +1,335 @@
+(def element ShipModule (_moduleEntity:gfx, _isHeightProvider:bool=false, _isLastModuleInTree:bool=false)
+	(scope
+		(var resourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
+		(var accountResource:gfx = "resourceEntity.accountResource")
+		(var isOperationsAccountLocked:bool = "accountResource.operationsLocked" (event "accountResource.evOperationsLockChanged"))
+
+		(var moduleInfo:gfx = "_moduleEntity.module")
+		(var nextShipId:number = "moduleInfo.nextShipId" (event "moduleInfo.evUpdated"))
+		(var isModuleExplored:bool = "moduleInfo.isExplored" (event "moduleInfo.evUpdated"))
+		(var isModulePurchased:bool = "moduleInfo.isPurchased" (event "moduleInfo.evUpdated"))
+		(var canBuy:bool = "moduleInfo.canBuy" (event "moduleInfo.evUpdated"))
+		(var explorationLocked:bool = "!canBuy && !isModuleExplored && !isModulePurchased")
+
+		(var isInstalled:bool = "_moduleEntity.hasComponent(CC.installedModule)" (event "_moduleEntity.evAdded") (event "_moduleEntity.evRemoved"))
+		(var isStockModule:bool = "_moduleEntity.hasComponent(CC.stockModule)" (event "_moduleEntity.evAdded") (event "_moduleEntity.evRemoved"))
+		
+		(var moduleType:str = "moduleInfo.type" (event "moduleInfo.evUpdated"))
+		(var moduleDepth:number = "moduleInfo.depth" (event "moduleInfo.evUpdated"))
+
+		(var modulePK:str = "moduleType + '_' + moduleDepth")
+
+		(var modulesByTypeCollection:gfx = "$datahub.getCollection(CC.module).getChildByPath('byModuleType.' + moduleType)")
+		(var modulesByType:array = "modulesByTypeCollection.items ?: []" (event "modulesByTypeCollection.evAdded") (event "modulesByTypeCollection.evRemoved"))
+
+		(macro USER_PREF_DATA)
+		(var moduleId:number = "moduleInfo.id" (event "moduleInfo.evUpdated"))
+		(var isModulePreviewedInTTX:bool = "userPrefs.previewModuleId == moduleId")
+
+		
+		(macro PULL_SHIP_ID)
+		(var shipEntity:gfx = "$datahub.getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:gfx = "shipEntity.ship")
+		(var upgradableShipInfo:gfx = "shipEntity.upgradableShipInfo" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+
+		(var ownShipWatcher:gfx = "$datahub.getPrimWatcher(CC.ownShip, viewedShipId)")
+		(var ownShipEntity:gfx = "ownShipWatcher.entity" (event "ownShipWatcher.event"))
+		(var ownShipInfo:gfx = "shipEntity.ownShip")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var isInFormation:bool = "ownShipInfo.isInFormation" (event "ownShipInfo.evUpdateLock"))
+		(var isLocked:bool = "ownShipInfo.isLocked" (event "ownShipInfo.evUpdateLock"))
+		(var isNeedRepair:bool = "ownShipInfo.isNeedRepair" (event "ownShipInfo.evUpdateDockState"))
+
+		(var isAvailable:bool = "upgradableShipInfo.isExplored" (event "upgradableShipInfo.evUpdate"))
+		(var isModulePriceButtonVisible:bool = "(isAvailable && !isModuleExplored) || (isOwned && !isModulePurchased)")
+
+		(var isManagementOperationsLocked:bool = "	isInFormation || isLocked ||
+													isNeedRepair || isOperationsAccountLocked || explorationLocked")
+		
+		
+		
+		(struct freeXpModuleSuffTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SUFF"))
+		(struct freeXpModuleSuffRepeatTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SUFF_REPEAT"))
+		(struct freeXpModuleInsuffTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF"))
+		(struct freeXpModuleInsuffRepeatTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF_REPEAT"))
+		
+		(var currentTipId:number = "freeXpModuleSuffTip.isActive		&& freeXpModuleSuffTip.targetId == moduleInfo.name				? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SUFF :
+									freeXpModuleSuffRepeatTip.isActive	&& freeXpModuleSuffRepeatTip.targetId == moduleInfo.name		? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SUFF_REPEAT :
+									freeXpModuleInsuffTip.isActive		&& freeXpModuleInsuffTip.targetId == moduleInfo.name			? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF :
+									freeXpModuleInsuffRepeatTip.isActive && freeXpModuleInsuffRepeatTip.targetId == moduleInfo.name		? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF_REPEAT 
+																																		: SC.Context_guiding_tip.TIP_TYPE.NONE ")
+		(var isGuidingTipVisible:bool = "currentTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		
+
+		
+		(var iconPath:str = "'url:../modules/icon_module' +	moduleType + (	isInstalled && isOwned	? '_installed' :
+																			isModulePurchased		? '' :
+																			isModuleExplored		? '_researched'
+																									: '_not_owned') + '.png'")
+
+		(var clickAction:str = "isManagementOperationsLocked || isInstalled		? '' :
+								isModulePurchased								? 'installModule'
+																				: 'setUserPref'")
+
+		(var actionParams:dict = "	clickAction == 'installModule'		?	{ shipId: viewedShipId, moduleId: moduleId } :
+									clickAction == 'setUserPref'		?	isModulePreviewedInTTX	? { value: 0, name: 'previewModuleId' }
+																									: { value: moduleId, name: 'previewModuleId' }
+																		:	{}")
+		(var isTopLinkVisible:bool = "moduleDepth == 0")
+
+		(macro MOUSE_HANDLER_SCOPE _prefix="'module_area_'")
+		(macro MOUSE_HANDLER_SCOPE _prefix="'module_slot_'")
+		(var commonAlpha:number = "isAvailable || isModulePreviewedInTTX ? 0.7 : 0.3")
+		(var slotAlpha:number = "	isInstalled && isOwned || isModulePreviewedInTTX	? 1 :
+									clickAction	&&	module_slot_mouseDown				? commonAlpha - 0.1 :
+									clickAction	&&	module_slot_rollOver				? commonAlpha + 0.3
+																						: commonAlpha")
+		
+	)
+	(bind name "moduleInfo.name")
+	(style
+		(align = "center")
+		(bind marginRight "	shipInfo.hasControlledSquadrons &&
+							shipInfo.subtype != ShipTypes.AIRCARRIER	? { 1280:8px, 1920:28px }
+																		: { 1568:16px, 1920:28px }")
+		(bind marginLeft "	shipInfo.hasControlledSquadrons &&
+							shipInfo.subtype != ShipTypes.AIRCARRIER	? { 1280:8px, 1920:28px }
+																		: { 1568:16px, 1920:28px }")
+	)
+	(style (bind height "_isHeightProvider || !toBool(nextShipId) ? auto : 100%"))
+	(macro MOUSE_EVENTS_DISPATCHER _prefix="'module_area_'")
+	
+	(block
+		(bind visible "isTopLinkVisible")
+		(macro MODULES_ALPHA_STATE "isAvailable")
+
+		(class $ModulesLink)
+		(style (height = "{ 720:SXS, 1080:M }"))
+	)
+
+	(block
+		(alpha = "slotAlpha")
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotAlpha" _alpha="slotAlpha")
+
+		(block
+			(bind alpha "isModulePreviewedInTTX ? 1.3 : 1")
+
+			
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(paddingLeft = "-M")
+					(paddingRight = "-M")
+					(paddingTop = "-S")
+					(bind paddingBottom "isModulePriceButtonVisible	? -MS : -S")
+				)
+
+				(block
+					(class $Fullsize)
+
+					(controller $Tooltip
+						(renderer = 'ModuleTooltip')
+						(args
+							_modulePK = "modulePK"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(macro MOUSE_HANDLER
+						_prefix = "'module_slot_'"
+						_soundSet = "clickAction ? 'button_module' : ''"
+						_methods = "[	{	type: clickAction ? 'inputMapping.onAction' : '',
+											name: clickAction,
+											args: actionParams },
+										{	type: clickAction == 'setUserPref' ? '' : 'inputMapping.onAction',
+											name:  'setUserPref',
+											args: { value: 0, name: 'previewModuleId' }}]"
+					)
+				)
+			)
+
+			(block
+				(style
+					(width = 60px)
+					(height = 60px)
+					(bind backgroundImage "iconPath")
+					(hitTest = false)
+				)
+
+				
+				(block
+					(bind visible "!isModulePreviewedInTTX")
+					(class $FullsizeAbsolute)
+					(style (backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png') (scale9grid = 2))
+					(bind colorTransform "isInstalled && isOwned ? COLOR_TRANSFORM_WHITE_TO_YELLOW : {}")
+				)
+
+				(block
+					(bind visible "isModulePreviewedInTTX")
+					(class $FullsizeAbsolute)
+					(style (padding = -1px))
+
+					(block
+						(class $Fullsize)
+						(style (backgroundImage = 'url:../service_kit/frames/two_pixel_frame.png') (scale9grid = 3))
+					)
+				)
+				
+
+			)
+		)
+	)
+
+	(block
+		(style
+			(bind height "	moduleDepth < modulesByType.length - 1		?	{ 720:24px, 1080:32px } :
+							_isHeightProvider							?	{ 720:40px, 1080:80px }
+																		:	100%")
+		)
+
+		(block
+			(style (bind height "isModulePriceButtonVisible ? 25px : 0px"))
+
+			(block
+				(style (position = "absolute") (width = 1px) (align = "center"))
+
+				(controller $Instance renderer='ModulePriceButton'
+					(bind enabled "isModulePriceButtonVisible")
+					(args
+						_modulePK = "modulePK"
+						_rollOver = "module_area_rollOver && !isManagementOperationsLocked"
+					)
+				)
+
+				(controller $Instance renderer='GuidingTipHub'
+					(bind enabled "isGuidingTipVisible")
+					(args
+						_tipId = "currentTipId"
+						_tipPositioning = "TIP_POSITION_RIGHT"
+						_offsetX = 51px
+						_pointerOffset = 34px
+						_modalWindowName = 'Dock'
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "nextShipId || !_isLastModuleInTree")
+			(macro MODULES_ALPHA_STATE "isAvailable")
+
+			(class $ModulesLink)
+			(style (height = 100%))
+		)
+		
+	)
+)
+
+(def element ModulePriceButton (_modulePK:str, _rollOver:bool)
+	(scope
+		(var moduleEntity:gfx = "$datahub.getPrimaryEntity(CC.module, _modulePK)")
+		(var moduleInfo:gfx = "moduleEntity.module")
+		(var moduleId:number = "moduleInfo.id" (event "moduleInfo.evUpdated"))
+		(var isExplored:bool = "moduleInfo.isExplored" (event "moduleInfo.evUpdated"))
+		(var expDeficit:number = "moduleInfo.expDeficit ?: 0" (event "moduleInfo.evUpdated"))
+		(var creditsDeficit:number = "moduleInfo.creditsDeficit ?: 0" (event "moduleInfo.evUpdated"))
+
+		(struct moduleExplorePrice = PULL_PRICE(_entityId = "toString(moduleId)" _actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(struct moduleBuyPrice = PULL_PRICE(_entityId = "toString(moduleId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+	
+		(var isDeficit:bool = "!isExplored	?	expDeficit > 0
+											:	creditsDeficit > 0")
+		(var priceInfo:dict = "!isExplored	? moduleExplorePrice.info
+											: moduleBuyPrice.info")
+
+		(var buttonLabel:str = "!isExplored	? 'IDS_RESEARCH_UPPER_CASE'
+											: 'IDS_BUY_UPPER_CASE'")
+
+		(var buttonRequest:str = "!isExplored	? 'openResearchModuleWindow'
+												: 'openPurchaseAndInstallModuleWindow'")
+	)
+	(bind name "'ButtonModuleResearchOrPurchase_' + moduleInfo.name")
+	(style (width = 92px) (height = 25px) (backgroundColor = "NO_COLOR"))
+
+	(block
+		(style
+			(width = 100%) (align = "center") (marginTop = 5px) (paddingLeft = "XXS")
+			(bind alpha "isDeficit ? 0.4 : 0.9")
+			(hitTest = false)
+		)
+
+		(controller $Animation
+			(bind enabled "!isDeficit")
+
+			(bindcall play
+				duration = 0.15
+				from = "{ alpha: 1, visible:true, visualOffsetY: 0px }"
+				to = "{ alpha: 0, visible:false, visualOffsetY: 10px }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				reverse = "!_rollOver"
+				(bind trigger "_rollOver")
+			)
+		)
+
+		(controller $Instance renderer='PriceTag'
+			(bind enabled "priceInfo")
+			(args
+				_priceInfo = "priceInfo"
+				_showDiscountTag = true
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute") (top = 1px)
+			(width = 100%) (align = "center")
+			(alpha = 0) (visualOffsetY = 10px)
+		)
+		(visible = false)
+
+		(controller $Animation
+			(bind enabled "!isDeficit")
+
+			(bindcall play
+				duration = 0.15
+				from = "{ alpha: 0, visible: false, visualOffsetY: -10px }"
+				to = "{ alpha: 1, visible: true, visualOffsetY: 0px }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				reverse = "!_rollOver"
+				(bind trigger "_rollOver")
+			)
+		)
+
+		(element DefaultButton
+			_width = 100%
+			_enabled = "!isDeficit"
+			_size = "SIZE.SMALL"
+			_isTransactionBtn = true
+			_label = "buttonLabel"
+			_methods = "[{	type: 'inputMapping.onRequest',
+							name: buttonRequest,
+							args: { modulePK: _modulePK}},
+						{	type: 'inputMapping.onAction',
+							name: 'setUserPref',
+							args: { value: 0, name: 'previewModuleId' }}]"
+		)
+	)
+)
+
+(def element ModuleItemView (_moduleInfoType:str, _isExplored:bool)
+	(scope
+		(var moduleState:str =	"_isExplored ? '_researched' : '_not_owned'")
+		(var iconPath:str =		"'url:../modules/icon_module' + _moduleInfoType + moduleState + '.png'")
+	)
+
+	(style
+		(width = 60px)
+		(height = 60px)
+		(bind backgroundImage "iconPath")
+	)
+)

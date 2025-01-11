@@ -1,0 +1,148 @@
+(def css $HintBody ()
+	(flow = "horizontal")
+	(align = "middle")
+)
+
+(def css $HintContainer ()
+	(paddingTop = "M") (paddingBottom = "M")
+	(paddingLeft = "M") (paddingRight = "M")
+	(backgroundSize = "fill")
+	(backgroundImage = "'url:../battle_hud/shared/tips_bg.png'")
+	(scale9grid = 12)
+)
+
+(def constant HOTKEYS_DIVIDER '/')
+
+(def constant TUTORIAL_HINTS_TYPE_TO_KEYS_RENDERER [
+	'KeysHintBody',
+	'WASDHintBody'
+])
+
+
+(def element TutorialContextHintsContainer ()
+	(scope
+		(macro IS_ALIVE)
+
+		(var hintsCollection:dhCollection = "getCollection(CC.tutorialContextHint)")
+		(var tutorialContextHintEntity:dhEntity = "hintsCollection.getEntityAtIndex(0)" (event "hintsCollection.evAdded") (event "hintsCollection.evRemoved"))
+
+		(var isHintTypeEnabled:bool = "tutorialContextHintEntity != null")
+	)
+
+	(block
+		(style (marginLeft = -50%))
+		(controller $Instance renderer='TutorialContextHint'
+			(bind enabled "isAlive && isHintTypeEnabled")
+			(args _tutorialContextHintEntity="tutorialContextHintEntity")
+			(bindcall recreate (bind trigger "tutorialContextHintEntity"))
+		)
+	)
+)
+
+(def element TutorialContextHint (_tutorialContextHintEntity:dhEntity)
+	(scope
+		(var tutorialContextHintComponent:dhComponent = "_tutorialContextHintEntity.tutorialContextHint" (event "_tutorialContextHintEntity.evAdded"))
+		(var keys:array = "tutorialContextHintComponent.keys")
+		(var messageIDS:str = "tr(tutorialContextHintComponent.messageIDS)")
+		(var sound:str = "tutorialContextHintComponent.sound")
+
+		(var timeToLive:dhComponent = "_tutorialContextHintEntity.timeToLive" autoUpdate=false (event "_tutorialContextHintEntity.evAdded"))
+
+		(var rendererName:str = "TUTORIAL_HINTS_TYPE_TO_KEYS_RENDERER[tutorialContextHintComponent.type ?: 0]")
+	)
+
+	(bindcall externalCall 'direct.action' "['action.onTutorialHintShowed', {sound: sound}]" watch=false (event "tutorialContextHintComponent.evShow") (bind enabled "sound"))
+
+	(class $HintContainer)
+	(alpha = 0)
+
+	(controller $Instance
+		(bind renderer "rendererName")
+		(args
+			_keys="keys"
+			_messageIDS="messageIDS"
+		)
+	)
+
+	
+	(controller $Animation
+		(bindcall play  duration=0.35
+						from="{ alpha: 0, marginTop: 20 }"
+						to="{ alpha: 1, marginTop: 0 }"
+						action="killAll"
+						(bind enabled "_tutorialContextHintEntity.id != 0")
+						(event "tutorialContextHintComponent.evShow")
+		)
+		(bindcall play  duration="timeToLive.deathTime"
+						to="{ alpha: 0, marginTop: -20 }"
+						action="killAll"
+						(event "timeToLive.evRemove")
+		)
+	)
+)
+
+(def element WASDHintBody (_keys:array, _messageIDS:str)
+	(class $HintBody)
+
+	(element KeysHintBody
+		_keys="[_keys[0], _keys[1]]"
+		_messageIDS='IDS_FIRST_BATTLE_PROMPT_FASTER_SLOWER'
+	)
+	(block
+		(style (marginLeft = "L"))
+		(element KeysHintBody
+			_keys="[_keys[2], _keys[3]]"
+			_messageIDS='IDS_FIRST_BATTLE_PROMPT_LEFT_RIGHT'
+		)
+	)
+)
+
+(def element KeysHintBody (_keys:array, _messageIDS:str)
+	(class $HintBody)
+
+	
+	(hblock
+		(style
+			(align = "middle")
+			(marginTop = -6px)
+			(marginBottom = -6px)
+			(bind marginRight "_keys.length ? S : 0px")
+		)
+		(controller $Repeat renderer='TutorialContextHintHotkeyContainer'
+			(bind count "_keys.length")
+			(args _commandId="_keys[$index]" _needDelimiter="$index != 0")
+		)
+	)
+
+	
+	(tf
+		(class $TextDefaultBold19NM)
+		(style
+			(textAlign = "center")
+			(maxWidth = 560px)
+		)
+		(bindcall substitute imageOffset=6 sourceText="_messageIDS" postfix='' toggle=false init=true)
+	)
+)
+
+(def element TutorialContextHintHotkeyContainer (_commandId:number, _needDelimiter:bool=false)
+	(scope
+		(var commandEntity:dhEntity = "getPrimaryEntity(CC.commandMappingCommand, _commandId)")
+		(var isHintCompleted:bool = false)
+		(bind isHintCompleted "true" watch=false init=false (event "commandEntity.commandMappingCommand.evCall"))
+	)
+
+	(class $HintBody)
+	(tf
+		(bind visible "_needDelimiter")
+		(class $TextHUD24Bold)
+		(style (marginLeft = "XS") (marginRight = "XS"))
+		(text = "HOTKEYS_DIVIDER")
+	)
+	(element HotkeyIndicator
+			_active = "true"
+			_commandId = "_commandId"
+			_size = "SIZE.LARGE"
+			_toggled = "isHintCompleted"
+	)
+)

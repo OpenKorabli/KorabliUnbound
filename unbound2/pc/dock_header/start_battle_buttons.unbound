@@ -1,0 +1,531 @@
+(def element StartBattleButtonBig (_tooltipDisabled:bool=false)
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(var shipsInFormation:gfx = "$datahub.getCollection(CC.ownShip).child('shipsInFormation')")
+		(var shipsInFormationItems:array = "shipsInFormation ? shipsInFormation.items : []" (event "shipsInFormation.evAdded") (event "shipsInFormation.evRemoved"))
+
+		(var selectedBattleTypes:gfx = "$datahub.getCollection(CC.battleType).child('selected')")
+		(var selectedBattleTypesItems:array = "selectedBattleTypes ? selectedBattleTypes.items : []" (event "selectedBattleTypes.evAdded") (event "selectedBattleTypes.evRemoved"))
+		(var battleTypeEntity:gfx = "selectedBattleTypesItems.length > 0 ? selectedBattleTypesItems[0] : null")
+		(var battleTypeEntityId:number = "battleTypeEntity ? battleTypeEntity.id : 0")
+		(var battleTypeComponent:gfx = "battleTypeEntity ? battleTypeEntity.battleType : null")
+
+		(var selectedBattleStatus:number = "battleTypeComponent ? battleTypeComponent.status : 0" (event "battleTypeComponent.evStatusChanged"))
+		(var fightButtonDenyReasons:array = "battleTypeComponent ? battleTypeComponent.fightButtonReasons : []" (event "battleTypeComponent.evDisableReasonChanged"))
+
+		
+		(var buttonEnabled:bool = "fightButtonDenyReasons.length == 0 && (selectedBattleStatus != SC.Common.BATTLE_TYPE_STATE.INACTIVE_BY_PRIMETIME)")
+
+		
+		(var ctaPlayButtonResearchEntity:gfx = "$datahub.getPrimaryEntity(CC.splitRunTest, 'Player_Focus_And_CTA_Button_Research')")
+		(var isPlayButtonActive:bool = "ctaPlayButtonResearchEntity.splitRunTest.data.isCTABattleButtonActive ?: false" (event "ctaPlayButtonResearchEntity.splitRunTest.evDataChanged"))
+		(var ctaPlayButtonResearchEntityTag:str = "ctaPlayButtonResearchEntity.splitRunTest.id ?: ''" (event "ctaPlayButtonResearchEntity.splitRunTest.evDataChanged"))
+
+		(var taskCollection:gfx = "$datahub.getCollection(CC.sseCore).child('firstLineSSE').child('bySSETag').child(ctaPlayButtonResearchEntityTag)")
+		(var taskEntity:gfx = "taskCollection.items[0] ?: null" (event "taskCollection.evAdded") (event "taskCollection.evUpdated"))
+		(var isPlayButtonAnimation:bool = "isPlayButtonActive && taskEntity != null && buttonEnabled")
+	)
+	(element DefaultButton
+		_name = 'buttonStartBattle'
+		_enabled = "buttonEnabled"
+		_width = 132
+		_type = "SC.Ui_styles.BUTTON_TYPE.ACCENT"
+		_size = "SIZE.LARGE"
+		_label = 'IDS_START_BATTLE'
+		_isTransactionBtn = true
+		_methods = "[{ type: 'inputMapping.onAction', name: 'onBattleButtonClick', args: {} }]"
+
+		(controller $Tooltip
+			(bind enabled "fightButtonDenyReasons.length > 0")
+			(renderer = 'StartButtonWarningsTooltip')
+			(args
+				_warningsArr = "fightButtonDenyReasons"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
+			(bind enabled "buttonEnabled && !_tooltipDisabled")
+			(renderer = 'StartBattleTooltip')
+			(args
+				_shipID = "shipsInFormationItems.length > 0		? shipsInFormationItems[0].ownShip.id
+																: playerShipId"
+				_battleTypeEntityId = "battleTypeEntityId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	
+	(block
+		(bind visible "isPlayButtonAnimation")
+		(class $FullsizeAbsolute)
+		(style	(hitTest = false) (top = -7px) (left = -50px) (backgroundSize = "autosize")
+				(backgroundImage = 'url:../animations/spine/play_button_banner/button/playbuttonglance.skel'))
+	)
+)
+
+(def element StartBattleTooltip (_shipID:number, _battleTypeEntityId:number)
+	(scope
+		(var divisionWatcher:gfx = "$datahub.getFirstWatcher(CC.division)")
+		(var divisionDataEntity:gfx = "divisionWatcher.entity" (event "divisionWatcher.event"))
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity && selfPlayerEntity.hasComponent(CC.preBattlePlayerSimple) ? selfPlayerEntity.preBattlePlayerSimple : null" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isCommander:bool = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.isCommander : false" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+		(var selfPreBattleId:number = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.preBattleId : 0" (event "preBattlePlayerSimpleComponent.evPreBattleIdChanged"))
+		(var selfPlayerShipId:number = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.shipId : 0" (event "preBattlePlayerSimpleComponent.evShipIdChanged"))
+		(var teamId:number = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.teamId : 0" (event "preBattlePlayerSimpleComponent.evTeamIdChanged"))
+
+		(var isTeamObserver:bool = "teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+		(var isTeamNeutral:bool = "teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM")
+
+		(var rankSeasonEntity:gfx = "$datahub.getSingleEntity(CC.rankSeason)")
+		(var rankSeasonComponent:gfx = "rankSeasonEntity ? rankSeasonEntity.rankSeason : null")
+		(var isDivisionAllowedInRanked:bool = "rankSeasonComponent ? rankSeasonComponent.isDivisionAllowed : false" (event "rankSeasonComponent.evChanged"))
+
+		(var selfPreBattlePlayersFilter:str = "'byPreBattleAndTeam.' + selfPreBattleId + '_' +  teamId + '.readyPlayers.sorted'")
+		(var preBattlePlayerSimpleCol:gfx = "$datahub.getCollection(CC.preBattlePlayerSimple)")
+		(var selfPreBattlePlayers:gfx = "preBattlePlayerSimpleCol ? preBattlePlayerSimpleCol.getChildByPath(selfPreBattlePlayersFilter) : null"	(event "preBattlePlayerSimpleCol.evChildAdded")
+																																		(event "preBattlePlayerSimpleCol.evChildRemoved"))
+
+		(var selfPreBattlePlayersItems:array = "selfPreBattlePlayers ? selfPreBattlePlayers.items : []" (event "selfPreBattlePlayers.evUpdated") (event "selfPreBattlePlayers.evAdded") (event "selfPreBattlePlayers.evRemoved"))
+		(var battleTypeEntity:gfx = "$datahub.getEntity(_battleTypeEntityId)")
+		(var battleTypeComponent:gfx = "battleTypeEntity ? battleTypeEntity.battleType : null")
+		(var status:number = "battleTypeComponent ? battleTypeComponent.status : 0" (event "battleTypeComponent.evStatusChanged"))
+		(var battleType:str = "battleTypeComponent ? battleTypeComponent.type : ''" (event "battleTypeComponent.evStatusChanged"))
+
+		(var selectedBattleTypes:gfx = "$datahub.getCollection(CC.battleType).child('selected')")
+		(var selectedBattleTypesItems:array = "selectedBattleTypes ? selectedBattleTypes.items : []" (event "selectedBattleTypes.evAdded") (event "selectedBattleTypes.evRemoved"))
+		(var selectedBattleTypeEntity:gfx = "selectedBattleTypesItems.length > 0 ? selectedBattleTypesItems[0] : null")
+		(var selectedBattleTypeComponent:gfx = "selectedBattleTypeEntity ? selectedBattleTypeEntity.battleType : null")
+		(var battleTypeGameParamId:number = "selectedBattleTypeComponent ? selectedBattleTypeComponent.battleTypeGameParamId : 0")
+
+		(var eventBattleStateComponent:gfx = "battleTypeEntity ? battleTypeEntity.eventBattleState : null")
+		(var selectedEventBattleName:str = "eventBattleStateComponent ? eventBattleStateComponent.name : ''" (event "eventBattleStateComponent.evChanged"))
+
+		(var battleTypeLabel:str = "battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? tr(toUpper('IDS_' + selectedEventBattleName))
+																						: tr(toUpper('IDS_' + battleType))")
+
+		(var operationEntity:gfx = "$datahub.getPrimaryEntity(CC.operation, battleTypeGameParamId)")
+		(var operationComponent:gfx = "operationEntity ? operationEntity.operation : null")
+		(var operationIconName:str = "operationComponent ? operationComponent.customIconName : ''" (event "operationComponent.evStatusChanged"))
+
+		(var battleTypeName:str = "	operationIconName									? operationIconName :
+									battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? selectedEventBattleName
+																						: battleType")
+
+		(var battleTypeIcon:str = "status == BATTLE_TYPE.DISABLED	? battleTypeName + '_disabled'
+																	: battleTypeName")
+
+		(var isNotBattleTypeWithDivision:bool = "	divisionDataEntity && isCommander && !isDivisionAllowedInRanked &&
+													battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE")
+	)
+
+	(style (width = 300px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl =			"'url:../service_kit/battle_types/' + battleTypeIcon + '_small.png'"
+			_imageWidth =		35
+			_imageHeight =		35
+			_headerText =		"battleTypeLabel"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!isTeamObserver && !isTeamNeutral"))
+		)
+
+		(block
+			(style (width = 100%))
+			(block
+				(style (width = 100%))
+
+				(controller $Instance renderer='TooltipSystemShipStereotype'
+					(bind enabled "!isTeamObserver && !isTeamNeutral")
+					(args
+						_shipId = "_shipID"
+						_isReady = true
+					)
+				)
+			)
+
+			(block
+				(style (width = 100%))
+
+				(controller $Repeat renderer='ShipStereotypeRepeatByCollectionItem'
+					(bind count "!isTeamObserver && !isTeamNeutral ? selfPreBattlePlayersItems.length : 0")
+					(args
+						_id = "selfPreBattlePlayersItems[$index].id"
+					)
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'TooltipSystemHorizontalDivider' (bind enabled "isNotBattleTypeWithDivision"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isNotBattleTypeWithDivision")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text = 'IDS_DIVISIONS_ARE_NOT_ALLOWED_IN_RANK_BATTLES'
+				)
+			)
+		)
+	)
+)
+
+(def element ShipStereotypeRepeatByCollectionItem (_id:number)
+	(scope
+		(var preBattlePlayerEntity:gfx = "$datahub.getEntity(_id)")
+		(var shipId:number = "preBattlePlayerEntity ? preBattlePlayerEntity.preBattlePlayerSimple.shipId : 0" (event "preBattlePlayerEntity.preBattlePlayerSimple.evShipIdChanged"))
+		(var isSelfPlayer:bool = "preBattlePlayerEntity ? preBattlePlayerEntity.accountSimple.isSelfPlayer : true")
+	)
+
+	(bind visible "!isSelfPlayer")					
+
+	(style
+		(width = 100%)
+		(bind marginTop "shipId ? SXS : 0")
+	)
+
+	(element TooltipSystemShipStereotype
+		_shipId = "shipId"
+		_isReady = "shipId ? true : false"
+	)
+)
+
+(def element StartButtonWarningsTooltip (_warningsArr:array)
+	(name = 'startButtonWarningTooltip')
+	(style (width = 300px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemStatusMultiparagraph
+			_unifiedStatus		= "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+			_paragraphs			= "_warningsArr"
+			_paragraphRenderer	= "'ItemOfStartButtonWarningTooltip'"
+		)
+	)
+)
+
+(def element ItemOfStartButtonWarningTooltip (_unifiedStatus:str, _text:str)
+	(scope
+		(var clanCurrentSeasonEntityCollection:gfx = "$datahub.getCollection(CC.clanBattleSeason).child('current')")
+		(var clanCurrentSeasonEntityItems:gfx = "clanCurrentSeasonEntityCollection ? clanCurrentSeasonEntityCollection.items : []" (event "clanCurrentSeasonEntityCollection.evAdded") (event "clanCurrentSeasonEntityCollection.evRemoved"))
+		(var clanCurrentSeasonEntity:gfx = "clanCurrentSeasonEntityItems.length > 0 ? clanCurrentSeasonEntityItems[0] : null")
+		(var clanBattleSeasonComponent:gfx = "clanCurrentSeasonEntity ? clanCurrentSeasonEntity.clanBattleSeason : null")
+
+		(var cbs_primeTimeStartTime:number = "clanBattleSeasonComponent.primeTimeStartTime ?: 0" (event "clanBattleSeasonComponent.evChanged"))
+		(var cbs_primeTimeFinishTime:number = "clanBattleSeasonComponent.primeTimeFinishTime ?: 0" (event "clanBattleSeasonComponent.evChanged"))
+
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE "'startPrimeTimeText'" "cbs_primeTimeStartTime" "'HIGHEST,WITH_DAYS'")
+		(macro COUNTDOWN_SCOPE "'finishPrimeTimeText'" "cbs_primeTimeFinishTime" "'HIGHEST,WITH_DAYS'")
+
+		(var itemText:str = "_text == 'IDS_CLAN_BATTLES_PRIMETIME_STARTS_IN'	? subst('IDS_CLAN_BATTLES_PRIMETIME_STARTS_IN', [], {timeLeft: startPrimeTimeText})
+																				: _text")
+	)
+
+	(style
+		(width = 100%)
+		(bind marginTop "$index ? SXS : 0")
+	)
+
+	(element TooltipSystemStatusLine
+		_unifiedStatus = "_unifiedStatus"
+		_text = "itemText"
+		_showStatusIcon = "$index ? false : true"
+	)
+)
+
+(def element BigReadyForFormationBattleButton (_isTrainingRoom:bool=false)
+	(scope
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity ? selfPlayerEntity.preBattlePlayerSimple : null" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isSelfPlayerReady:bool = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.isReady : false" (event "preBattlePlayerSimpleComponent.evIsReadyChanged"))
+
+		(var selectedBattleTypes:gfx = "$datahub.getCollection(CC.battleType).child('selected')")
+		(var selectedBattleTypesItems:array = "selectedBattleTypes ? selectedBattleTypes.items : []" (event "selectedBattleTypes.evAdded") (event "selectedBattleTypes.evRemoved"))
+		(var battleTypeEntity:gfx = "selectedBattleTypesItems.length > 0 ? selectedBattleTypesItems[0] : null")
+		(var battleTypeComponent:gfx = "battleTypeEntity ? battleTypeEntity.battleType : null")
+
+		(var battleType:str = "battleTypeComponent ? battleTypeComponent.type : ''" (event "battleTypeComponent.evStatusChanged"))
+		(var readyButtonDenyReasons:array = "battleTypeComponent ? battleTypeComponent.readyButtonReasons : []" (event "battleTypeComponent.evDisableReasonChanged"))
+
+		(var isReadyBtnEnabled:bool = "(readyButtonDenyReasons.length == 0) || isSelfPlayerReady")
+	)
+
+	(element TEXT_SWITCH_TABS_BACKGROUND
+		(element TextSwitchTab
+			_label = "tr('IDS_READY')"
+			_width = 128
+			_height = 40
+			_size = "SIZE.LARGE"
+			_isEnabled = "isReadyBtnEnabled"
+			_isReadyBtn = true
+			_methods = "[ {	type: 'inputMapping.onAction',
+							name: _isTrainingRoom ? 'setIsReadyInTrainingRoom' : 'setIsReadyInDivision',
+							args: { isReady: !isSelfPlayerReady } } ]"
+			_isSelected = "isSelfPlayerReady"
+			_selectedClickable = true
+
+
+			(controller $Tooltip
+				(bind enabled "!isReadyBtnEnabled && !isSelfPlayerReady")
+				(renderer = 'StartButtonWarningsTooltip')
+				(args
+					_warningsArr = "readyButtonDenyReasons"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(controller $Tooltip
+				(bind enabled "isReadyBtnEnabled")
+				(renderer = 'DivisionStatusButtonTooltip')
+				(args
+					_isMainBtn = true
+					_isBtnEnabled = "isReadyBtnEnabled"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+)
+
+(def element FormationReadyButtonTooltip ()
+	(scope
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity ? selfPlayerEntity.preBattlePlayerSimple : null" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var selfPlayerShipId:number = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.shipId : 0" (event "preBattlePlayerSimpleComponent.evShipIdChanged"))
+		(var isSelfPlayerReady:bool = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.isReady : false" (event "preBattlePlayerSimpleComponent.evIsReadyChanged"))
+
+		(macro PULL_SHIP_ID)
+	)
+	(style (width = 280px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(controller $Instance renderer='DivisionStatusButtonReadyTooltip'
+			(bind enabled "!isSelfPlayerReady")
+			(args
+				_shipId = "isSelfPlayerReady ? selfPlayerShipId : playerShipId"
+			)
+		)
+
+		(controller $Instance renderer='DivisionButtonReadyPressedTooltip'
+			(bind enabled "isSelfPlayerReady")
+			(args
+				_shipId = "isSelfPlayerReady ? selfPlayerShipId : playerShipId"
+			)
+		)
+	)
+)
+
+(def element FormationNotReadyButtonTooltip (_isReadyBtnEnabled:bool)
+	(scope
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity ? selfPlayerEntity.preBattlePlayerSimple : null" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isSelfPlayerReady:bool = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.isReady : false" (event "preBattlePlayerSimpleComponent.evIsReadyChanged"))
+	)
+	(style (width = 300px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(controller $Instance renderer='DivisionButtonNotReadyPressedTooltip'
+			(bind enabled "!isSelfPlayerReady || (!isSelfPlayerReady && !_isReadyBtnEnabled)")
+			(args
+				_isSelfPlayerReady = "isSelfPlayerReady"
+			)
+		)
+
+		(controller $Instance renderer='DivisionStatusButtonNotReadyTooltip'
+			(bind enabled "isSelfPlayerReady && _isReadyBtnEnabled")
+		)
+	)
+)
+
+(def element DivisionStatusButtonTooltip (_isMainBtn:bool, _isBtnEnabled:bool)
+	(scope
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity ? selfPlayerEntity.preBattlePlayerSimple : null" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var selfPlayerShipId:number = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.shipId : 0" (event "preBattlePlayerSimpleComponent.evShipIdChanged"))
+		(var isSelfPlayerReady:bool = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.isReady : false" (event "preBattlePlayerSimpleComponent.evIsReadyChanged"))
+
+		(macro PULL_SHIP_ID)
+	)
+
+	(style (width = 300px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='DivisionStatusButtonReadyTooltip'
+				(bind enabled "_isMainBtn && !isSelfPlayerReady")
+				(args
+					_shipId = "isSelfPlayerReady ? selfPlayerShipId : playerShipId"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='DivisionStatusButtonNotReadyTooltip'
+				(bind enabled "_isMainBtn && isSelfPlayerReady")
+			)
+		)
+	)
+)
+
+(def element DivisionStatusButtonReadyTooltip (_shipId:number)
+	(scope
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.PORT" "'isInPort'")
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var isActiveTrainingBattle:bool = "trainingRoomEntity != null")
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattleSelfPlayerSimple:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isPrebattlePlayerOwner:bool = "preBattleSelfPlayerSimple.isCommander" (event "preBattleSelfPlayerSimple.evIsCommanderChanged"))
+	)
+	(style (width = 100%))
+
+	(element TooltipSystemShipStereotype
+		_shipId = "_shipId"
+		_isReady = true
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInPort && isActiveTrainingBattle && isPrebattlePlayerOwner"))
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemDescriptionText'
+			(bind enabled "isInPort && isActiveTrainingBattle && isPrebattlePlayerOwner")
+			(args
+				_descriptionText = 'IDS_READY_TO_BATTLE_DENY_REASON_TRAINING_OWNER_NOT_IN_TRAINING'
+			)
+		)
+	)
+	
+	(element TooltipSystemHorizontalDivider)
+
+	(element TooltipSystemStatusLine
+		_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+		_text = 'IDS_SET_READY_TO_BATTLE_IN_FORMATION'
+	)
+)
+
+(def element DivisionButtonReadyPressedTooltip (_shipId:number)
+	(style (width = 100%))
+
+	(element TooltipSystemShipStereotype
+		_shipId = "_shipId"
+		_isReady = true
+	)
+
+	(element TooltipSystemHorizontalDivider)
+
+	(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+		(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+			(element TooltipSystemDescriptionText
+				_descriptionText = 'IDS_READY_TO_BATTLE_IN_FORMATION_STATUS'
+			)
+		)
+
+		(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+			(element TooltipSystemDescriptionText
+				_descriptionText = 'IDS_READY_TO_BATTLE_IN_FORMATION_INFO_2'
+			)
+		)
+	)
+)
+
+(def element DivisionStatusButtonNotReadyTooltip ()
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.PORT" "'isInPort'")
+		(var isActiveTrainingBattle:bool = "trainingRoomEntity != null")
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattleSelfPlayerSimple:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isPrebattlePlayerOwner:bool = "preBattleSelfPlayerSimple.isCommander" (event "preBattleSelfPlayerSimple.evIsCommanderChanged"))
+	)
+	(style (width = 100%))
+
+	(element TooltipSystemDescriptionText
+		_descriptionText = 'IDS_NOT_READY_TO_BATTLE_IN_FORMATION_INFO'
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInPort && isActiveTrainingBattle && isPrebattlePlayerOwner"))
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemDescriptionText'
+			(bind enabled "isInPort && isActiveTrainingBattle && isPrebattlePlayerOwner")
+			(args
+				_descriptionText = 'IDS_READY_TO_BATTLE_DENY_REASON_TRAINING_OWNER_NOT_IN_TRAINING'
+			)
+		)
+	)
+
+	(element TooltipSystemHorizontalDivider)
+	(element TooltipSystemStatusLine
+		_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+		_text = 'IDS_SET_NOT_READY_TO_BATTLE_IN_FORMATION'
+	)
+)
+
+(def element DivisionButtonNotReadyPressedTooltip (_isSelfPlayerReady:bool)
+	(style (width = 100%))
+
+	(element TooltipSystemDescriptionText
+		_descriptionText = "!_isSelfPlayerReady	? 'IDS_NOT_READY_TO_BATTLE_IN_FORMATION_STATUS'
+												: 'IDS_SPECTATORS_CANT_CHANGE_READY_STATUS'"
+	)
+)
+
+(def element FormationReadyHintTooltip (_shipId:number)
+	(style (width = 100%))
+
+	(element TooltipSystemShipStereotype
+		_shipId = "_shipId"
+		_isReady = true
+	)
+
+	(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+		(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+			(element TooltipSystemDescriptionText
+				_descriptionText = 'IDS_READY_TO_BATTLE_IN_FORMATION_STATUS'
+			)
+		)
+
+		(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+			(element TooltipSystemDescriptionText
+				_descriptionText = 'IDS_READY_TO_BATTLE_IN_FORMATION_INFO_2'
+			)
+		)
+	)
+)
+
+(def element FormationNotReadyHintTooltip ()
+	(style (width = 100%))
+
+	(element TooltipSystemDescriptionText
+		_descriptionText = 'IDS_NOT_READY_TO_BATTLE_IN_FORMATION_STATUS'
+	)
+)

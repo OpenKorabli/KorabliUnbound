@@ -1,0 +1,213 @@
+(def constant SEGMENT_STATE_COLORS	{	'green'		: {redOffset: -179,	greenOffset: -23,	blueOffset: -85},
+										'orange'	: {redOffset: 0,	greenOffset: -102,	blueOffset: -204},
+										'red'		: {redOffset: 0,	greenOffset: -189,	blueOffset: -255},
+})
+
+(def constant SEGMENT_Y_OFFSET	{	0: 0,
+									1: 44,
+									2: 69,
+									3: 94,
+									4: 119,
+									5: 144,
+									6: 169,
+									7: 194,
+})
+
+(def constant ARMOR_SECTOR_WIDTH 54)
+
+
+(def element NewCompass ()
+	(scope
+		(var compassEntity:gfx = "$datahub.getSingleEntity(CC.compass)")
+		(var compassRotation:number = "compassEntity.compass.compassRotation" (event "compassEntity.compass.evCompassRotationChanged"))
+
+		(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
+		(var gameModeId:number = "battleDataEntity.battleInfo.gameModeId")
+	)
+
+	(class $FullsizeAbsolute)
+	(style
+		(pivotX = 50%)
+		(pivotY = 50%)
+
+		(bind rotation "compassRotation")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../battle_hud/new_doll/compass.png')
+			(position = "absolute")
+		)
+	)
+)
+
+(def element NewFrustum (_frustumAngle:number)
+	(alpha = 0.1)
+
+	(class $FullsizeAbsolute)
+
+	(controller $Sector
+		(bind arc "_frustumAngle")
+		(radius = "160")
+		(bind offset "-90 - (_frustumAngle/2)")
+		(color = "0x7dffff")
+	)
+
+)
+
+(def element NewDollCompass ()
+	(scope
+		(macro IS_ALIVE)
+		(var selfAvatarId:number = "selfAvatarEntity ? selfAvatarEntity.avatar.id : INVALID_PLAYER_AVATAR_ID")
+
+		(var cameraComponent:gfx = "$datahub.getSingleComponent(CC.camera)")
+
+		(var frustumAngle:number = "cameraComponent.frustumAngle" (event "cameraComponent.evFrustumAngleChanged"))
+
+		(var observedShipId:number = "cameraComponent ? cameraComponent.observedShipId : INVALID_OBSERVED_AVATAR_ID" (event "cameraComponent.evObservedShipChanged"))
+		(var observedAvatarId:number = "cameraComponent ? cameraComponent.observedPlayerId : INVALID_OBSERVED_AVATAR_ID" (event "cameraComponent.evObservedPlayerIdChanged"))
+		(var isSelfObserved:bool = "selfAvatarId == observedAvatarId")
+
+		(macro IS_SPECTATOR_MODE)
+
+		(var armorSegmentsCollection:dhCollection = "getCollectionByPath(CC.segmentArmor, 'selfArmor')")
+		(var armorSegmentsItems:array = "armorSegmentsCollection.items ?: []" (event "armorSegmentsCollection.evAdded") (event "armorSegmentsCollection.evRemoved"))
+		(var hasArmor:bool = "armorSegmentsItems.length > 0")
+
+		(var compassEntity:dhEntity = "getSingleEntity(CC.compass)")
+		(var shipDollRotation:number = "isAlive ? compassEntity.compass.shipDollRotation : 0" (event "compassEntity.compass.evShipDollRotationChanged"))
+	)
+
+	(class $FullsizeAbsolute)
+	(style
+		(align = "bottom|left")
+	)
+
+	(block
+		(style
+			(width = 320px) (height = 320px)
+			(visualOffsetX = 170px) (visualOffsetY = 150px)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (zindex = 0))
+
+			(bind visible "isAlive || (hasArmor && isSpectator && (observedShipId != 0)) || isSelfObserved")
+
+			(element NewCompass)
+			(element NewFrustum _frustumAngle="radToGrad(frustumAngle)")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (zindex = 1))
+
+			(bind visible "isAlive || (hasArmor && isSpectator && (observedShipId != 0) && !isSelfObserved)")
+
+			(controller $Instance renderer='SelfSegmentArmorContainer'
+				(bind enabled "hasArmor")
+				(args
+					_shipDollRotation="shipDollRotation"
+				)
+			)
+
+			(controller $Instance renderer='ShipProfileContainer'
+				(bind enabled "!hasArmor")
+				(args
+					_shipDollRotation="shipDollRotation"
+				)
+			)
+
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (zindex = 2))
+			(controller $Instance renderer='GunsListContainer'
+				(bind enabled "isAlive")
+				(args
+					_shipDollRotation="shipDollRotation"
+				)
+			)
+		)
+	)
+)
+
+(def element ShipProfileContainer (_shipDollRotation:number)
+	(style
+		(width = 50px)
+		(height = 188px)
+		(position = "absolute")
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(bind rotation "_shipDollRotation")
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(width = 50px)
+			(height = 188px)
+			(backgroundImage = 'swf:../battle_hud/new_doll/new_doll.swf:destroyer')
+		)
+	)
+)
+
+(def element SelfSegmentArmorContainer (_shipDollRotation:number)
+	(scope
+		(var armorSegmentsCollection:dhCollection = "getCollectionByPath(CC.segmentArmor, 'selfArmor')")
+		(var armorSegmentsItems:array = "armorSegmentsCollection.items ?: []" (event "armorSegmentsCollection.evAdded") (event "armorSegmentsCollection.evRemoved"))
+	)
+
+	(style
+		(width = 108px)
+		(height = 248px)
+		(position = "absolute")
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(bind rotation "_shipDollRotation")
+	)
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(width = 86px)
+			(height = 236px)
+			(bind backgroundImage "'swf:../battle_hud/armor/armor.swf:background'")
+		)
+	)
+
+	(controller $Repeat renderer='ArmorSegment'
+		(bind count "armorSegmentsItems.length")
+		(args
+			_armorSegmentEntity="armorSegmentsCollection.getEntityAtIndex($index)"
+		)
+	)
+)
+
+(def element ArmorSegment (_armorSegmentEntity:dhEntity)
+	(scope
+		(var armorSegmentComponent:dhComponent = "_armorSegmentEntity.segmentArmor")
+		(var segmentY:number = "armorSegmentComponent.y")
+
+		(var isBig:bool = "segmentY == 0 || segmentY == 7")
+		(var groupSideName:str = "armorSegmentComponent.x == 0 ? 'left_' : 'right_'")
+		(var state:number = "armorSegmentComponent.state" (event "armorSegmentComponent.evStateUpdated"))
+		(var colorDiff:dict = "	state == SC.Battle.ARMOR_SEGMENT_STATE.UNDAMAGED	?	SEGMENT_STATE_COLORS['green'] :
+								state == SC.Battle.ARMOR_SEGMENT_STATE.DAMAGED		?	SEGMENT_STATE_COLORS['orange']
+																					:	SEGMENT_STATE_COLORS['red']")
+	)
+
+	(style
+		(position = "absolute")
+		(width = "ARMOR_SECTOR_WIDTH")
+
+		(bind height "isBig ? 44px : 25px")
+		(bind top "SEGMENT_Y_OFFSET[segmentY]")
+		(bind left "armorSegmentComponent.x * ARMOR_SECTOR_WIDTH")
+		(bind backgroundImage "'swf:../battle_hud/armor/armor.swf:main_' + groupSideName + armorSegmentComponent.y")
+	)
+	(bind colorTransform "colorDiff")
+)

@@ -1,0 +1,130 @@
+(def element AnimatedBackground (_selectedCategory:str='default', _type:number="SC.Ui_styles.ANIMATED_BG.DEFAULT", _startShow:bool=true)
+	(scope
+		(event evStartShow)
+		(event evEffectSpeedChange)
+		(event evEffectAnimEnded)
+		(event evBGAnimEnded)
+		(event evColorSettingsChanged)
+
+		
+		(var customBgColor:dict = null)
+		(bind customBgColor "$event.bg_settings" init=false (event "evColorSettingsChanged"))
+		(var customEffectColor:dict = null)
+		(bind customEffectColor "$event.effect_settings" init=false (event "evColorSettingsChanged"))
+		
+
+		(macro STAGE_SIZE)
+		(macro GET_PREF 'qualityGraphics' "'graphics.preset'")
+
+		(dispatch evStartShow on='addedToStage' (bind enabled "_startShow"))
+
+		(var curConfig:dict = "ANIMATED_BG_CONFIG_MAP[_type]")
+		(var configData:dict = "_selectedCategory in curConfig ? curConfig[_selectedCategory] : curConfig['default']")
+
+		(var isStatic:bool = "qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.LOW || qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.MINIMUM")
+		(var curBgPath:str = 		"configData['animatedBgPath']")
+		(var curBgColor:dict = 		"customBgColor ? customBgColor : configData['colorBG']")
+		(var isColorEffect:bool = 	"'colorEffect' in configData")
+		(var colorEffect:dict = 	"	customEffectColor		? customEffectColor :
+										isColorEffect			? configData['colorEffect']
+																: {}")
+
+		(var isEffectPath:bool = 	"'effectPath' in configData")
+		(var effectPath:str = 		"isEffectPath ? configData['effectPath'] : ''")
+		(var effectChangedTrigger:str = "toString(_startShow) + effectPath")
+
+		(var bgSpeed:number = 0)
+		(bind bgSpeed "isStatic ? 0 : 1" init=false (event "evBGAnimEnded") (bind trigger "isStatic"))
+
+		(var effectSpeed:number = 0)
+		(bind effectSpeed "isStatic ? 0 : 1" init=false (event "evEffectSpeedChange") (bind trigger "isStatic"))
+
+		(var isCacheAsBitmapBg:bool = true)
+		(bind isCacheAsBitmapBg "isStatic" init=false (event "evBGAnimEnded"))
+
+		(var isCacheAsBitmapEffect:bool = true)
+		(bind isCacheAsBitmapEffect "true" init=false (bind trigger "effectChangedTrigger"))
+		(bind isCacheAsBitmapEffect "isStatic" init=false (event "evEffectAnimEnded"))
+	)
+	(style (bind width "stageWidth") (bind height "stageHeight"))
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "curBgPath")
+			(backgroundSize = "cover")
+		)
+		(bind alpha "0" on='removedFromStage')
+
+		(colorTransform = "curBgColor")
+		(bind cacheAsBitmap "isCacheAsBitmapBg")
+
+		(controller $Spine
+			(bind speed "bgSpeed")
+		)
+
+		
+		(controller $Animation
+			(bindcall play
+				duration = 0.6
+				to = "{colorTransform: curBgColor}"
+				(bind trigger "curBgColor")
+			)
+		)
+
+		
+		(controller $Animation
+			(bindcall play
+				duration = 0.3
+				to = "{alpha: 1}"
+				action = "kill"
+				(event "evStartShow")
+				(bind trigger "_startShow")
+			)
+			(dispatch evBGAnimEnded init=false on=evAnimEnded)
+		)
+	)
+
+	
+	(block
+		(bind visible "isEffectPath")
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "effectPath")
+			(backgroundSize = "cover")
+		)
+		(bind alpha "0" on='removedFromStage')
+
+		(colorTransform = "colorEffect")
+		(bind cacheAsBitmap "isCacheAsBitmapEffect")
+
+		(controller $Spine
+			(bind speed "effectSpeed" on=refresh)
+		)
+
+		
+		(controller $Animation
+			(bindcall play
+				duration = 0.6
+				to = "{colorTransform: colorEffect}"
+				(bind trigger "colorEffect")
+			)
+		)
+
+		
+		(controller $Animation
+			(bindcall play
+				duration = 0.6
+				from = "{alpha: 0}"
+				to = "{alpha: 1}"
+				easing = "Easing.quad_out"
+				action = "kill"
+				(event "evStartShow")
+				(bind trigger "effectChangedTrigger")
+			)
+			(dispatch evEffectSpeedChange init=false delay=0.2 on=evAnimStarted)
+			(dispatch evEffectAnimEnded init=false on=evAnimEnded)
+		)
+	)
+)

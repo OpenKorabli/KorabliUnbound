@@ -1,0 +1,248 @@
+
+(def constant CREW_LEARN_SKILL_MW_CONTENT_WIDTH {
+	MIN:	4,
+	MAX:	7
+})
+
+(def element ModalWindowLearnSkills (_crewId:number, _selectedShipClass:str)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(macro MODAL_WINDOW_SYSTEM_PURCHASE_EVENTS_SCOPE)
+
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+		(struct shipInfo =		PULL_OWN_SHIP(_playerShipId = "crew.component.shipID"))
+
+		(var isInFormation:bool = "shipInfo.ownShipComponent.isInFormation" (event "shipInfo.ownShipComponent.evUpdateLock"))
+
+		(var skillsCollection:dhCollection =			"getCollection(CC.skill)")
+		(var selectedSkillsCollection:dhCollection =	"skillsCollection.getChildByPath('isSelected.sorted')" (event "skillsCollection.evChildAdded") (event "skillsCollection.evChildRemoved"))
+		(var selectedSkillsItems:array =				"selectedSkillsCollection.items ?: []" (event "selectedSkillsCollection.evAdded") (event "selectedSkillsCollection.evRemoved"))
+
+		(var skillMarginsSumm:number =	"SXS * 2")
+		(var innerPanelWidth:number =	"selectedSkillsItems.length <= CREW_LEARN_SKILL_MW_CONTENT_WIDTH.MIN	? (CREW_LEARN_SKILL_MW_CONTENT_WIDTH.MIN * skillMarginsSumm) + (CREW_LEARN_SKILL_MW_CONTENT_WIDTH.MIN * CREW_SKILL_ICON_SIZE) :
+										 selectedSkillsItems.length <= CREW_LEARN_SKILL_MW_CONTENT_WIDTH.MAX	? (selectedSkillsItems.length * skillMarginsSumm) + (selectedSkillsItems.length * CREW_SKILL_ICON_SIZE)
+																												: (CREW_LEARN_SKILL_MW_CONTENT_WIDTH.MAX * skillMarginsSumm) + (CREW_LEARN_SKILL_MW_CONTENT_WIDTH.MAX * CREW_SKILL_ICON_SIZE)")
+
+		(var crewSkillPickerEntity:dhEntity =		"getSingleEntity(CC.crewSkillPicker)")
+		(var crewSkillPickerComponent:dhComponent =	"crewSkillPickerEntity.crewSkillPicker")
+		(var selectedSkillsLearnPrice:number =		"crewSkillPickerComponent.selectedSkillsLearnPrice"	(event "crewSkillPickerComponent.evSelectedSkillsLearnPriceChanged"))
+
+		(var questionString:str = "tr('IDS_QUESTION_LEARN_FOR') + ' ' + subst('IDS_CREW_SKILL_POINTS', [], { count: selectedSkillsLearnPrice }, selectedSkillsLearnPrice) + tr('IDS_QUESTION')")
+
+		(var timeRent:number =		"crew.component.timeRent" (event "crew.component.evTimeRentChanged"))
+		(var isRentalCrew:bool =	"timeRent > 0")
+
+		(var windowHitTest:bool = true)
+		(bind windowHitTest "false" watch=false init=false (event "evHideContent"))
+	)
+
+	(dispatch evHideContent init=false (event "startHide"))
+	(bindcall externalCall 'inputMapping.onRequest' "[CREW_ACTIONS.LEARN_SELECTED_SKILLS, { selectedShipClass: _selectedShipClass, crewId: _crewId }]" init=false (event "dataLoadingBecomeVisible"))
+	(bindcall externalCall 'inputMapping.onRequest' "['close', { }]" init=false (event "delayedDataLoadingBecomeVisible"))
+
+	(bindcall externalCall "isRentalCrew ? '' : 'inputMapping.onRequest'" "[CREW_ACTIONS.CLOSE_LEARN_SKILLS_WINDOW, {}]" init=false (bind trigger "isRentalCrew"))
+
+	(style
+		(align = "center|middle")
+		(bind hitTest "windowHitTest")
+	)
+
+	(block
+		(style (bind width "innerPanelWidth"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1 hideEvent = "'evHideContent'")
+			(style (width = 100%) (align = "center") (marginBottom = "S"))
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_MODAL_WINDOW_LEARNSKILLS_HEADER'
+				_hasDivider = "false"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2 hideEvent = "'evHideContent'")
+			(style (width = 100%) (marginBottom = "MS"))
+
+			(element CrewSkillsToLearnList
+				_list = "selectedSkillsItems"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3 hideEvent = "'evHideContent'")
+			(style (width = 100%) (marginBottom = "MS"))
+
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_questionString = "questionString"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5 hideEvent = "'evHideContent'" animationFinishedEvent = "'evAnimationFinished'")
+			(style (align = "center") (width = 100%))
+
+			(hblock
+				(block
+					(style (marginRight = "M"))
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(bind enabled "isInFormation")
+						(args
+							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+							_text =				'IDS_LEARN_SKILLS_DENY_REASON_IN_DIVISION'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(element DefaultButton
+						_width =			130px
+						_enabled =			"!isInFormation"
+						_isTransactionBtn =	true
+						_label =			'IDS_YES'
+						_dispatchedEv =		"'evHideContent'"
+						_focusIndex =		0
+						_defaultFocused =	true
+					)
+				)
+
+				(element DefaultButton
+					_width =		130px
+					_name =			'btn_cancel'
+					_label =		'IDS_NO'
+					_dispatchedEv =	'evHideContent'
+					_focusIndex =	1
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(class $FullsizeAbsolute)
+		(style (align = "center|middle"))
+
+		(block
+			(alpha = 0)
+			(visible = false)
+			(style (visualOffsetY = 10px))
+
+			(controller $Animation
+				(bindcall play	duration = 0.1
+								action="kill"
+								to = "{alpha: 1, visible: true, visualOffsetY: 0px}"
+								(event "evAnimationFinished")
+				)
+				(dispatch dataLoadingBecomeVisible args="{}" init=false on=evAnimEnded)
+				(dispatch delayedDataLoadingBecomeVisible args="{}" delay=0.4 init=false on=evAnimEnded)
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(text = "toUpper(tr('IDS_DATA_LOADING'))")
+			)
+		)
+	)
+)
+
+(def element CrewSkillsToLearnList (_list:array=[])
+	(style (width = 100%))
+
+	(element HorizontalDividerTwoPx)
+
+	(htile
+		(style
+			(align = "center|middle")
+			(width = 100%)
+			(paddingTop = "SXS")
+			(paddingBottom = "SXS")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		)
+
+		(controller $Repeat renderer='CrewSkillLearnItem'
+			(bind count "_list.length")
+			(args
+				_entityId = "_list[$index].id"
+			)
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+)
+
+(def element CrewSkillLearnItem (_entityId:number=0)
+	(scope
+		(macro PULL_SHIP_ID)
+		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+
+		(var crewId:number = "shipInfo.ownShipComponent.crewId" (event "shipInfo.ownShipComponent.evCrewChanged"))
+		(var selectedShipClass:str = "shipInfo.shipComponent.subtype")
+
+		(var skillEntity:dhEntity =			"getEntity(_entityId)")
+		(var skillComponent:dhComponent =	"skillEntity.skill")
+
+		(var name:str =				"skillComponent.name")
+		(var skillSubType:number =	"skillComponent.skillSubType")
+
+		(var isEpic:bool =			"skillSubType == SC.Common.SKILL_SUBTYPE.EPIC")
+		(var isRecommended:bool =	"skillComponent.isRecommended"		(event "skillComponent.evIsRecommendedChanged"))
+		(var isUseless:bool =		"!skillEntity.attributes.useful"	(event "skillEntity.attributes.evChanged"))
+	)
+
+	(style
+		(margin = "SXS")
+		(width = "CREW_SKILL_ICON_SIZE")
+		(height = "CREW_SKILL_ICON_SIZE")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SkillTooltip')
+		(args
+			_skillKey =				"_entityId"
+			_crewId =				"crewId"
+			_selectedShipClass =	"selectedShipClass"
+			_noMouseInstructions =	true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(style (bind alpha "isUseless ? 0.5 : 1"))
+
+		(element CrewSkillIconView
+			_name = "name"
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='CrewSkillEpicIcon' (bind enabled "isEpic"))
+	)
+
+	(block
+		(bind visible "isUseless")
+
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "fill")
+			(backgroundImage = 'url:../service_kit/icons/icon_useless_big.png')
+		)
+	)
+
+	(block
+		(bind visible "isRecommended")
+
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(right = "M")
+			(bottom = "M")
+			(backgroundImage = 'url:../service_kit/icons/icon_recommended.png')
+		)
+	)
+)

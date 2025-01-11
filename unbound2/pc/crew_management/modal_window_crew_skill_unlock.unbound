@@ -1,0 +1,232 @@
+(def constant MODAL_WINDOW_CREW_SKILL_UNLOCK_WIDTH 412px)
+
+(def constant SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY [
+	'EPIC_SKILL_UNLOCKING_0',
+	'EPIC_SKILL_UNLOCKING_1',
+	'EPIC_SKILL_UNLOCKING_2'
+])
+
+(def constant TALENT_RESEARCH_ENTITY_PK_KEY 'UNIQUE_SKILL_UNLOCKING')
+
+(def element ModalWindowUnlockCrewSkill (	_crewId:number, _crewSkillEntityId:number=0, _crewTalentEntityId:number=0,
+											_installedSkillEntityId:number=0, _selectedShipClass:str='')
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(macro MODAL_WINDOW_SYSTEM_PURCHASE_EVENTS_SCOPE)
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:dhComponent = "resourceEntity.accountResource")
+		(var accountEliteXP:number =	"accountResourceComponent.eliteXP	?: 0" (event "accountResourceComponent.evChangedEliteXP"))
+		(var accountFreeXP:number =		"accountResourceComponent.freeXP	?: 0" (event "accountResourceComponent.evChangedFreeXP"))
+
+		(macro USER_PREF_DATA)
+
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+
+		(var eliteCrewLearning:dhComponent =		"crew.entity.eliteCrewLearning"					(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+		(var skillUnlockingCostCategory:number =	"eliteCrewLearning.skillUnlockingCostCategory"	(event "eliteCrewLearning.evChanged"))
+
+		(var selectedShipClass:str =	"isIn(_selectedShipClass, SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES) ? _selectedShipClass : SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES[0]")
+
+		(var skillUnlockPKKey:str =	"_crewTalentEntityId	? TALENT_RESEARCH_ENTITY_PK_KEY
+													 		: SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[skillUnlockingCostCategory]")
+		(struct skillPrice = PULL_PRICE(_entityId = "skillUnlockPKKey"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+
+		(var totalPrice:number =	"skillPrice.info.finalPrice")
+		(var priceCurrency:str =	"skillPrice.info.currency")
+
+		(var deficit:number =			"totalPrice - accountEliteXP")
+		(var optionalPriceShown:bool =	"(deficit > 0) && (accountEliteXP + accountFreeXP >= totalPrice)")
+		(var isDeficit:bool =			"(deficit > 0) && (accountEliteXP + accountFreeXP < totalPrice)")
+
+		(var priceInfo:dict =			"optionalPriceShown	? { finalPrice: accountEliteXP,	currency: SC.Common.CURRENCIES.ELITE_XP }
+															: { finalPrice: totalPrice,		currency: SC.Common.CURRENCIES.ELITE_XP }")
+		(var optionalPriceInfo:dict =	"optionalPriceShown ? { finalPrice: deficit,		currency: SC.Common.CURRENCIES.FREE_XP } : {}")
+
+		(var currenciesPanelPrices:array =	"optionalPriceInfo	? [{ finalPrice: -accountEliteXP, currency: priceCurrency }, { finalPrice: -deficit, currency: SC.Common.CURRENCIES.FREE_XP }]
+																: [{ finalPrice: -totalPrice, currency: priceCurrency }]")
+
+		
+		(struct skill =					PULL_SKILL(_entityId = "_crewSkillEntityId"))
+		(struct installedCrewSkill =	PULL_CREW_SKILL_STATE(	_crewId =	"_crewId"
+																_skillId =	"_installedSkillEntityId"))
+
+		(var skillName:str =		"skill.component.name")
+		(var skillType:number =		"skill.component.skillType")
+		(var skillSubType:number =	"skill.component.skillSubType")
+		(var isEpic:bool =			"skillSubType == SC.Common.SKILL_SUBTYPE.EPIC")
+		
+
+		
+		(struct talent =		PULL_TALENT(_entityId = "_crewTalentEntityId"))
+		(var talentId:str =		"talent.component.id")
+		
+
+		(var modalWindowHeader:str = "	_crewSkillEntityId	? 'IDS_MODAL_WINDOW_TITLE_SKILL_UPGRADE' :
+										_crewTalentEntityId	? 'IDS_MODAL_WINDOW_TITLE_TALENT_UNLOCK'
+															: ''")
+
+		(var headerText:str =		"_crewSkillEntityId		? toUpper('IDS_SKILL_'+ skillName) :
+									 _crewTalentEntityId	? tr('IDS_TALENT_' + talentId)
+															: ''")
+		(var subheaderText:str =	"_crewSkillEntityId		? isEpic	? 'IDS_SKILL_ISEPIC'
+																		: 'IDS_SKILL' :
+									 _crewTalentEntityId				? 'IDS_TALENT_CAT_NAME_DEFAULT'
+																		: ''")
+
+		(var crewUnlockSkillDict:dict = "{ crewId: _crewId, skillEntityId: skill.entity.id }")
+		(var crewUnlockTalentDict:dict = "{ crewId: _crewId, talentEntityId: talent.entity.id }")
+
+		(var windowHitTest:bool = true)
+		(bind windowHitTest "false" watch=false init=false (event "evHideContent"))
+	)
+
+	(dispatch evHideContent init=false (event "startHide"))
+	(bindcall externalCall "_crewSkillEntityId ? 'inputMapping.onAction' : ''"	"[ CREW_ACTIONS.UNLOCK_SKILL, crewUnlockSkillDict ]"	watch=false (event "dataLoadingBecomeVisible"))
+	(bindcall externalCall "_crewTalentEntityId ? 'inputMapping.onAction' : ''"	"[ CREW_ACTIONS.UNLOCK_TALENT, crewUnlockTalentDict ]"	watch=false (event "dataLoadingBecomeVisible"))
+	(bindcall externalCall 'inputMapping.onRequest' "['closeUnlockSkillWindow', {}]" (event "delayedDataLoadingBecomeVisible"))
+
+	(style (align = "center|middle"))
+
+	(block
+		(style
+			(bind hitTest "windowHitTest")
+			(align = "center")
+			(width = "MODAL_WINDOW_CREW_SKILL_UNLOCK_WIDTH")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1 hideEvent = "'evHideContent'")
+
+			(style
+				(align = "center")
+				(marginBottom = "S")
+				(width = 100%)
+			)
+
+			(element ModalWindowShortHeader
+				_header =		"modalWindowHeader"
+				_hasDivider =	false
+			)
+
+			(element CurrenciesPanel
+				_priceInfo =	"currenciesPanelPrices"
+				_width =		"MODAL_WINDOW_CREW_SKILL_UNLOCK_WIDTH"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.3 hideEvent = "'evHideContent'")
+
+			(style (marginBottom = "SXS"))
+
+			(controller $Tooltip
+				(renderer = 'SkillTooltip')
+				(bind enabled "_crewSkillEntityId")
+				(args
+					_skillKey =					"_crewSkillEntityId"
+					_selectedShipClass =		"selectedShipClass"
+					_noMouseInstructions =		true
+					_isUnlocked =				false
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(controller $Tooltip
+				(renderer = 'CrewTalentTooltip')
+				(bind enabled "_crewTalentEntityId")
+				(args
+					_id =					"talentId"
+					_crewId =				"_crewId"
+					_selectedShipClass =	"selectedShipClass"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+				_headerIconType =	"MODAL_WINDOW_SYSTEM_PURCHASABLE_ITEM_ICON.SKILL"
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_headerText =		"headerText"
+				_subheaderText =	"subheaderText"
+				_imageWidth =		60px
+				_imageHeight =		60px
+				_maxWidth =			300px
+				_data =				"_crewSkillEntityId		? { type: CREW_SKILL_TYPE.SKILL, name: skillName, isEpic: isEpic } :
+									 _crewTalentEntityId	? { type: CREW_SKILL_TYPE.TALENT, id: talentId }
+															: {}"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5 hideEvent = "'evHideContent'")
+			(style (marginBottom = "MS") (width = 100%))
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2 hideEvent = "'evHideContent'")
+			(style (marginBottom = "MS") (width = 100%))
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_priceInfo =					"priceInfo"
+				_optionalPriceInfo =			"optionalPriceInfo"
+				_questionString =				"_crewSkillEntityId ? 'IDS_QUESTION_SKILL_UPGRADE_FOR' : 'IDS_QUESTION_TALENT_UNLOCK_FOR'"
+				_isWarningText = 				"isDeficit"
+				_isDeficit =					"isDeficit"
+				_deficit =						"deficit"
+				_additionalInfoUnifiedStatus =	"_crewSkillEntityId		? SC.Ui_styles.UNIFIED_STATUS.ATTENTION :
+												 _crewTalentEntityId	? SC.Ui_styles.UNIFIED_STATUS.INFO
+																		: SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_additionalInfoStr =			"_crewSkillEntityId		? installedCrewSkill.isLearned	? ''
+																										: 'IDS_CREW_SKILL_LEARN_ADDITIONAL_INFO' :
+												 _crewTalentEntityId	? 'IDS_CREW_TALENT_LEARN_ADDITIONAL_INFO'
+																		: ''"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3 hideEvent = "'evHideContent'" animationFinishedEvent = "'evAnimationFinished'")
+			(style (align = "center") (width = 100%))
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_hideEventName =	'evHideContent'
+				_isDeficit =		"isDeficit"
+			)
+		)
+	)
+
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+		(class $FullsizeAbsolute)
+		(style
+			(bind hitTest "windowHitTest")
+			(align = "center|middle")
+		)
+
+		(block
+			(alpha = 0)
+			(visible = false)
+			(style (visualOffsetY = 10px))
+
+			(controller $Animation
+				(bindcall play	duration = 0.1
+								action="kill"
+								to = "{alpha: 1, visible: true, visualOffsetY: 0px}"
+								(event "evAnimationFinished")
+				)
+				(dispatch dataLoadingBecomeVisible args="{}" init=false on=evAnimEnded)
+				(dispatch delayedDataLoadingBecomeVisible args="{}" delay=0.4 init=false on=evAnimEnded)
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(alpha = "TA")
+				(bind text "toUpper(tr('IDS_DATA_LOADING'))")
+			)
+		)
+	)
+)

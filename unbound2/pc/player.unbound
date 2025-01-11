@@ -1,0 +1,938 @@
+(def constant PREBATTLE_TYPE_TRAINING_ROOM 0)
+(def constant PREBATTLE_TYPE_DIVISION 1)
+
+(def element ContactContextMenu (_entityAccountId:number, _inviteType:number='', _isInvitation:bool=false, _playerContext:dict={}, _currentGroupId:str=null)
+	(scope
+		(var entityAccount:gfx = "$datahub.getEntity(_entityAccountId)")
+		(var isSuspended:bool = "entityAccount.accountSimple.suspended" (event "entityAccount.accountSimple.evSuspendedChanged"))
+
+		(var renderContextMenu:str = "isSuspended ? 'SuspendedContactContextMenu' : 'NormalContactContextMenu'")
+	)
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+
+	(class $ContextMenuDimensions)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance
+			(bind renderer "renderContextMenu")
+			(args
+				_entityAccountId = "_entityAccountId"
+				_inviteType = "_inviteType"
+				_isInvitation = "_isInvitation"
+				_playerContext = "_playerContext"
+				_currentGroupId = "_currentGroupId"
+			)
+		)
+	)
+)
+
+(def element SuspendedContactContextMenu (_entityAccountId:number, _inviteType:number, _isInvitation:bool=false, _playerContext:dict={})
+	(scope
+		(var entityAccount:gfx = "$datahub.getEntity(_entityAccountId)")
+		(var accountDbId:number = "entityAccount.accountSimple.dbId")
+	)
+	(style (width = 100%))
+
+	(element ContextMenuItem
+		_title = "'IDS_REMOVE_FROM_CONTACTS'"
+		_methods = "[ {
+						type:	'inputMapping.onAction',
+						name:	'removeContact',
+						args:	{ dbId: accountDbId }
+					}]"
+	)
+)
+
+(def element NormalContactContextMenu (_entityAccountId:number, _inviteType:number, _isInvitation:bool=false, _playerContext:dict={}, _currentGroupId:str=null)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.BALANCER" "'isInBalancer'")
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattleSelfPlayerSimple:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+
+		(var isSelfPlayerCommander:bool = "preBattleSelfPlayerSimple.isCommander ?: false" (event "preBattleSelfPlayerSimple.evIsCommanderChanged"))
+		(var selfPreBattlePlayerId:number = "preBattleSelfPlayerSimple.id")
+		(var selfTeamId:number = "preBattleSelfPlayerSimple.teamId" (event "preBattleSelfPlayerSimple.evTeamIdChanged"))
+
+		(var selfTrainingRoomPlayer:gfx = "selfPlayerEntity.trainingRoomPlayer" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isSelfPlayerTeamCommander:bool = "selfTrainingRoomPlayer.isCommander" (event "selfTrainingRoomPlayer.evUpdate"))
+
+		(var entityAccount:gfx = "$datahub.getEntity(_entityAccountId)")
+		(var isSelf:bool = "entityAccount.accountSimple.isSelfPlayer")
+
+		(var preBattleAccountPlayerSimple:gfx = "entityAccount.preBattlePlayerSimple" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var prebattlePlayerId:number = "preBattleAccountPlayerSimple.id")
+		(var prebattlePlayerTeamId:number = "preBattleAccountPlayerSimple.teamId" (event "preBattleAccountPlayerSimple.evTeamIdChanged"))
+		(var isPrebattlePlayerMercenary:bool = "preBattleAccountPlayerSimple.isMercenary" (event "preBattleAccountPlayerSimple.evIsMercenaryChanged"))
+
+		(var trainingRoomPlayer:gfx = "entityAccount.trainingRoomPlayer" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var isPrebattlePlayerTeamCommander:bool = "trainingRoomPlayer.isCommander" (event "trainingRoomPlayer.evUpdate"))
+
+		(var isInvitedToPrebattle:bool = "entityAccount.hasComponent(CC.playerInvitedToPrebattleInfo)" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var canInviteToDivision:bool = "!isInvitedToPrebattle && !entityAccount.hasComponent(CC.invitationToDivision)" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+
+		(var isInPrebattle:bool = "preBattleAccountPlayerSimple && !isInvitedToPrebattle")
+		(var isInTrainingRoom:bool = "selfPlayerEntity.hasComponent(CC.trainingRoomPlayer)" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+
+		(var trMaxPlayers:number = "trainingRoomEntity.trainingRoom.teamSize ?: 0" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+		(var trainingRoomOwnerId:number = "trainingRoomEntity.preBattle.ownerId" (event "trainingRoomEntity.preBattle.evOwnerIdChanged"))
+		(var isSelfPlayerTrainingRoomOwner:bool = "isInTrainingRoom && trainingRoomOwnerId == selfPreBattlePlayerId")
+		(var isPrebattlePlayerTrainingRoomOwner:bool = "isInTrainingRoom && trainingRoomOwnerId == prebattlePlayerId")
+		(var isCommandersManagement:bool = "trainingRoomEntity.trainingRoom.commandersManagement" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+
+		(var accountDbId:number = "entityAccount.accountSimple.dbId")
+		(var chatEntity:gfx = "$datahub.getSingleEntity(CC.chat)")
+		(var isChatServerAvailable:bool = "chatEntity.chat.isConnected" (event "chatEntity.chat.evConnected") (event "chatEntity.chat.evDisConnected"))
+
+		(var contactsGroupCollection:gfx = "$datahub.getCollection(CC.contactsGroup)")
+		(var contactsGroup:array = "contactsGroupCollection ? contactsGroupCollection.items : []" (event "contactsGroupCollection.evAdded") (event "contactsGroupCollection.evRemoved"))
+
+		(var nickName:str = "entityAccount.accountName.nickName" (event "entityAccount.accountName.evChanged"))
+		(var pureName:str = "entityAccount.accountName.name" (event "entityAccount.accountName.evChanged"))
+
+		(macro PLAYER_VOICE_STATE "pureName")
+
+		(var isAccountOnline:bool = "entityAccount.accountStatus.online" (event "entityAccount.accountStatus.evOnlineChanged"))
+		(var elementInGroupsComponent:gfx = "entityAccount.elementInGroups" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var groupIdsOfAccount:array = "elementInGroupsComponent ? elementInGroupsComponent.groupIds : []" (event "elementInGroupsComponent.evGroupsChanged"))
+		(var isIgnored:bool = "entityAccount.contact.isIgnored" (event "entityAccount.contact.evIsIgnoredChanged") (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+
+		(var canAddGroupEntitiesId:array = "elementInGroupsComponent	? elementInGroupsComponent.canAddGroupEntitiesId
+																		: chatEntity.chat.canAddGroupEntitiesId"	(event "elementInGroupsComponent.evCanAddGroupEntitiesChanged")
+																													(event "chatEntity.chat.evRosterChanged"))
+
+		(var isInFormation:bool = "entityAccount && entityAccount.hasComponent(CC.preBattlePlayerSimple)"	(event "entityAccount.evAdded")
+																											(event "entityAccount.evRemoved"))
+
+		(var divisionDataEntity:gfx = "$datahub.getSingleEntity(CC.division)")
+		(var shipRestrictions:dict = "divisionDataEntity.division.shipRestrictions" (event "divisionDataEntity.division.evShipRestrictionsChanged"))
+		(var shipRestrictionsMaxPlayers:number = "shipRestrictions.maxPlayers ?: 0" (event "divisionDataEntity.division.evShipRestrictionsChanged"))
+
+		
+		(var clanEntity:gfx = "$datahub.getPrimaryEntity(CC.clan, selfPlayerEntity.clanman.clanId)")
+		(var role:str = "selfPlayerEntity.clanman.role" (event "selfPlayerEntity.clanman.evRoleChanged"))
+		(var noFreePlacesInClan:bool = "clanEntity.clanExtended.isFull" (event "clanEntity.clanExtended.evIsFullChanged"))
+
+		(var haveOwnClan:bool = "clanEntity != null")
+		(var canInvite:bool = "isIn(role, SC.Clan.CLAN_ROLE.CAN_INVITE)")
+		(var accountClanman:gfx = "entityAccount.clanman" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var alreadyInYourClan:bool = "accountClanman && accountClanman.clanId == selfPlayerEntity.clanman.clanId")
+		(var alreadyInAnotherClan:bool = "accountClanman && accountClanman.clanId != selfPlayerEntity.clanman.clanId")
+
+		
+		
+
+		(var playersInDivisionCollection:gfx = "$datahub.getCollection(CC.preBattlePlayerSimple)")
+		(var playersInDivision:array = "playersInDivisionCollection.items ?: []" (event "playersInDivisionCollection.evAdded") (event "playersInDivisionCollection.evRemoved"))
+
+		(var playersInvitedToDivisionCollection:gfx = "$datahub.getCollection(CC.playerInvitedToPrebattleInfo)")
+		(var playersInvitedToDivision:array = "playersInvitedToDivisionCollection.items ?: []" (event "playersInvitedToDivisionCollection.evAdded") (event "playersInvitedToDivisionCollection.evRemoved"))
+
+		(var maxPlayers:number = "isInTrainingRoom	? trMaxPlayers
+													: shipRestrictionsMaxPlayers")
+		(var freePlaces:number = "maxPlayers - playersInDivision.length - playersInvitedToDivision.length")
+
+		(macro GET_PREF 'selfVoiceChatEnabled' "'sound.voice.chat.enabled'")
+
+		(var isBot:bool = "entityAccount && entityAccount.hasComponent(CC.bot)" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var isInviteIToGrouptemVisible:bool = "!isIgnored && canAddGroupEntitiesId.length > 0 && contactsGroup.length > 1 && !isBot")
+		(var isExcludePlayerMenuItemVisible:bool = "isInPrebattle && (!isInTrainingRoom || (isInTrainingRoom && isSelfPlayerTrainingRoomOwner && !isPrebattlePlayerTrainingRoomOwner))")
+
+		
+		(var isAppointPlayerToCommanderMenuItemVisible:bool = "(isSelfPlayerCommander || (isInTrainingRoom && isSelfPlayerTeamCommander && selfTeamId == prebattlePlayerTeamId)) &&
+																!isBot && ((isInPrebattle && trainingRoomEntity == null) || (trainingRoomEntity && isCommandersManagement)) &&
+																prebattlePlayerTeamId != SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM &&
+																prebattlePlayerTeamId != SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM &&
+																!isInvitedToPrebattle && !isPrebattlePlayerTeamCommander && !isPrebattlePlayerMercenary")
+	)
+	(bind alpha "accountDbId != null ? 1 : 0.5")
+	(bind mouseChildren "accountDbId != null")
+
+	(style (width = 100%))
+
+	(controller $Tooltip
+		(bind enabled "accountDbId == null")
+		(renderer ='SimpleStatusTooltip')
+		(args
+			_text = 'IDS_UNABLED_ACTION_WITH_PLAYER'
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(style (width = 100%))
+		(bind visible "(isSelfPlayerCommander || (isInTrainingRoom && isSelfPlayerTeamCommander && selfTeamId == prebattlePlayerTeamId)) &&  (isInPrebattle || isInvitedToPrebattle) && (!isInBalancer)")
+
+		(block
+			(bind visible "isInvitedToPrebattle")
+			(style (width = 100%))
+
+			(element ContextMenuItem
+				_title = 'IDS_RECALL_INVITATION'
+				_methods = "[ {
+								type:	'inputMapping.onAction',
+								name:	'revokeInvitationToDivision',
+								args:	{ id: prebattlePlayerId }
+							}]"
+			)
+		)
+
+		(block
+			(bind visible "isExcludePlayerMenuItemVisible")
+			(style (width = 100%))
+
+			(element ContextMenuItem
+				_title = "isInTrainingRoom ? 'IDS_EXCLUDE_PLAYER_OUT_OF_TRAINING_ROOM' : 'IDS_EXCLUDE_PLAYER_OUT_OF_DIVISION'"
+				_methods = "[ {
+								type:	isBot ? 'inputMapping.onAction' : 'inputMapping.onRequest',
+								name:	'kickPlayerFromDivision',
+								args:	{	playerId: prebattlePlayerId,
+											name: nickName,
+											subtitle: isInTrainingRoom ? 	'IDS_MODAL_EXCLUDE_PLAYER_OUT_OF_TRAINING_ROOM' :
+																			'IDS_MODAL_EXCLUDE_PLAYER_OUT_OF_DIVISION'
+										}
+							}]"
+			)
+		)
+
+		(block
+			(bind visible "isAppointPlayerToCommanderMenuItemVisible")
+			(style (width = 100%))
+
+			(element ContextMenuItem
+				_title = 'IDS_APPOINT_PLAYER_TO_COMMANDER'
+				_methods = "[ {
+								type:	'inputMapping.onAction',
+								name:	'changeCommander',
+								args:	{	playerId: prebattlePlayerId,
+											teamId: prebattlePlayerTeamId
+										}
+							}]"
+			)
+		)
+
+		(block
+			(bind visible "!isBot && isChatServerAvailable")
+			(style (width = 100%))
+			(element HorizontalDividerTwoPx)
+		)
+	)
+
+	(block
+		(bind visible "_playerContext.type == 'inviteToChannel'")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title = 'IDS_INVITE_PLAYER_TO_CHANNEL'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'sendChannelInvite',
+							args:	{	channelId: _playerContext.channelId,
+										inviteDbId: accountDbId
+									}
+						}]"
+		)
+	)
+
+	(block
+		(bind visible "_playerContext.type == 'inviteToChannel'")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title = 'IDS_SEND_MESSAGE'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'openChannelForPrivateMessages',
+							args:	{ dbId: accountDbId }
+						}]"
+		)
+	)
+
+	(block
+		(bind visible " ((isSelfPlayerCommander && freePlaces > 0) || canInviteToDivision) &&
+						isAccountOnline &&
+						!isInFormation &&
+						!isInBalancer &&
+						_playerContext.type != 'inviteToTrainingRoom' &&
+						!isInvitedToPrebattle &&
+						!isInTrainingRoom")
+
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_enabled = "canInviteToDivision"
+			_title = 'IDS_INVITE_IN_DIVISION'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'inviteToDivision',
+							args:	{ playerId: accountDbId, playerName: pureName, inviteType: _inviteType }
+						}]"
+		)
+	)
+
+	(block
+		(bind visible "	isInTrainingRoom && (isSelfPlayerCommander || isSelfPlayerTeamCommander) &&
+						isAccountOnline &&
+						!isInFormation &&
+						!isInvitedToPrebattle")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title = 'IDS_INVITE_IN_TRAINING_ROOM'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'inviteToTrainingRoom',
+							args:	{ inviteeDBID: accountDbId }
+						}]"
+		)
+	)
+
+	(block
+		(bind visible "!isIgnored && !isBot && isChatServerAvailable")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title = "groupIdsOfAccount.length > 0 ? 'IDS_REMOVE_FROM_CONTACTS' : 'IDS_ADD_TO_CONTACTS'"
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	groupIdsOfAccount.length > 0 ? 'removeContact' : 'addContact',
+							args:	{ dbId: accountDbId }
+						}]"
+		)
+	)
+
+	(block
+		(bind visible "isInviteIToGrouptemVisible")
+		(style (width = 100%))
+
+		(element ContextMenuItemExpand
+			_title = 'IDS_ADD_TO_GROUP'
+			_contextElement = 'MoveToGroupContextSubMenu'
+			_args = "{ _entityAccountId: _entityAccountId, _items: canAddGroupEntitiesId }"
+		)
+	)
+
+	(block
+		
+		(bind visible "_currentGroupId && !isIgnored && !isBot")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title = 'IDS_REMOVE_FROM_GROUP'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'removeContactFromGroup',
+							args:	{ dbId: entityAccount.accountSimple.dbId, fromGroupId: _currentGroupId }
+						}]"
+		)
+	)
+
+	(block
+		(bind visible "!isBot && isChatServerAvailable")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title = "!isIgnored ? 'IDS_IGNORE_PLAYER' : 'IDS_NOT_IGNORE_PLAYER'"
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'userIgnoreContact',
+							args:	{ dbId: accountDbId, ignore: !isIgnored }
+						}]"
+		)
+
+		(element MenuItemReportPortChatMisbehaviour
+			_dbId = "entityAccount.accountSimple.dbId"
+			_channelId = "_playerContext.channelIdl"
+		)
+	)
+
+	(block
+		(bind visible "(selfVoiceChatEnabled || isSelf) && isInFormation")
+
+		(style (width = 100%))
+
+		(element VoiceChatMenuItem
+			_playerVoiceState = "playerVoiceState"
+			_actionType = 'direct.action'
+			_action = 'toggleVoice'
+			_actionArgs = "{ playerName: pureName, nickName: nickName }"
+		)
+	)
+
+	(block
+		
+		(bind visible "haveOwnClan && canInvite && !isInBalancer && !alreadyInYourClan && !isBot")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_enabled = "!(alreadyInAnotherClan || noFreePlacesInClan)"
+			_title = 'IDS_INVITATION_TO_CLAN'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'sendInviteToClan',
+							args:	{ playerDBID: accountDbId }
+						}]"
+		)
+
+		(controller $Tooltip
+			(bind enabled "alreadyInAnotherClan || noFreePlacesInClan")
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = "noFreePlacesInClan 	? 'IDS_CLAN_INVITATION_DENY_REASON_CLAN_IS_FULL':
+						alreadyInAnotherClan 	? 'IDS_CLAN_INVITATION_DENY_REASON_PLAYER_ALREADY_IN_CLAN'
+												: ''"
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+
+	
+	(block
+		(bind visible "!isInBalancer && !isBot && isChatServerAvailable")
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title = 'IDS_PROFILE'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'navigateTo',
+							args:	{
+										route: SC.Ui_windows.ROUTE.PORTAL,
+										data: { url: SC.Ui_windows.GUI_URL.PLAYER_STATS, accountId: toString(accountDbId)}
+									}
+						}]"
+		)
+	)
+)
+
+(def element MenuItemReportPortChatMisbehaviour (_channelId:number=null, _dbId:number=null)
+	(scope
+		(var channelEntity:gfx = "$datahub.getPrimaryEntity(CC.channel, _channelId)")
+		(var canReportPortChatMisbehaviour:bool = "channelEntity.channel.typeIdent != SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE && channelEntity.channel.typeIdent != SC.Channel.CHANNEL_TYPE_IDENT_VALUE.TRAINING_ROOM" (event "channelEntity.channel.evTypeChanged"))
+
+		(var playerEntity:gfx = "$datahub.getPrimaryEntity(CC.accountSimple, _dbId)")
+		(var banRequestAlreadySent:bool = "playerEntity.accountSimple.reported" (event "playerEntity.accountSimple.evReportedChanged"))
+	)
+
+	(bind visible "_channelId != null && canReportPortChatMisbehaviour")
+	(style (width = 100%))
+
+	(element ContextMenuItem
+		_enabled = "!banRequestAlreadySent"
+		_title = 'IDS_REQUEST_BAN_PLAYER_DOCK'
+		_methods = "[ {
+						type:	'inputMapping.onAction',
+						name:	'makeChatComplaint',
+						args:	{ subjectSpaID: _dbId, channelID: _channelId }
+					}]"
+	)
+)
+
+
+(def element MoveToGroupContextSubMenu (_args:dict)
+	(scope
+		(event evContextSubMenuRollOver)
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE _prefix = "'MenuItemExpandContent_'")
+
+		(var hitTestState:bool = false)
+		(bind hitTestState "true" init=false (event "evStartShow"))
+		(bind hitTestState "false" init=false (event "evStartHide"))
+	)
+	(style (bind hitTest "hitTestState"))
+	(dispatch evContextSubMenuRollOver args="{ value: MenuItemExpandContent_rollOver }" dir="EventDirection.UP" (event "MenuItemExpandContent_evRollOver") (event "MenuItemExpandContent_evRollOut"))
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(class $ContextMenuDimensions)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='MoveToGroupContextSubMenuItem'
+			(bind count "_args._items.length")
+			(args
+				_item = "_args._items[$index]"
+				_args = "_args"
+			)
+		)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER _prefix = "'MenuItemExpandContent_'")
+)
+
+(def element MoveToGroupContextSubMenuItem (_args:dict)
+	(scope
+		(var entityAccount:gfx = "$datahub.getEntity(_args._entityAccountId)")
+		(var accountDbId:number = "entityAccount.accountSimple.dbId")
+		(var groupEntity:gfx = "$datahub.getEntity(_args._items[$index])")
+
+		(var groupOfElements:gfx = "groupEntity.groupOfElements")
+		(var groupId:str = "groupOfElements.groupId")
+		(var isNoTranslate:bool = "	groupOfElements.isLocal || 
+									groupOfElements.groupType == 'channels' || 
+									groupOfElements.isIgnorList ||
+									groupOfElements.isReferralsList")
+	)
+	(style (width = 100%))
+
+	(element ContextMenuItem
+		_title = "groupOfElements.name"
+		_dispatchedEv = 'evContextMenuClose'
+		_noTranslate = "!isNoTranslate"
+		_methods = "[ {
+						type:	'inputMapping.onAction',
+						name:	'addContactToGroup',
+						args:	{ dbId: accountDbId, toGroupId: groupOfElements.groupId, fromGroupId: null }
+					}]"
+	)
+)
+
+(def element ContactInfoTooltipAccountHeader (_playerDbId:number, _isBot:bool=false, _isAbuser:bool=false, _ctkStatus:bool=false)
+	(scope
+		(var renderStereotypeElement:str = "_isBot ? 'BotStereotype' : 'PlayerStereotypeDogTag'")
+	)
+
+	(style (width = 100%))
+
+	(controller $Instance
+		(bind renderer "renderStereotypeElement")
+		(args
+			_playerDbId =	"_playerDbId"
+			_isAbuser =		"_isAbuser"
+			_ctkStatus =	"_ctkStatus"
+		)
+	)
+)
+
+(def element IconReferralSystem (_referralType:number)
+	(style
+		(width = 27px)
+		(height = 27px)
+		(bind backgroundImage "_referralType == SC.Common.REFERRAL_TYPE.VETERAN 	? 'url:../service_kit/icons/icon_status_list_veteran.png'
+																					: 'url:../service_kit/icons/icon_status_list_referal.png'")
+	)
+)
+
+(def element PlayerContactItem (_entityAccount:gfx, _playerContext:dict, _isShort:bool=false, _nickNameWidth:str='', _notTrancated:bool=false)
+	(scope
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var isInTrainingRoom:bool = "selfPlayerEntity.hasComponent(CC.trainingRoomPlayer)" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+
+		(var nickName:str = "_entityAccount.accountName.nickName ?: ''" (event "_entityAccount.accountName.evChanged"))
+		(var pureName:str = "_entityAccount.accountName.name ?: ''" (event "_entityAccount.accountName.evChanged"))
+		(var isAccountOnline:bool = "_entityAccount.accountStatus.online" (event "_entityAccount.accountStatus.evOnlineChanged"))
+		(var inBattle:bool = "_entityAccount.accountStatus.inBattle" (event "_entityAccount.accountStatus.evInBattleChanged"))
+		(var rank:number = "_entityAccount.accountRank.rank ?: 0" (event "_entityAccount.accountRank.evRankChanged"))
+		(var rankLeague:number = "_entityAccount.accountRank.league ?: 0" (event "_entityAccount.accountRank.evRankChanged"))
+		(var clanId:number = "_entityAccount.clanman.clanId ?: 0" (event "_entityAccount.clanman.evClanIdChanged"))
+		(var isSelf:bool = "_entityAccount.accountSimple.isSelfPlayer")
+
+		(var preBattlePlayerSimple:gfx = "_entityAccount.preBattlePlayerSimple" (event "_entityAccount.evAdded") (event "_entityAccount.evRemoved"))
+		(var isInBattle:bool = "preBattlePlayerSimple.isInBattle" (event "preBattlePlayerSimple.evIsInBattleChanged"))
+		(var isCommander:bool = "preBattlePlayerSimple.isCommander" (event "preBattlePlayerSimple.evIsCommanderChanged"))
+		(var isReady:bool = "preBattlePlayerSimple.isReady" (event "preBattlePlayerSimple.evIsReadyChanged"))
+
+		(var clanEntity:gfx = "$datahub.getPrimaryEntity(CC.clan, clanId)")
+
+		(var playerInvitedToPrebattleInfo:gfx = "_entityAccount.playerInvitedToPrebattleInfo" (event "_entityAccount.evAdded") (event "_entityAccount.evRemoved"))
+		(var isInvitedToDivision:bool = "playerInvitedToPrebattleInfo != null")
+		(var isInFormation:bool = "preBattlePlayerSimple != null")
+
+		(var isInDivision:bool = "isInFormation && !isInvitedToDivision")
+		(var isMercenary:bool = "preBattlePlayerSimple.isMercenary" (event "preBattlePlayerSimple.evIsMercenaryChanged"))
+
+		(var isInFormationBattle:bool ="isInDivision && (isInBattle || inBattle)")
+		(var currentNickname:str = "'channelTypeIdent' in _playerContext && _playerContext.channelTypeIdent == 'clan' ? pureName : nickName")
+	)
+	(style
+		(bind alpha "isAccountOnline ? 1 : 0.65")
+		(flow = "horizontal")
+		(hitTest = false)
+		(width = 100%)
+		(height = 30px)
+	)
+
+	(block
+		(style (position = "absolute") (top = 5px) (left = "-18"))
+
+		(controller $Instance renderer='VoiceChatDockIcon'
+			(bind enabled "isAccountOnline && isInFormation")
+			(args
+				_playerName = "pureName"
+				_isSelf = "isSelf"
+			)
+		)
+	)
+
+	(block
+		(bind visible "isAccountOnline && (inBattle && !isInFormationBattle)")
+		(style
+			(marginTop = "S") (marginRight = "XS")
+			(height = 15px) (width = 15px)
+			(backgroundImage = 'url:../service_kit/divisions_icons/player_in_battle_division_other_division.png')
+		)
+	)
+
+	(hblock
+		(bind visible "(isInDivision || (isInvitedToDivision && !isSelf)) && !isInTrainingRoom")
+		(style (marginTop = 7px) (marginRight = "XS"))
+
+
+		(controller $Instance renderer='FormationPlayerIcon'
+			(bind enabled "(isInDivision || (isInvitedToDivision && !isSelf)) && !isInTrainingRoom")
+			(args
+				_isEmptySlot = "isInvitedToDivision"
+				_isCommander = "isCommander"
+				_isMercenary = "isMercenary"
+				_isReady = "isReady"
+				_isInBattle = "isInFormationBattle"
+			)
+		)
+	)
+
+	(block
+		(bind visible "rank > 0 && !(_isShort || isInDivision)")
+		(style (marginTop = 5px) (marginRight = "XS"))
+
+		(controller $Instance renderer='IconRankSmall'
+			(bind enabled "rank > 0 && !(_isShort || isInDivision)")
+			(args
+				_rank	= "rank"
+				_league	= "rankLeague"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%) (marginTop = 9px))
+		(tf
+			(bind name "'playerContactName_' + nickName")
+			(bind class "isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+			(style
+				(width = 100%)
+				(elideMode = true)
+				(wordWrap = false)
+				(noTranslate = true)
+
+				(bind alpha "(isSelf || isInDivision) && !isMercenary ? 1 : TA")
+				(bind textColor "(isSelf || isInDivision) && !isMercenary	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																			: SC.Ui_styles.SERVICE_COLORS.WHITE")
+			)
+			(bind text "currentNickname")
+		)
+	)
+)
+
+(def element ContactInfoTooltip (_entityAccountId:number, _playerContext:dict, _actionDenyReason:str="ACTION_DENY_REASON_NONE", _expirationTime:number=0,
+									_isChatServerAvailable:bool=false, _isContextMenuAvailable:bool=false)
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+
+		(var entityAccount:gfx = "$datahub.getEntity(_entityAccountId)")
+		(var playerDbId:number = "entityAccount.accountSimple.dbId")
+
+		(var accountStatus:gfx = "entityAccount.accountStatus" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var hasAccountStatus:bool = "accountStatus != null")
+		(var inBattle:bool = "accountStatus.inBattle" (event "accountStatus.evInBattleChanged"))
+		(var isAccountOnline:bool = "accountStatus.online" (event "accountStatus.evOnlineChanged"))
+
+		(var rank:number = "entityAccount.accountRank.rank ?: 0" (event "entityAccount.accountRank.evRankChanged"))
+		(var league:number = "entityAccount.accountRank.league ?: 0" (event "entityAccount.accountRank.evRankChanged"))
+		(var isSuspended:bool = "entityAccount.accountSimple.suspended" (event "entityAccount.accountSimple.evSuspendedChanged"))
+
+		(var pureName:str = "entityAccount.accountName.name ?: ''" (event "entityAccount.accountName.evChanged"))
+
+		(var referralComponent:gfx = "entityAccount.referral" (event "entityAccount.evAdded"))
+		(var referralType:number = "referralComponent.type ?: null" (event "referralComponent.evTypeUpdated"))
+		(var isRefSysParticipant:bool = "referralType != null")
+		(var isRefferalVeteran:bool = "referralType == SC.Common.REFERRAL_TYPE.VETERAN")
+
+		(var preBattlePlayerSimple:gfx = "entityAccount.preBattlePlayerSimple" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var isInBattle:bool = "preBattlePlayerSimple.isInBattle" (event "entityAccount.preBattlePlayerSimple.evIsInBattleChanged"))
+
+		(var playerInvitedToPrebattleInfo:gfx = "entityAccount.playerInvitedToPrebattleInfo" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var expirationTime:number = "playerInvitedToPrebattleInfo.expirationTime ?: 0")
+		(var isInvitedToDivision:bool = "playerInvitedToPrebattleInfo != null")
+		(var isInFormation:bool = "preBattlePlayerSimple != null")
+		(var isInDivision:bool = "isInFormation && !isInvitedToDivision")
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattleSelfPlayerSimple:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var selfPreBattlePlayerId:number = "preBattleSelfPlayerSimple.id")
+
+		(var ownerId:number = "trainingRoomEntity.preBattle.ownerId" (event "trainingRoomEntity.preBattle.evOwnerIdChanged"))
+		(var isInTrainingRoom:bool = "entityAccount.hasComponent(CC.trainingRoomPlayer)" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var isSelfPlayerTrainingRoomOwner:bool = "ownerId && ownerId == selfPreBattlePlayerId")
+
+		(var isInFormationBattle:bool = "isInDivision && (isInBattle || inBattle)")
+		(var isFormationStatusVisible:bool = "isInDivision || isInTrainingRoom")
+
+		(var isBot:bool = "entityAccount && entityAccount.hasComponent(CC.bot)" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var isSelf:bool = "entityAccount.accountSimple.isSelfPlayer")
+
+		(var chatEntity:gfx = "$datahub.getSingleEntity(CC.chat)")
+		(var isChatServerAvailable:bool = "chatEntity.chat.isConnected" (event "chatEntity.chat.evConnected") (event "chatEntity.chat.evDisConnected"))
+
+		(var isLeftMouseInstructionVisible:bool = "_actionDenyReason == ACTION_DENY_REASON_NONE && !isBot && !isSuspended && !isSelf")
+		(var isRightMouseInstructionVisible:bool = "(isSelfPlayerTrainingRoomOwner || !isBot) && !isSelf")
+		(var hasMouseInstruction:bool = "(isLeftMouseInstructionVisible && isChatServerAvailable) || (isRightMouseInstructionVisible && _isContextMenuAvailable)")
+
+		(var chatRestrictionsEntity:gfx = "$datahub.getSingleEntity(CC.chatRestrictions)")
+		(var isDescriptionTextFieldsBlocked:bool = "chatRestrictionsEntity.chatRestrictions.isBlockDescriptionTextFields" (event "chatRestrictionsEntity.chatRestrictions.evBlockDescriptionTextFieldsChanged"))
+
+		(macro GET_PREF 'selfVoiceChatEnabled' "'sound.voice.chat.enabled'")
+		(macro PLAYER_VOICE_STATE "pureName")
+		(var playerVoiceChatIsEnabled:bool = "playerVoiceStateEntity != null")
+
+		(var isVoiceChatInfoVisible:bool = "!isSelf && isFormationStatusVisible && isAccountOnline && isInFormation")
+	)
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element ContactInfoTooltipAccountHeader
+			_playerDbId = "playerDbId"
+			_isBot = "isBot"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "rank > 0"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemRankAndLeagueStatusLine'
+				(bind enabled "rank > 0")
+				(args
+					_rank =	"rank"
+					_league = "league"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRefSysParticipant"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isRefSysParticipant")
+				(args
+					_unifiedStatus = "isRefferalVeteran	? SC.Ui_styles.UNIFIED_STATUS.REFERAL_VETERAN
+														: SC.Ui_styles.UNIFIED_STATUS.REFERAL"
+					_text =	"isRefferalVeteran	? 'IDS_REFERRAL_PLAYER_TYPE_VETERAN_DESCRIPTION'
+												: 'IDS_REFERRAL_PLAYER_TYPE_REFERRAL_DESCRIPTION'"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasAccountStatus && (!isAccountOnline || (inBattle && !isInFormationBattle))"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "hasAccountStatus && (!isAccountOnline || (inBattle && !isInFormationBattle))")
+				(args
+					_unifiedStatus = "inBattle	? SC.Ui_styles.UNIFIED_STATUS.IN_BATTLE
+												: SC.Ui_styles.UNIFIED_STATUS.OFFLINE"
+					_text =	"inBattle	? 'IDS_IN_BATTLE'
+										: 'IDS_PLAYER_IS_OFFLINE_C'"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "'isFormationSeeker' in _playerContext"))
+		)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(bind visible "'isFormationSeeker' in _playerContext")
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemStatusLine
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DISIVION_WANTED_ON"
+					_text =	'IDS_WANT_IN_DIVISION'
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "'seekerComment' in _playerContext && _playerContext.seekerComment.length > 0 && !isDescriptionTextFieldsBlocked")
+				(style (alpha = "TC"))
+
+				(element TooltipSystemDescriptionText
+					_descriptionText = "tr('IDS_LEFT_QUOTE') + _playerContext.seekerComment + tr('IDS_RIGHT_QUOTE')"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!isBot && isFormationStatusVisible && !('isInvitation' in _playerContext)"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemPlayerFormationStatusLine'
+				(bind enabled "!isBot && isFormationStatusVisible && !('isInvitation' in _playerContext)")
+				(args
+					_entityAccountId = "_entityAccountId"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInvitedToDivision && !isSelf"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemCountDownStatusLine'
+				(bind enabled "isInvitedToDivision && !isSelf")
+				(args
+					_text = 'IDS_INVITED_IN_DIVISION'
+					_timeStamp = "expirationTime"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DIVISION_INVITE"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isVoiceChatInfoVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isVoiceChatInfoVisible")
+				(args
+					_unifiedStatus = "	!playerVoiceChatIsEnabled	? SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_OFF :
+										isMuted						? SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_MUTED
+																	: SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_ON"
+					_text =	"	!playerVoiceChatIsEnabled	?	'IDS_PLAYER_IS_NOT_AVAILABLE_IN_VOICE_CHAT'	:
+								isMuted						?	'IDS_PLAYER_IS_MUTED_IN_VOICE_CHAT'
+															:	'IDS_PLAYER_IS_AVAILABLE_IN_VOICE_CHAT'"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_actionDenyReason != ACTION_DENY_REASON_NONE"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_actionDenyReason != ACTION_DENY_REASON_NONE")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text =	"_actionDenyReason"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasMouseInstruction"))
+		)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(bind visible "hasMouseInstruction")
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "isLeftMouseInstructionVisible && isChatServerAvailable")
+				(element TooltipSystemStatusLine
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text =	"	_playerContext.type == 'startPrivateChat'		? 'IDS_HINT_LEFT_CLICK_TO_START_CHAT' :
+								_playerContext.type == 'inviteToChannel'		? 'IDS_HINT_LEFT_CLICK_TO_INVITE_TO_CHANNEL' :
+								_playerContext.type == 'inviteToDivision'		? 'IDS_HINT_LEFT_CLICK_TO_INVITE_TO_DIVISION' :
+								_playerContext.type == 'inviteToTrainingRoom'	? 'IDS_HINT_LEFT_CLICK_TO_INVITE_TO_TRAINING_ROOM' :
+								_playerContext.type == 'channelParticipants'	? 'IDS_HINT_LEFT_CLICK_TO_START_CHAT'
+																				: 'NO INSTRUCTION FOR SUCH _playerContext.type: ' + _playerContext.type"
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "isRightMouseInstructionVisible && _isContextMenuAvailable")
+
+				(element TooltipSystemStatusLine
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT"
+					_text =	'IDS_HINT_RIGHT_CLICK_FOR_CONTEXT_MENU'
+				)
+			)
+		)
+	)
+)
+
+(def element BotStereotype (_playerDbId:number)
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var isBotsAIEnabled:bool = "trainingRoomEntity.trainingRoom.isBotsAIEnabled" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+
+		(var entityAccount:gfx = "$datahub.getPrimaryEntity(CC.accountSimple, _playerDbId)")
+		(var nickName:str = "entityAccount.accountName.nickName" (event "entityAccount.accountName.evChanged"))
+
+		(var AILevel:number = "entityAccount.bot.AILevel ?: 0" (event "entityAccount.bot.evUpdate"))
+		(var canShoot:bool = "toBool(entityAccount.bot.canShoot)" (event "entityAccount.bot.evUpdate"))
+		(var canMove:bool = "toBool(entityAccount.bot.canMove)" (event "entityAccount.bot.evUpdate"))
+
+		(var canShootStr:str = "canShoot	? 'IDS_BOT_CAN_SHOOT_STATUS'
+											: 'IDS_BOT_CAN_NOT_SHOOT_STATUS'")
+		(var canMoveStr:str = "canMove		? 'IDS_BOT_CAN_MOVE_STATUS'
+											: 'IDS_BOT_CAN_NOT_MOVE_STATUS'")
+	)
+	(style (width = 100%) (flow = "horizontal") (align = "middle"))
+
+	(block
+		(style (width = "DOG_TAG_SIZE.SMALL") (height = "DOG_TAG_SIZE.SMALL") (marginRight = "S"))
+
+		(element PlayerDogTagContainer
+			_playerId = "_playerDbId"
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(block
+			(style (width = 100%) (paddingRight = "S"))
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (width = 100%) (alpha = "TA"))
+				(bind text "nickName")
+			)
+
+			(tf
+				(bind visible "trainingRoomEntity != null")							
+
+				(class $TextDefaultNM)
+				(style (width = 100%) (alpha = "TA") (marginTop = "S"))
+
+				(bind text "!isBotsAIEnabled 	? 'IDS_DISABLED_AI_BOT_STATUS' :
+							AILevel > 9 		? 'IDS_HARD_LEVEL_BOT_STATUS' :
+							AILevel > 5 		? 'IDS_MEDIUM_LEVEL_BOT_STATUS'
+												: 'IDS_LOW_LEVEL_BOT_STATUS'")
+			)
+		)
+
+		(block
+			(bind visible "isBotsAIEnabled")
+			(style (width = 100%) (marginRight = "S") (marginTop = 6px))
+			(tf
+				(class $TextDefaultNM)
+				(style (width = 100%) (alpha = "TA"))
+				(bind text "tr(canShootStr) + ' ' + tr(canMoveStr)")
+			)
+		)
+	)
+)

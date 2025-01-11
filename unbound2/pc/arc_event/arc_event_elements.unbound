@@ -1,0 +1,154 @@
+(def element ArcEventStatus (_isFull:bool = false)
+	(scope
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var arcEvent:dhComponent = "arcEventEntity.arcEvent")
+		(var state:number = "arcEvent.state ?: 0" (event "arcEvent.evEventStateChanged"))
+		(var eventFinishTime:number = "arcEvent.finishTime ?: 0" (event "arcEvent.evChanged"))
+		(var nextPrimeAt:number = "arcEvent.nextPrimeAt ?: 0" (event "arcEvent.evEventStateChanged"))
+		(var finishPrimeAt:number = "arcEvent.finishPrimeAt ?: 0" (event "arcEvent.evEventStateChanged"))
+		(var playerSideId:number = "arcEventEntity.playerArcEventInfo.sideId ?: 0" (event "arcEventEntity.playerArcEventInfo.evSideChanged"))
+
+		(var playerProgressEntity:dhEntity = "getPrimaryEntity(CC.progressWithRewards, 'personal' + playerSideId)")
+		(var progressWithRewards:dhComponent = "playerProgressEntity.progressWithRewards")
+		(var personalRewardIndex:number = "progressWithRewards.activeIndex - 1" (event "progressWithRewards.evChanged"))
+		(var personalProgress:number = "progressWithRewards.pointsCurrent ?: 0" (event "progressWithRewards.evChanged"))
+		(var personalProgressArray:array = "progressWithRewards.pointsArray" (event "progressWithRewards.evChanged"))
+		(var hasReceivedAllRewards:bool = "personalRewardIndex == personalProgressArray.length - 1")
+		(var pointsTillNextRewardTotal:number = "personalRewardIndex >= 0 && !hasReceivedAllRewards	? personalProgressArray[personalRewardIndex + 1]
+																									: personalProgressArray[0]")
+		(var pointsTillNextRewardRemaining:number = "pointsTillNextRewardTotal - personalProgress")
+
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE "'primeCountDownStart'" "nextPrimeAt" "'HH:mm:ss'")
+		(macro COUNTDOWN_SCOPE "'primeCountDownFinish'" "finishPrimeAt" "'HIGHEST,WITH_DAYS'")
+
+		(var isPrimeTimeActive:number = "state & SC.Sse.RVR_EVENT_STATE.PRIME_ACTIVE")
+		(var isEventFinished:number = "state & SC.Sse.RVR_EVENT_STATE.EVENT_FINISHED")
+		(var isPlayerChoseSide:number = "state & SC.Sse.RVR_EVENT_STATE.SIDE_CHOSEN")
+
+		(var statusText:str =	"	isEventFinished								?	'IDS_ARC_EVENT_COMMON_STATUS_CALCULATING_EVENT_RESULTS' :
+									!isPlayerChoseSide							?	'IDS_ARC_EVENT_COMMON_STATUS_CHOOSE_SIDE' :
+									isPrimeTimeActive && _isFull				?	subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_ENDS_IN_FULL', [],
+																							{ _timeTillPrimeTimeEnd: primeCountDownFinish }) :
+									isPrimeTimeActive && hasReceivedAllRewards	?	'IDS_SUBST_ARC_EVENT_PORT_STATUS_ALL_REWARDS_RECEIVED' :
+									isPrimeTimeActive							?	subst('IDS_SUBST_ARC_EVENT_PORT_STATUS_POINTS_TILL_NEXT_REWARD', [],
+																							{ _pointsTillNext: pointsTillNextRewardRemaining }, pointsTillNextRewardRemaining) :
+									!nextPrimeAt								?	'IDS_SUBST_ARC_EVENT_COMMON_STATUS_ALL_PRIMETIMES_ENDED' :
+									_isFull										?	subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_FULL', [],
+																							{ _timeTillPrimeTimeStart: primeCountDownStart })
+																				:	subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_SHORT', [],
+																							{ _timeTillPrimeTimeStart: primeCountDownStart })")
+	)
+	(style (bind width "_isFull ? 'auto' : 100%"))
+	(controller $Instance renderer='StatusLine'
+		(bind enabled "_isFull")
+		(args
+			_unifiedStatus = "isPrimeTimeActive && nextPrimeAt	? SC.Ui_styles.UNIFIED_STATUS.DATE
+																: SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_text = "statusText"
+		)
+	)
+	(block
+		(bind visible "!_isFull")
+		(style (width = 100%))
+		(tf
+			(class $TextDefaultNM)
+			(style (width = 100%) (maxWidth = 172px) (alpha = "TS"))
+			(bind text "statusText")
+		)
+	)
+)
+
+(def element ArcEventTaskStatus (_taskId:number = 0, _isSimple:bool = false)
+	(scope
+		(macro SERVER_TIME_SCOPE)
+
+		(var arcEventTaskEntity:dhEntity = "getEntity(_taskId)")
+		(var arcEventTask:dhComponent = "arcEventTaskEntity.arcEventTask")
+		(var state:number = "arcEventTask.state" (event "arcEventTask.evStateChanged"))
+		(var startTime:number = "arcEventTask.startTime ?: 0" (event "arcEventTask.evChanged"))
+		(var finishTime:number = "arcEventTask.finishTime ?: 0" (event "arcEventTask.evChanged"))
+		(var personalPoints:number = "arcEventTask.personalPoints" (event "arcEventTask.evPersonalPointsChanged"))
+		(var personalRatePoints:number = "arcEventTask.personalRatePoints" (event "arcEventTask.evChanged"))
+
+		(var taskTotalPointsSum:number = "personalPoints + personalRatePoints")
+		(var isLocked:bool = "state == SC.Sse.RVR_TASK_STATE.LOCKED")
+		(var isActive:bool = "state == SC.Sse.RVR_TASK_STATE.ACTIVE")
+		(var isExpired:bool = "serverTime > finishTime")
+		(var isDone:bool = "isExpired && personalPoints")
+		(var isFailed:bool = "isExpired && !personalPoints")
+
+		(var arcEventUnifiedStatus:str = "	isDone		? SC.Ui_styles.UNIFIED_STATUS.CHECK :
+											isFailed	? SC.Ui_styles.UNIFIED_STATUS.NEGATIVE
+														: SC.Ui_styles.UNIFIED_STATUS.DATE")
+
+		(var arcEventStatusTextTime:str = "	isLocked	? 'IDS_ARC_EVENT_MAIN_SCREEN_TASK_STATUS_TIME_TILL_START_COLON' :
+											isActive	? 'IDS_ARC_EVENT_MAIN_SCREEN_TASK_STATUS_TIME_TILL_FINISH_COLON'
+														: ''")
+		(var arcEventStatusText:str = "	isDone		? _isSimple ? 'IDS_SSE_STATUS_COMPLETED'
+																: subst('IDS_SUBST_ARC_EVENT_MAIN_SCREEN_TASK_STATUS_DONE_POINTS_RECEIVED',[],
+																		{ _points: taskTotalPointsSum }, taskTotalPointsSum	) :
+										isFailed	? 'IDS_SSE_STATUS_FAILED'
+													: arcEventStatusTextTime")
+
+		(var timeToCount:number = "isLocked ? startTime : finishTime")
+		(var timeLeft:number = "timeToCount - serverTime")
+		(var hours:number = "timeLeft > 0 ? floor(timeLeft/HOUR_IN_SEC) : 0")
+		(var minutes:number = "timeLeft > 0 ? floor((timeLeft - hours * HOUR_IN_SEC)/MINUTE_IN_SEC) : 0")
+		(var seconds:number = "timeLeft > 0 ? floor(timeLeft - hours * HOUR_IN_SEC - minutes * MINUTE_IN_SEC) : 0")
+		(var hoursVisible:bool = "!isExpired && hours != 0")
+		(var minsVisible:bool = "!isExpired && minutes != 0")
+		(var secondsVisible:bool = "!isExpired && minutes == 0 && hours == 0")
+	)
+	(style (flow = "horizontal"))
+	(element StatusLine
+		_unifiedStatus = "arcEventUnifiedStatus"
+		_text = "arcEventStatusText"
+	)
+	(hblock
+		(bind visible "arcEventStatusTextTime != ''")
+		(style (bind marginLeft "arcEventStatusTextTime != '' ? XS : 0"))
+		(tf
+			(bind visible "hoursVisible")
+			(class $TextDefaultNM)
+			(style (alpha = "TA") (bind marginRight "hours != 0 ? XS : 0"))
+			(bind text "toString(hours) + ' ' + trPlural('IDS_PL_HOUR_FULL', hours)")
+		)
+		(tf
+			(bind visible "minsVisible")
+			(class $TextDefaultNM)
+			(style (alpha = "TA") (bind marginRight "minutes != 0 ? XS : 0"))
+			(bind text "toString(minutes) + ' ' + trPlural('IDS_PL_MINUTE_FULL', minutes)")
+		)
+		(tf
+			(bind visible "secondsVisible")
+			(class $TextDefaultNM)
+			(style (alpha = "TA") (bind marginRight "seconds != 0 ? XS : 0"))
+			(bind text "toString(seconds) + ' ' + trPlural('IDS_PL_SECOND_FULL', seconds)")
+		)
+	)
+)
+
+(def element ArcEventStageTimer ()
+	(scope
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var nextStageStartTime:number = "arcEventEntity.arcEvent.nextStageAt ?: 0" (event "arcEventEntity.arcEvent.evChanged"))
+
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE "'currentStageEndsIn'" "nextStageStartTime" "'HIGHEST,WITH_DAYS'")
+
+		(var currentStageFinishDateTime:str = "formatTime(nextStageStartTime, 'dd.MM.yyyy hh:mm', '', true)")
+	)
+
+	(element StatusLine
+		_text = "subst(	'IDS_SUBST_ARC_EVENT_STAGE_ENDS_IN', [], { _timeLeft: currentStageEndsIn })"
+	)
+
+	(controller $Tooltip
+		(renderer='SimpleStatusTooltip')
+		(args
+			_text = "subst(	'IDS_SUBST_ARC_EVENT_STAGE_ENDS_AT', [], { _expiryDateTime: currentStageFinishDateTime })"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)

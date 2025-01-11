@@ -1,0 +1,510 @@
+(def constant PBS_COLUMN_DIVISIONS_WIDTH 40)
+(def constant PBS_COLUMN_NICKNAME_WIDTH 162)
+(def constant PBS_COLUMN_SHIP_WIDTH 190)
+(def constant PBS_COLUMN_FRAGS_WIDTH 48)
+(def constant PBS_COLUMN_PLANE_FRAGS_WIDTH 48)
+(def constant PBS_COLUMN_EXP_WIDTH 80)
+(def constant PBS_COLUMN_ACHIEVEMENTS_WIDTH 48)
+
+
+(def element BattleResultsPlayersTable (_teamResults:dict, _gameData:dict, _personal:dict, _complaintsAvailable:bool)
+
+	(style
+		(flow = "horizontal")
+	)
+
+	(block
+		(style
+			(marginRight = 1px)
+		)
+		(element BattleResultsPlayersTableHeader
+			_isChallenge = "_gameData.game_mode == SC.Battle.GAME_MODE.BATTLE_CHALLENGES"
+		)
+		(block
+			(controller $Repeat	renderer='BattleResultsPlayersTableRow'
+				(bind count "_teamResults.listAllied.length")
+				(args
+					_data = "_teamResults.listAllied[$index]"
+					_personal = "_personal"
+					_gameData = "_gameData"
+					_complaintsAvailable="_complaintsAvailable"
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "_teamResults.listEnemies.length > 0 && _gameData.game_mode != SC.Battle.GAME_MODE.PVE")
+		(block
+			(style
+				(width = 100%)
+			)
+			(controller $Instance renderer='BattleResultsPlayersTableHeader'
+				(bind enabled "_teamResults.listEnemies.length > 0 && _gameData.game_mode != SC.Battle.GAME_MODE.PVE")
+				(args
+					_isReversed = true
+					_isChallenge = "_gameData.game_mode == SC.Battle.GAME_MODE.BATTLE_CHALLENGES"
+				)
+			)
+		)
+
+		(block
+			(controller $Repeat	renderer='BattleResultsPlayersTableRow'
+				(bind count "_teamResults.listEnemies.length")
+				(args
+					_data = "_teamResults.listEnemies[$index]"
+					_gameData = "_gameData"
+					_isReversed = true
+					_complaintsAvailable="_complaintsAvailable"
+				)
+			)
+		)
+	)
+)
+
+(def element BattleResultsPlayersTableHeader (_isReversed:bool = false, _isChallenge:bool = false)
+	(scope
+		(struct teamName = GET_TEAM_NAME(_isChallenge="_isChallenge"))
+	)
+
+	(style
+		(width = 100%)
+		(height = "LINE_HEIGHT")
+		(align = "middle")
+		(bind backgroundColor "_isReversed ? C_RED_HEADER : C_GREEN_HEADER")
+		(bind flow "_isReversed ? reverse_horizontal : horizontal")
+	)
+
+	(tf
+		(class $TextDefaultBold17NM)
+		(style
+			(marginLeft = "MS")
+			(marginRight = "MS")
+			(alpha = "TA")
+		)
+
+		(bind text "_isReversed ? teamName.bravoTeamName : teamName.alphaTeamName")
+	)
+
+	(block 
+		(style
+			(width = 100%)
+		)
+	)
+
+	(block 
+		(style
+			(width = "PBS_COLUMN_ACHIEVEMENTS_WIDTH")
+			(height = 100%)
+			(backgroundColor = "NO_COLOR")
+			(align = "center|middle")
+		)
+		(block
+			(style
+				(width = 21px)
+				(height = 21px)
+				(backgroundImage = 'swf:../service_kit/battle_results/svg/svg.swf:icon_achievement')
+			)
+		)
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = 'IDS_BY_REWARDS'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block 
+		(style
+			(width = "PBS_COLUMN_PLANE_FRAGS_WIDTH")
+			(height = 100%)
+			(backgroundColor = "NO_COLOR")
+			(align = "center|middle")
+		)
+		(block
+			(style
+				(width = 21px)
+				(height = 21px)
+				(backgroundImage = 'swf:../service_kit/battle_results/svg/svg.swf:icon_stat_avia')
+			)
+		)
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = 'IDS_BY_DESTOYED_PLANES'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block 
+		(style
+			(width = "PBS_COLUMN_FRAGS_WIDTH")
+			(height = 100%)
+			(backgroundColor = "NO_COLOR")
+			(align = "center|middle")
+		)
+		(block
+			(style
+				(width = 21px)
+				(height = 21px)
+				(backgroundImage = 'swf:../service_kit/battle_results/svg/svg.swf:icon_stat_frag')
+			)
+		)
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = 'IDS_BY_KILLS'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block 
+		(style
+			(width = "PBS_COLUMN_EXP_WIDTH")
+			(height = 100%)
+			(backgroundColor = "NO_COLOR")
+			(align = "center|middle")
+		)
+		(block
+			(style
+				(width = 21px)
+				(height = 21px)
+				(backgroundImage = 'swf:../service_kit/battle_results/svg/svg.swf:icon_stat_exp')
+			)
+		)
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = 'IDS_BY_EXPERIENCE'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element BattleResultsPlayersTableRow (_data:dict, _gameData:dict, _personal:dict={}, _isReversed:bool = false, _complaintsAvailable:bool=true)
+	(scope
+		(event evMenuItemClicked)
+
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(macro SHIP_DATA_SCOPE "_data.player.shipId")
+		(var subType:str = "shipEntity.ship.subtype")
+
+		(var battleInfoEntity:dhEntity = "getSingleEntity(CC.battleInfo)")
+		(var isReplayPlaying:bool = "battleInfoEntity.battleInfo.isReplayPlaying")
+
+		(var rankPlayerEntity:dhEntity = "getSingleEntity(CC.rankPlayer)")
+		(var currentRank:number = "rankPlayerEntity.rankPlayer.currentRank" (event "rankPlayerEntity.rankPlayer.evChanged"))
+		(var currentLeague:number = "rankPlayerEntity.rankPlayer.currentLeague" (event "rankPlayerEntity.rankPlayer.evChanged"))
+
+
+		(var rankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, currentRank + '_' + currentLeague)")
+		(var starEarnCondition:bool = "_data.player.is_self ? _personal.starsGained > 0 : _data.place <= rankInfoEntity.rankInfo.starEarnPlace && _data.battleResult == 1")
+		(var starLossCondition:bool = "_data.place >= rankInfoEntity.rankInfo.starLossPlace && _data.battleResult <= 0")
+
+
+		(var playerEntity:gfx = "$datahub.getPrimaryEntity(CC.accountSimple, _data.player.dbId)")
+		(var pureName:str = "playerEntity.accountName.name" (event "playerEntity.accountName.evChanged"))
+		(var isPlayerDeletedByGDPR:bool = "playerEntity.accountSimple.suspended" (event "playerEntity.accountSimple.evSuspendedChanged")) 
+		(var relation:number = "_data.player.relation")
+		(var divisionSign:number = "_data.divisionSign ?: 0")
+
+
+		(macro FEATURES "9")
+		(var rawKeyTargetValue:array = "_data.player.keyTargetMarkers ?: []")
+		(var isKeyTargetVisible:bool = "rawKeyTargetValue && feature_9 != 'locked'")
+
+
+		(var battleType:str = "_gameData.battleType")
+		(var isBotInRandom:bool = "_data.isBot && battleType == SC.Common.BATTLE_TYPES.RANDOM_BATTLE")
+		(var isContextMenuAvailable:bool = "!_data.player.is_self && !isPlayerDeletedByGDPR && !isReplayPlaying && !_data.isBot || isBotInRandom")
+
+		(var playerShipColor:number = "!_data.player.is_self && _data.isInSameDivision	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																						: SC.Ui_styles.SERVICE_COLORS.WHITE")
+
+		(var alphaOfText:number = "_data.is_alive	? playerShipColor == SC.Ui_styles.SERVICE_COLORS.WHITE	? TA 
+																											: 1
+													: TS")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(style
+		(height = "LINE_HEIGHT")
+		(bind flow "_isReversed ? reverse_horizontal : horizontal")
+	)
+
+	(block 
+		(class $LineBackgroundStyle)
+		(style
+			(bind backgroundColor "_data.player.is_self ? SC.Ui_styles.SERVICE_COLORS.WHITE: C_DARK")
+			(bind alpha "_data.player.is_self	? 0.17 :
+						!_data.is_alive			? 0.25
+												: 0.15")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(bind alpha "rollOver ? 0.05 : 0")
+		)
+		(controller $Tooltip
+			(renderer = 'BattlePlayerTooltip')
+			(args
+				_playerEntity = "playerEntity"
+				_isInPostBattle = true
+				_isBot = "_data.isBot"
+				_isContextMenuAvailable = "isContextMenuAvailable"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
+			(renderer = 'ContextMenuPlayerPBS')
+			(bind enabled "isContextMenuAvailable")
+			(args
+				_playerEntity =	"playerEntity"
+				_isBot = "_data.isBot"
+				_relation = "_data.player.relation"
+				_isInSameDivisionOnStart = "_data.isInSameDivisionOnStart"
+				_battleType = "battleType"
+				_accountDBID = "_data.player.dbId"
+				_arenaId = "toNumber(_gameData.arena_id)"
+				_complaintsAvailable = "_complaintsAvailable"
+			)
+			(macro DEFAULT_MENU_BEHAVIOUR "1")
+			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+		)
+	)
+
+	
+	(block
+		(style
+			(hitTest = false)
+			(width = "PBS_COLUMN_DIVISIONS_WIDTH")
+			(height = 100%)
+			(align = "center|middle")
+		)
+		(block
+			(bind visible "battleType != SC.Common.BATTLE_TYPES.RANKED_BATTLE && _data.divisionIndex > 0")
+			(style
+				(width = 19px)
+				(height = 19px)
+				(marginTop = "XXS")
+				(bind backgroundImage "	_data.isDivisionCommander && _data.isInSameDivision ? 'swf:../service_kit/divisions_icons/svg/svg.swf:division_your_commander' :
+										_data.isInSameDivision 								? 'swf:../service_kit/divisions_icons/svg/svg.swf:division_your_' + DIVISION_LETTERS_ARRAY[divisionSign]
+																							: 'swf:../service_kit/divisions_icons/svg/svg.swf:division_another_' + DIVISION_LETTERS_ARRAY[divisionSign]")
+			)
+		)
+
+		(block
+			(bind visible "battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE && (starEarnCondition || starLossCondition)")
+			(style
+				(width = 19px)
+				(height = 19px)
+				(bind backgroundImage "	starEarnCondition	? 'swf:../service_kit/battle_results/svg/svg.swf:icon_rank_star_earn' :
+										starLossCondition	? 'swf:../service_kit/battle_results/svg/svg.swf:icon_rank_star_lose'
+															: ''")
+			)
+		)
+	)
+
+	
+	(hblock
+		(style
+			(hitTest = false)
+			(width = "PBS_COLUMN_NICKNAME_WIDTH")
+			(height = 100%)
+			(align = "middle")
+		)
+		(block
+			(bind visible "_personal.rankNew || _data.player.rank")
+			(style
+				(marginRight = 6px)
+				(marginLeft = -3px)
+				(width = 19px)
+				(height = 19px)
+			)
+			(controller $Instance renderer='IconRankSmall'
+				(bind enabled "_personal.rankNew || _data.player.rank")
+				(args
+					_rank = "_data.player.is_self && battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE ? _personal.rankNew : _data.player.rank"
+					_league = "_data.player.is_self && battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE ? _personal.rankLeague : _data.player.league"
+				)
+			)
+		)
+		(block
+			(style
+				(width = 100%)
+				(marginTop = -1px)
+				(bind alpha "_data.player.isAbuser ? 1 : alphaOfText")
+			)
+			(bind name "'player_tab_stat_' + _data.player.name")
+			(element PlayerNameAndClanTag
+					_isSelf = "_data.player.is_self"
+					_isTextBold = "_data.player.is_self"
+					_isDead = "!_data.is_alive"
+					_fontSize = "17"
+					_isAbuser = "_data.player.isAbuser"
+					_isInPostBattle = true
+					_isInSameDivision = "_data.isInSameDivision"
+					_playerName = "pureName"
+					_clanTag = "_data.clanTag"
+					_clanTagColor = "_data.clanColor"
+					_isBot = "_data.isBot"
+					_isSuspended = "isPlayerDeletedByGDPR"
+			)
+		)
+	)
+
+	
+	(hblock
+		(style
+			(hitTest = false)
+			(width = "PBS_COLUMN_SHIP_WIDTH")
+			(height = 100%)
+			(align = "middle")
+		)
+
+		(block
+			(bind visible "isKeyTargetVisible")
+			(style
+				(backgroundImage = "'url:../service_kit/markers/keytarget_teamlist.png'")
+				(width = 22px)
+				(height = 22px)
+			)
+		)
+
+		(element ShipIconAndLevelAndName
+			_shipIDS =			"shipIDS"
+			_shipLevelRome =	"shipLevelRome"
+			_shipLevelIcon =	"shipLevelIcon"
+			_shipType =			"subType ? toLower(subType): ''"
+			_name =				"_data.player.name"
+			_isDead =			"!_data.is_alive"
+			_alpha =			"alphaOfText"
+			_playerShipColor =	"playerShipColor"
+		)
+	)
+
+ 	
+	(block
+		(style
+			(width = "PBS_COLUMN_ACHIEVEMENTS_WIDTH")
+			(height = 100%)
+			(align = "center|middle")
+		)
+
+		(controller $Instance renderer='EarnedAchievementsByPlayer'
+			(bind enabled "_data.totalAchievements > 0")
+			(args
+				_achievements = "_data.achievements"
+				_isSelfPlayer = "_data.player.is_self"
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(hitTest = false)
+			(width = "PBS_COLUMN_PLANE_FRAGS_WIDTH")
+			(height = 100%)
+			(align = "center|middle")
+		)
+		(tf
+			(bind visible "_data.killed_planes != 0")
+			(bind class "_data.player.is_self ? '$TextDefaultBold17NM' : '$TextDefault17NM'")
+			(style
+				(multiline = false)
+			)
+			(bind text "_data.killed_planes")
+		)
+	)
+
+	
+	(block
+		(style
+			(hitTest = false)
+			(width = "PBS_COLUMN_FRAGS_WIDTH")
+			(height = 100%)
+			(align = "center|middle")
+		)
+
+		(tf
+			(bind visible "_data.ships_killed != 0")
+			(bind class "_data.player.is_self ? '$TextDefaultBold17NM' : '$TextDefault17NM'")
+			(style
+				(multiline = false)
+			)
+			(bind text "_data.ships_killed")
+		)
+	)
+
+	
+	(block
+		(style
+			(hitTest = false)
+			(width = "PBS_COLUMN_EXP_WIDTH")
+			(height = 100%)
+			(align = "center|middle")
+		)
+		(tf
+			(bind class "_data.player.is_self ? '$TextDefaultBold17NM' : '$TextDefault17NM'")
+			(style
+				(width = "100%")
+				(textAlign = "center")
+			)
+			(bind text "_data.exp")
+		)
+	)
+)
+
+
+(def element EarnedAchievementsByPlayer (_achievements:array, _isSelfPlayer:bool)
+	(style
+		(width = 21px)
+		(height = 21px)
+		(backgroundImage = 'url:../achievements/icon_achievement.png')
+	)
+	(controller $Tooltip
+		(renderer = 'EarnedAchievementsByPlayerTooltip')
+		(args
+			_achievements = "_achievements"
+			_isSelfPlayer = "_isSelfPlayer"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element EarnedAchievementsByPlayerTooltip (_achievements:array, _isSelfPlayer:bool)
+	(style
+		(width = "DEFAULT_TOOLTIP_WIDTH")
+	)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "_isSelfPlayer ? 'IDS_YOUR_ACHIEVEMENTS' : 'IDS_PLAYERS_ACHIEVEMENTS'"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%) (vgap = "M"))
+			(controller $Repeat renderer = 'TooltipSystemTeamBattleResultsAchievementsList'
+				(bind count "_achievements.length")
+				(args
+					_achievements = "_achievements[$index]"
+				)
+			)
+		)
+	)
+)

@@ -1,0 +1,159 @@
+(def constant MODAL_WINDOW_SIGNAL_BUY_WIDTH 400px)
+
+(def element ModalWindowBuySignal (signalId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(macro MODAL_WINDOW_SYSTEM_PURCHASE_EVENTS_SCOPE)
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountCredits:number = "resourceEntity.accountResource.credits ?: 0" (event "resourceEntity.accountResource.evChangedCredit"))
+
+		(var signalEntity:dhEntity =		"getPrimaryEntity(CC.signal, signalId)")
+		(var signalComponent:dhComponent =	"signalEntity.signal")
+
+		(var rarity:number =		"signalComponent.rarity ?: 0")
+		(var signalName:str =		"signalComponent.name ?: ''")
+
+		(var headerText:str =		"tr('IDS_' + toUpper(signalName))")
+		(var subheaderText:str =	"rarity ? tr('IDS_BATTLE_SIGNAL_RARITY_' + rarity) : ''")
+
+		(struct signalPrice = PULL_PRICE(_entityId = "toString(signalId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var totalPrice:number =	"signalPrice.info.finalPrice")
+		(var priceCurrency:str =	"signalPrice.info.currency")
+
+		(var deficit:number =		"totalPrice - accountCredits")
+		(var isDeficit:bool =		"deficit > 0")
+		(var priceInfo:dict =		"{	finalPrice:	totalPrice,
+										currency:	priceCurrency,
+										basePrice:	signalPrice.info.basePrice,
+										type:		signalPrice.info.type,
+										till:		signalPrice.info.till,
+										isPrivate:	signalPrice.info.isPrivate }")
+		(var currenciesPanelPrices:array =	"[{ finalPrice: -totalPrice, currency: priceCurrency }]")
+
+		(var windowHitTest:bool = true)
+		(bind windowHitTest "false" watch=false init=false (event "evHideContent"))
+	)
+
+	(dispatch evHideContent init=false (event "startHide"))
+	(bindcall externalCall 'inputMapping.onAction' "[SIGNALS_ACTION.BUY_AND_INSTALL, { signalId: signalId }]" init=false (event "dataLoadingBecomeVisible"))
+	(bindcall externalCall 'inputMapping.onRequest' "['close', {}]" init=false (event "delayedDataLoadingBecomeVisible"))
+
+	(style
+		(align = "center|middle")
+		(bind hitTest "windowHitTest")
+	)
+
+	(block
+		(style
+			(align = "center")
+			(width = "MODAL_WINDOW_SIGNAL_BUY_WIDTH")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1 hideEvent = "'evHideContent'")
+
+			(style
+				(align = "center")
+				(marginBottom = "S")
+				(width = 100%)
+			)
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_MODAL_WINDOW_TITLE_SIGNAL_PURCHASE'
+				_hasDivider = "false"
+			)
+
+			(element CurrenciesPanel
+				_priceInfo = "currenciesPanelPrices"
+				_width = "MODAL_WINDOW_SIGNAL_BUY_WIDTH"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.3 hideEvent = "'evHideContent'")
+
+			(style (marginBottom = "SXS"))
+
+			(controller $Tooltip
+				(renderer = 'SignalTooltip')
+				(args
+					_id = "signalId"
+					_noMouseInstructions =	true
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+				_headerIconType =	"MODAL_WINDOW_SYSTEM_PURCHASABLE_ITEM_ICON.SIGNAL"
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_headerText =		"headerText"
+				_subheaderText =	"subheaderText"
+				_imageWidth =		60px
+				_imageHeight =		60px
+				_maxWidth =			300px
+				_data =				"{ name: signalName }"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5 hideEvent = "'evHideContent'")
+			(style (marginBottom = "MS") (width = 100%))
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2 hideEvent = "'evHideContent'")
+			(style (marginBottom = "MS") (width = 100%))
+
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_priceInfo =		"priceInfo"
+				_questionString =	'IDS_QUESTION_PURCHASE_AND_INSTALL_FOR'
+				_isDeficit =		"isDeficit"
+				_deficit =			"deficit"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3 hideEvent = "'evHideContent'" animationFinishedEvent = "'evAnimationFinished'")
+			(style (align = "center") (width = 100%))
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_hideEventName =	'evHideContent'
+				_isDeficit =		"isDeficit"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(class $FullsizeAbsolute)
+		(style (align = "center|middle"))
+
+		(block
+			(alpha = 0)
+			(visible = false)
+			(style (visualOffsetY = 10px))
+
+			(controller $Animation
+				(bindcall play	duration = 0.1
+								action="kill"
+								to = "{alpha: 1, visible: true, visualOffsetY: 0px}"
+								(event "evAnimationFinished")
+				)
+				(dispatch dataLoadingBecomeVisible args="{}" init=false on=evAnimEnded)
+				(dispatch delayedDataLoadingBecomeVisible args="{}" delay=0.4 init=false on=evAnimEnded)
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(alpha = "TA")
+				(bind text "toUpper(tr('IDS_DATA_LOADING'))")
+			)
+		)
+	)
+)

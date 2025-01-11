@@ -1,0 +1,268 @@
+(def element BattleTypeChooser ()
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(macro CALCULATE_PORT_HEADER_ELEM_SIDE_PADDING)
+
+		(var divisionWatcher:gfx = "$datahub.getFirstWatcher(CC.division)")
+		(var divisionDataEntity:gfx = "divisionWatcher.entity" (event "divisionWatcher.event"))
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity ? selfPlayerEntity.preBattlePlayerSimple : null" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isCommander:bool = "preBattlePlayerSimpleComponent ? preBattlePlayerSimpleComponent.isCommander : false" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+
+		(var selectedBattleTypes:gfx = "$datahub.getCollection(CC.battleType).child('selected')")
+		(var selectedBattleTypesItems:array = "selectedBattleTypes ? selectedBattleTypes.items : []" (event "selectedBattleTypes.evAdded") (event "selectedBattleTypes.evRemoved"))
+		(var selectedBattleTypeEntity:gfx = "selectedBattleTypesItems.length > 0 ? selectedBattleTypesItems[0] : null")
+		(var selectedBattleTypeEntityId:number = "selectedBattleTypeEntity ? selectedBattleTypeEntity.id : 0")
+
+		(var battleTypeComponent:gfx = "selectedBattleTypeEntity ? selectedBattleTypeEntity.battleType : null")
+		(var eventBattleStateComponent:gfx = "selectedBattleTypeEntity ? selectedBattleTypeEntity.eventBattleState : null")
+
+		(var battleType:str = "battleTypeComponent ? battleTypeComponent.type : ''" (event "battleTypeComponent.evStatusChanged"))
+		(var isSelected:bool = "battleTypeComponent ? battleTypeComponent.selected : false" (event "battleTypeComponent.evSelectionChanged"))
+		(var status:number = "battleTypeComponent ? battleTypeComponent.status : 0" (event "battleTypeComponent.evStatusChanged"))
+		(var battleTypeGameParamId:number = "battleTypeComponent ? battleTypeComponent.battleTypeGameParamId : 0")
+		(var isDisabled:bool = "status == BATTLE_TYPE.DISABLED")
+		(var selectedEventBattleName:str = "eventBattleStateComponent ? eventBattleStateComponent.name : ''" (event "eventBattleStateComponent.evChanged"))
+
+		(var isRandomBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.RANDOM_BATTLE")
+		(var isCooperativeBattle:bool =	"battleType == SC.Common.BATTLE_TYPES.COOPERATIVE_BATTLE")
+		(var isRankedBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE")
+		(var isPVEBattle:bool =			"battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+		(var isClanBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE")
+		(var isEventBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE")
+		(var isBrawlBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.BRAWL_BATTLE")
+
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var isActiveTrainingBattle:bool = "trainingRoomEntity && battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+
+		(var isCommonBattle:bool = "isRandomBattle || isCooperativeBattle")
+
+		(var unseenBattleTypes:gfx = "$datahub.getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.BATTLE_TYPES)")
+		(var unseenBattleTypesNewContentComponent:gfx = "unseenBattleTypes ? unseenBattleTypes.newContent : null")
+		(var unseenBattleTypesCount:number = "unseenBattleTypesNewContentComponent ? unseenBattleTypesNewContentComponent.count : 0" (event "unseenBattleTypesNewContentComponent.evCountChanged"))
+		(var isNew:bool = "!isActiveTrainingBattle && unseenBattleTypesCount != 0")
+
+		(var operationEntity:gfx = "$datahub.getPrimaryEntity(CC.operation, battleTypeGameParamId)")
+		(var operationComponent:gfx = "operationEntity ? operationEntity.operation : null")
+		(var operationGPName:str = "operationComponent ? operationComponent.gpName : ''")
+		(var pveOperationCustomIconName:str = "operationComponent ? operationComponent.customIconName : ''" (event "operationComponent.evStatusChanged"))
+		(var battleTypeIcon:str = "	pveOperationCustomIconName	? pveOperationCustomIconName :
+									isEventBattle				? selectedEventBattleName
+																: battleType")
+
+		(var pveBattleButtonText:str = "operationGPName ? tr('IDS_' + toUpper(operationGPName) + '_NAME') : ''")
+		(var battleTypeLabel:str = "isPVEBattle									? pveBattleButtonText :
+									isEventBattle && selectedEventBattleName	? tr(toUpper('IDS_' + selectedEventBattleName)) :
+									battleType									? tr(toUpper('IDS_' + battleType))
+																				: ''")
+
+		(var battleTypeDescription:str = "isActiveTrainingBattle ? 'IDS_RETURN_TO_TRAINING_ROOM' : 'IDS_CHOOSE_BATTLE_TYPE'")
+		
+		(var isBtnChooserEnabled:bool = "isCommander || !divisionDataEntity")
+
+		(struct pvpIntroNewTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.PVP_INTRO"))
+		(struct repeatPvpIntroNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.PVP_INTRO_REPEAT"))
+		(struct pveIntroNewTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.PVE_INTRO"))
+		(struct pveIntroRepeatNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.PVE_INTRO_REPEAT"))
+		(struct rankIntroNewTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.RANK_INTRO"))
+		(struct rankIntroRepeatNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.RANK_INTRO_REPEAT"))
+		(struct battleChooserBlockedTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.BATTLE_TYPE_BLOCKED_DIVISION"))
+
+		(var newTipId:number = "pvpIntroNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.PVP_INTRO :
+								repeatPvpIntroNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.PVP_INTRO_REPEAT :
+								pveIntroNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.PVE_INTRO :
+								pveIntroRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.PVE_INTRO_REPEAT :
+								rankIntroNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.RANK_INTRO :
+								rankIntroRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.RANK_INTRO_REPEAT :
+								battleChooserBlockedTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.BATTLE_TYPE_BLOCKED_DIVISION
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isNewTipVisible:bool = "newTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var state:number = "	!isBtnChooserEnabled	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var iconAlpha:number = "PORT_HEADER_BATTLE_TYPE_CHOOSER_ICON_ALPHA[state]")
+		(var mainLabelAlpha:number = "PORT_HEADER_MAIN_TEXT_ALPHA[state]")
+		(var subTextAlpha:number = "PORT_HEADER_SUBTEXT_ALPHA[state]")
+
+		
+		(var ctRollOver:dict = "{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								  redOffset: 15,	greenOffset: 15,	blueOffset: 15,		alphaOffset: 0 }")
+		(var ctDown:dict = "	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								  redOffset: 0,		greenOffset: 0,		blueOffset: 0,		alphaOffset: 0 }")
+		
+
+		(var battleTypeTooltipRenderer:str = "	isEventBattle	? 'EventBattleTypeTooltip' :
+												isRankedBattle	? 'RankedBattleTypeTooltip' :
+												isClanBattle	? 'ClanBattleTypeTooltip' :
+												isPVEBattle		? 'PVEOperationTooltip' :
+												isBrawlBattle	? 'BrawlBattleTypeTooltip' :
+												isCommonBattle	? 'CommonBattleTypeTooltip'
+																: 'CommonBattleTypeTooltip'")
+	)
+
+	
+	(style
+		(bind paddingLeft "-PORT_HEADER_CONTROL_DEFAULT_PADDING")
+		(bind paddingRight "-PORT_HEADER_CONTROL_DEFAULT_PADDING")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(element DockHeaderControlBackground
+			_state = "state"
+		)
+
+		(controller $Tooltip
+			(bind renderer "battleTypeTooltipRenderer")
+			(bind enabled "isBtnChooserEnabled")
+			(args
+				_battleTypeEntityId = "selectedBattleTypeEntityId"
+				_isFromPort = true
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(bind enabled "!isBtnChooserEnabled")
+			(args
+				_text = 'IDS_STARTBATTLE_LOCK_REASON_NOT_COMMANDER_DIVISION'
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(macro MOUSE_HANDLER
+			_enabled = "isBtnChooserEnabled"
+			_soundSet = "'button_battle_type'"
+			_methods = "isBtnChooserEnabled && isActiveTrainingBattle	? [{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.TRAINING_ROOM_MAIN } }] :
+						isBtnChooserEnabled								? [{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.BATTLE_TYPE_CHOOSER_SHOW } }]
+																		: []"
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(flow = "horizontal")
+			(height = 60px)
+			(bind paddingLeft "PORT_HEADER_CONTROL_DEFAULT_PADDING")
+			(bind paddingRight "PORT_HEADER_CONTROL_DEFAULT_PADDING")
+		)
+
+		(name = 'ButtonDock')
+
+		(block
+			(bind colorTransform "	mouseDown	? ctDown :
+									rollOver	? ctRollOver
+												: CT_NONE")
+			(style
+				(marginTop = "SXS")
+				(marginRight = "S")
+				(width = 35px)
+				(height = 35px)
+				(marginLeft = -5px)
+				(bind backgroundImage "isDisabled	? 'url:../service_kit/battle_types/' + battleTypeIcon + '_disabled_small.png'
+													: 'url:../service_kit/battle_types/' + battleTypeIcon + '_small.png'")
+			)
+
+			(bind name "isPVEBattle ? 'operationType_' + operationGPName : ''")
+		)
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+
+		
+
+		
+		
+		
+		
+		
+
+		(block
+			(style
+				(align = "middle")
+				(height = 100%)
+			)
+
+			(block
+				(tf
+					(name = 'battleTypeChooserBtn')
+
+					(class $TextDefaultBold17NM)
+					(style
+						(wordWrap = false)
+						(alpha = "mainLabelAlpha")
+					)
+
+					(bind text "battleTypeLabel")
+
+					(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+						_trigger	= "state"
+						_alpha		= "mainLabelAlpha"
+					)
+				)
+
+				(block
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNew")
+					(style
+						(position = "absolute")
+						(right = -47px)
+						(top = "-S")
+						(hitTest = false)
+					)
+
+					(element MarkerNew)
+				)
+			)
+
+			(tf
+				(class $TextDefault13NM)
+				(style
+					(marginTop = "S")
+					(wordWrap = false)
+					(bind alpha "subTextAlpha" watch=false)
+				)
+
+				(bind text "battleTypeDescription")
+
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+					_trigger	= "state"
+					_alpha		= "subTextAlpha"
+				)
+			)
+
+			(block
+				(style (width = 100%))
+
+				(controller $Instance renderer='GuidingTipHub'
+					(bind enabled "isNewTipVisible")
+					(args
+						_tipId =			"newTipId"
+						_tipPositioning =	"TIP_POSITION_BOTTOM"
+						_offsetY =			"battleChooserBlockedTip.isActive ? 0 : 5px"
+						_offsetX =			"battleChooserBlockedTip.isActive ? XXL : 0"
+						_noArrow =			"battleChooserBlockedTip.isActive"
+						_noPointer =		"battleChooserBlockedTip.isActive"
+						_modalWindowName =	'Dock'
+					)
+				)
+			)
+		)
+	)
+)

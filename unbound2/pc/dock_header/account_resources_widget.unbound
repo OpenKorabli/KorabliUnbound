@@ -1,0 +1,163 @@
+(def element AccountResourcesWidget (_height:number=60)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE "'freeExp_'")
+		(macro FEATURES "5")
+
+		(var resourceWatcher:gfx = "$datahub.getFirstWatcher(CC.accountResource)")
+		(var resourceEntity:gfx = "resourceWatcher.entity" (event "resourceWatcher.event"))
+		(var resourceComponent:gfx = "resourceEntity ? resourceEntity.accountResource : null")
+
+		(var isSyncedWithWallet:bool = "resourceComponent ? resourceComponent.isSyncedWithWallet :false" (event "resourceComponent.evChangedIsSyncedWithWallet"))
+		(var isWalletAvailable:bool = "resourceComponent ? resourceComponent.walletStatus :false" (event "resourceComponent.evChangedWalletStatus"))
+		(var showWGWalletWarning:bool = "!isSyncedWithWallet || !isWalletAvailable")
+
+		(var isFreeExpNew:bool = "feature_5 == 'new'")
+
+		(struct researchFreeXpNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FREEEXP"))
+		(struct researchFreeXpRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FREEEXP_REPEAT"))
+		(struct freeXpIntroNewTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_INTRO"))
+		(struct freeXpIntroRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_INTRO_REPEAT"))
+
+		(var freeXpTipId:number = "	researchFreeXpNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FREEEXP : 
+									researchFreeXpRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FREEEXP_REPEAT :
+									freeXpIntroNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_INTRO :
+									freeXpIntroRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_INTRO_REPEAT
+																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isFreeXpIntroTip:bool = "researchFreeXpNewTip.isActive && researchFreeXpRepeatNewTip.isActive")
+		(var freeXpTipVisible:bool = "freeXpTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['featureSeen', { featureIndex: 5 }]" init=false watch=false (event "freeExp_evClicked"))
+
+	(style (flow = "horizontal"))
+
+	(block
+		(bind visible "showWGWalletWarning")
+
+		(style
+			(marginTop = 6px)
+			(height = 30px)
+			(width = 30px)
+		)
+
+		(controller $Instance renderer='WGWalletServiceStatus'
+			(bind enabled "showWGWalletWarning")
+		)
+	)
+
+	
+	(block
+		(name = 'buttonBuyGold')
+
+		(element DockResourcesWidget
+			_name = 'goldBalance'
+			_currency = "SC.Common.CURRENCIES.GOLD"
+			_label = 'IDS_GOLD'
+			_height = "_height"
+		)
+	)
+	
+
+	
+	(block
+		(name = 'buttonExchangeGold')
+
+		(style (bind alpha "showWGWalletWarning ? 0.5 : 1"))
+
+		(element DockResourcesWidget
+			_name = 'creditBalance'
+			_currency = "SC.Common.CURRENCIES.CREDITS"
+			_label = 'IDS_CONVERT_CREDITS'
+			_height = "_height"
+		)
+
+		(element GuidingTipHub
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.RESEARCH_CREDITS"
+			_tipPositioning = "TIP_POSITION_BOTTOM"
+			_noPointer = "!isFreeXpIntroTip"
+			_offsetY = 5px
+			_hasNextButton = true
+			_keepOnNotFit = true
+			_pinOffsetInPercents = "feature_5 == 'locked' ? 90 : 50"
+			_screenOffsetRight = "feature_5 == 'locked' ? 50px : 0"
+			_modalWindowName = 'Dock'
+		)
+
+		(element GuidingTipHub
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.RESEARCH_CREDITS_REPEAT"
+			_tipPositioning = "TIP_POSITION_BOTTOM"
+			_noPointer = true
+			_offsetY = 5px
+			_hasNextButton = true
+			_keepOnNotFit = true
+			_pinOffsetInPercents = "feature_5 == 'locked' ? 90 : 50"
+			_screenOffsetRight = "feature_5 == 'locked' ? 50px : 0"
+			_modalWindowName = 'Dock'
+		)
+	)
+	
+
+	
+	(block
+		(bind visible "feature_5 != 'locked'")
+
+		(macro MOUSE_EVENTS_DISPATCHER "'freeExp_'")
+		(name = 'buttonConvertExp')
+
+		(element DockResourcesWidget
+			_name = 'freeExpBalance'
+			_currency = "SC.Common.CURRENCIES.FREE_XP"
+			_label = 'IDS_CONVERT_FREE_EXPERIENCE'
+			_height = "_height"
+			_isMarkerVisible = "isFreeExpNew"
+		)
+
+		
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "freeXpTipVisible")
+				(args
+					_tipId = "freeXpTipId"
+					_tipPositioning = "TIP_POSITION_BOTTOM"
+					_offsetY = 5px
+					_noPointer = true
+					_hasNextButton = true
+					_keepOnNotFit = true
+					_pinOffsetInPercents = 92
+					_screenOffsetRight = "M"
+					_modalWindowName = 'Dock'
+				)
+			)
+		)
+		
+	)
+	
+)
+
+(def element WGWalletServiceStatus ()
+	(class $FullsizeAbsolute)
+	(style
+		(backgroundColor = "NO_COLOR")
+		(align = "center|middle")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+			_text = 'IDS_SERVICE_IS_LIMITED'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(style
+			(width = 22px)
+			(height = 22px)
+			(backgroundImage = 'url:../service_kit/icons/icon_status_attention.png')
+		)
+	)
+)

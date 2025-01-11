@@ -1,0 +1,114 @@
+(def element ModalWindowShipRepair (shipId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(macro SHIPCOMPONENT_TITLE_INFO "shipId")
+
+		(var shipComponentEntity:dhEntity = "getPrimaryEntity(CC.shipComponent, shipId)")
+		(var shipComponentsCount:number = "shipComponentEntity.shipComponent.count ?: 0" (event "shipComponentEntity.shipComponent.evChanged"))
+		(var isAvailableForCrafting:bool = "shipComponentEntity.shipComponent.isAvailableForCrafting ?: false" (event "shipComponentEntity.shipComponent.evChanged"))
+
+		(var shipMaterialEntity:dhEntity = "getPrimaryEntity(CC.shipMaterial, shipLevel)" )
+		(var shipMaterialsCount:number = "shipMaterialEntity.shipMaterial.count ?: 0" (event "shipMaterialEntity.shipMaterial.evChanged"))
+
+		(var isShipComponentsCountEnough:bool = "shipComponentsCount >= SHIP_SHARDS.COMPONENTS_CRAFTING_COST")
+		(var shipComponentsCost:number = "isShipComponentsCountEnough ? SHIP_SHARDS.COMPONENTS_CRAFTING_COST : shipComponentsCount")
+		(var shipMaterialsCost:number = "isShipComponentsCountEnough ? 0 : (SHIP_SHARDS.COMPONENTS_CRAFTING_COST - shipComponentsCost) * SHIP_SHARDS.COMPONENT_COST")
+		(var shipComponentsCostInfo:dict = "{ finalPrice: shipComponentsCost, currency: SC.Common.CURRENCIES.SHIPCOMPONENT }")
+		(var shipMaterialsCostInfo:dict = "isShipComponentsCountEnough ? null : { finalPrice: shipMaterialsCost, currency: SC.Common.CURRENCIES.SHIPMATERIAL }")
+
+		(var shipComponentsCompensation:number = "isShipComponentsCountEnough ? shipComponentsCount - SHIP_SHARDS.COMPONENTS_CRAFTING_COST : 0")
+		(var shipMaterialsBalance:number = "shipMaterialsCount - shipMaterialsCost + shipComponentsCompensation")
+		(var priceInfo:array = "[	{ finalPrice: shipMaterialsCount, currency: SC.Common.CURRENCIES.SHIPMATERIAL, shipMaterialsBalance: shipMaterialsBalance, shipId: shipId},
+									{ finalPrice: shipComponentsCount, currency: SC.Common.CURRENCIES.SHIPCOMPONENT, shipId: shipId }]")
+	)
+
+	(bindcall externalCall 'inputMapping.onRequest' "['closeShipRepairModal', { }]" (bind trigger "isAvailableForCrafting"))
+
+	(name = 'ModalWindowShipRepair')
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = 380px) (align = "center"))
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style (width = 100%))
+			(element ModalWindowShortHeader
+				_header = 'IDS_SHIP_SHARDS_SHIP_REPAIR_HEADER'
+				_hasDivider = false
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(style (width = 100%) (marginBottom = "S"))
+			(element CurrenciesPanel
+				_shipId = "shipId"
+				_priceInfo = "priceInfo"
+				_width = 380px
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (width = 100%) (marginBottom = "MS"))
+			(element ModalWindowShipPreview _shipId="shipId")
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (width = 100%) (marginBottom = "MS"))
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(element PriceTagWithQuestion
+				_questionText = 'IDS_SHIP_SHARDS_REPAIR_QUESTION'
+				_priceInfo = "shipMaterialsCostInfo"
+				_optionalPriceInfo = "shipComponentsCostInfo"
+			)
+		)
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(style (marginTop = "MS") (marginBottom = "MS"))
+
+			(element DefaultButton
+				_width = 129px
+				_name = 'btn_ok'
+				_label = 'IDS_YES'
+				_enabled = true
+				_defaultFocused = true
+				_focusIndex = 0
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'ShipShardsProxyUSS.craftShip',
+									args: { shipId: shipId }},
+								{	type: 'inputMapping.onAction',
+									name: 'deactivateTipChain',
+									args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SHIP_SHARDS_SHIP_CRAFTING }},
+								{	type: 'inputMapping.onAction',
+									name: 'selectShip',
+									args: { shipId: shipId }}]"
+			)
+			(block
+				(style (marginLeft = "S"))
+				(element DefaultButton
+					_width = 129px
+					_name = 'btn_cancel'
+					_label = 'IDS_NO'
+					_enabled = true
+					_focusIndex = 1
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "shipComponentsCount > SHIP_SHARDS.COMPONENTS_CRAFTING_COST")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text = 'IDS_SHIP_SHARDS_REPAIR_WARNING'
+				)
+			)
+		)
+	)
+)

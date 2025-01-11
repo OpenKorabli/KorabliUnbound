@@ -1,0 +1,801 @@
+(def constant CREW_MANAGEMENT_ABILITIES_INSET 0)
+(def constant CREW_MANAGEMENT_ASSIGN_INSET 1)
+
+(def element CrewNationSpecializationBlock (_crewId:number=0, _crewHistoryId:number=0)
+	(scope
+		(var crewEntity:dhEntity =	"getPrimaryEntity(_crewId ? CC.crew : CC.crewHistoryInfo, _crewId ? _crewId : _crewHistoryId)")
+		(var crew:dhComponent =		"_crewId ? crewEntity.crew : crewEntity.crewHistoryInfo")
+
+		(var crewNation:str =	"crew.nation" (event "crew.evChanged"))
+		(var isNoNation:bool =	"crewNation == SC.Common.NATION.COMMON")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "isNoNation")
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.INFO"
+				_text =				'IDS_NO_NATION_CREW'
+			)
+		)
+	)
+
+	(tf
+		(bind visible "!isNoNation")
+
+		(class $TextDefaultNM)
+		(style (width = 100%) (marginBottom = "XS") (alpha = "TA"))
+		(text = 'IDS_CREW_SPECIALIZATION_TO_NATION')
+	)
+
+	(block
+		(bind visible "!isNoNation")
+
+		(style
+			(flow = "horizontal")
+			(align = "middle")
+			(marginBottom = -5px)
+		)
+
+		(element NationFlagsTiny _shipCountry = "crewNation")
+
+		(tf
+			(class $TextDefault17NM)
+			(style
+				(marginLeft = "S")
+				(alpha = "TA")
+			)
+
+			(bind text "isNoNation ? '' : tr(toUpper('IDS_' + crewNation))")
+		)
+	)
+)
+
+(def element CrewPanelSpecializationAdoptationBlock (_crewId:number, _crewHistoryId:number, _isShipVisible:bool=false, _isSmallPanel:bool=false)
+	(scope
+		(var crewEntity:dhEntity =			"getPrimaryEntity(CC.crew, _crewId)")
+		(var crewHistoryEntity:dhEntity =	"getPrimaryEntity(CC.crewHistoryInfo, _crewHistoryId)")
+		(var crewInfo:dhComponent =			"_crewId ? crewEntity.crew : crewHistoryEntity.crewHistoryInfo")
+
+		(var curShipId:number =		"crewInfo.shipID"				(event "crewInfo.evShipChanged"))
+		(var isInAdaptation:bool =	"crewEntity.retraining != null"	(event "crewEntity.evAdded") (event "crewEntity.evRemoved"))
+
+		(var label:str = "isInAdaptation	?	_isShipVisible	? 'IDS_CREW_IN_ADAPTATION_TO_ANOTHER_SHIP'
+																: 'IDS_CREW_IN_ADAPTATION_TO_SELECT_SHIP'
+											:	'IDS_CREW_SPECIALIZATION_TO_SELECT_SHIP'")
+
+		(var unifiedStatus:str = "isInAdaptation ? SC.Ui_styles.UNIFIED_STATUS.ATTENTION : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+
+		(var adaptationXpBarSpacing:number = "_isSmallPanel ? XS : S")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(bind visible "crewInfo.specializationID != curShipId || isInAdaptation")
+		(style (width = 100%) (marginBottom = 3px))
+
+		(controller $Instance renderer='ShipWithLabel'
+			(bind enabled "crewInfo.specializationID != curShipId || isInAdaptation")
+			(args
+				_shipId = "_isShipVisible ? crewInfo.specializationID : null"
+				_unifiedStatus = "unifiedStatus"
+				_label = "label"
+			)
+		)
+
+		(controller $Tooltip
+			(renderer='CrewSpecializationAdoptationTooltip')
+			(args
+				_isInAdaptation = "isInAdaptation"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			(align = "top|right")
+		)
+	)
+
+	(block
+		(bind visible "isInAdaptation")
+
+		(style
+			(width = 100%)
+			(bind marginTop "isInAdaptation ? adaptationXpBarSpacing : 0")
+		)
+
+		(controller $Instance renderer='CrewExperienceBar'
+			(bind enabled "isInAdaptation")
+			(args
+				_crewId = "_crewId"
+			)
+		)
+	)
+)
+
+(def element CrewSpecializationAdoptationTooltip (_isInAdaptation:bool)
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemSecondaryHeaderText
+			_headerText = "_isInAdaptation ? 'IDS_TOOLTIP_DESC_CREW_IN_ADAPTATION_HEADER' : 'IDS_TOOLTIP_CREW_SPECIALIZATION_HEADER'"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemDescriptionText
+			_descriptionText = "_isInAdaptation ? 'IDS_TOOLTIP_DESC_CREW_IN_ADAPTATION_DESC_ONE' : 'IDS_TOOLTIP_DESC_CREW_SPECIALIZATION_TO_SELECT_SHIP'"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isInAdaptation"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "_isInAdaptation")
+				(args
+					_descriptionText = 'IDS_TOOLTIP_DESC_CREW_IN_ADAPTATION_DESC_TWO'
+				)
+			)
+		)
+	)
+)
+
+(def element CrewAssignedToSelectShipTooltip ()
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemSecondaryHeaderText
+			_headerText = 'IDS_TOOLTIP_CREW_ASSIGNED_HEADER'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_TOOLTIP_DESC_CREW_ASSIGNED_TO_SELECT_SHIP'
+		)
+	)
+)
+
+
+
+(def element CrewPanel (_currentRoute:str, _crewId:number=0, _shipId:number=0, _isCrewInfoModalWindow:bool=false)
+	(scope
+		(macro STAGE_SIZE)
+		(var isSmallPanel:bool = "stageHeight < 760")
+
+		(macro PULL_SHIP_ID)
+
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
+
+		(var isDisabledCrewPanel:bool = 	"permissions.isDisabledBarracks && permissions.isDisabledCrewFire")
+		(var skillMatrixId:number =			"crew.component.skillMatrixId ?: 0" (event "crew.component.evChanged"))
+		(var isButtonsBlockVisible:bool =	"_crewId > 0 && skillMatrixId")
+
+		(var rendererName:str =		"_crewId > 0 ? 'CrewPanelContent' : 'CrewPanelEmptyContent'")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance
+			(bind renderer "rendererName")
+			(args
+				_crewId =					"_crewId"
+				_shipId =					"viewedShipId"
+				_isSmallPanel =				"isSmallPanel"
+				_isCrewInfoModalWindow =	"_isCrewInfoModalWindow"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "isSmallPanel ? S : SXS")
+		)
+
+		(controller $Instance renderer='CrewPanelEmptyButtons'
+			(bind enabled "_crewId == 0")
+		)
+
+		(controller $Instance renderer='CrewPanelCommonButtons'
+			(bind enabled "!isDisabledCrewPanel && isButtonsBlockVisible")
+			(args
+				_currentRoute =	"_currentRoute"
+				_isSmallPanel =	"isSmallPanel"
+			)
+		)
+
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "isDisabledCrewPanel && isButtonsBlockVisible")
+			(args
+				_text = 'IDS_DISABLE_CREW_PANEL'
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_width = "100%"
+			)
+		)
+	)
+)
+
+(def element CrewPanelEmptyContent (_isSmallPanel:bool=false)
+	(scope
+		(var size:number = "_isSmallPanel ? SIZE.MEDIUM : SIZE.LARGE")
+	)
+
+	(style (width = 100%) (align = "center"))
+
+	(element CrewStereotypeWithName _size = "size")
+
+	(tf
+		(class $TextDefaultNM)
+		(style (width = 100%) (marginTop = "XS") (marginLeft = -6px) (leading = -3) (alpha = "TC"))
+		(text = 'IDS_CREW_HIRE_CREW_DESCRIPTION_0')
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style (width = 100%) (marginTop = "SXS") (marginLeft = -6px) (leading = -3) (alpha = "TC"))
+		(text = 'IDS_CREW_HIRE_CREW_DESCRIPTION_1')
+	)
+)
+
+(def element CrewPanelContent (_crewId:number=0, _shipId:number=0, _isCrewInfoModalWindow:bool=false, _isSmallPanel:bool=false)
+	(scope
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+		(struct ownShipInfo =	PULL_OWN_SHIP(_playerShipId = "_shipId"))
+
+		(var shipSubtype:str = "ownShipInfo.shipComponent.subtype ?: ''")
+
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel"					(event "crew.component.evLevelUp"))
+		(var specializationID:number =	"crew.component.specializationID ?: 0"		(event "crew.component.evChanged"))
+		(var timeRent:number =			"crew.component.timeRent ?: 0"				(event "crew.component.evTimeRentChanged") (event "crew.component.evChanged"))
+		(var skillMatrixId:number =		"crew.component.skillMatrixId ?: 0"			(event "crew.component.evChanged"))
+		(var allSkillPoints:number =	"crew.component.allSkillPoints ?: 0"		(event "crew.component.evLevelUp"))
+		(var crewNation:str =			"crew.component.nation ?: ''"				(event "crew.component.evChanged"))
+		(var dismissDelay:number =		"crew.component.dismissDelay ?: 0"			(event "crew.component.evDismissDelayChanged"))
+		(var isCurrencyDeficit:bool =	"crew.componentRetraining.allTypesBlocked"	(event "crew.componentRetraining.evRetrainingUpdated"))
+		(var classificationId:number =	"crew.component.classificationId")
+
+		(var isLocked:bool =		"ownShipInfo.ownShipComponent.isLocked"			(event "ownShipInfo.ownShipComponent.evUpdateLock"))
+		(var isInFormation:bool =	"ownShipInfo.ownShipComponent.isInFormation"	(event "ownShipInfo.ownShipComponent.evUpdateLock"))
+
+		(var isInAdaptation:bool =	"crew.componentRetraining != null")
+		(var isXpBarVisible:bool =	"crew.component && !isMaxLevel && !isInAdaptation && skillMatrixId")
+
+		
+		(var isCrewSpecialization:bool = "specializationID > 0")
+		(var isEmptyCrew:bool = "crewNation == SC.Common.NATION.COMMON")
+		(var isCrewNationSpecialization:bool = "!isCrewSpecialization && !isEmptyCrew")
+
+		(var isCrewElite:bool = "classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+
+		(var hasAnySpecialization:bool = "isCrewSpecialization || isCrewNationSpecialization")
+
+		(var isFastTrainingButtonVisible:bool =				"!(isInAdaptation || isMaxLevel) && skillMatrixId")
+		(var isSpecializationAdoptationVisible:bool =		"(specializationID != _shipId || isInAdaptation) && !isCrewNationSpecialization")
+		(var isCrewNationSpecializationBlockVisible:bool =	"_isCrewInfoModalWindow && _shipId == 0 && !isSpecializationAdoptationVisible")
+
+		(var finishTrainingText:str = "	isInFormation	?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
+										isLocked		?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
+										isInAdaptation	?	'IDS_FAST_TRAINING_DISABLE_REASON_IN_ADAPTATION' :
+										isEmptyCrew		?	'IDS_FAST_TRAINING_DISABLE_REASON_NATION_COMMON'
+														:	'IDS_FAST_TRAINING_CREW_AVAILABLE'")
+		(var isFastTrainingDisabled:bool = "isInFormation || isLocked || isInAdaptation || isEmptyCrew")
+		(var fastTrainingUnifiedStatus:str = "isFastTrainingDisabled ? SC.Ui_styles.UNIFIED_STATUS.NEGATIVE : SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT")
+
+		(var finishTrainingDenyReason:str = "	isInFormation		?	'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
+												isLocked			?	'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
+												isCurrencyDeficit	?	'IDS_NOT_ENOUGH_FUNDS'
+																	:	''")
+		(var crewStereotypeSize:number = "_isSmallPanel ? SIZE.MEDIUM : SIZE.LARGE")
+		(var isRental:bool = "timeRent > 0")
+
+		(var buttonSize:number =	"_isSmallPanel ? SIZE.SMALL : SIZE.MEDIUM")
+		(var elemSpacing:number =	"_isSmallPanel ? S : SXS")
+
+		(var levelText:str = "subst(isMaxLevel ? 'IDS_CREW_PANEL_MAX_LEVEL' : 'IDS_CREW_PANEL_LEVEL', [], {crewLevel: allSkillPoints})")
+		(var substituteMap:dict = "{	'[el_left_sm]': 'elite_wreath_left_small',
+										'[el_right_15_sm]':'elite_wreath_right_15_small' }")
+
+		(var isCrewInfoLowerDividerVisible:bool = "_isCrewInfoModalWindow && isCrewElite")
+
+		(var eliteCrewNewItemComponent:dhComponent =	"crew.entity.newItem" (event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+		(var isEliteMentorshipNew:bool =				"eliteCrewNewItemComponent != null")
+	)
+
+	(style (width = 100%) (align = "center"))
+
+	(element CrewStereotypeWithName
+		_crewId = "_crewId"
+		_shipClass = "shipSubtype"
+		_size = "crewStereotypeSize"
+		_isRentIconHidden = true
+		_hideSkillPoints = true
+	)
+
+	(block
+		(bind visible "skillMatrixId && allSkillPoints > 0")
+		(style (width = 100%) (marginTop = "SXS"))
+
+		(tf
+			(class $TextDefaultNM)
+			(style (alpha = "TA"))
+			(bindcall substitute imageOffset="6" substitutionMap="substituteMap" sourceText="levelText" postfix='' init=true)
+		)
+	)
+
+	(block
+		(bind visible "isXpBarVisible")
+
+		(style
+			(width = 100%)
+			(marginTop = "S")
+			(marginBottom = "XS")
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='CrewExperienceBar'
+				(bind enabled "isXpBarVisible")
+				(args
+					_crewId = "_crewId"
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "isFastTrainingButtonVisible")
+
+		(style
+			(bind marginTop "elemSpacing")
+			(width = 100%)
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isFastTrainingButtonVisible")
+			(args
+				_size =					"buttonSize"
+				_width =				100%
+				_label =				'IDS_FAST_TRAINING_BUTTON_LABEL'
+				_isTransactionBtn =		true
+				_enabled =				"!isFastTrainingDisabled"
+				_methods =				"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.FAST_TRAINING, args: { shipId: _shipId, crewID: _crewId} }]"
+			)
+		)
+
+		(controller $Tooltip
+			(renderer='SimpleStatusTooltip')
+			(bind enabled "isFastTrainingButtonVisible")
+			(args
+				_unifiedStatus =	"fastTrainingUnifiedStatus"
+				_text =				"finishTrainingText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(bind visible "!_isCrewInfoModalWindow && skillMatrixId")
+
+		(style
+			(bind marginTop "elemSpacing")
+			(width = 100%)
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "!_isCrewInfoModalWindow && skillMatrixId")
+			(args
+				_enabled =	"hasAnySpecialization && !isInFormation"
+				_size =		"buttonSize"
+				_width =	100%
+				_label =	'IDS_PERSONAL_FILE_BUTTON_LABEL'
+				_methods =	"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_CREW_INFO_WINDOW, args: { _crewId: _crewId } }]"
+			)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(position = "absolute")
+				(bind right "_isSmallPanel ? 74px : XL")
+				(bind top "_isSmallPanel ? 0 : XXS")
+			)
+
+			(block
+				(macro DEFAULT_CONTROL_MARKER_ANIMATION "isEliteMentorshipNew")
+				(style (position = "absolute"))
+
+				(element MarkerNew)
+			)
+		)
+
+		(controller $Tooltip
+			(renderer='SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"!hasAnySpecialization		? SC.Ui_styles.UNIFIED_STATUS.ATTENTION :
+									 isInFormation				? SC.Ui_styles.UNIFIED_STATUS.NEGATIVE
+																: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				_text =				"!hasAnySpecialization		? 'IDS_HINT_CREW_WITHOUT_NATION' :
+									 isInFormation				? 'IDS_HINT_CREW_INFO_UNAVAILABLE_DUE_IN_FORMATION'
+																: 'IDS_HINT_LEFT_CLICK_FOR_CREW_PROFILE'"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(style (width = 100%) (bind marginTop "isRental ? SXS : 0"))
+		(controller $Instance renderer = 'HorizontalDividerTwoPx' (bind enabled "isRental"))
+	)
+
+	(block
+		(style (width = 100%) (bind marginTop "isRental ? elemSpacing : 0"))
+		(controller $Instance renderer='CrewPanelRentTimer'
+			(bind enabled "isRental")
+			(args
+				_crewId = "_crewId"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "isCrewNationSpecializationBlockVisible ? elemSpacing : 0")
+		)
+		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "isCrewNationSpecializationBlockVisible"))
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "isCrewNationSpecializationBlockVisible ? elemSpacing : 0")
+		)
+		(controller $Instance renderer='CrewNationSpecializationBlock'
+			(bind enabled "isCrewNationSpecializationBlockVisible")
+			(args
+				_crewId = "_crewId"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "isSpecializationAdoptationVisible ? elemSpacing : 0")
+		)
+		(controller $Instance renderer = 'HorizontalDividerTwoPx' (bind enabled "isSpecializationAdoptationVisible"))
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "isSpecializationAdoptationVisible ? elemSpacing : 0")
+		)
+
+		(controller $Instance renderer='CrewPanelSpecializationAdoptationBlock'
+			(bind enabled "isSpecializationAdoptationVisible")
+			(args
+				_crewId =			"_crewId"
+				_isShipVisible =	"_shipId != specializationID"
+				_isSmallPanel =		"_isSmallPanel"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "isInAdaptation ? elemSpacing : 0")
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isInAdaptation")
+			(args
+				_label =			'IDS_FINISH_RETRAINING_BUTTON'
+				_size =				"buttonSize"
+				_width =			220px
+				_focusIndex =		0
+				_isTransactionBtn =	true
+				_enabled =			"!finishTrainingDenyReason"
+				_methods =			"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_CREW_RETRAIN_WINDOW, args: { shipId: _shipId, crewId: _crewId} }]"
+			)
+		)
+
+		(controller $Tooltip
+			(renderer='SimpleStatusTooltip')
+			(bind enabled "isFastTrainingButtonVisible")
+			(args
+				_text = "finishTrainingDenyReason"
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "_isCrewInfoModalWindow ? elemSpacing : 0")
+		)
+
+		(controller $Instance renderer='CrewPanelAssignedBlock'
+			(bind enabled "_isCrewInfoModalWindow")
+			(args
+				_shipId =		"_shipId"
+				_dismissDelay = "dismissDelay"
+				_isSmallPanel =	"_isSmallPanel"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "(skillMatrixId && !_isCrewInfoModalWindow) || isCrewInfoLowerDividerVisible ? elemSpacing : 0")
+		)
+
+		(controller $Instance renderer = 'HorizontalDividerTwoPx' (bind enabled "(skillMatrixId && !_isCrewInfoModalWindow) || isCrewInfoLowerDividerVisible"))
+	)
+)
+
+(def element CrewPanelAssignedBlock (_shipId:number=0, _isSmallPanel:bool=false, _dismissDelay:number=0)
+	(scope
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE "'formattedFinishTime'" "_dismissDelay" "'mm:ss'")
+		(var isFromBarracksStatusVisible:bool = "_shipId == 0 && !_dismissDelay")
+		(var isDemobilizationStatusVisible:bool = "_shipId == 0 && _dismissDelay")
+	)
+	(style (width = 100%))
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(bind visible "_shipId > 0")
+
+		(style
+			(width = 100%)
+			(marginBottom = 3px)
+			(bind marginTop "_isSmallPanel ? S : SXS")
+		)
+
+		(controller $Instance renderer='ShipWithLabel'
+			(bind enabled "_shipId > 0")
+			(args
+				_shipId = "_shipId"
+				_label = 'IDS_CREW_ASSIGNED_TO_SELECT_SHIP'
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "_shipId > 0")
+			(renderer = 'CrewAssignedToSelectShipTooltip')
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(style (width = 100%) (bind marginTop "isFromBarracksStatusVisible ? SXS : 0"))
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "isFromBarracksStatusVisible")
+			(args
+				_text = 'IDS_CREW_IN_BARRACKS'
+			)
+		)
+	)
+
+	(block
+		(bind visible "isDemobilizationStatusVisible")
+		(style (width = 100%) (marginTop = "SXS"))
+		(tf
+			(class $TextDefaultNM)
+			(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+			(bind text "subst('IDS_WAITING_FOR_DEMOBILIZATION_TIMER', [], { _timeLeft: formattedFinishTime }, formattedFinishTime)")
+		)
+	)
+)
+
+(def element CrewPanelCommonButtons (_currentRoute:str, _isSmallPanel:bool=false)
+	(scope
+		(macro PULL_SHIP_ID)
+		(struct shipInfo =			PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+		(var isLocked:bool =		"shipInfo.ownShipComponent.isLocked"		(event "shipInfo.ownShipComponent.evUpdateLock"))
+		(var isInFormation:bool =	"shipInfo.ownShipComponent.isInFormation"	(event "shipInfo.ownShipComponent.evUpdateLock"))
+		(var crewId:number =		"shipInfo.ownShipComponent.crewId"			(event "shipInfo.ownShipComponent.evCrewChanged"))
+
+		(struct crew =			PULL_CREW(_crewId = "crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
+
+		(var isDisabledCrewPanel:bool =			"permissions.isDisabledBarracks && permissions.isDisabledCrewFire")
+		(var canDisassignCrew:bool =			"dockEntity.crewData.canDisassignCrew" (event "dockEntity.crewData.evUpdate"))
+		(var isDisassignButtonEnabled:bool =	"!isLocked && !isInFormation")
+
+		(var disassignDisableTooltipData:array =	"isInFormation		?	[{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																				text: 'IDS_DISASSIGN_CREW_DENY_REASON_IN_FORMATION' }] :
+													 isLocked			?	[{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																				text: 'IDS_DISASSIGN_CREW_DENY_REASON_IN_BATTLE' }] :
+													 !canDisassignCrew	?	[{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																				text: 'IDS_ASSIGN_NEW_CREW_DISABLE_REASON_FULL_BARRACKS' },
+																			 {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																				text: 'IDS_EXPAND_BARRACKS' }]
+																		:	null")
+
+		(var fireCrewTooltipText:str =	"isInFormation	? 'IDS_FIRE_CREW_DENY_REASON_IN_FORMATION' :
+										 isLocked		? 'IDS_FIRE_CREW_DENY_REASON_IN_BATTLE'
+														: ''")
+
+		(var isCrewAbilitiesInset:bool =	"_currentRoute == SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT")
+		(var crewManagementInset:number =	"isCrewAbilitiesInset ? CREW_MANAGEMENT_ASSIGN_INSET : CREW_MANAGEMENT_ABILITIES_INSET")
+
+		(var buttonSize:number =	"_isSmallPanel ? SIZE.SMALL : SIZE.MEDIUM")
+		(var buttonMargin:number =	"_isSmallPanel ? S : SXS")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(bind visible "!permissions.isDisabledBarracks")
+
+		(style
+			(width = 100%)
+			(bind marginBottom "!permissions.isDisabledBarracks ? buttonMargin : 0")
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "!permissions.isDisabledBarracks")
+			(args
+				_label =			"isCrewAbilitiesInset ? 'IDS_REASSIGN_CREW_BUTTON' : 'IDS_TO_ABILITIES_BUTTON'"
+				_size =				"buttonSize"
+				_width =			100%
+				_focusIndex =		1
+				_defaultFocused =	false
+				_methods =			"[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: isCrewAbilitiesInset	? SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT
+																																: SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT } }]"
+			)
+		)
+	)
+
+	(block
+		(bind visible "!permissions.isDisabledBarracks")
+
+		(style
+			(width = 100%)
+			(bind marginBottom "!permissions.isDisabledBarracks ? buttonMargin : 0")
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "!permissions.isDisabledBarracks")
+			(args
+				_type =				"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_name =				'CrewDisassignButton'
+				_label =			'IDS_CREW_TO_BARRACKS'
+				_size =				"buttonSize"
+				_width =			100%
+				_enabled =			"isDisassignButtonEnabled"
+				_methods =			"[	{ type: disassignDisableTooltipData ? 'inputMapping.onRequest': '',		name: CREW_ACTIONS.INCREASE_BARRACKS_CAPACITY,	args: {} },
+										{ type: !disassignDisableTooltipData ? 'inputMapping.onAction' : '',	name: CREW_ACTIONS.DISASSIGN,					args: { crewId: crewId } }]"
+				_isTransactionBtn =	true
+				_focusIndex =		2
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "disassignDisableTooltipData")
+			(renderer = 'RepeatStatusTooltip')
+			(args
+				_tooltipDataArray = "disassignDisableTooltipData"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(bind visible "!permissions.isDisabledCrewFire")
+
+		(style (width = 100%))
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "!permissions.isDisabledCrewFire")
+			(args
+				_type =				"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_name =				'CrewFireButton'
+				_label =			'IDS_CREW_FIRE'
+				_size =				"buttonSize"
+				_width =			100%
+				_enabled =			"!isLocked"
+				_methods =			"[{ type: 'inputMapping.onRequest', name: 'openFireCrewWindow', args: { crewId: crewId } }]"
+				_isTransactionBtn =	true
+				_focusIndex =		3
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "fireCrewTooltipText != ''")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"fireCrewTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+
+(def element CrewPanelEmptyButtons ()
+	(scope
+		(macro PULL_SHIP_ID)
+		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+
+		(var lastBoardedCrewId:number =		"shipInfo.shipComponent.lastBoardedCrewId ?: 0"	(event "shipInfo.shipComponent.evLastBoardedCrewIdChanged")
+																							(event "shipInfo.shipComponent.evUpdate"))
+
+		(var isWithoutCrewPenalty:bool =	"shipInfo.shipComponent && shipInfo.shipComponent.isWithoutCrewPenalty" (event "shipInfo.shipComponent.evUpdate"))
+		(var isLocked:bool =				"shipInfo.ownShipComponent.isLocked"		(event "shipInfo.ownShipComponent.evUpdateLock"))
+		(var isInFormation:bool =			"shipInfo.ownShipComponent.isInFormation"	(event "shipInfo.ownShipComponent.evUpdateLock"))
+		(var crewId:number =				"shipInfo.ownShipComponent.crewId"			(event "shipInfo.ownShipComponent.evCrewChanged"))
+
+		(struct crew =		PULL_CREW(_crewId = "lastBoardedCrewId"))
+		(var hasLastBoardedCrew:bool =					"crew.entity != null")
+		(var otherShipId:number =						"crew.component.shipID"					(event "crew.component.evShipChanged"))
+		(var lastBoardedCrewDismissDelay:number =		"crew.component.dismissDelay ?: 0"		(event "crew.component.evDismissDelayChanged"))
+		(var lastBoarderCrewSpecializationId:number =	"crew.component.specializationID ?: 0"	(event "crew.component.evChanged"))
+		(var isReturnLastCrewButtonVisible:bool =		"crewId == 0 && lastBoardedCrewId != 0 && hasLastBoardedCrew")
+
+		(var otherShipEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, otherShipId)")
+		(var isOtherShipExist:bool =	"otherShipEntity != null")
+		(var isOtherShipLocked:bool =	"otherShipEntity.ownShip.isLocked" (event "otherShipEntity.ownShip.evUpdateLock"))
+
+		(var isLastBoardedCrewLocked:bool =		"isOtherShipExist && isOtherShipLocked")
+		(var isLastBoardedCrewInBasket:bool =	"hasLastBoardedCrew && lastBoardedCrewDismissDelay > 0")
+
+		(var canAssignWithoutRetrain:bool =		"lastBoarderCrewSpecializationId == playerShipId || isWithoutCrewPenalty")
+		(var isButtonDisabled:bool =			"isLocked || isInFormation || isLastBoardedCrewLocked || isLastBoardedCrewInBasket")
+		(var methodType:str = "canAssignWithoutRetrain ? 'inputMapping.onAction' : 'inputMapping.onRequest'")
+		(var methodName:str = "canAssignWithoutRetrain ? CREW_ACTIONS.ASSIGN_TO_SHIP : CREW_ACTIONS.OPEN_CREW_RETRAIN_WINDOW")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "isReturnLastCrewButtonVisible"))
+	)
+
+	(block
+		(style (marginTop = "SXS"))
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isReturnLastCrewButtonVisible")
+			(args
+				_label = 'IDS_CREW_HIRE_LAST_CREW'
+				_width = 220px
+				_enabled = "!isButtonDisabled"
+				_isTransactionBtn = true
+				_focusIndex = 0
+				_methods = "[{ type: methodType, name: methodName, args: { crewId: lastBoardedCrewId, shipId: playerShipId } }]"
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "isReturnLastCrewButtonVisible")
+			(renderer='CrewTooltip')
+			(args
+				_crewId = "lastBoardedCrewId"
+				_targetShipId = "playerShipId"
+				_noContextMenuInstruction = true
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)

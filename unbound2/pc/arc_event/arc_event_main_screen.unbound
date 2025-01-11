@@ -1,0 +1,783 @@
+(def constant ARC_EVENT_CARD_SIZE {
+	WIDTH: 360,
+	HEIGHT: 380,
+	WIDTH_WITH_OFFSETS: 384  
+})
+
+(def element ModalWindowArcEventMainScreen ()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(var arcEventTasksCollection:dhCollection = "getCollection(CC.arcEventTask).getChildByPath('sorted_by_start.recent.sorted')")
+		(var arcEventTasks:array = "arcEventTasksCollection.items ?: []" (event "arcEventTasksCollection.evAdded") (event "arcEventTasksCollection.evRemoved"))
+		(var isTasksCarouselVisible:bool = "arcEventTasks.length > 0")
+
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var finishTime:number = "arcEventEntity.arcEvent.finishTime ?: 0" (event "arcEventEntity.arcEvent.evChanged"))
+		(var sideId:number = "arcEventEntity.playerArcEventInfo.sideId" (event "arcEventEntity.playerArcEventInfo.evSideChanged"))
+
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE "'eventFinishTime'" "finishTime" "'HIGHEST,WITH_DAYS'")
+
+		(var playerProgressEntity:dhEntity = "getPrimaryEntity(CC.progressWithRewards, 'personal' + sideId)")
+		(var progressWithRewards:dhComponent = "playerProgressEntity.progressWithRewards")
+		(var personalRewards:array = "progressWithRewards.rewards" (event "progressWithRewards.evChanged"))
+		(var personalRewardCategories:array = "progressWithRewards.rewardsCategories" (event "progressWithRewards.evChanged"))
+
+		(var personalRewardIndex:number = "progressWithRewards.activeIndex - 1" (event "progressWithRewards.evChanged"))
+		(var personalProgress:number = "progressWithRewards.pointsCurrent ?: 0" (event "progressWithRewards.evChanged"))
+		(var personalProgressArray:array = "progressWithRewards.pointsArray" (event "progressWithRewards.evChanged"))
+
+		(var thresholdPoints:number = "personalRewardIndex >= 0 ? personalProgressArray[personalRewardIndex + 1] : personalProgressArray[0]")
+		(var pointsTillNextReward:number = "thresholdPoints - personalProgress")
+		(var maxProgress:number = "personalProgressArray[personalProgressArray.length - 1]")
+		(var progress:number = "personalProgress > maxProgress ? maxProgress : personalProgress")
+
+		(var hasReceivedAllRewards:bool = "personalRewardIndex == personalProgressArray.length - 1")
+		(var isEventEnded:bool = "serverTime >= finishTime")
+		(var eventStatusText:str = "isEventEnded			? 'IDS_ARC_EVENT_MAIN_SCREEN_PERSONAL_TASKS_UNAVAILABLE' :
+									hasReceivedAllRewards	? 'IDS_ARC_EVENT_MAIN_SCREEN_POINTS_COMPLETED_ALL' :
+									personalProgress > 0	? subst('IDS_PL_ARC_EVENT_MAIN_SCREEN_POINTS_TILL_NEXT_REWARD', [],
+																	{_pointsTillNext: pointsTillNextReward }, pointsTillNextReward)
+															: 'IDS_ARC_EVENT_MAIN_SCREEN_POINTS_CALL_TO_ACTION'")
+	)
+	(name = 'ModalWindowArcEventMainScreen')
+	(class $Fullsize)
+	(style (align = "center"))
+	(block
+		(class $FullsizeAbsolute)
+		(style (alpha = 0))
+		(controller $Animation
+			(bindcall play  duration=0.2
+							from = "{ alpha: 0 }"
+							to = "{ alpha: 1 }"
+							(event "startShow")
+			)
+			(bindcall play  duration=0.2
+							delay=0.2
+							from = "{ alpha: 1 }"
+							to = "{ alpha: 0 }"
+							action="killAll"
+							(event "startHide")
+			)
+		)
+		(element AnimatedBackground _selectedCategory="'main'" _type = "SC.Ui_styles.ANIMATED_BG.ARC_EVENT")
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+		(style (width = 100%) (marginBottom = "{720: SXS, 1080: MS}"))
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_ARC_EVENT_COMMON_EVENT_TITLE'
+			_backButtonText = 'IDS_RETURN_TO_DOCK'
+			_paddingTop = "M"
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_closeIconName = 'arcEventMainScreenEsc'
+			_methods = "[{type: 'inputMapping.onRequest', name: 'goToPort', args: {}}]"
+		)
+	)
+
+	(block
+		(style
+			(maxWidth = 1280px)
+			(width = 100%)
+			(height = 100%)
+			(paddingRight = "M")
+			(paddingLeft = "M")
+			(align = "center")
+		)
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style
+				(width = 100%)
+				(marginBottom = "{720:M, 1080:L}")
+				(align = "middle")
+			)
+			(hblock
+				(style (width = 100%) (align = "middle"))
+				(element ArcEventSideStereotype _sideId = "sideId")
+				(block
+					(style (marginLeft = "M"))
+					(tf
+						(class $TextDefaultBold19NM)
+						(style (marginBottom = "SXS") (alpha = "TA"))
+						(bind text "sideId != -1 ? 'IDS_ARC_EVENT_COMMON_SIDE_' + sideId : ''")
+					)
+					(block
+						(tf
+							(bind visible "isEventEnded")
+							(class $TextDefaultNM)
+							(style (alpha = "TA"))
+							(text = 'IDS_ARC_EVENT_COMMON_STATUS_EVENT_FINISHED')
+						)
+						(controller $Instance renderer='StatusLine'
+							(bind enabled "!isEventEnded")
+							(args
+								_text = "subst('IDS_ARC_EVENT_MAIN_SCREEN_EVENT_ENDS_IN', [], { _timeLeft: eventFinishTime })"
+								_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DATE"
+							)
+						)
+					)
+				)
+			)
+			(block
+				(style
+					(position = "absolute")
+					(top = "XS")
+					(width = 100%)
+					(align = "center")
+				)
+				(block
+					(style (marginBottom = "M"))
+					(element ArcEventStatus _isFull=true)
+				)
+				(element ArcEventStageTimer)
+			)
+			(element DefaultButton
+				_width = 180px
+				_label = 'IDS_ARC_EVENT_MAIN_SCREEN_RULES_LINK_TEXT'
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_enabled = true
+				_defaultFocused = true
+				_focusIndex = 1
+				_methods = "[{type: 'inputMapping.onRequest', name: 'showBattleTypeRules', args: { _rulesType: 'arc_event' }}]"
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(style (marginBottom = "MS"))
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (alpha = "TA"))
+				(bind text "toUpper(tr(eventStatusText))")
+			)
+		)
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(width = 100%)
+				(marginBottom = "{720:XLM, 1080:XLL}")
+				(paddingLeft = "MS")
+				(paddingRight = "MS")
+			)
+			(block
+				(style
+					(hitTest = false)
+					(position = "absolute")
+					(top = 1px)
+					(left = 1px)
+					(width = 100%)
+					(height = 8px)
+					(backgroundImage = 'url:../events/arc_event/common/progress_fill_stroke.png') (backgroundRepeatX = true))
+			)
+			(controller $Repeat renderer='ArcEventMainProgress'
+				(bind count "personalProgressArray.length")
+				(args
+					_currentProgress = "progress"
+					_thresholds = "personalProgressArray"
+					_personalRewardCategories = "personalRewardCategories"
+					_isRewardReceived = "personalRewardIndex >= $index"
+					_pointsTillNextReward = "personalProgressArray[$index] - personalProgress"
+					_rewards = "personalRewards"
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(height = "ARC_EVENT_CARD_SIZE.HEIGHT")
+				(marginBottom = "{720:MS, 1080:LM}")
+				(align = "center|middle")
+			)
+			(controller $Instance renderer='ArcEventTasksCarousel' (bind enabled "isTasksCarouselVisible"))
+			(controller $Instance renderer='ArcEventNoTasks' (bind enabled "!isTasksCarouselVisible"))
+		)
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(block
+				(style (marginRight = "MS"))
+				(element DefaultButton
+					_width = 180px
+					_label = 'IDS_ARC_EVENT_CHOOSE_SIDE_RULES_LINK_TEXT'
+					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_enabled = true
+					_focusIndex = 2
+					_methods = "[{type: 'inputMapping.onRequest', name: 'arcEventShowLore', args: { }}]"
+				)
+			)
+			(element DefaultButton
+				_width = 180px
+				_isTransactionBtn = true
+				_label = 'IDS_ARC_EVENT_MAIN_SCREEN_REWARDS_LINK_TEXT'
+				_enabled = true
+				_focusIndex = 3
+				_methods = "[	{	type: 'inputMapping.onRequest', name: 'goToPort', args: {}},
+								{	type: 'inputMapping.onRequest', name: 'openMetashop', args: { url: SC.Ui_windows.GUI_URL.METASHOP_RVR }}]"
+			)
+		)
+	)
+)
+
+(def element ArcEventTasksCarousel ()
+	(scope
+		(event evScrollToPrev)
+		(event evScrollToNext)
+
+		(event CarouselScrollValueChanged)
+		(event CarouselCanScrollChanged)
+
+		(var carouselCanScrollLeft:bool = "$event ? $event.down : false" (event "CarouselCanScrollChanged"))
+		(var carouselCanScrollRight:bool = "$event ? $event.up : false" (event "CarouselCanScrollChanged"))
+		(var carouselScrollEnabled:bool = "$event ? $event.down || $event.up : true" (event "CarouselCanScrollChanged"))
+
+		(var arcEventTasksCollection:dhCollection = "getCollection(CC.arcEventTask).getChildByPath('sorted_by_start.recent.sorted')")
+		(var arcEventTasks:array = "arcEventTasksCollection.items ?: []" (event "arcEventTasksCollection.evAdded") (event "arcEventTasksCollection.evRemoved"))
+
+		(var arcEventTasksFinishedCollection:dhCollection = "getCollection(CC.arcEventTask).getChildByPath('sorted_by_start.finished')")
+		(var arcEventTasksFinished:array = "arcEventTasksFinishedCollection.items ?: []"	(event " arcEventTasksFinishedCollection.evAdded")
+																							(event " arcEventTasksFinishedCollection.evRemoved"))
+		(var currentSelectedIndex:number = "arcEventTasksFinished.length")
+	)
+	(class $Fullsize)
+	(style (align = "center|middle") (flow = "horizontal"))
+
+	(block
+		(class $MiddleVAlignedAbsolutely)
+		(element ArcEventCarouselScrollButton
+			_scrollEnabled = "carouselScrollEnabled"
+			_canScroll = "carouselCanScrollLeft"
+			_clickDispatchedEv = 'evScrollToPrev'
+			_isLeft = true
+		)
+	)
+	(scrollArea
+		(class $Fullsize)
+		(style (backgroundColor = "NO_COLOR") (bind width "ARC_EVENT_CARD_SIZE.WIDTH_WITH_OFFSETS * 3"))
+
+		(horizontalSlider = 'ArcEventCarouselScroll')
+		(hscrollPolicy = 'auto')
+		(vscrollPolicy = 'off')
+		(scrollPerItem = true)
+
+		(activeControlsAlpha = 1)
+		(inactiveControlsAlpha = 0.5)
+		(animationDuration = 0.2)
+		(animationEasing = "Easing.quad_out")
+
+		(wheelScrollSpeed = 1.0)
+		(wheelScrollAcceleration = 0.7)
+		(maxScrollingAnimatedDistance = "ARC_EVENT_CARD_SIZE.WIDTH_WITH_OFFSETS")
+
+		(content
+			(class $Fullsize)
+			(style (flow = "horizontal") (bind align "arcEventTasks.length > 3 ? null : center"))
+			(controller $DynamicRepeat renderer='ArcEventTaskRenderer'
+				(bind count "arcEventTasks.length")
+				(args
+					_entityId = "arcEventTasks[$index].id"
+				)
+				(itemOffset = "ARC_EVENT_CARD_SIZE.WIDTH_WITH_OFFSETS")
+				(itemWidth = "ARC_EVENT_CARD_SIZE.WIDTH_WITH_OFFSETS")
+				(itemHeight = "ARC_EVENT_CARD_SIZE.HEIGHT")
+			)
+		)
+		(bindcall scrollTo index="currentSelectedIndex" animated=false init=true watch=false)
+		(bindcall scrollLeft (event "evScrollToPrev"))
+		(bindcall scrollRight (event "evScrollToNext"))
+	)
+	(block
+		(class $MiddleVAlignedAbsolutely)
+		(style (right = 0))
+		(element ArcEventCarouselScrollButton
+			_scrollEnabled = "carouselScrollEnabled"
+			_canScroll = "carouselCanScrollRight"
+			_clickDispatchedEv = 'evScrollToNext'
+		)
+	)
+)
+
+(def element ArcEventProgressThreshold (_thresholds:array = [], _isMainProgress:bool = false, _personalRewardCategories:array = [],
+										_isRewardReceived:bool = false, _pointsTillNextReward:number = 0, _rewards:array = [])
+	(scope
+		(var hasThresholds:bool = "_thresholds.length > 0")
+	)
+	(style (bind width "hasThresholds ? 100%/_thresholds.length : 'auto'") (bind align "hasThresholds ? right : left"))
+	(block
+		(style
+			(width = 1px)
+			(height = 10px)
+			(marginBottom = "S")
+			(backgroundColor = 0x40FFFFFF)
+		)
+	)
+	(tf
+		(bind visible "!_isMainProgress")
+		(class $TextDefaultNM)
+		(style
+			(textAlign = "center")
+			(alpha = "TS")
+			(bind width "hasThresholds ? 40px : 'auto'")
+			(bind marginRight "hasThresholds ? -M : 0"))
+		(bind text "hasThresholds ? _thresholds[$index] : 0")
+	)
+	(block
+		(bind visible "_isMainProgress")
+		(style (marginRight = "-MS"))
+		(element RewardCategory
+			_rewardCategory = "_personalRewardCategories[$index]"
+			_isUnavailable = "_isRewardReceived"
+			_isRewardActive = false
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style (align = "center|middle") (hitTest = false))
+
+			(block
+				(style
+					(width = 48px)
+					(height = 48px)
+					(pivotX = 50%)
+					(pivotY = 50%)
+					(backgroundImage = 'url:../reward_categories/icon_check.png')
+				)
+				(alpha = "_isRewardReceived ? 1 : 0")
+
+				(controller $Animation
+					(bindcall play  duration = 0.5
+									delay = 0.2
+									from = "{ visualScaleX: 2, visualScaleY: 2, alpha: 0 }"
+									to = "{ visualScaleX: 1, visualScaleY: 1, alpha: 1 }"
+									(bind enabled "_isRewardReceived")
+									(bind trigger "_isRewardReceived")
+					)
+				)
+			)
+		)
+		(controller $Tooltip
+			(renderer ='ArcEventRewardTooltip')
+			(args
+				_isReceived = "_isRewardReceived"
+				_pointsTillNextReward = "_pointsTillNextReward"
+				_rewards = "_rewards[$index]"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element ArcEventCarouselScroll()
+	(scope
+		(event CarouselScrollValueChanged)
+		(event CarouselCanScrollChanged)
+	)
+	(scroll_bar
+		(orientation="horizontal")
+		(singleStep = "ARC_EVENT_CARD_SIZE.WIDTH_WITH_OFFSETS")
+		(scrollDuration=700)
+		(dispatch 'CarouselScrollValueChanged' dir="EventDirection.UP" args="$event" on='valueChanged')
+		(dispatch 'CarouselCanScrollChanged' dir="EventDirection.UP" args="$event" on='canScrollChanged')
+	)
+)
+
+(def element ArcEventCarouselScrollButton (_scrollEnabled:bool, _canScroll:bool, _clickDispatchedEv:str, _isLeft:bool = false)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var arrowIcon:str = "_isLeft	? 'url:../service_kit/buttons/carousel_arrows/arrow_left.png'
+										: 'url:../service_kit/buttons/carousel_arrows/arrow_right.png'")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER _soundSet = "'default_button'")
+	(dispatch "_clickDispatchedEv" dir="EventDirection.UP" (event "evClicked") (bind enabled "_canScroll"))
+
+	(style
+		(width = 12px)
+		(height = 18px)
+		(bind backgroundImage "arrowIcon")
+		(bind hitTest "_canScroll")
+	)
+	(bind colorTransform "	!_scrollEnabled			? CT_SCROLL_DISABLED :
+							!_canScroll				? CT_CANT_SCROLL :
+							rollOver && !mouseDown	? CT_ROLL_OVER :
+							mouseDown				? CT_DOWN
+													: CT_SCROLL_IDLE")
+)
+
+(def element ArcEventRewardRepeater (	_personalRewardCategories:array = [], _isRewardReceived:bool = false,
+										_pointsTillNextReward:number = 0, _rewards:array = [])
+	(style (align = "right") (bind width "100%/_personalRewardCategories.length"))
+	(block
+		(style
+			(width = 1px)
+			(height = 22px)
+			(marginRight = "MS")
+			(marginBottom = "S")
+			(backgroundColor = 0x22FFFFFF)
+		)
+	)
+	(element RewardCategory
+		_rewardCategory = "_personalRewardCategories[$index]"
+		_isRewardActive = false
+		_isReceived = "_isRewardReceived"
+	)
+	(controller $Tooltip
+		(renderer ='ArcEventRewardTooltip')
+		(args
+			_isReceived = "_isRewardReceived"
+			_pointsTillNextReward = "_pointsTillNextReward"
+			_rewards = "_rewards[$index]"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ArcEventRewardTooltip (_isReceived:bool = false, _pointsTillNextReward:number = 0, _rewards:array = [])
+	(scope
+		(var isPointsTillNextRewardShown:bool = "!_isReceived && (_pointsTillNextReward > 0)")
+	)
+	(style (width = 344px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText _headerText = 'IDS_TOOLTIP_REWARDS_TITLE')
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isReceived")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_REWARD_IS_TAKEN'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isReceived"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemCounterLine'
+				(bind enabled "isPointsTillNextRewardShown")
+				(args
+					_title = 'IDS_ARC_EVENT_MAIN_SCREEN_REWARD_TOOLTIP_POINTS_TILL_NEXT_REWARD_COLON'
+					_count = "_pointsTillNextReward"
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPointsTillNextRewardShown"))
+		)
+
+		(element TooltipSystemDHRewards
+			_rewards = "_rewards"
+		)
+	)
+)
+
+(def element ArcEventNoTasks ()
+	(scope
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var startPrimeAt:number = "arcEventEntity.arcEvent.startPrimeAt" (event "arcEventEntity.arcEvent.evEventStateChanged"))
+		(var nextPrimeAt:number = "arcEventEntity.arcEvent.nextPrimeAt" (event "arcEventEntity.arcEvent.evEventStateChanged"))
+		(var subText:str = "startPrimeAt > 0 || nextPrimeAt > 0	? 'IDS_ARC_EVENT_MAIN_SCREEN_NO_TASKS_SUBTEXT'
+																: 'IDS_SUBST_ARC_EVENT_COMMON_STATUS_ALL_PRIMETIMES_ENDED'")
+	)
+	(style (align = "center"))
+	(tf
+		(class $TextDefaultBold25NM)
+		(style
+			(marginBottom = "M")
+			(textAlign = "center")
+			(alpha = "TA")
+		)
+		(bind text "toUpper(tr('IDS_NO_CURRENT_TASKS'))")
+	)
+	(tf
+		(class $TextDefault17NM)
+		(style (textAlign = "center") (alpha = "TC"))
+		(bind text "subText")
+	)
+)
+
+(def element ArcEventTaskRenderer (_entityId:number = 0)
+	(scope
+		(macro SERVER_TIME_SCOPE)
+
+		(var arcEventTaskEntity:dhEntity = "getEntity(_entityId)")
+		(var pointsArray:array = "arcEventTaskEntity.progressWithRewards.pointsArray" (event "arcEventTaskEntity.progressWithRewards.evPointsArrayChanged"))
+		(var pointsCurrent:number = "arcEventTaskEntity.progressWithRewards.pointsCurrent ?: 0" (event "arcEventTaskEntity.progressWithRewards.evChanged"))
+		(var personalPoints:number = "arcEventTaskEntity.arcEventTask.personalPoints" (event "arcEventTaskEntity.arcEventTask.evPersonalPointsChanged"))
+		(var state:number = "arcEventTaskEntity.arcEventTask.state" (event "arcEventTaskEntity.arcEventTask.evStateChanged"))
+		(var finishTime:number = "arcEventTaskEntity.arcEventTask.finishTime" (event "arcEventTaskEntity.arcEventTask.evChanged"))
+		(var personalPercentRate:number = "arcEventTaskEntity.arcEventTask.personalPercentRate" (event "arcEventTaskEntity.arcEventTask.evPersonalPercentRateChanged"))
+
+		(var conditionEntity:dhEntity = "getEntity(arcEventTaskEntity.arcEventTask.conditions[0])")
+		(var taskCategory:str = "conditionEntity.sseConditions.conditionCategory")
+
+		(var arcEventTaskIcon:str = "'url:../events/arc_event/common/icon_arc_event_task_category_' + taskCategory + '.png'")
+		(var isExpired:bool = "serverTime > finishTime")
+		(var isDone:bool = "isExpired && personalPoints")
+		(var isUnavailable:bool = "isIn(state, [SC.Sse.RVR_TASK_STATE.LOCKED, SC.Sse.RVR_TASK_STATE.FINISHED]) || isDone")
+		(var isCardContentVisible:bool = "!(isUnavailable && !isExpired)")
+
+		(var isLeaderboardCalculated:bool = "personalPercentRate > 0 && personalPercentRate != 100")
+		(var personalPercentRateText:str = "personalPercentRate <= 10	? subst(	'IDS_SUBST_ARC_EVENT_COMMON_LEADERBOARD_TOP', [],
+																					{ _percentRate: personalPercentRate }	) :
+											personalPercentRate <= 50	? subst(	'IDS_SUBST_ARC_EVENT_COMMON_LEADERBOARD_MID', [],
+																					{ _percentRate: 100 - personalPercentRate }	)
+																		: 'IDS_ARC_EVENT_COMMON_LEADERBOARD_BOTTOM'")
+	)
+	(bind name "'taskCarouselItem' + taskCategory")
+
+	(style
+		(width = "ARC_EVENT_CARD_SIZE.WIDTH")
+		(height = "ARC_EVENT_CARD_SIZE.HEIGHT")
+		(backgroundColor = 0x33000000)
+		(marginLeft = "SXS")
+		(marginRight = "SXS")
+		(bind alpha "isUnavailable ? TS : 1")
+	)
+	(macro INNER_PANEL_BACKGROUND)
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundImage = 'url:../panel_background/selection_panel.png') (scale9grid = 3) (alpha = 0.2))
+	)
+	(block
+		(style (width = 100%) (padding = "[L, L, L, LM]") (align = "center"))
+		(block
+			(style
+				(width = 64px)
+				(height = 64px)
+				(marginBottom = "M")
+				(bind backgroundImage "arcEventTaskIcon")
+			)
+		)
+		(tf
+			(class $TextDefault19NM)
+			(style
+				(width = 100%)
+				(height = 54px)
+				(marginBottom = "M")
+				(textAlign = "center")
+				(alpha = "TA")
+			)
+			(bind text "'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + taskCategory + '_FULL'")
+		)
+		(block
+			(style (marginBottom = "L"))
+			(element ArcEventTaskStatus _taskId = "_entityId")
+		)
+		(block
+			(bind visible "isCardContentVisible")
+			(style (width = 100%) (align = "center"))
+			(hblock
+				(style (width = 265px) (marginBottom = "LM"))
+				(controller $Repeat renderer='ArcEventTaskProgress'
+					(bind count "pointsArray.length")
+					(args
+						_currentProgress = "pointsCurrent"
+						_thresholds = "pointsArray"
+					)
+				)
+				(block
+					(style (position = "absolute") (top = 10px))
+					(element ArcEventProgressThreshold)
+				)
+			)
+			(tf
+				(class $TextDefaultNM)
+				(style (marginBottom = "M") (alpha = "TC"))
+				(bind text "'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + taskCategory + '_SHORT'")
+			)
+			(tf
+				(class $TextDefaultBold36NM)
+				(style (alpha = "TA"))
+				(bind text "formatSeparator(pointsCurrent)")
+			)
+		)
+	)
+	(block
+		(bind visible "isUnavailable && !isExpired")
+		(class $MiddleVHAbsolutely)
+		(style
+			(width = 48px)
+			(height = 48px)
+			(marginTop = "XXS")
+			(backgroundImage = 'url:../service_kit/icons/icon_lock.png')
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(controller $Tooltip
+			(renderer ='ArcEventTaskTooltip')
+			(bind enabled "!(isUnavailable && !isExpired)")
+			(args
+				_entityId = "_entityId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		)
+	)
+	(block
+		(bind visible "isLeaderboardCalculated")
+		(style
+			(position = "absolute")
+			(right = "M")
+			(height = 24px)
+			(paddingTop = 6px)
+			(paddingLeft = "S")
+			(paddingRight = "S")
+			(backgroundColor = 0x33ffffff)
+		)
+		(tf
+			(class $TextDefaultNM)
+			(style (alpha = "TA"))
+			(bind text "subst('IDS_SUBST_ARC_EVENT_MAIN_SCREEN_TASK_PERSONAL_LEADERBOARD', [],
+							{ _percentRate: personalPercentRate })")
+		)
+		(controller $Tooltip
+			(renderer='SimpleStatusTooltip')
+			(args
+				_text="personalPercentRateText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR "1")
+		)
+	)
+)
+
+(def element ArcEventTaskTooltip (_entityId:number = 0)
+	(scope
+		(macro SERVER_TIME_SCOPE)
+
+		(var arcEventTaskEntity:dhEntity = "getEntity(_entityId)")
+		(var arcEventTask:dhComponent = "arcEventTaskEntity.arcEventTask")
+		(var finishTime:number = "arcEventTask.finishTime" (event "arcEventTask.evChanged"))
+		(var personalPoints:number = "arcEventTask.personalPoints ?: 0" (event "arcEventTask.evPersonalPointsChanged"))
+		(var personalRatePoints:number = "arcEventTask.personalRatePoints ?: 0" (event "arcEventTask.evChanged"))
+		(var nextRewardIndex:number = "arcEventTaskEntity.progressWithRewards.activeIndex ?: 0" (event "arcEventTaskEntity.progressWithRewards.evChanged"))
+		(var rewards:array = "arcEventTaskEntity.progressWithRewards.rewards" (event "arcEventTaskEntity.progressWithRewards.evChanged"))
+		(var rewardPointsForCutoff:number = "rewards[nextRewardIndex]")
+
+		(var conditionEntity:dhEntity = "getEntity(arcEventTaskEntity.arcEventTask.conditions[0])")
+		(var taskCategory:str = "conditionEntity.sseConditions.conditionCategory")
+
+		(var isExpired:bool = "serverTime > finishTime")
+		(var isCompleted:bool = "nextRewardIndex == rewards.length")
+
+		(var headerText:str = "'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + taskCategory + '_FULL'")
+		(var personalPointsToDisplay:number = "personalPoints ? personalPoints : rewardPointsForCutoff")
+		(var attributeIDS:str = "	isCompleted 	? 'IDS_ARC_EVENT_MAIN_SCREEN_TASK_TOOLTIP_PROGRESS_BAR_COMPLETED_DESCRIPTION' :
+									nextRewardIndex	? subst('IDS_PL_ARC_EVENT_MAIN_SCREEN_TASK_TOOLTIP_PROGRESS_BAR_SUM_DESCRIPTION', [],
+															{ _cutoffs: nextRewardIndex }, nextRewardIndex)
+													: 'IDS_ARC_EVENT_MAIN_SCREEN_TASK_TOOLTIP_PROGRESS_BAR_CUTOFF_DESCRIPTION'")
+		(var attributesCommon:array = "[	{	attributeIDS: attributeIDS,
+												measuredValue: tr('+' + personalPointsToDisplay),
+												measure: trPlural('IDS_PL_ARC_EVENT_MAIN_SCREEN_TASK_POINTS_FOR_PROGRESS_ITEM', personalPointsToDisplay),
+												category: 'positive' }]")
+		(var attributesSpecific:array = "	[{	attributeIDS: 'IDS_ARC_EVENT_MAIN_SCREEN_TASK_STATUS_TOOLTIP_LINE_LEADERBOARD',
+												measuredValue: tr('+' + personalRatePoints),
+												measure: trPlural('IDS_PL_ARC_EVENT_MAIN_SCREEN_TASK_POINTS_FOR_PROGRESS_ITEM', personalRatePoints),
+												category: 'positive' }]")
+	)
+	(style (hitTest = false) (width = 280px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText _headerText = "headerText")
+		(element TooltipSystemHorizontalDivider)
+
+		(element ArcEventTaskStatus
+			_taskId = "_entityId"
+			_isSimple = true
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemInnerHeaderText
+			_headerText='IDS_ARC_EVENT_MAIN_SCREEN_TASK_TOOLTIP_LINE_SUBHEADER_PERSONAL_POINTS'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemParamsModifiersList
+			_attributesPositive = "attributesCommon"
+			_attributesNeutral = "personalRatePoints > 0 ? attributesSpecific : null"
+		)
+	)
+)
+
+(def element ArcEventTaskProgress (_thresholds:array, _currentProgress:number = 0)
+	(scope
+		(var rawProgress:number = "$index == 0	? _currentProgress / _thresholds[0]
+												: (_currentProgress - _thresholds[$index-1]) / (_thresholds[$index] - _thresholds[$index-1])")
+		(var currentProgress:number = "_currentProgress == _thresholds[$index] || _currentProgress > _thresholds[$index] ? 1 : rawProgress")
+		(var progressBarWidth:number = "round(268/_thresholds.length)")
+	)
+	(style (bind marginLeft "$index ? -1px : 0"))
+
+	(element DefaultProgressBar
+		_width = "progressBarWidth"
+		_height = 10px
+		_progress = "currentProgress"
+	)
+	(block
+		(style (position = "absolute") (right = 0) (top = 10px))
+		(element ArcEventProgressThreshold _thresholds="_thresholds")
+	)
+)
+
+(def element ArcEventMainProgress (	_thresholds:array, _currentProgress:number = 0, _personalRewardCategories:array = [],
+									_isRewardReceived:bool = false, _pointsTillNextReward:number = 0, _rewards:array = [])
+	(scope
+		(var positionOffset:number = "$index ? -1 : 0")
+		(var rawProgress:number = "$index == 0	? _currentProgress / _thresholds[0]
+												: (_currentProgress - _thresholds[$index-1]) / (_thresholds[$index] - _thresholds[$index-1])")
+		(var currentProgress:number = "_currentProgress == _thresholds[$index] || _currentProgress > _thresholds[$index] ? 1 : rawProgress")
+		(var progressBarWidth:number = "round(1204/_thresholds.length)")
+		(var isProgressFull:bool = "_currentProgress >= _thresholds[$index]")
+		(var isProgressEmpty:bool = "$index && (_currentProgress < _thresholds[$index-1])")
+
+		(var pointsDiff:number = "$index == 0 ? _currentProgress : _currentProgress - _thresholds[$index-1]")
+		(var pointsThresholdDiff:number = "$index == 0 ? _thresholds[0] : _thresholds[$index] - _thresholds[$index-1]")
+		(var leftWidth:str = "toString(ceil(pointsDiff * progressBarWidth /pointsThresholdDiff) - positionOffset)")
+	)
+	(style (bind marginLeft "positionOffset"))
+
+	(element DefaultProgressBar
+		_width = "progressBarWidth"
+		_height = 10px
+		_progress = "currentProgress"
+	)
+	(block
+		(style (position = "absolute") (right = 0) (top = 9px))
+		(element ArcEventProgressThreshold
+			_thresholds="_thresholds"
+			_isMainProgress = true
+			_personalRewardCategories = "_personalRewardCategories"
+			_isRewardReceived = "_isRewardReceived"
+			_pointsTillNextReward = "_pointsTillNextReward"
+			_rewards = "_rewards"
+		)
+	)
+	(block
+		(bind visible "!(isProgressFull || isProgressEmpty)")
+		(style (position = "absolute") (top = -17px) (bind left "leftWidth") )
+		(block
+			(tf
+				(class $TextDefaultNM)
+				(style (marginLeft = "-XXS") (marginBottom = "XS") (alpha = "TA"))
+				(bind text "_currentProgress")
+			)
+			(block
+				(style
+					(width = 1px)
+					(height = 14px)
+					(marginLeft = -1px)
+					(backgroundColor = 0xE6FFFFFF)
+				)
+			)
+		)
+	)
+)

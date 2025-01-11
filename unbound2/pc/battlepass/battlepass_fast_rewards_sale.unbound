@@ -1,0 +1,198 @@
+(def constant ITEMS_PER_ROW "5")
+(def constant ITEM_HEIGHT "100")
+(def constant BP_CONTENT_WIDTH "820")
+
+(def element ModalWindowBattlePassFastRewardsSale () layout=true
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(struct bpRegularPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_REGULAR'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct bpEnhancedPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_ENHANCED'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct bpLevelPrice =		PULL_PRICE(_entityId = "'BATTLEPASS_LEVEL'"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var resourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:gfx = "resourceEntity ? resourceEntity.accountResource : null")
+		(var currentGoldBalance:number = "accountResourceComponent ? accountResourceComponent.gold : 0" (event "accountResourceComponent.evChangedGold"))
+		(var isGoldEnough:bool = "currentGoldBalance >= bpRegularPrice.info.finalPrice")
+
+		(var battlePassEntity:gfx = "$datahub.getSingleEntity(CC.battlePass)")
+		(var bpType:number = "battlePassEntity ? battlePassEntity.battlePass.type : 0" (event "battlePassEntity.battlePass.evChanged"))
+		(var bpId:number = "battlePassEntity ? battlePassEntity.battlePass.id : 0" (event "battlePassEntity.battlePass.evChanged"))
+		(var previewRewardsStackId:number = "battlePassEntity ? battlePassEntity.battlePass.previewRewardsStack : 0" (event "battlePassEntity.battlePass.evChanged"))
+		(var finishTime:number = "battlePassEntity ? battlePassEntity.battlePass.finishTime : 0" (event "battlePassEntity.battlePass.evChanged"))
+		(var battlePassPaidRegular:str = "SC.Common.BATTLEPASS_TYPES.VALUE_TO_NAME[SC.Common.BATTLEPASS_TYPES.PAID_REGULAR]")
+
+		(var rewardsStackEntity:gfx = "$datahub.getEntity(previewRewardsStackId)")
+		(var rewards:array = "rewardsStackEntity ? rewardsStackEntity.rewardsStack.rewards : []" (event "rewardsStackEntity.rewardsStack.evChanged"))
+
+		
+		(var collectionLevels:gfx = "$datahub.getCollection(CC.battlePassLevel)")
+		(var levelsList:array = "collectionLevels ? collectionLevels.items : []" (event "collectionLevels.evAdded") (event "collectionLevels.evRemoved"))
+
+		(var battlePassCurrentLevelWatcher:gfx = "$datahub.getFirstWatcher(CC.battlePassCurrentLevel)")
+		(var battlePassCurrentLevelEntity:gfx = "battlePassCurrentLevelWatcher ? battlePassCurrentLevelWatcher.entity : null" (event "battlePassCurrentLevelWatcher.event"))
+		(var currentLevel:number = "battlePassCurrentLevelEntity ? battlePassCurrentLevelEntity.battlePassLevel.level : 0")
+		(var levelsRemaining:number = "levelsList.length - currentLevel")
+
+		(var dynamicHeight:number = "stageHeight - 600")  
+		(var rows:number = "ceil(rewards.length/ITEMS_PER_ROW)")
+		(var rewardsHeight:number = "rows * ITEM_HEIGHT + 32")  
+		(var scrollHeight:number = "dynamicHeight < rewardsHeight ? dynamicHeight : rewardsHeight")
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['BattlePassProxyUSS.previewEndSeasonOffer', { }]" init=false watch=false on='addedToStage' (bind trigger "currentLevel"))
+	(bindcall externalCall "'inputMapping.onAction'" "['BattlePassProxyUSS.setBattlePassFlag', {battlePassFlag: SC.Common.BATTLEPASS_SEASON_FLAGS.END_SEASON_OFFER_SHOWN}]" init=false watch=false on='addedToStage')
+
+	(name = 'ModalWindowBattlePassFastRewardsSale')
+	(class $Fullsize)
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = "BP_CONTENT_WIDTH") (align = "center"))
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style (width = 100%) (align = "center"))
+			(block
+				(style	(width = 130px) (height = 130px) (marginBottom = "MS")
+						(backgroundImage = 'url:../sse/battlepass/types/medium/paid_regular.png') (backgroundSize = "fill"))
+			)
+			(element ModalWindowShortHeader _header = 'IDS_BATTLEPASS_TYPE_PAID_REGULAR')
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (width = 100%) (marginTop = "L") (marginBottom = "L"))
+			(tf
+				(class $TextDefault19NM)
+				(style (width = 100%) (textAlign = "center") (alpha = "TA"))
+				(text = 'IDS_BATTLEPASS_FAST_REWARDS_SALE_SUBHEADER')
+			)
+		)
+		(block
+			(hblock
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+				(scrollArea
+					(style (backgroundColor = "NO_COLOR") (width = "BP_CONTENT_WIDTH") (bind height "scrollHeight"))
+
+					(verticalSlider = 'BpRewardsScrollBar')
+					(hscrollPolicy = 'off')
+					(vscrollPolicy = 'auto')
+					(scrollPerItem = true)
+
+					(wheelScrollSpeed = 1.0)
+					(wheelScrollAcceleration = 1.9)
+
+					(activeControlsAlpha = 1)
+					(inactiveControlsAlpha = 1)
+					(bottomShadow = 'BpBonusesShadowBottom')
+
+					(repeatController = 'battlePassRewardItemAdapter')
+
+					(content
+						(style (width = 100%) (paddingBottom = "{720:MS, 1080:LS}") (align = "center") (flow = "tile_horizontal"))
+						
+						(controller $DynamicRepeat renderer='BattlePassRewardItemAdapter' name='battlePassRewardItemAdapter'
+							(bind count "rewards.length")
+							(args
+								_entityId = "rewards[$index]"
+							)
+
+							(itemHeight = "ITEM_HEIGHT")
+							(itemWidth = 160px)
+							(itemOffset = 240px)
+						)
+					)
+				)
+			)
+			(element HorizontalDividerTwoPx)
+		)
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(style (marginTop = "MS") (marginBottom = "MS"))
+			(element PriceTagWithQuestion
+				_questionText = 'IDS_QUESTION_DO_PURCHASE_FOR'
+				_priceInfo = "{finalPrice: bpRegularPrice.info.finalPrice, currency: SC.Common.CURRENCIES.GOLD}"
+			)
+		)
+		
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
+			
+			(element DefaultButton
+				_width = 154px
+				_name = 'btn_ok'
+				_label = 'IDS_YES'
+				_enabled = "isGoldEnough"
+				_defaultFocused = "isGoldEnough"
+				_focusIndex = 1
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'BattlePassProxyUSS.buyBattlePass',
+									args: {	battlePassId: bpId,
+											battlePassType: SC.Common.BATTLEPASS_TYPES.PAID_REGULAR}},
+								{	type: 'inputMapping.onRequest',
+									name: 'showBattlePassLevelUp',
+									args: {	battlePassTypeName: battlePassPaidRegular,
+											battlePassType: SC.Common.BATTLEPASS_TYPES.PAID_REGULAR,
+											clickedButtonType: 'ingame'}}]"
+			)
+
+			(block
+				(style (marginLeft = "S"))
+				(element DefaultButton
+					_width = 154px
+					_name = 'btn_cancel'
+					_label = 'IDS_NO'
+					_enabled = true
+					_focusIndex = 2
+				)
+			)
+		)
+	)
+	
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
+		(bind visible "!isGoldEnough")
+		(style (position = "absolute") (bottom = "M") (width = 100%) (align = "center"))
+		
+		(block
+			(style (width = 360px) (marginRight = "MS"))
+			(tf
+				(class $TextDefaultNM)
+				(style (width = 100%) (alpha = "TC"))
+				(text = 'IDS_BATTLEPASS_PURCHASE_GOLD_TEXT')
+			)
+		)
+		(element DefaultButton
+			_width = 167px
+			_enabled = true
+			_isTransactionBtn = true
+			_defaultFocused = "!isGoldEnough"
+			_focusIndex = 1
+			_type = "SC.Ui_styles.BUTTON_TYPE.ACCENT"
+			_label = 'IDS_GOLD'
+			_methods = "[	{	type: 'inputMapping.onRequest',
+								name: 'openMetashop',
+								args: {	url: SC.Ui_windows.GUI_URL.BATTLEPASS_SHOP_IN_GAME,
+										params: {	battlepass_type: bpType,
+													battlepass_expiration_date: finishTime,
+													remaining_level: levelsRemaining,
+													total_levels: levelsList.length,
+													level_price: bpLevelPrice.info.basePrice,
+													battlepass_price: bpRegularPrice.info.basePrice,
+													battlepass_big_price: bpEnhancedPrice.info.basePrice}}}]"
+		)
+	)
+)
+
+(def element BattlePassRewardItemAdapter (_entityId:gfx) layout=true
+	(style (height = "ITEM_HEIGHT") (width = 160px) (align = "center|middle"))
+	(element RewardItemAdapter _entityId="_entityId")
+)
+
+(def element BpRewardsScrollBar () layout=true
+	(scroll_bar
+		(value = 0)
+		(orientation = "vertical")
+		(thumb = 'SBVThumbLight')
+		(track = 'SBVTrackLight')
+	)
+)

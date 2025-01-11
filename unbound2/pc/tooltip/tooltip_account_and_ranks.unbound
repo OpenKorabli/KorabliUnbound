@@ -1,0 +1,812 @@
+(def constant ACCOUNT_INFOTIP_WIDTH 285)
+
+(def element AccountInfotip ()
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE "true")
+
+		(macro PULL_SELF_PLAYER_SCOPE)
+
+		(var accountLevel:number =	"selfPlayerEntity	? selfPlayerEntity.accountLevel.level		: 0"	(event "selfPlayerEntity.accountLevel.evLevelChanged"))
+
+		(var userTaskEntity:gfx = "$datahub.getSingleEntity(CC.userTask)")
+		(var userTaskComponent:gfx = "userTaskEntity ? userTaskEntity.userTask : null")
+		(var currentUserTaskFlags:array = "userTaskComponent ? userTaskComponent.flags : []" (event "userTaskComponent.evFlagChanged"))
+
+		(var resourceWatcher:gfx = "$datahub.getFirstWatcher(CC.accountResource)")
+		(var resourceEntity:gfx = "resourceWatcher.entity" (event "resourceWatcher.event"))
+		(var resourceComponent:gfx = "resourceEntity ? resourceEntity.accountResource : null")
+		(var hasReferralPoints:bool =	"resourceComponent	? resourceComponent.hasReferralPoints	: false"	(event "resourceComponent.evChangedHasReferralPoints"))
+		(var isSyncedWithWallet:bool =	"resourceComponent	? resourceComponent.isSyncedWithWallet	: false"	(event "resourceComponent.evChangedIsSyncedWithWallet"))
+		(var walletAvailable:bool =		"resourceComponent	? resourceComponent.walletStatus		: false"	(event "resourceComponent.evChangedWalletStatus"))
+		(var showWGWalletWarning:bool = "!isSyncedWithWallet || !walletAvailable")
+
+		
+		(var accountCompletionEntity:gfx = "$datahub.getSingleEntity(CC.accountCompletion)")
+		(var isAccountCompletionAvailable:bool = "accountCompletionEntity ? accountCompletionEntity.accountCompletion.isAvailable : false")
+		(var shouldRedirectOnCompletion:bool = "selfPlayerEntity ? selfPlayerEntity.accountSelf.shouldRedirectOnCompletion : false")
+		(var steamLoginEntity:gfx = "$datahub.getSingleEntity(CC.steamLoginData)")
+		(var accountCompleted:bool = "steamLoginEntity ? steamLoginEntity.steamLoginData.emailBind : false" (event "steamLoginEntity.steamLoginData.evUpdate"))
+		
+
+		
+		(var realmConstantsEntity:gfx = "$datahub.getSingleEntity(CC.realmConstants)")
+		(var realmConstantsComponent:gfx = "realmConstantsEntity ? realmConstantsEntity.realmConstants : null")
+		(var isInviteRefferalFriendUIAvailable:bool = "realmConstantsComponent ? realmConstantsComponent.isInviteRefferalFriendUIAvailable : false")
+		(var referralCollection:gfx = "$datahub.getCollection(CC.referral)")
+		(var referralCollectionItems:array = "referralCollection ? referralCollection.items : []" (event "referralCollection.evAdded") (event "referralCollection.evRemoved"))
+		(var isRefSysParticipant:bool = "referralCollectionItems.length > 0")
+		
+
+		
+		(var almanacParamsWatcher:gfx = "$datahub.getFirstWatcher(CC.almanacState)")
+		(var almanacParamsEntity:gfx = "almanacParamsWatcher.entity" (event "almanacParamsWatcher.event"))
+		
+
+		(var isPremiumAccountMenuItemVisible:bool = "accountLevel >= SC.Ui_common.AL_MENU_FEATURES_VISIBILITY.BUY_PREMIUM")
+		(var isAlmanacMenuItemVisible:bool = "almanacParamsEntity ? almanacParamsEntity.id != 0 : false")
+		(var isReferralMenuItemVisible:bool = "isInviteRefferalFriendUIAvailable && (accountLevel >= SC.Ui_common.AL_MENU_FEATURES_VISIBILITY.REFERRAL || isRefSysParticipant)")
+		(var isCompleteAccountMenuItemVisible:bool = "isAccountCompletionAvailable && !accountCompleted && !shouldRedirectOnCompletion")
+
+
+		(macro FEATURES "27")		
+		(macro FEATURES "23")		
+
+		(var playerHasClanManComponent:bool = "selfPlayerEntity && selfPlayerEntity.hasComponent(CC.clanman)")
+
+		(var showClanItem:bool = "!playerHasClanManComponent && (feature_27 == 'locked')")
+		(var showWarehouseItem:bool = "feature_23 != 'locked'")
+		(var showCatalogueItem:bool = "feature_23 != 'locked'")
+
+		
+		(var areReplaysAvailable:bool = "selfPlayerEntity ? selfPlayerEntity.accountSelf.replaysAvailable : false")
+
+
+		
+		(struct inviteFriendMenuNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.INVITE_USER_MENU_INVITE_BTN"))
+		(struct webStorageFinalNewTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.WEB_STORAGE_FINAL"))
+		(struct webStorageFinalRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.WEB_STORAGE_FINAL_REPEAT"))
+
+		(var chainId:number =		"webStorageFinalNewTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.WEB_STORAGE :
+									 webStorageFinalRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_CHAIN_ID.WEB_STORAGE_REPEAT
+																			: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE")
+
+		(var guidingTipId:number =	"inviteFriendMenuNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.INVITE_USER_MENU_INVITE_BTN :
+									 webStorageFinalNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.WEB_STORAGE_FINAL :
+									 webStorageFinalRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.WEB_STORAGE_FINAL_REPEAT
+																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isNewTipVisible:bool = "guidingTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var isWebStorageTipVisible:bool = "isIn(guidingTipId, [ SC.Context_guiding_tip.TIP_TYPE.WEB_STORAGE_FINAL, SC.Context_guiding_tip.TIP_TYPE.WEB_STORAGE_FINAL_REPEAT ])")
+
+		(dispatch "isNewTipVisible ? 'evGuidingTipClose' : ''" dir="EventDirection.DOWN" init=false watch=false on='evStartHide')
+
+		(bindcall externalCall "inviteFriendMenuNewTip.isActive ? 'inputMapping.onAction' : ''" "['setNextTip', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.INVITE_FRIEND }]" init=false watch=false on='evStartHide')
+		(bindcall externalCall "chainId != SC.Context_guiding_tip.TIP_CHAIN_ID.NONE ? 'inputMapping.onAction' : ''" "['setNextTip', { tip_chain_id: chainId }]" init=false watch=false on='evStartHide')
+		
+	)
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+
+	(style (width = "ACCOUNT_INFOTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style
+				(width = 100%)
+				(paddingTop = 1px)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(element PlayerInfotipItemAccount)
+
+			
+			(block
+				(bind visible "isCompleteAccountMenuItemVisible")
+				(name = 'buttonAccountCompletion')
+
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(bind enabled "isCompleteAccountMenuItemVisible")
+					(renderer = 'AccountCompletionRewardTooltip')
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Instance renderer='AccountInfotipItem'
+					(bind enabled "isCompleteAccountMenuItemVisible")
+					(args
+						_text = 'IDS_ACCOUNT_COMPLETION_FINISH_BUTTON'
+						_markerNewVisible = true
+						_isAnimated = true
+						_icon = 'container'
+						_isGolden = true
+						_inputBtnName = 'buttonAccountCompletion'
+					)
+				)
+			)
+			
+
+			
+			(block
+				(bind visible "isPremiumAccountMenuItemVisible")
+
+				(style (width = 100%))
+
+				(block
+					(style
+						(width = 100%)
+						(bind alpha "showWGWalletWarning ? 0.5 : 1")
+					)
+
+					(controller $Tooltip
+						(bind enabled "isPremiumAccountMenuItemVisible")
+						(renderer = 'AccountInfotipPremShopTooltip')
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+					
+					(controller $Instance renderer='AccountInfotipItem'
+						(bind enabled "isPremiumAccountMenuItemVisible")
+						(args
+							_text = 'IDS_BUY_PREMIUM_ACCOUNT'
+							_markerNewVisible = "currentUserTaskFlags[BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_WOWS_PREM]] == 0"
+							_icon = 'premium'
+							_isGolden = true
+							_methods = "[	{ type: 'inputMapping.onRequest', name: 'buttonShowPremiumPeriods', args: {} },
+											{ type: 'inputMapping.onAction', name: 'ServerUIDataUSS.setUserTaskExecuted', args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_WOWS_PREM] } } ]"
+						)
+					)
+				)
+
+				(block
+					(class $FullsizeAbsolute)
+					(controller $Instance renderer='WGWalletServiceStatus'
+						(bind enabled "showWGWalletWarning")
+					)
+				)
+			)
+			
+
+			
+			(block
+				(bind visible "isReferralMenuItemVisible")
+				(name = 'buttonPlaytogether')
+
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(bind enabled "isReferralMenuItemVisible")
+					(renderer = 'ReferralSystemTooltip')
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Instance renderer='AccountInfotipItem'
+						(bind enabled "isReferralMenuItemVisible")
+						(args
+							_text = 'IDS_INVITE_FRIEND'
+							_markerNewVisible = "currentUserTaskFlags[BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.CONTROL_SEEN_PLAYTOGETHER]] == 0"
+							_isAnimated = "hasReferralPoints"
+							_icon = "hasReferralPoints ? 'referral_active' : 'referral'"
+							_isGolden = "hasReferralPoints"
+							_methods = "[	{ type: 'inputMapping.onAction',	name: 'navigateTo',								args: {	route: SC.Ui_windows.ROUTE.PORTAL,
+																																		data: { url: SC.Ui_windows.GUI_URL.PLAYTOGETHER_IN_GAME } } },
+											{ type: 'inputMapping.onAction',	name: 'ServerUIDataUSS.setUserTaskExecuted',	args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.CONTROL_SEEN_PLAYTOGETHER] } },
+											{ type: 'inputMapping.onAction',	name: 'deactivateTipChain',						args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.INVITE_FRIEND } } ]"
+						)
+					)
+				)
+
+				(controller $Instance renderer='GuidingTipHub'
+					(bind enabled "inviteFriendMenuNewTip.isActive")
+					(args
+						_tipId =			"SC.Context_guiding_tip.TIP_TYPE.INVITE_USER_MENU_INVITE_BTN"
+						_tipPositioning =	"TIP_POSITION_RIGHT"
+						_modalWindowName =	'Dock'
+					)
+				)
+
+				(dispatch "inviteFriendMenuNewTip.isActive ? 'evGuidingTipClose' : ''" dir="EventDirection.DOWN" init=false watch=false on='click')
+			)
+			
+
+			
+			(block
+				(bind visible "showClanItem")
+
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(bind enabled "showClanItem")
+					(renderer = 'HeaderDescriptionInstructionTooltip')
+					(args
+						_headerText =			'IDS_CLANS'
+						_descriptionText =		'IDS_HINT_CLANS'
+						_mouseInstructionText =	'IDS_GO_TO_CLANS'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Instance renderer='AccountInfotipItem'
+					(bind enabled "showClanItem")
+					(args
+						_text = 'IDS_CLANS'
+						_icon = 'clans'
+						
+						_methods = "[ { type: 'inputMapping.onAction', name: 'navigateTo', args: {	route:	SC.Ui_windows.ROUTE.PORTAL,
+																									data:	{ url: SC.Ui_windows.GUI_URL.CLANS_IN_GAME } } } ]"
+					)
+				)
+			)
+			
+
+			
+			(block
+				(bind visible "showWarehouseItem")
+				(name = 'buttonWarehouse')
+
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(bind enabled "showWarehouseItem")
+					(renderer = 'HeaderDescriptionInstructionTooltip')
+					(args
+						_headerText =			'IDS_WAREHOUSE'
+						_descriptionText =		'IDS_HINT_WAREHOUSE'
+						_mouseInstructionText =	'IDS_GO_TO_WAREHOUSE'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Instance renderer='AccountInfotipItem'
+						(bind enabled "showWarehouseItem")
+						(args
+							_text = 'IDS_WAREHOUSE'
+							_markerNewVisible = "feature_23 == 'new'"
+							_icon = 'warehouse'
+							_methods = "[	{ type: 'inputMapping.onAction', name: 'navigateTo', args:	{ route: SC.Ui_windows.ROUTE.PORTAL,
+																										  data: { url: SC.Ui_windows.GUI_URL.WAREHOUSE_IN_GAME } } },
+											{ type: 'inputMapping.onAction', name: chainId != SC.Context_guiding_tip.TIP_CHAIN_ID.NONE ? 'deactivateTipChain' : '', args: { tip_chain_id: chainId } },
+											{ type: 'inputMapping.onAction', name: 'featureSeen', args: { featureIndex: 23 } } ]"
+						)
+					)
+				)
+
+				(controller $Instance renderer='GuidingTipHub'
+					(bind enabled "isWebStorageTipVisible")
+					(args
+						_tipId =			"guidingTipId"
+						_tipPositioning =	"TIP_POSITION_RIGHT"
+						_modalWindowName =	'Dock'
+					)
+				)
+
+				(dispatch "isWebStorageTipVisible ? 'evGuidingTipClose' : ''" dir="EventDirection.DOWN" init=false watch=false on='click')
+			)
+			
+
+			
+			(block
+				(bind visible "showCatalogueItem")
+				(name = 'buttonCatalogue')
+
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(bind enabled "showCatalogueItem")
+					(renderer = 'HeaderDescriptionInstructionTooltip')
+					(args
+						_headerText =			'IDS_CATALOGUE'
+						_descriptionText =		'IDS_HINT_CATALOGUE'
+						_mouseInstructionText =	'IDS_GO_TO_CATALOGUE'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Instance renderer='AccountInfotipItem'
+					(bind enabled "showCatalogueItem")
+					(args
+						_text = 'IDS_CATALOGUE'
+						_markerNewVisible = false	
+						_icon = 'catalogue'
+						_methods = "[	{ type: 'inputMapping.onAction',	name: 'navigateTo',		args: {	route:	SC.Ui_windows.ROUTE.PORTAL,
+																											data:	{ url: SC.Ui_windows.GUI_URL.CATALOGUE_IN_GAME } } },
+										{ type: 'inputMapping.onAction',	name: 'featureSeen',	args: { featureIndex: 23 } } ]"
+					)
+				)
+			)
+			
+
+			
+			(block
+				(bind visible "isAlmanacMenuItemVisible")
+
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(bind enabled "isAlmanacMenuItemVisible")
+					(renderer = 'HeaderDescriptionInstructionTooltip')
+					(args
+						_headerText =			'IDS_ALMANAC_INFOTIP_TOOLTIP_HEADER'
+						_descriptionText =		'IDS_ALMANAC_INFOTIP_TOOLTIP_DESC'
+						_mouseInstructionText =	'IDS_GO_TO_ALMANAC_MOUSE_INSTRUCTION'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Instance renderer='AccountInfotipItem'
+					(bind enabled "isAlmanacMenuItemVisible")
+					(args
+						_text = 'IDS_INFOTIP_ALMANAC'
+						_icon = 'almanac'
+						_methods = "[ { type: 'inputMapping.onAction', name: 'forceOpenAlmanac', args: {} } ]"
+					)
+				)
+			)
+			
+
+			
+			(block
+				(bind visible "areReplaysAvailable")
+
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(bind enabled "areReplaysAvailable")
+					(renderer = 'HeaderDescriptionInstructionTooltip')
+					(args
+						_headerText =			'IDS_REPLAYS'
+						_descriptionText =		'IDS_HINT_REPLAYS'
+						_mouseInstructionText =	'IDS_GO_TO_REPLAYS'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Instance renderer='AccountInfotipItem'
+					(bind enabled "areReplaysAvailable")
+					(args
+						_text = 'IDS_REPLAYS'
+						_icon = 'replays'
+						_methods = "[ { type: 'inputMapping.onRequest', name: 'showReplaysWindow', args: {} } ]"
+						_isLast = false
+					)
+				)
+			)
+			
+		)
+	)
+)
+
+(def element PlayerInfotipItemAccount ()
+	(scope
+		(event evDogTagRollOverChanged)
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro PULL_SELF_PLAYER_SCOPE)
+
+		(var abuseStatus:number = "selfPlayerEntity ? selfPlayerEntity.accountInfo.abuseStatus : 0" (event "selfPlayerEntity.accountInfo.evAbuseStatusChanged"))
+		(var rank:number = "selfPlayerEntity ? selfPlayerEntity.accountRank.rank : 0" (event "selfPlayerEntity.accountRank.evRankChanged"))
+
+		(var resourceWatcher:gfx = "$datahub.getFirstWatcher(CC.accountResource)")
+		(var resourceEntity:gfx = "resourceWatcher.entity" (event "resourceWatcher.event"))
+		(var resourceComponent:gfx = "resourceEntity ? resourceEntity.accountResource : null")
+
+		(var premiumType:number =		"resourceComponent ? resourceComponent.activePremiumType : 0" (event "resourceComponent.evActivePremiumTypeChanged"))
+		(var isPremiumAccount:bool = "premiumType != SC.Common.PREMIUM_TYPE.NONE")
+
+		(var isAbuseStatusConfirmed:bool = "abuseStatus > 0")
+
+		(var state:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var isOverDogTag:bool = false)
+		(bind isOverDogTag "$event ? $event.value : false" init=false watch=false (event "evDogTagRollOverChanged"))
+
+		(dispatch evAccountInfotipItemClicked dir="EventDirection.UP" init=false watch=false (event "evClicked"))
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(paddingTop = -1px)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(element MenuItemBackground
+				_state = "state"
+			)
+
+			(controller $Tooltip
+				(renderer = 'AbuseStatusProfileTooltip')
+				(bind enabled "isAbuseStatusConfirmed")
+				(args
+					_mouseInstructionText = 'IDS_GO_TO_PROFILE_MOUSE_INSTRUCTION'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(controller $Tooltip
+				(renderer = 'PlayerInfotipItemAccountTooltip')
+				(bind enabled "!isAbuseStatusConfirmed")
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(bindcall externalCall "!isOverDogTag ? 'inputMapping.onAction' : ''" "['navigateTo', { route: SC.Ui_windows.ROUTE.SUMMARY, data: { isPortBannerClicked: false } }]" init=false watch=false (event "evClicked"))
+		)
+		
+
+		(block
+			(style
+				(width = 100%)
+				(paddingTop = "XS")
+				(paddingBottom = "XS")
+				(paddingLeft = "S")
+				(paddingRight = "S")
+			)
+
+			(element PlayerStereotypeForAccountButton
+				_playerDbId = "selfPlayerDbId"
+				_abuseStatus = "abuseStatus"
+				_isPremiumAccount = "isPremiumAccount"
+				_noRank = "rank == 0"
+			)
+		)
+
+		(macro MOUSE_EVENTS_DISPATCHER)
+		(macro SOUND_HANDLER
+			_soundSet = "isOverDogTag ? '' : 'dropdown'"
+		)
+	)
+)
+
+
+(def constant ACCOUNT_INFOTIP_ITEM_IMAGE_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.4,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 1,
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.6,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 1,
+	SC.Ui_styles.BUTTON_STATE.UP		: 1
+})
+
+(def constant ACCOUNT_INFOTIP_ITEM_IMAGE_ALPHA_GOLDEN {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.4,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 1,
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.6,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 1,
+	SC.Ui_styles.BUTTON_STATE.UP		: 1
+})
+
+(def element PlayerInfotipItemAccountTooltip ()
+	(style (width = 300px) (hitTest = false))
+	
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemHeaderSubheaderText
+					_headerText = 'IDS_PROFILE'
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_TOOLTIP_PROFILE'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemHeaderSubheaderText
+					_headerText = 'IDS_TOOLTIP_KARMA_HEADER'
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_TOOLTIP_KARMA_DESCRIPTION'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text = 'IDS_GO_TO_PROFILE_MOUSE_INSTRUCTION'
+		)
+	)
+)
+
+(def element AccountInfotipItem (_text:str='', _markerNewVisible:bool=false, _isAnimated:bool=false, _icon:str='', _isGolden:bool=false, _inputBtnName:str='', _methods:array=[])
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var state:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var textAlpha:number = "_isGolden	? PORT_HEADER_MAIN_TEXT_COLORIZED_ALPHA[state]
+											: PORT_HEADER_MAIN_TEXT_ALPHA[state]")
+		(var imageAlpha:number = "_isGolden	? ACCOUNT_INFOTIP_ITEM_IMAGE_ALPHA_GOLDEN[state]
+											: ACCOUNT_INFOTIP_ITEM_IMAGE_ALPHA[state]")
+	)
+
+	(style (width = 100%))
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(style
+			(width = 100%)
+			(height = 44px)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(paddingTop = -1px)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(element MenuItemBackground
+				_state = "state"
+			)
+
+			(macro MOUSE_HANDLER
+				_soundSet = "'button_secondary'"
+				_dispatchedEv = "'evAccountInfotipItemClicked'"
+				_methods = "_methods"
+			)
+
+			(macro INPUT
+				_enabled = "_inputBtnName != ''"
+				_btnName = "_inputBtnName"
+			)
+		)
+		
+
+		(hblock
+			(style (hitTest = false))
+
+			
+			(block
+				(style
+					(width = 32px)
+					(height = 32px)
+					(marginLeft = "MS")
+					(marginRight = "MS")
+					(marginTop = 6px)
+					(backgroundImage = "'url:../service_kit/account_menu/' + _icon + '.png'")
+					(bind alpha "imageAlpha" watch=false)
+				)
+
+				(block
+					(style
+						(position = "absolute")
+						(right = "S")
+						(top = 17px)
+					)
+
+					(controller $Instance renderer='RewardsMarkerAnimation'
+						(bind enabled "_isAnimated")
+					)
+				)
+
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+					_trigger = "state"
+					_alpha = "imageAlpha"
+				)
+			)
+			
+
+			
+			(block
+				(style (marginTop = "M"))
+
+				(tf
+					(class $TextDefaultBoldNM)
+					(style
+						(maxWidth = 160px)
+						(wordWrap = false)
+						(bind textColor "_isGolden	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+													: SC.Ui_styles.SERVICE_COLORS.WHITE")
+						(bind alpha "textAlpha" watch=false)
+					)
+
+					(bind text "toUpper(tr(_text))")
+
+					(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+						_trigger	= "state"
+						_alpha		= "textAlpha"
+					)
+				)
+
+				(block
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "_markerNewVisible")
+					(style
+						(position = "absolute")
+						(right = -47px)
+						(top = "-S")
+						(hitTest = false)
+					)
+
+					(element MarkerNew)
+				)
+			)
+			
+		)
+	)
+)
+
+
+(def element AccountCompletionRewardTooltip ()
+	(scope
+		(var completionRewardsWatcher:gfx = "$datahub.getFirstWatcher(CC.completionRewards)")
+		(var completionRewardsEntity:gfx = "completionRewardsWatcher ? completionRewardsWatcher.entity : null" (event "completionRewardsWatcher.event"))
+		(var rewards:array = "completionRewardsEntity ? completionRewardsEntity.completionRewards.rewards : []")
+	)
+
+	(style (hitTest = false) (width = 344px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_ACCOUNT_COMPLETION_DOCK_TOOLTIP_HEADER'
+			_subheaderText = 'IDS_ACCOUNT_COMPLETION_DOCK_TOOLTIP_SUBHEADER'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDHRewards
+			_rewards = "rewards"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text = 'IDS_ACCOUNT_COMPLETION_DOCK_TOOLTIP_MOUSE_INSTRUCTION'
+		)
+	)
+)
+
+(def element AccountInfotipPremShopTooltip ()
+	(scope
+		(var resourceWatcher:gfx = "$datahub.getFirstWatcher(CC.accountResource)")
+		(var resourceEntity:gfx = "resourceWatcher.entity" (event "resourceWatcher.event"))
+		(var resourceComponent:gfx = "resourceEntity ? resourceEntity.accountResource : null")
+
+		(var premBefore:number =		"resourceComponent	? resourceComponent.premBefore			: 0"	(event "resourceComponent.evChangedPrem"))
+		(var wowsPremBefore:number =	"resourceComponent	? resourceComponent.wowsPremBefore		: 0"	(event "resourceComponent.evChangedPrem"))
+		(var activePremiumType:number =	"resourceComponent	? resourceComponent.activePremiumType	: 0"	(event "resourceComponent.evChangedPrem"))
+
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE "'remainingWowsPremTime'"	"wowsPremBefore"	"'HIGHESTDAYS'")
+		(macro COUNTDOWN_SCOPE "'remainingPremTime'"		"premBefore"		"'HIGHESTDAYS'")
+
+		(var timeOffWowsPrem:number =	"wowsPremBefore - serverTime")
+		(var timeOffPrem:number =		"premBefore - serverTime")
+	)
+
+	(style (width = 300px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+			_headerText = 'IDS_PREMIUM_ACCOUNT'
+		)
+
+		(block
+			(bind visible "timeOffWowsPrem > 0")
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "timeOffWowsPrem > 0")
+			)
+
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "timeOffWowsPrem > 0")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text =				"subst('IDS_PREMIUM_ACCOUNT_WOWS_TOOLTIP_HEADER', [], { days: remainingWowsPremTime })"
+				)
+			)
+		)
+
+		(block
+			(bind visible "timeOffPrem > 0")
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "timeOffPrem > 0")
+			)
+
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "timeOffPrem > 0")
+				(args
+					_unifiedStatus =	"activePremiumType == SC.Common.PREMIUM_TYPE.COMMON		? SC.Ui_styles.UNIFIED_STATUS.CHECK
+																								: SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_text =				"subst('IDS_PREMIUM_ACCOUNT_WG_TOOLTIP_HEADER', [], { days: remainingPremTime })"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_HINT_PREM_GET_MORE_CREDITS_AND_EXP'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =				'IDS_PREMIUM_ACCOUNT_CHOOSE_AND_BUY'
+		)
+	)
+)
+
+(def element ReferralSystemTooltip ()
+	(scope
+		(var resourceWatcher:gfx = "$datahub.getFirstWatcher(CC.accountResource)")
+		(var resourceEntity:gfx = "resourceWatcher.entity" (event "resourceWatcher.event"))
+		(var hasReferralPoints:bool = "resourceEntity ? resourceEntity.accountResource.hasReferralPoints : false" (event "resourceEntity.accountResource.evChangedHasReferralPoints"))
+		(var headerUnifiedStatus:str = "hasReferralPoints ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+	)
+	(style (width = 300px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_unifiedStatus = "headerUnifiedStatus"
+			_headerText = 'IDS_DOCK_BANNER_REF_SYS_TOOLTIP_HEADER'
+		)
+
+		(block
+			(bind visible "hasReferralPoints")
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "hasReferralPoints")
+			)
+
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "hasReferralPoints")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.BROTHERHOOD_REWARD"
+					_text =				'IDS_AVAILABLE_REFERRAL_POINTS'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_DOCK_BANNER_REF_SYS_TOOLTIP_INFO_BLOCK'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =				'IDS_GO_TO_INVITE_FRIENDS'
+		)
+	)
+)

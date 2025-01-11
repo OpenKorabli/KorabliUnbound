@@ -1,0 +1,199 @@
+(def constant TAB_BUTTON_DEFAULT_HEIGHT 32)
+
+(def macro DEFAULT_CONTROL_MARKER_ANIMATION (_isVisible:expression)
+	(alpha = "_isVisible ? 1 : 0")
+	(style (visualOffsetY = "_isVisible ? 0px : 8px"))
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.12
+			from	 = { alpha: 0, visualOffsetY: 8px }
+			to		 = { alpha: 1, visualOffsetY: 0px }
+			action = "kill"
+			easing = "Easing.quad_in"
+			(bind enabled "_isVisible")
+		)
+		(bindcall play
+			duration = 0.12
+			from	 = { alpha: 1, visualOffsetY: 0px }
+			to		 = { alpha: 0, visualOffsetY: -8px }
+			action = "kill"
+			easing = "Easing.quad_out"
+			(bind enabled "!_isVisible")
+		)
+	)
+)
+
+(def macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA (_trigger:expression, _alpha:expression)
+	(controller $Animation
+		(bindcall play
+			duration = "0.1"
+			to = "{alpha: _alpha}"
+			easing = "Easing.quad_in"
+			
+			(bind trigger "_trigger")
+		)
+	)
+)
+
+(def constant TAB_BUTTON_LABEL_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.2,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: "TA",
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.3,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 0.75,
+	SC.Ui_styles.BUTTON_STATE.UP		: 0.65
+})
+
+(def constant TAB_BUTTON_LINE_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: "TA",
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.2,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 0.5,
+	SC.Ui_styles.BUTTON_STATE.UP		: 0
+})
+
+(def element TabButton (_label:str='', _isSelected:bool=false, _isDisabled:bool=false, _width:str='',
+						_isNewMarker:bool=false, _isAttentionMarker:bool=false, _newContentCounter:number=0, _image:str='',
+						_dispatchedEv:str='', _dispatchParams:gfx={}, _methods:array=[], _tooltipElement:str='SimpleStatusTooltip', _tooltipData:dict={}, _name:str='')
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var showMarkerNew:bool = "_isNewMarker")
+		(var showMarkerAttention:bool = "_isAttentionMarker && !_isNewMarker")
+		(var showMarkerCounter:bool = "_newContentCounter > 0 && !showMarkerNew && !showMarkerAttention")
+
+		(var state:number = "	_isDisabled	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								_isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var labelAlpha:number = "TAB_BUTTON_LABEL_ALPHA[state]")
+		(var lineAlpha:number = "TAB_BUTTON_LINE_ALPHA[state]")
+
+		(var label:str = "_label ? toUpper(tr(_label)) : ''")
+
+		(var tooltipText:str = "'text' in _tooltipData ? _tooltipData.text : ''")
+		(var tooltipUnifiedStatus:str = "'unifiedStatus' in _tooltipData ? _tooltipData.unifiedStatus : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+	)
+
+	(bind name "_name")
+
+	(style
+		(align = "center")
+		(bind width "_width ? _width : 'auto'")
+		(height = "TAB_BUTTON_DEFAULT_HEIGHT")
+	)
+
+	(hblock
+		(bind name "_isSelected")
+
+		(style
+			(bind marginLeft "_width ? 0px : MS")
+			(bind marginRight "_width ? 0px : MS")
+		)
+
+		
+		(hblock
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="labelAlpha")
+			
+			(style
+				(bind alpha "labelAlpha" watch=false)
+			)
+
+			
+			(block
+				(bind visible "_image")
+
+				(style
+					(marginTop = 3px)
+					(width = 24px)
+					(height = 24px)
+					(bind backgroundImage "_image")
+				)
+			)
+
+			
+			(block
+				(bind visible "_label")
+
+				(tf
+					(class $TextDefaultBoldNM)
+
+					(style
+						(marginTop = 10px)
+						(wordWrap = false)
+						(bind marginLeft "_image ? XS : 0px")
+					)
+
+					(bind text "toUpper(tr(_label))")
+				)
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_CONTROL_MARKER_ANIMATION "showMarkerNew")
+			(style
+				(position = "absolute")
+				(bind right "_width ? -47px : -39px")
+				(top = "XXS")
+			)
+
+			(element MarkerNew)
+		)
+
+		
+		(block
+			(macro DEFAULT_CONTROL_MARKER_ANIMATION "showMarkerAttention")
+			(style (position = "absolute") (right = "-MS") (top = "XXS"))
+
+			(element MarkerAttention)
+		)
+
+		
+		(block
+			(style (position = "absolute") (right = -3px) (top = "XXS"))
+
+			(block
+				(macro DEFAULT_CONTROL_MARKER_ANIMATION "showMarkerCounter")
+				(style (position = "absolute"))
+				
+				(element MarkerNew
+					_newContentCounter = "_newContentCounter"
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(bind alpha "lineAlpha" watch=false)
+			(width = 100%)
+			(bottom = 0px)
+			(height = "XXS")
+			(backgroundColor = 0xFFFFFFFF)
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="lineAlpha")
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled = "!_isDisabled && !_isSelected"
+		_dispatchedEv = "_dispatchedEv"
+		_dispatchParams = "_dispatchParams"
+		_methods = "_methods"
+		_soundSet = "'button_tab'"
+	)
+
+	(controller $Tooltip
+		(bind enabled "tooltipText && (!_isSelected || _image || _isAttentionMarker)")
+		(bind renderer "_tooltipElement")
+		(args
+			_text = "tooltipText"
+			_unifiedStatus = "tooltipUnifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+	)
+)

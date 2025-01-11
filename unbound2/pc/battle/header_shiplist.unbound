@@ -1,0 +1,320 @@
+(def constant HEADER_SHIP_ITEM_WIDTH 28)
+(def constant HEADER_SHIP_CONTAINER_HEIGHT 27)
+(def constant HEADER_SHIP_ITEM_DURATION 0.15)
+(def constant HEADER_SHIP_ITEM_DELAY 0.15)
+(def constant HEADER_SHIP_ITEM_DOUBLE_DELAY 0.3)
+(def constant HEADER_TEAMS_DISTANCE 57)
+(def constant POINT_COUNTER_ITEM_WIDTH 74)
+(def constant ONE_DIGIT_WIDTH 13)
+
+(def constant MIN_ENEMY_TEAMS_TO_SIMPLE_CENTER_ALIGN 2)
+
+(def element HeaderShipList ()
+	(scope
+		(var collection:gfx = "$datahub.getCollection(CC.avatar)")
+		(var allyCollection:gfx = "collection.getChildByPath('team.ally.sortedLeftTeam')")
+		(var allyTotalMemberCount:number = "allyCollection.items.length" (event "allyCollection.evAdded") (event "allyCollection.evRemoved"))
+
+		(var enemyTeamsCollection:gfx = "collection.getChildByPath('team.enemy.byTeams')" (event "collection.evChildAdded") (event "collection.evChildRemoved"))
+		(var enemyTeamsCount:number = "enemyTeamsCollection.childrenCount ?: 0" (event "enemyTeamsCollection.evChildrenCountChanged"))
+		(var enemyFirstTeam:gfx = "enemyTeamsCount ? enemyTeamsCollection.child(0) : null")
+		(var enemyFirstTeamMemberCount:number = " enemyFirstTeam.items.length ?: 0")
+		(var isSimplyCentered:bool = "enemyTeamsCount >= MIN_ENEMY_TEAMS_TO_SIMPLE_CENTER_ALIGN")
+		(var allyLeftPadding:number = "!isSimplyCentered && allyTotalMemberCount < enemyFirstTeamMemberCount ? (enemyFirstTeamMemberCount - allyTotalMemberCount) * HEADER_SHIP_ITEM_WIDTH : 0")
+		(var enemyRightPadding:number = "!isSimplyCentered && allyTotalMemberCount > enemyFirstTeamMemberCount ? (allyTotalMemberCount - enemyFirstTeamMemberCount) * HEADER_SHIP_ITEM_WIDTH : 0")
+
+		
+		(var diplomacyRelationCollection:gfx = "$datahub.getCollection(CC.diplomacyRelation)")
+		(var hasDiplomacyRelations:bool = "diplomacyRelationCollection.items.length > 0" (event "diplomacyRelationCollection.evAdded"))
+		(var isGloballyEnabled:bool = "!hasDiplomacyRelations")
+	)
+
+	(style (align = "center"))
+	(block
+		(controller $Instance renderer='HeaderShipListMultiTeams'
+			(bind enabled "isGloballyEnabled")
+			(args
+				_allyCollection = "allyCollection"
+				_enemyCollection = "enemyTeamsCollection"
+				_allyLeftPadding = "allyLeftPadding"
+				_enemyRightPadding = "enemyRightPadding"
+			)
+		)
+	)
+)
+
+(def element HeaderShipListAlly (_allyCollection:gfx, _allyLeftPadding:number)
+	(scope
+		(var allyTotalMemberCount:number = "_allyCollection.items.length" (event "_allyCollection.evAdded") (event "_allyCollection.evRemoved"))
+		(var allyItemsWidth:number = "allyTotalMemberCount * HEADER_SHIP_ITEM_WIDTH")
+	)
+
+	(style
+		(height = "HEADER_SHIP_CONTAINER_HEIGHT")
+		(flow = "horizontal")
+	)
+	(hblock
+		(style
+			(bind marginLeft "_allyLeftPadding")
+			(bind width "allyItemsWidth")
+		)
+		(controller $Repeat renderer='BattleShipListRenderer'
+			(bind count "allyTotalMemberCount")
+			(args _collection = "_allyCollection" _isAlly = true)
+		)
+	)
+)
+
+(def element HeaderShipListMultiTeams (_allyCollection:gfx, _enemyCollection:gfx, _allyLeftPadding:number, _enemyRightPadding:number)
+	(scope
+		(var enemyChildCount:number = "_enemyCollection.childrenCount ?: 0" (event "_enemyCollection.evChildrenCountChanged"))
+
+		(var capturePointsCollection:gfx = "$datahub.getCollection(CC.capturePoint)")
+		(var capturePointsCollectionSorted:gfx = "capturePointsCollection.getChildByPath('active')" (event "capturePointsCollection.evChildAdded") (event "capturePointsCollection.evChildRemoved"))
+		(var capturePointsCount:number = "capturePointsCollectionSorted.items.length" (event "capturePointsCollectionSorted.evAdded") (event "capturePointsCollectionSorted.evRemoved") (event "capturePointsCollectionSorted.evUpdated"))
+
+		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
+		(var isPointCounterForcedVisible:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.CAPTURE_POINT_COUNTER) > 0")
+
+		(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
+		(var gameModeId:number = "battleDataEntity.battleInfo.gameModeId")
+
+		(var isOneEnemyTeam:bool = "enemyChildCount == 1")
+		(var isAlliesOnly:bool = "enemyChildCount == 0 || gameModeId == SC.Battle.GAME_MODE.PVE")
+		(var isPointCounterVisible:bool = "(isOneEnemyTeam || isAlliesOnly) && (capturePointsCount || isPointCounterForcedVisible)")
+	)
+
+	(style (height = "HEADER_SHIP_CONTAINER_HEIGHT") (flow = "horizontal"))
+
+	(block
+		(element HeaderShipListAlly
+			_allyCollection="_allyCollection"
+			_allyLeftPadding = "isAlliesOnly ? 0 : _allyLeftPadding"
+		)
+	)
+
+	(block
+		(bind visible "isPointCounterVisible")
+		(controller $Instance renderer='PointCounter'
+			(bind enabled "isPointCounterVisible")
+			(args _isAlliesOnly="isAlliesOnly")
+		)
+	)
+	(block
+		(bind visible "!isPointCounterVisible && !isAlliesOnly")
+		(style (width = "HEADER_TEAMS_DISTANCE"))
+	)
+
+	(hblock
+		(controller $Repeat renderer='HeaderOneEnemyTeam'
+			(bind enabled "!isAlliesOnly")
+			(bind count "enemyChildCount")
+			(args
+				_enemyRightPadding="_enemyRightPadding"
+				_enemyCollection="_enemyCollection"
+			)
+		)
+	)
+)
+
+(def element HeaderOneEnemyTeam (_enemyRightPadding:number, _enemyCollection:gfx)
+	(scope
+		(var teamChildCollection:gfx = "_enemyCollection.child($index)")
+		(var enemyChildCount:number = " _enemyCollection.childrenCount ?: 0" (event "_enemyCollection.evChildrenCountChanged"))
+		(var oneEnemySortedTeamCollection:gfx = "teamChildCollection" watch=false)
+		(var itemCount:number = "oneEnemySortedTeamCollection.items.length ?: 0" (event "oneEnemySortedTeamCollection.evAdded") (event "oneEnemySortedTeamCollection.evRemoved"))
+		(var enemyItemsWidth:number = "itemCount * HEADER_SHIP_ITEM_WIDTH")
+
+		(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
+		(var isFogOfWar:bool = "battleDataEntity && battleDataEntity.battleInfo.isFogOfWar")
+	)
+	(style
+		(height = "HEADER_SHIP_CONTAINER_HEIGHT")
+		(flow = "horizontal")
+		(bind marginLeft "enemyChildCount > 1 ? L : 0")
+		(bind width "enemyItemsWidth + _enemyRightPadding")
+	)
+
+	(controller $Repeat renderer='BattleShipListRenderer'
+		(bind count "itemCount")
+		(args
+			_collection = "oneEnemySortedTeamCollection"
+			_isAlly = false
+			_isFogOfWar = "isFogOfWar"
+		)
+	)
+)
+
+(def element BattleShipListRenderer (_collection:gfx, _isAlly:bool, _isFogOfWar:bool="false")
+	(scope
+		
+		(var collection:gfx = "_collection")
+		(var entity:gfx = "collection.items[$index]" watch=false (event "collection.evAdded") (event "collection.evRemoved"))
+
+		(var avatarAnimation:gfx = "entity.avatarAnimation")
+
+		(var relationComponent:gfx = "entity.relation")
+		(var isEnemy:bool = "relationComponent.value == SC.Battle.PLAYER_RELATION.ENEMY" (event "relationComponent.evChanged"))
+		(macro PULL_INFO_ABOUT_SHIP_DETECTION "entity.id" "_isFogOfWar")
+		(var isShipHidedByFogOfWar:bool = "isDetectionInfoHidden && isEnemy")
+	)
+
+	(bind name "'HeaderIconShip_'+ (_isAlly ? 'Ally_' : 'Enemy_') + $index")
+
+	(style (position = "absolute") (left = "$index * HEADER_SHIP_ITEM_WIDTH"))
+
+	(controller $Animation
+		(bindcall play
+			duration = "HEADER_SHIP_ITEM_DURATION"
+			delay = "HEADER_SHIP_ITEM_DELAY"
+			from="{left:avatarAnimation.fromIndex * HEADER_SHIP_ITEM_WIDTH}"
+			to="{left:avatarAnimation.toIndex * HEADER_SHIP_ITEM_WIDTH}"
+			watch=false
+			action="killAll"
+			(event "avatarAnimation.evPlayMoveAnimation")
+		)
+
+		(bindcall play
+			duration = "HEADER_SHIP_ITEM_DURATION"
+			delay = "HEADER_SHIP_ITEM_DELAY"
+			from="{left:avatarAnimation.fromIndex * HEADER_SHIP_ITEM_WIDTH}"
+			to="{left:avatarAnimation.toIndex * HEADER_SHIP_ITEM_WIDTH}"
+			watch=false
+			action="killAll"
+			(event "avatarAnimation.evPlayDeathAnimation")
+		)
+	)
+
+	(block
+		(style 
+			(width = "SHIP_ICON_SIZE.WIDTH")
+			(height = "SHIP_ICON_SIZE.HEIGHT")
+			(pivotX = "SHIP_ICON_SIZE.WIDTH/2")
+			(pivotY = "SHIP_ICON_SIZE.HEIGHT/2")
+		)
+
+		(controller $Instance renderer='ShipMarkerIconSimple'
+			(bind enabled "!isShipHidedByFogOfWar")
+			(args _markerEntity = "entity")
+		)
+		(controller $Instance renderer='ShipMarkerIconNotDetected'
+			(bind enabled "isShipHidedByFogOfWar")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = "HEADER_SHIP_ITEM_DURATION"
+				from={alpha:1, scaleX:1, scaleY:1}
+				to={alpha:0, scaleY:0.1, scaleX:0.1}
+				watch=false
+				(event "avatarAnimation.evPlayStartDeathAnimation")
+			)
+			(bindcall play
+				duration = "HEADER_SHIP_ITEM_DURATION"
+				delay = "HEADER_SHIP_ITEM_DOUBLE_DELAY"
+				from={alpha:0, scaleY:0.1, scaleX:0.1}
+				to={alpha:1, scaleY:1, scaleX: 1}
+				watch=false
+				(event "avatarAnimation.evPlayEndDeathAnimation")
+			)
+		)
+	)
+)
+
+(def element PointCounter (_isAlliesOnly:bool)
+	(scope
+		(event evShowAllyPointsDifference)
+		(event evShowEnemyPointsDifference)
+
+		(var teamScoreComponent:gfx = "$datahub.getSingleComponent(CC.battleTeamScore)")
+
+		(var allyScore:number = "teamScoreComponent.allyScore" (event "teamScoreComponent.evAllyScoreChanged"))
+		(var allyScorePrev:number = "teamScoreComponent.allyScore" (event "evShowAllyPointsDifference"))
+		(var allyScoreAnimated:number = "teamScoreComponent.allyScore" watch=false)
+
+		(var enemyScore:number = "teamScoreComponent.enemyScore" (event "teamScoreComponent.evEnemyScoreChanged"))
+		(var enemyScorePrev:number = "teamScoreComponent.enemyScore" (event "evShowEnemyPointsDifference"))
+		(var enemyScoreAnimated:number = "teamScoreComponent.enemyScore" watch=false)
+
+		(controller $Animation
+			(bindcall play to="{allyScoreAnimated: allyScore}" duration=0.55 delay=0.55 easing="Easing.line" (event "evShowAllyPointsDifference"))
+			(bindcall play to="{enemyScoreAnimated: enemyScore}" duration=0.55  delay=0.55 easing="Easing.line" (event "evShowEnemyPointsDifference"))
+		)
+	)
+
+	(dispatch evShowEnemyPointsDifference args="{value: enemyScore - enemyScorePrev}" (event "teamScoreComponent.evEnemyScoreChanged"))
+	(dispatch evShowAllyPointsDifference args="{value: allyScore - allyScorePrev}" (event "teamScoreComponent.evAllyScoreChanged"))
+
+	(style
+		(height = "HEADER_SHIP_CONTAINER_HEIGHT")
+		(flow = "horizontal")
+		(align = "center|middle")
+	)
+
+	(hblock
+		(style (height = 100%) (width = "POINT_COUNTER_ITEM_WIDTH") (align = "right|middle"))
+		(block
+			(style (align = "right|middle") (marginRight = "XS"))
+			(controller $FxInstance renderer='CapturingPointsIndicatorReceivedValue' lifetime=1
+				(args _value="$event.value")
+				(bindcall create (event "evShowAllyPointsDifference"))
+			)
+		)
+		(tf
+			(class $TextDefaultBold21NM)
+			(style (textAlign = "right") (bind width "tr(floor(allyScoreAnimated)).length * ONE_DIGIT_WIDTH"))
+			(bind text "floor(allyScoreAnimated)")
+		)
+	)
+
+	(hblock
+		(style (height = 100%) (align = "center|middle"))
+		(bind visible "!_isAlliesOnly")
+		(block
+			(style (marginLeft = 6px) (marginRight = "XS") (width = 4px))
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (textAlign = "center"))
+				(text = 'IDS_COLON')
+			)
+		)
+
+		(hblock
+			(style (height = 100%) (width = "POINT_COUNTER_ITEM_WIDTH") (align = "left|middle"))
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (bind width "tr(floor(enemyScoreAnimated)).length * ONE_DIGIT_WIDTH"))
+				(bind text "floor(enemyScoreAnimated)")
+			)
+			(block
+				(style (marginLeft = "XS"))
+				(controller $FxInstance renderer='CapturingPointsIndicatorReceivedValue' lifetime=1
+					(bind enabled "!_isAlliesOnly")
+					(args _value="$event.value")
+					(bindcall create (event "evShowEnemyPointsDifference"))
+				)
+			)
+		)
+	)
+)
+
+
+(def element CapturingPointsIndicatorReceivedValue (_value:number)
+	(controller $Animation
+		(bindcall play
+			keyframes =
+			"[
+				{ frame:0, 	to:{marginTop: 4px, 	alpha:0} },
+				{ frame:15, to:{marginTop: 0px, 	alpha:1} },
+				{ frame:45, to:{marginTop: 0px, 	alpha:1} },
+				{ frame:60, to:{marginTop: -3px, 	alpha:0} }
+			]"
+			repeatCount=1
+			on='addedToStage'
+		)
+	)
+	(tf
+		(class $TextDefaultBold13NM)
+		(bind text "_value < 0 ? _value : '+' + _value")
+	)
+)

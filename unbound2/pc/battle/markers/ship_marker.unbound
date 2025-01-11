@@ -1,0 +1,668 @@
+(def constant SHIP_ICON_SIZE {
+	WIDTH: 28,
+	HEIGHT: 27
+})
+
+(def constant DIPLOMACY_TEAM_ICON_SIZE {
+	WIDTH: 20,
+	HEIGHT: 20
+})
+
+(def constant CONSUMABLE_SLOT_SIZE "34")
+
+
+(def element ShipMarkerIconSimple (_markerEntity:gfx) layout=true
+	(scope
+		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
+		(var isMultyTeamEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.MULTYTEAMS) > 0")
+
+		(var avatarComponent:gfx = "_markerEntity.avatar")
+		(var teamId:number = "avatarComponent.teamId ?: 0" (event "avatarComponent.evTeamIdChanged"))
+		(var subType:str = "avatarComponent.shipType" (event "avatarComponent.evShipTypeChanged"))
+		(var shipType:str = "subType ? toLower(subType): ''")
+
+		(var relationComponent:gfx = "_markerEntity.relation")
+		(var relationName:str = "toLower(SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationComponent.value])" (event "relationComponent.evChanged"))
+		(var isSelf:bool = "relationComponent && relationComponent.value == SC.Battle.PLAYER_RELATION.SELF" (event "relationComponent.evChanged"))
+		(var isAlly:bool = "relationComponent && isIn(relationComponent.value, SC.Battle.PLAYER_RELATION.ALLIES)" (event "relationComponent.evChanged"))
+		(var isEnemy:bool = "relationComponent && relationComponent.value == SC.Battle.PLAYER_RELATION.ENEMY" (event "relationComponent.evChanged"))
+		(var isAlive:bool = "_markerEntity.health.isAlive" (event "_markerEntity.health.evIsAliveChanged") (event "_markerEntity.evAdded"))
+		(var isDeadEnemy:bool = "!isAlly && !isSelf && !isAlive")
+
+		(var markerColorName:str = 
+			"	isDeadEnemy			? 'enemy_sunk' :
+				!isAlive			? 'sunk' :
+				!isEnemy			? relationName :
+				isMultyTeamEnabled	? MULTI_TEAMS_COLOR_NAMES[teamId]
+									: 'enemy'
+		")
+
+		(var iconName:str = "shipType + '_' + markerColorName")
+	)
+	(block
+		(style
+			(pivotX = "SHIP_ICON_SIZE.WIDTH/2")
+			(pivotY = "SHIP_ICON_SIZE.HEIGHT/2")
+			(bind backgroundImage "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:' + iconName")
+		)
+	)
+)
+
+(def element ShipMarkerIconNotDetected () layout=true
+	(style
+		(pivotX = "SHIP_ICON_SIZE.WIDTH/2")
+		(pivotY = "SHIP_ICON_SIZE.HEIGHT/2")
+		(bind backgroundImage "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:not_detected_enemy'")
+	)
+)
+
+(def element ShipMarkerIconItem (_markerEntity:gfx, _rotation:number, _isLampVisibility:bool) layout=true
+	(scope
+		(macro GET_MARKER_ENTITY_COMPONENT 'vehicle')
+		(macro GET_MARKER_ENTITY_COMPONENT 'relation')
+		(macro GET_MARKER_ENTITY_COMPONENT 'avatar')
+
+		(var relationValue:number = "relationComponent ? relationComponent.value : -1" (event "relationComponent.evChanged"))
+		(var isSelf:bool = "relationValue == SC.Battle.PLAYER_RELATION.SELF")
+		(var isAlive:bool = "_markerEntity.health ? _markerEntity.health.isAlive : false" (event "_markerEntity.health.evIsAliveChanged"))
+		(var isEnemy:bool = "relationComponent && relationComponent.value == SC.Battle.PLAYER_RELATION.ENEMY" (event "relationComponent.evChanged"))
+
+		(var subType:str = "avatarComponent.shipType" (event "avatarComponent.evShipTypeChanged"))
+		(var shipType:str = "subType ? toLower(subType): ''")
+
+		(macro IS_ON_PLANE)
+
+		(macro ALT_VISION_SCOPE)
+
+		(var isAltInterface:bool = "altVisionMode == AltVisionMode.ENABLED || altVision")
+
+		(var hasDiplomacyComponent:bool = "_markerEntity.hasComponent(CC.diplomacyRelation)")
+
+		(var iconHeight:number = "hasDiplomacyComponent ? DIPLOMACY_TEAM_ICON_SIZE.HEIGHT : SHIP_ICON_SIZE.HEIGHT")
+		(var iconWidth:number = "hasDiplomacyComponent ? DIPLOMACY_TEAM_ICON_SIZE.WIDTH : SHIP_ICON_SIZE.WIDTH")
+
+		(var useDiplomacyIcon:bool = "hasDiplomacyComponent && !(isSelf)")
+
+		(var addRotation:number = "!(useDiplomacyIcon) 	? isTactical 	? (90 * (relationValue == SC.Battle.PLAYER_RELATION.ENEMY ? 1 : -1))
+																		: 0
+														: 0")
+
+		(var colorOffset:number = "0" watch=false)
+		(controller $Animation
+			(bindcall play	duration=0.15
+							from={colorOffset: 0}
+							to={colorOffset: 160}
+							action="killAll"
+							(event "vehicleComponent.evHit")
+			)
+			(bindcall play	duration=0.45
+							delay=0.15
+							from={colorOffset: 160}
+							to={colorOffset: 0}
+							(event "vehicleComponent.evHit")
+			)
+		)
+	)
+	(class $WorldMarkerItemMargins)
+	(style
+		(bind width "iconWidth")
+		(bind height "iconHeight")
+		(align = "center|middle")
+	)
+
+	(block
+		(style
+			(width = 0) (height = 0)
+			(align = "center|middle")
+			(bind rotation "_rotation + addRotation")
+		)
+
+		(block
+			(bind visible "_isLampVisibility && isAltInterface && isAlive")
+			(style
+				(position = "absolute")
+				(bind scaleX "isEnemy ? -1 : 1")
+				(pivotX = "SHIP_ICON_SIZE.WIDTH/2")
+				(pivotY = "SHIP_ICON_SIZE.HEIGHT/2")
+			)
+			(controller $Instance renderer='ShipVisibilityIcon'
+				(args "_isLampVisibility" "shipType")
+			)
+		)
+
+		(block
+			(style
+				(width = "SHIP_ICON_SIZE.WIDTH")
+				(height = "SHIP_ICON_SIZE.HEIGHT")
+			)
+			(controller $Instance renderer='ShipMarkerIconSimple'
+				(args "_markerEntity")
+				(bind enabled "!(useDiplomacyIcon) && !(isTactical && isSelf && !(isOnPlane))")
+			)
+		)
+
+		(controller $Instance renderer='ShipMarkerIconOwnTactical'
+			(args "_markerEntity")
+			(bind enabled "!(useDiplomacyIcon) && isTactical && isSelf && !(isOnPlane)")
+		)
+
+		(controller $Instance renderer='DiplomacyShipTeamIcon'
+			(args "_markerEntity")
+			(bind enabled "useDiplomacyIcon && !(isTactical)")
+		)
+
+		(controller $Instance renderer='DiplomacyMapMarkerShipIcon'
+			(args "_markerEntity")
+			(bind enabled "useDiplomacyIcon && isTactical")
+		)
+
+		(bind colorTransform "{redOffset: colorOffset, greenOffset: colorOffset, blueOffset: colorOffset}")
+
+		(block
+			(bind visible "!isTactical && isAltInterface")
+			(style
+				(position = "absolute")
+				(pivotX = "SHIP_ICON_SIZE.WIDTH/2")
+				(pivotY = "SHIP_ICON_SIZE.HEIGHT/2")
+			)
+			(controller $Instance renderer='ShipVisibilityPoint'
+				(args "_isLampVisibility")
+				(bind enabled "_isLampVisibility")
+			)
+		)
+	)
+)
+
+(def element ShipMarkerIconOwnTactical (_markerEntity:gfx) layout=true
+	(style
+		(position = "absolute")
+		(left = -11) (top = -10)
+		(width = 23) (height = 19)
+		(backgroundImage = 'bitmap:own_tactical_map_small')
+		(align = "center|middle")
+	)
+
+	(block
+		(class $WorldMarkerFXBlur)
+		(class $FullsizeAbsolute)
+		(style
+			(width = 23) (height = 19)
+			(backgroundImage = 'bitmap:own_tactical_map_small')
+			(pivotX = 50%)
+			(pivotY = 50%)
+			(left = 0%) 
+			(top = 0%)  
+		)
+
+		(controller $Animation
+			(play 	duration=1.15
+					delay=0.85
+					from="{alpha: 1, scaleX: 0, scaleY: 0}"
+					to="{alpha: 0, scaleX: 3.8, scaleY: 3.8}"
+					repeatCount=-1
+			)
+		)
+	)
+)
+
+(def element DiplomacyShipTeamIcon (_markerEntity:gfx) layout=true
+	(scope
+		(macro GET_MARKER_ENTITY_COMPONENT 'avatar')
+		(var teamId:number = "avatarComponent ? avatarComponent.teamId : 0" (event "avatarComponent.evTeamIdChanged"))
+	)
+
+	(style
+		(width = "DIPLOMACY_TEAM_ICON_SIZE.WIDTH")
+		(height = "DIPLOMACY_TEAM_ICON_SIZE.HEIGHT")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "'url:../battle_hud/diplomacy/teams/diplomacy_team_' + teamId + '.png'")
+		)
+	)
+)
+
+(def element ShipVisibilityIcon(_isLampVisibility:bool, _shipType:str)
+	(style
+		(bind backgroundImage "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:' + _shipType + '_visibility'")
+	)
+	(controller $Animation
+		(bindcall play
+			duration=0.3
+			easing="Easing.quad_in_out"
+			from="{alpha:0}"
+			to="{alpha:1}"
+			(bind trigger "_isLampVisibility")
+		)
+	)
+)
+
+(def element ShipVisibilityPoint(_isLampVisibility:bool)
+	(style
+		(bind backgroundImage  "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:attention_visibility'")
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration=0.5
+			easing="Easing.quad_in_out"
+			from="{alpha:0}"
+			to="{alpha:1}"
+			(bind trigger "_isLampVisibility")
+
+		)
+		(play
+			duration=0.3
+			delay=2
+			easing="Easing.quad_in_out"
+			from="{alpha:1}"
+			to="{alpha:0}"
+		)
+	)
+)
+
+(def layout WorldShipMarker (_markerEntity:gfx)
+	(scope
+		(event evMarkerShow)
+		(event evMarkerHide)
+		(event evUpdateRotation)
+
+		
+		(var timer:gfx = "$datahub.getSingleComponent(CC.timer)")
+		(macro GET_MARKER_ENTITY_COMPONENT 'avatar')
+		(macro GET_MARKER_ENTITY_COMPONENT 'distance')
+		(macro GET_MARKER_ENTITY_COMPONENT 'health')
+		(macro GET_MARKER_ENTITY_COMPONENT 'relation')
+		(macro GET_MARKER_ENTITY_COMPONENT 'target')
+		(macro GET_MARKER_ENTITY_COMPONENT 'mapPosition')
+		(macro GET_MARKER_ENTITY_COMPONENT 'dissolve')
+		(macro GET_MARKER_ENTITY_COMPONENT 'scenarioTag')
+
+		
+		(macro ALT_VISION_SCOPE)
+
+		
+		(dispatch evUpdateRotation args={} (event "timer.evFrequent") (bind enabled "isTactical"))
+
+		
+		(var visibilityFlags:number = "_markerEntity.vehicle.visibilityFlags" (event "_markerEntity.vehicle.evVisibilityFlagsChanged"))
+		(var targetFlags:number = "targetComponent ? targetComponent.flags : 0" (event "targetComponent.evChanged") (event "targetComponent.evFlagsChanged"))
+		(var isTargetLocked:bool = "(targetFlags & LOCKABLE_WEAPONS) > 0")
+		(var distanceIndex:number = "distanceComponent ? distanceComponent.distanceIndex : SC.Battle.DISTANCE_TYPE.NEAR" (event "distanceComponent.evDistanceIndexChanged"))
+		(var relationValue:number = "relationComponent ? relationComponent.value : -1" (event "relationComponent.evChanged"))
+		(var shipRotation:number = "mapPositionComponent ? radToGrad(mapPositionComponent.yaw) : 0" (event "evUpdateRotation"))
+		(var iconRotation:number = "isTactical ? shipRotation : 0")
+
+		
+		(var hasDiplomacyComponent:bool = "_markerEntity.hasComponent(CC.diplomacyRelation)")
+		(var isBot:bool = "(avatarComponent ? avatarComponent.isBot : false) || _markerEntity.hasComponent(CC.bot)")
+		(var hidePlayerName:bool = "hasDiplomacyComponent && isBot")
+
+		
+		(macro IS_ON_PLANE)
+
+		
+		(var hasBattery:bool = "_markerEntity.hasComponent(CC.battery)" (event "_markerEntity.evAdded"))
+		(var hasSubmarineScreenPosition:bool = "_markerEntity.hasComponent(CC.submarineScreenPosition)" (event "_markerEntity.evAdded"))
+
+		
+		(var isSelf:bool = "relationValue == SC.Battle.PLAYER_RELATION.SELF")
+		(var isEnemy:bool = "relationValue == SC.Battle.PLAYER_RELATION.ENEMY")
+		(var isAlive:bool = "healthComponent && healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
+		(var distanceType:number = "isTactical || (isOnPlane && isSelf)		? SC.Battle.DISTANCE_TYPE.TACTICAL :
+									isTargetLocked || isFullAltVisionMode 	? SC.Battle.DISTANCE_TYPE.NEAR
+																			: distanceIndex")
+		(var isDistanceTypeTactical:bool = "distanceType == SC.Battle.DISTANCE_TYPE.TACTICAL")
+		(var isDistanceTypeFarthest:bool = "distanceType == SC.Battle.DISTANCE_TYPE.FARTHEST")
+		(var farAdaptiveAltVisionMode:bool = "isAdaptiveAltVisionMode && distanceType <= SC.Battle.DISTANCE_TYPE.FAR")
+
+		(var teamId:number = "avatarComponent.teamId")
+		(var shipName:str = "avatarComponent.ship.ref.ship.nameUpper ?: ''" (event "avatarComponent.evShipRefChanged"))
+		(var playerName:str = "avatarComponent.name ?: ''")
+
+		(macro IS_SPECTATOR_MODE)
+		(var distanceTypeForConsumablesMonitor:number = "isTargetLocked	? SC.Battle.DISTANCE_TYPE.NEAR : distanceIndex")
+		(var isConsumablesMonitorVisible:bool = "isSpectatorTrainingMode && distanceTypeForConsumablesMonitor <= SC.Battle.DISTANCE_TYPE.FAR && !isTactical")
+		
+		(var shipNameItemVisibility:bool = "(isDistanceTypeTactical && isAdaptiveAltVisionMode || farAdaptiveAltVisionMode) && !(isSelf && isTactical)")
+		(var playerNameItemVisibility:bool = "!isDistanceTypeTactical && farAdaptiveAltVisionMode && !hidePlayerName && !isSelf && !isSpectatorTrainingMode")
+		(var distanceItemVisibility:bool = "(!isIn(distanceType, [SC.Battle.DISTANCE_TYPE.TACTICAL, SC.Battle.DISTANCE_TYPE.FARTHEST]) || isAdaptiveAltVisionMode) && !isSelf")
+
+		(var weaponController:gfx = "$datahub.getSingleComponent(CC.weaponController)")
+		(var selectedWeapon:number = "weaponController ? weaponController.selectedWeapon : SC.Ships.SHIP_WEAPON_TYPES.NONE" (event "weaponController.evSelectedWeaponChanged"))
+
+		(macro GET_MARKER_ENTITY_COMPONENT 'canHit')
+		(var canHitFlags:number = "canHitComponent ? canHitComponent.flags : 0" (event "canHitComponent.evChanged"))
+		(var cantHit:bool = "selectedWeapon != SC.Ships.SHIP_WEAPON_TYPES.NONE 	? !(canHitFlags & (1 << selectedWeapon))
+																				: false")
+
+		(var healthBarItemLarge:bool = "isAdaptiveAltVisionMode && distanceType <= SC.Battle.DISTANCE_TYPE.FAR || isSpectatorTrainingMode")
+		(var healthBarItemVisible:bool = "((isAdaptiveAltVisionMode && distanceType <= SC.Battle.DISTANCE_TYPE.FARTHEST) || (distanceType == SC.Battle.DISTANCE_TYPE.NEAR) || (isTargetLocked && distanceType != SC.Battle.DISTANCE_TYPE.TACTICAL)) && !(isSelf)")
+		(var batteryBarItemVisible:bool = "hasBattery && healthBarItemVisible")
+		(var cantHitItemVisible:bool = "(isAdaptiveAltVisionMode || isTargetLocked || distanceType < SC.Battle.DISTANCE_TYPE.FAR) && !(isSelf) && cantHit")
+
+		(var innerVisible:bool = "ownCarrierEntity && isSelf ? (isTactical || isOnPlane) : true")
+		(macro SCOPE_HIGHLIGHT_MARKER_ON_WORLD_MOUSE_OVER)
+
+		(macro GET_PREF 'showLampVisibility' "'ui.showLampVisibility'")
+
+		(var cameraMode:number = "cameraEntity.camera.mode" (event "cameraEntity.camera.evModeChanged"))
+		(var isPlaneTraker:bool = "cameraMode == SC.Battle.CAMERA_MODE.PLANETRACKER")
+
+		(var isTeamVisibleInSpectate:bool = "isSpectatorTrainingMode || !isEnemy")
+		(var isSpectatorInNotTacticalMap:bool = "isSpectatorTrainingMode && !isTactical")
+		(var isLampVisibility:bool = "visibilityFlags > 0 && showLampVisibility && !isSelf && isTeamVisibleInSpectate")
+
+		(var consumableCollection:gfx = "$datahub.getCollection(CC.battleConsumable)")
+		(var allConsumableByAvatar:gfx = "consumableCollection.getChildByPath('byAvatarIdAndSquadronOwner.' + avatarComponent.id + '_' + DEFAULT_SQUADRON_OWNER_ID)" (event "consumableCollection.evChildAdded") (event "consumableCollection.evChildRemoved"))
+		(var allConsumableList:array = "allConsumableByAvatar.items" (event "allConsumableByAvatar.evAdded") (event "allConsumableByAvatar.evRemoved") (event "allConsumableByAvatar.evUpdated"))
+
+		(var allActiveConsumableByAvatar:gfx = "allConsumableByAvatar.getChildByPath('active.sorted')" (event "consumableCollection.evChildAdded") (event "consumableCollection.evChildRemoved"))
+		(var activeConsumableList:array = "allActiveConsumableByAvatar.items" (event "allActiveConsumableByAvatar.evAdded") (event "allActiveConsumableByAvatar.evRemoved") (event "allActiveConsumableByAvatar.evUpdated"))
+
+		(var isAltInterface:bool = "altVisionMode == AltVisionMode.ENABLED || altVision")
+		(var timerEntity:gfx = "$datahub.getSingleEntity(CC.timer)")
+		(var currentTime:number = "timerEntity.timer.currentTime ?: 0" (event "timerEntity.timer.evFrequent"))
+	)
+
+	(dispatch evMarkerShow args="{}" on='addedToStage')
+
+	(style
+		(width = 0) (height = 0)
+		(bind align "isTactical ? center|middle : center|bottom")
+	)
+
+	(bind visible "innerVisible")
+	(alpha = "isSelf ? 1 : 0")
+
+	(controller $Animation
+		(bindcall play	duration="DEATH_ANIMATION_DURATION"
+						from="{alpha: 0}"
+						to="{alpha: 1}"
+						init=false
+						watch=false
+						action="killAll"
+						reverse="!(isAlive)"
+						(bind trigger "isAlive")
+		)
+
+		(macro MARKER_DISSOLVE_BINDCALL_ANIMATION "!(isSelf)")
+	)
+
+	
+	(hblock
+		(bind visible "!isAltInterface && isConsumablesMonitorVisible")
+
+		(style (marginBottom = "S"))
+		(controller $Repeat renderer='ShipConsumableItem'
+			(bind enabled "isSpectatorTrainingMode")
+			(bind count "activeConsumableList.length")
+			(args
+				_consumableEntity = "activeConsumableList[$index]"
+			)
+		)
+	)
+	
+	(hblock
+		(bind visible "isAltInterface && !isTactical && isSpectatorTrainingMode")
+
+		(style (marginBottom = "S"))
+		(controller $Repeat renderer='ShipConsumableItem'
+			(bind enabled "isSpectatorTrainingMode")
+			(bind count "allConsumableList.length")
+			(args
+				_consumableEntity = "allConsumableList[$index]"
+				_currentTime = "currentTime"
+				_isAltInterface = "true"
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(width = 0)
+			(align = "center|top")
+			(position = "absolute")
+			(bind alpha "distanceItemVisibility ? 1 : 0")
+			(bind top "isTactical ? SHIP_ICON_SIZE.HEIGHT + DEPTH_INDICATOR_OFFSET_TACTICAL : 0")
+		)
+		(controller $Instance renderer='SubmarineDepthItem'
+			(bind enabled "hasSubmarineScreenPosition && !isSelf")
+			(args _markerEntity="_markerEntity")
+		)
+	)
+
+	
+	(block
+		(bind visible "isSpectatorInNotTacticalMap")
+		(style (marginBottom = "XXS"))
+		(controller $Instance renderer='PlayerNameItem'
+			(bind enabled "isSpectatorInNotTacticalMap")
+			(args
+				_playerName="playerName"
+				_isBot="isBot"
+				_isBold="true"
+				_fontSize="isDistanceTypeFarthest ? 11 : 13"
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "!isSpectatorTrainingMode || isTactical")
+		(style
+			(width = 0) (zindex = 4)
+			(align = "center|bottom")
+			(bind position "isTactical ? absolute : relative")
+			(bind bottom "isTactical ? SHIP_ICON_SIZE.HEIGHT/2 : 0")
+		)
+
+		(block
+			(element PriorityItem "_markerEntity")
+			(element TargetAnimationItem "_markerEntity"
+				(style
+					(position = "absolute")
+					(top = 0) (left = 50%)
+				)
+			)
+			(block
+				(style
+					(position = "absolute")
+					(bind top "isTactical ? -24 : -28") (left = 50%)
+				)
+				(controller $Instance renderer='ScenarioTagItem'
+					(bind enabled "scenarioTagComponent")
+					(args _markerEntity="_markerEntity")
+				)
+			)
+		)
+
+		(block
+			(controller $Instance renderer='SimpleMarkerTextItem'
+				(bind enabled "shipNameItemVisibility")
+				(args _value="shipName")
+			)
+		)
+	)
+
+	
+	(hblock
+		(bind visible "isSpectatorInNotTacticalMap")
+		(macro BIND_SCALE "isDistanceTypeFarthest ? 0.7 : 1")
+		(style
+			(align = "middle|center")
+			(marginTop = -7px) 
+			(marginBottom = -6px) 
+		)
+		(block
+			(controller $Instance renderer='ShipMarkerIconItem'
+				(bind enabled "isSpectatorTrainingMode")
+				(args
+					_markerEntity="_markerEntity"
+					_rotation="iconRotation"
+					_isLampVisibility="isLampVisibility"
+				)
+			)
+		)
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(marginLeft = "XS")
+				(bind textColor "isEnemy ? C_ENEMY : C_ALLY")
+			)
+			(bind text "shipName")
+		)
+	)
+
+	
+	(block
+		(bind visible "!isSpectatorTrainingMode || isTactical")
+		(element ShipMarkerIconItem "_markerEntity" "iconRotation" "isLampVisibility"
+			(style
+				(marginTop = "-6") 
+				(marginBottom = "-5") 
+			)
+			(macro EFFECT_HIGHLIGHT_MARKER_ON_MOUSE_OVER)
+			(macro BIND_SCALE "isDistanceTypeFarthest ? 0.7 : 1")
+		)
+		(element TargetLockItem "_markerEntity"
+			(style
+				(position = "absolute")
+				(left = 50%) (top = 50%)
+			)
+			(macro BIND_FAIR_SCALE "isTactical ? 0.7 : 1")
+		)
+		(element EntityStatesItem "_markerEntity"
+			(style
+				(position = "absolute")
+				(left = "-1")
+			)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(bind left "isTargetLocked ? 42 : 24")
+			)
+			(controller $Instance renderer='CanHitItem'
+				(bind enabled "cantHitItemVisible")
+				(args _markerEntity="_markerEntity")
+			)
+		)
+	)
+
+	
+	(block
+		(controller $Instance renderer='PlayerNameItem'
+			(bind enabled "playerNameItemVisibility")
+			(args
+				_playerName="playerName"
+				_isBot="isBot"
+			)
+		)
+	)
+
+	
+	(block
+		(element MarkerHealthBarItem
+			_markerEntity="_markerEntity"
+			_isLarge="healthBarItemLarge"
+
+			(bind visible "healthBarItemVisible")
+			(bind scaleX "isDistanceTypeFarthest ? 0.8 : 1")
+			(bind scaleY "isDistanceTypeFarthest ? 0.7 : 1")
+		)
+		(block
+			(bind visible "batteryBarItemVisible")
+			(style
+				(bind scaleX "isDistanceTypeFarthest ? 0.8 : 1")
+				(bind scaleY "isDistanceTypeFarthest ? 0.7 : 1")
+				(marginTop = -1px)
+			)
+			(controller $Instance renderer='ShipMarkerBatteryBarItem'
+				(bind enabled "hasBattery")
+				(args _markerEntity="_markerEntity" _isLarge="healthBarItemLarge")
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(height = 0px)
+			(width = 0px)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(bind left "healthBarItemLarge ? 48 : 24")
+				(bind bottom "healthBarItemVisible	? healthBarItemLarge ? 22 : 18
+													: 0")
+			)
+			(controller $Instance renderer='ShipMarkerBatteryDamageItem'
+				(bind enabled "hasBattery && !isTactical")
+				(args _markerEntity="_markerEntity")
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "distanceItemVisibility")
+		(style
+			(width = 0)
+			(align = "center|top")
+			(bind position "isTactical ? absolute : relative")
+			(bind top "isTactical ? 15px : 0px")
+		)
+		(element DistanceItem "_markerEntity")
+	)
+)
+
+(def element ShipConsumableItem (_consumableEntity:gfx, _currentTime:number=0, _isAltInterface:bool=false)
+	(scope
+		(var battleConsumableComponent:gfx = "_consumableEntity.battleConsumable")
+		(var atWork:bool = "battleConsumableComponent.state == SC.Battle.CONSUMABLE_STATES.AT_WORK" (event "battleConsumableComponent.evStateChanged"))
+
+		(var consumableNum:number = "battleConsumableComponent.consumeNum" (event "battleConsumableComponent.evConsumeNumChanged"))
+		(var itemImageUrl:str = "'url:../consumables/' + battleConsumableComponent.ident + (consumableNum == 0 && !atWork ? '_empty' : '') + '.png'")
+
+		(var countdown:gfx = "_consumableEntity.countDown" (event "_consumableEntity.evAdded") (event "_consumableEntity.evRemoved"))
+		(var remainTime:number = "countdown ? countdown.endTime - _currentTime : 0" (event "countdown.evEndTimeChanged"))
+		(macro HUMAN_READABLE_COUNTDOWN_SCOPE "remainTime")
+	)
+	(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL") (width = "CONSUMABLE_SLOT_SIZE") (height = "CONSUMABLE_SLOT_SIZE"))
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(width = 30px) (height = 30px)
+			(marginLeft = "XXS") (marginTop = "XXS")
+			(backgroundSize = "fill")
+			(bind backgroundImage "itemImageUrl")
+		)
+	)
+	(block
+		(bind visible "_isAltInterface && consumableNum > 0")
+		(class $FullsizeAbsolute)
+		(style (width = 6px) (height = 8px) (top = "XXS") (right = "XXS"))
+		(tf
+			(class $TextDefault11NM)
+			(bind text "consumableNum")
+		)
+	)
+	(block
+		(bind visible "_isAltInterface && remainTime > 0")
+		(class $FullsizeAbsolute)
+		(style
+			(width = "CONSUMABLE_SLOT_SIZE") (height = 10px) (top = -13px) (align = "middle|center")
+		)
+		(tf
+			(class $TextDefault13NM)
+			(style (bind textColor "atWork ? C_ALLY : 0xFFFBE288"))
+			(bind text "countdownText")
+		)
+	)
+)
+

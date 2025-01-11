@@ -1,0 +1,244 @@
+(def element SignalItemStatic (_id:number, _amount:number=0, _isReward:bool=false, _params:dict={})
+	(scope
+		(var signalEntity:gfx = "$datahub.getPrimaryEntity(CC.signal, _id)")
+		(var signalName:str = "signalEntity.signal.name")
+	)
+
+	(element SignalItemView
+		_signalName = "signalName"
+		_amount = "_amount"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SignalTooltip')
+		(args
+			_id =					"_id"
+			_amount =				"_amount"
+			_noMouseInstructions =	true
+			_isReward =				"_isReward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element SignalItemView (_signalName:str, _amount:number=0)
+	(bind name "'SignalItemDock_' + _signalName")
+	(style
+		(height = 60px)
+		(width = 60px)
+		(bind backgroundImage "'url:../signal_flags/' + _signalName + '.png'")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (align = "bottom|right"))
+
+		(controller $Instance renderer='ImageItemsCounter'
+			(bind enabled "_amount != 0")
+			(args
+				_amount = "_amount"
+			)
+		)
+	)
+)
+
+(def element SignalTooltip (_id:number, _isInstalled:bool=false, _amount:number=0, _noMouseInstructions:bool=false, _isReward:bool=false, _isSlotTooltip:bool=false)
+	(scope
+		
+		
+		
+		
+
+		(macro PULL_SHIP_ID)
+
+		(var shipEntity:gfx = "playerShipId ? $datahub.getPrimaryEntity(CC.ship, playerShipId) : null")
+
+		(struct signalPrice = PULL_PRICE(_entityId = "toString(_id)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(var ownShipInfo:gfx =		"shipEntity ? shipEntity.ownShip : null"			(event "shipEntity.ship.evUpdate"))
+
+		(var isLocked:bool =		"ownShipInfo.isLocked"			(event "ownShipInfo.evUpdateLock"))
+		(var isInFormation:bool =	"ownShipInfo.isInFormation"		(event "ownShipInfo.evUpdateLock"))
+		(var isNeedRepair:bool =	"ownShipInfo.isNeedRepair"		(event "ownShipInfo.evUpdateDockState"))
+
+		(var signalEntity:gfx =			"$datahub.getPrimaryEntity(CC.signal, _id)")
+		(var signalComponent:gfx =		"signalEntity.signal")
+		(var attributesComponent:gfx =	"signalEntity.attributes")
+
+		(var isInstalledDH:bool =	"signalComponent.isInstalled"	(event "signalComponent.evUpdated"))
+		(var canBeBought:bool =		"signalComponent.canBuy"		(event "signalComponent.evUpdated"))
+		(var availability:number =	"signalComponent.availability"	(event "signalComponent.evUpdated"))
+		(var rarity:number =		"signalComponent.rarity ?: 0")
+		(var signalName:str =		"signalComponent.name ?: ''")
+
+		(var signalsInStorage:number = "signalEntity ? signalEntity.countComponent.value : 0"	(event "signalEntity.countComponent.evUpdate"))
+
+		(var attributesPositive:array =	"attributesComponent.positive ?: []"	(event "attributesComponent.evChanged"))
+		(var attributesNegative:array =	"attributesComponent.negative ?: []"	(event "attributesComponent.evChanged"))
+		(var attributesNeutral:array =	"attributesComponent.neutral ?: []"		(event "attributesComponent.evChanged"))
+
+		(var amount:number = "_isReward ? _amount : signalsInStorage")
+		(var isAnyAmount:bool = "amount > 0")
+
+		(var isInstalled:bool =					"isInstalledDH && isAnyAmount && !_isReward")
+		(var isPreinstalled:bool =				"isInstalledDH && !isAnyAmount && !_isReward")
+		(var isPriceVisible:bool =				"!_isReward && canBeBought && signalPrice.info")
+		(var isAvailableThroughMetashop:bool =	"availability == SC.Common.METASHOP_ITEM_AVAILABILITY.NEED_TO_BE_PURCHASED_IN_METASHOP")
+		(var isNotForSaleVisible:bool =			"!_isReward && !canBeBought && !isAvailableThroughMetashop")
+		(var isNotInStorageVisible:bool =		"!isAnyAmount && !isPreinstalled")
+
+		(var unvailableForPurchaseHeaderText:str = "!isNotForSaleVisible ? '' : tr('IDS_UNAVAILABLE_SIGNAL_FOR_PURCHASE_' + rarity)")
+		(var unifiedStatus:str = "isInstalled ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+
+		(var isAmountOrUnavailablityInfoVisible:bool = "isAnyAmount || isNotInStorageVisible || (!_isReward && !isAvailableThroughMetashop)")
+
+		(var headerText:str = "tr('IDS_' + toUpper(signalName))")
+		(var subheaderText:str = "rarity ? tr('IDS_BATTLE_SIGNAL_RARITY_' + rarity) : ''")
+
+		(var mouseInstructionText:str = "!isAnyAmount && canBeBought					? 'IDS_MOUSE_INSTRUCTION_PURCHASE_SIGNAL' :
+										 !isAnyAmount && isAvailableThroughMetashop		? 'IDS_GO_TO_METASHOP_MOUSE_INSTRUCTION' :
+										 _isInstalled									? 'IDS_MOUSE_INSTRUCTION_TAKE_AWAY_SIGNAL'
+																						: 'IDS_MOUSE_INSTRUCTION_INSTALL_SIGNAL'")
+
+		(var mouseInstruction:dict =	"_noMouseInstructions	? null :
+										 isInFormation			? {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																	_text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_SIGNALS' } :
+										 isLocked				? {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																	_text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_SIGNALS' } :
+										 isNeedRepair			? {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																	_text: 'IDS_SERVICE_SHIP_TO_OPERATE_SIGNALS' } :
+										 _isSlotTooltip			? {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																	_text: 'IDS_SIGNAL_SLOT_OPEN_INFOTIP' }
+																: {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																	_text: mouseInstructionText }")
+	)
+	(style (width = 320px) (hitTest = false))
+	
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+			(element TooltipSystemHeaderWithIconAndText
+				_imageUrl=			"'url:../signal_flags/' + signalName + '.png'"
+				_imageWidth =		60px
+				_imageHeight =		60px
+				_unifiedStatus =	"unifiedStatus"
+				_headerText =		"headerText"
+				_subheaderText =	"subheaderText"
+				_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.SIMPLE"
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPreinstalled"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isPreinstalled")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text =				'IDS_PREINSTALLED_SIGNAL'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInstalled && !_isSlotTooltip"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isInstalled && !_isSlotTooltip")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text =				'IDS_INSTALLED'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isAmountOrUnavailablityInfoVisible"))
+		)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="isAmountOrUnavailablityInfoVisible"
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isAnyAmount"
+				(controller $Instance renderer='TooltipSystemCounterLine'
+					(bind enabled "isAnyAmount")
+					(args
+						_title =		"_isReward ? 'IDS_COUNT' : 'IDS_IN_WAREHOUSE'"
+						_count =		"amount"
+						_isAutoWidth =	true
+					)
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isNotInStorageVisible"
+				(controller $Instance renderer='TooltipSystemDescriptionText'
+					(bind enabled "isNotInStorageVisible")
+					(args
+						_descriptionText = 'IDS_OUT_OF_STOCK'
+					)
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isPriceVisible"
+				(controller $Instance renderer='TooltipSystemPriceTagLine'
+					(bind enabled "isPriceVisible")
+					(args
+						_title =		'IDS_COST_COLON'
+						_priceInfo =	"signalPrice.info"
+						_isAutoWidth =	true
+					)
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isNotForSaleVisible"
+				(controller $Instance renderer='TooltipSystemDescriptionText'
+					(bind enabled "isNotForSaleVisible")
+					(args
+						_descriptionText = "unvailableForPurchaseHeaderText"
+					)
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!_isReward && isAvailableThroughMetashop"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isReward && isAvailableThroughMetashop")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.TO_ARMORY"
+					_text =				'IDS_BUY_IN_ARMORY_STATUS'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemParamsModifiersList
+			_attributesPositive = "attributesPositive"
+			_attributesNeutral = "attributesNeutral"
+			_attributesNegative = "attributesNegative"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "mouseInstruction"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "mouseInstruction")
+				(args
+					_unifiedStatus =	"mouseInstruction._unifiedStatus"
+					_text =				"mouseInstruction._text"
+				)
+			)
+		)
+	)
+)

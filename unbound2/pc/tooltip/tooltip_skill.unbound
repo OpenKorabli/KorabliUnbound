@@ -1,0 +1,404 @@
+(def element SkillTooltip (	_skillKey:number=0, _crewId:number=0, _selectedShipClass:str='', _noMouseInstructions:bool=false, _crewInfoMouseInstruction:str='',
+							_isEpicSkillAvailableForSlot:bool=false, _isUnlocked:bool=true, _isSkillInfotipItem:bool=false)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var skillEntity:dhEntity = "getEntity(_skillKey)")
+		(var skill:dhComponent = "skillEntity.skill")
+
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(var isCrewInfoModalWindow:bool =	"isIn('ModalWindowCrewInfo', windowQueue)")
+		(var isUnlockSkillMW:bool =			"isIn('ModalWindowUnlockCrewSkill', windowQueue)")
+		(var isDenySkillMW:bool =			"isIn('ModalWindowDenyCrewSkill', windowQueue)")
+		(var isUnlockOrForgetSkillMW:bool =	"isUnlockSkillMW || isDenySkillMW")
+		
+		(var crewSkillEntity:dhEntity = "getPrimaryEntity(CC.crewSkill, toString(_crewId) + '_' + toString(skillEntity.id))")
+		(var crewSkill:dhComponent = "crewSkillEntity.crewSkill")
+		(var isCrewSkillLearned:bool = "crewSkill != null")
+
+		(struct crew =		PULL_CREW(_crewId = "_crewId"))
+
+		(var doesPlayerHaveSkillMentor:bool =	"skillEntity.availableSkill != null"	(event "skillEntity.evAdded") (event "skillEntity.evRemoved"))
+
+		(var classificationId:number = "crew.component.classificationId")
+		(var isCrewElite:bool = "classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+
+		(var isInAdaptation:bool = "crew.componentRetraining != null")
+
+		(var isTreatAsTrigger:bool =	"skill.isTreatAsTrigger")
+		(var skillSubType:number =		"skill.skillSubType")
+		(var isEpic:bool =				"skillSubType == SC.Common.SKILL_SUBTYPE.EPIC")
+		(var isSelected:bool =			"skill.isSelected" (event "skill.evIsSelectedChanged"))
+		(var isRecommended:bool =		"skill.isRecommended" (event "skill.evIsRecommendedChanged"))
+
+		(var skillTreeEntity:dhEntity = "$dh.getPrimaryEntity(CC.skillTree, toString(_crewId) + '_' + _selectedShipClass)")
+		(var skillTreeComponent:dhComponent = "skillTreeEntity.skillTree")
+		(var maxLearnedSkillTier:number = "skillTreeComponent.maxLearnedSkillTier ?: 0" (event "skillTreeComponent.evSkillsChanged"))
+		(var learnedSkillsPrice:number = "skillTreeComponent.learnedSkillsPrice ?: 0" (event "skillTreeComponent.evSkillsChanged"))
+
+		(var crewSkillPickerEntity:dhEntity = "getSingleEntity(CC.crewSkillPicker)")
+		(var crewSkillPickerComponent:dhComponent = "crewSkillPickerEntity.crewSkillPicker")
+		(var maxSelectedSkillTier:number = "crewSkillPickerComponent.maxSelectedSkillTier ?: 0" (event "crewSkillPickerComponent.evMaxSelectedSkillTierChanged"))
+		(var selectedSkillsLearnPrice:number = "crewSkillPickerComponent.selectedSkillsLearnPrice ?: 0" (event "crewSkillPickerComponent.evSelectedSkillsLearnPriceChanged"))
+
+		(var skillTier:number = "skill.tier ?: 0")
+		(var isUnlockedTier:bool = "(skillTier <= maxLearnedSkillTier + 1) || (skillTier <= maxSelectedSkillTier + 1)")
+		(var isEnoughPointsToSelect:bool = "crew.component.maxSkillPoints >= (learnedSkillsPrice + selectedSkillsLearnPrice + skillTier)")
+		
+		
+		(var isUseless:bool = "skillEntity && !(skillEntity.attributes.useful) && !isCrewInfoModalWindow" (event "skillEntity.attributes.evChanged"))
+		
+		
+		(var skillName:str = "skill.name")
+		(var skillDescriptionText:str = "tr('IDS_SKILL_DESC_' + toUpper(skillName))")
+		(var isSkillDescriptionVisible:bool = "skillDescriptionText != ' '")
+		
+		
+		(var skillAttributesNegative:array = "skillEntity.attributes.negative" (event "skillEntity.attributes.evChanged"))
+		(var skillAttributesNeutral:array = "skillEntity.attributes.neutral" (event "skillEntity.attributes.evChanged"))
+		(var skillAttributesPositive:array = "skillEntity.attributes.positive" (event "skillEntity.attributes.evChanged"))
+		(var isAttributesVisible:bool = "skillAttributesNegative.length || skillAttributesNeutral.length || skillAttributesPositive.length")
+	
+		
+		(var skillTriggerEntity:dhEntity = "getPrimaryEntity(CC.crewSkillTrigger, skillEntity.id)")
+		(var skillTriggerAttributes:dhComponent = "skillTriggerEntity.attributes")
+		(var skillTriggerAttributesNegative:array = "skillTriggerAttributes.negative" (event "skillTriggerAttributes.evChanged"))
+		(var skillTriggerAttributesNeutral:array = "skillTriggerAttributes.neutral" (event "skillTriggerAttributes.evChanged"))
+		(var skillTriggerAttributesPositive:array = "skillTriggerAttributes.positive" (event "skillTriggerAttributes.evChanged"))
+		(var isTriggersVisible:bool = "skillTriggerAttributesNegative.length || skillTriggerAttributesNeutral.length || skillTriggerAttributesPositive.length")
+
+		(var skillTriggerDescription:str = "isTriggersVisible	? skillTriggerEntity.crewSkillTrigger.descriptionIds.length > 0	? tr(skillTriggerEntity.crewSkillTrigger.descriptionIds)
+																																: tr('IDS_SKILL_TRIGGER_' + toUpper(skillTriggerEntity.crewSkillTrigger.type))
+																: ''")
+
+		
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var shipType:str = "shipInfo.subtype" (event "shipInfo.evUpdate"))
+
+		(var abilitiesDataForSkillTooltip:dhComponent = "skillEntity.abilitiesDataForSkillTooltip" (event "skillEntity.evAdded") (event "skillEntity.evRemoved"))
+		(var affectedConsumablesKeys:array = "abilitiesDataForSkillTooltip.keys ?: []" (event "abilitiesDataForSkillTooltip.evAbilitiesToShowChanged") (event "abilitiesDataForSkillTooltip.evKeysChanged"))
+		(var isAffectedConsumablesVisible:bool = "crew.component.shipID == viewedShipId && affectedConsumablesKeys.length > 0 && _selectedShipClass == shipType")
+
+
+		(var skillStateInfo:dict = "isUnlockOrForgetSkillMW		? null :
+									_isUnlocked					? isCrewSkillLearned	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
+																							text: 'IDS_LEARNED' }
+																						: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
+																							text: tr('IDS_SKILLS_LEARN_COST_COLON') + ' ' +  skillTier }
+																: null")
+		
+		(var headerIconPath:str = "'url:../crew_commander/skills/' + skillName + '.png'")
+		(var headerText:str = "toUpper('IDS_SKILL_'+ skillName)")
+		(var subheaderText:str = "isEpic ? 'IDS_SKILL_ISEPIC' : 'IDS_SKILL'")
+
+		(var eliteCrewLearning:dhComponent =			"crew.entity.eliteCrewLearning"						(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+		(var exploredSkillsCountByShipType:dict =		"eliteCrewLearning.exploredSkillsCountByShipType"	(event "eliteCrewLearning.evChanged"))
+		(var skillUnlockingCostCategory:number =		"eliteCrewLearning.skillUnlockingCostCategory"		(event "eliteCrewLearning.evChanged"))
+		(var unlockedSkillsForShipClassCount:number =	"exploredSkillsCountByShipType[_selectedShipClass]")
+
+		(var maxSkillsForShipClassKey:str = "toUpper(_selectedShipClass) + '_EPIC_SKILLS_MAX'")
+		(var isMaxSkillsCountUnlockedForShipClass:bool = "unlockedSkillsForShipClassCount >= SC.Common.ELITE_CREW_LEARNING_LIMITS[maxSkillsForShipClassKey]")
+
+
+		(var attentionNoMentor:str =			"(isCrewElite && !doesPlayerHaveSkillMentor && _isSkillInfotipItem) ? 'IDS_STATUS_LINE_NO_MENTOR_WITH_EPIC_SKILL' : ''")
+		(var attentionMaxSkillsUnlocked:str =	"(isCrewElite && isMaxSkillsCountUnlockedForShipClass && !_isUnlocked) ? 'IDS_STATUS_LINE_CANT_HOLD_MORE_EPIC_SKILLS_ON_SHIP_CLASS' : ''")
+
+		(var skillUnlockPKKey:str =		"SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[skillUnlockingCostCategory]")
+		(struct crewSkillUnlockPrice =	PULL_PRICE(_entityId = "skillUnlockPKKey"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+
+
+		(var isPriceShown:bool = "!_isUnlocked && !(attentionNoMentor || attentionMaxSkillsUnlocked)")
+
+		(var isSkillRecomendationVisible:bool = "isRecommended && !(isCrewInfoModalWindow || isUnlockOrForgetSkillMW)")
+		(var unifiedStatus:str = "isCrewSkillLearned 	? SC.Ui_styles.UNIFIED_STATUS.CHECK
+														: SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+
+		(var mouseInstruction:dict = "	_noMouseInstructions					? null :
+										isCrewInfoModalWindow					? _crewInfoMouseInstruction &&
+																				  !(attentionNoMentor || attentionMaxSkillsUnlocked)	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																																			text: _crewInfoMouseInstruction }
+																																		: null :
+										isInAdaptation || isCrewSkillLearned	? null :
+										isSelected								? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																					text: 'IDS_CREW_SKILL_UNSELECT_INSTRUCTION' } :
+										!isEnoughPointsToSelect					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																					text: 'IDS_CREW_SKILL_ALL_POINTS_DISTRIBUTED_INSTRUCTION' } :
+										!isUnlockedTier							? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																					text: 'IDS_SKILL_FIRST_SELECT_PREVIOUS_LEVEL' } :
+										!isSelected								? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																					text: 'IDS_CREW_SKILL_SELECT_INSTRUCTION' }
+																				: null")
+	)
+
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW_SKILL"
+			_imageUrl =			"headerIconPath"
+			_imageWidth =		60
+			_imageHeight =		60
+			_unifiedStatus =	"unifiedStatus"
+			_headerText =		"headerText"
+			_subheaderText =	"subheaderText"
+			_data =				"{	colorTransform:	isCrewSkillLearned ? COLOR_TRANSFORM_WHITE_TO_YELLOW : {},
+									isLearned:		isCrewSkillLearned,
+									isEpic:			isEpic }"
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPriceShown"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemPriceTagLine'
+				(bind enabled "isPriceShown")
+				(args
+					_title =		'IDS_COST_COLON'
+					_priceInfo =	"crewSkillUnlockPrice.info"
+					_isAutoWidth =	true
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "attentionNoMentor"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "attentionNoMentor")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text =				'IDS_STATUS_LINE_NO_MENTOR_WITH_EPIC_SKILL'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "attentionMaxSkillsUnlocked"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "attentionMaxSkillsUnlocked")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text =				'IDS_STATUS_LINE_CANT_HOLD_MORE_EPIC_SKILLS_ON_SHIP_CLASS'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "skillStateInfo != null"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "skillStateInfo != null")
+				(args
+					_unifiedStatus =	"skillStateInfo.unifiedStatus"
+					_text =				"skillStateInfo.text"
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isSkillRecomendationVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isSkillRecomendationVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.RECOMMENDED"
+					_text =	'IDS_RECOMMENDED_SKILL'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isEpicSkillAvailableForSlot"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isEpicSkillAvailableForSlot")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.EPIC_SKILL"
+					_text =	'IDS_STATUS_LINE_SKILL_CAN_BE_MADE_EPIC'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isUseless"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isUseless")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+					_text =	'IDS_WARNING_USELESS_PERK'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTreatAsTrigger"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemInnerHeaderText'
+				(bind enabled "isTreatAsTrigger")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_headerText = 'IDS_TOOLTIP_SKILL_TRIGGER_TITLE'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isSkillDescriptionVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemSubstituteDescriptionText'
+				(bind enabled "isSkillDescriptionVisible")
+				(args
+					_descriptionText = "skillDescriptionText"
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isAttributesVisible && isTriggersVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemInnerHeaderText'
+				(bind enabled "isAttributesVisible && isTriggersVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_headerText = 'IDS_TOOLTIP_SKILL_PARAMS_TITLE'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isAttributesVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "isAttributesVisible")
+				(args
+					_attributesNegative = "skillAttributesNegative"
+					_attributesNeutral = "skillAttributesNeutral"
+					_attributesPositive = "skillAttributesPositive"
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTriggersVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemInnerHeaderText'
+				(bind enabled "isTriggersVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_headerText = 'IDS_TOOLTIP_SKILL_TRIGGER_TITLE'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTriggersVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemSubstituteDescriptionText'
+				(bind enabled "isTriggersVisible")
+				(args
+					_descriptionText = "skillTriggerDescription"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTriggersVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "isTriggersVisible")
+				(args
+					_attributesNegative = "skillTriggerAttributesNegative"
+					_attributesNeutral = "skillTriggerAttributesNeutral"
+					_attributesPositive = "skillTriggerAttributesPositive"
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isAffectedConsumablesVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemAdditionalConsumablesList'
+				(bind enabled "isAffectedConsumablesVisible")
+				(args
+					_skillEntityId = "skillEntity.id"
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "mouseInstruction"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "mouseInstruction")
+				(args
+					_unifiedStatus =	"mouseInstruction.unifiedStatus"
+					_text =				"mouseInstruction.text"
+				)
+			)
+		)
+	)
+)

@@ -1,0 +1,277 @@
+(def element BattleChallengesLeaderboardAndTaskContainer () 
+	(scope
+		(event evTriggerAnim)
+
+		(var challengeParticipantCollection:gfx = "$datahub.getCollection(CC.challengeParticipant).getChildByPath('filteredByActiveParticipants')")
+		(var challengeParticipantCollectionArray:array = " challengeParticipantCollection.items ?: []" (event "challengeParticipantCollection.evUpdated"))
+
+		(var challengeComponent:gfx = "$datahub.getSingleEntity(CC.challenge).challenge")
+	)
+	(style (width = 256px))
+
+	(block
+		(style (width = 100%))
+
+		(element BattleChallengesLeaderboardTaskItem
+			_challengeComponent = "challengeComponent"
+		)
+	)
+
+	(block
+		(style (width = 100%) (marginTop = "M"))
+		(controller $Repeat renderer = 'BattleChallengesLeaderboardPlayerItem'
+			(bind count "challengeParticipantCollectionArray.length")
+			(args
+				_avatarEntity = "challengeParticipantCollectionArray[$index]"
+				_avatarCollectionLength = "challengeParticipantCollectionArray.length"
+				_challengeComponent = "challengeComponent"
+				_playersCloseToLose = "challengeComponent.challengeType == SC.Battle.DISCIPLINE_TYPES.CATCHING_EGGS ? 0 : 1"
+			)
+		)
+	)
+)
+
+(def element BattleChallengesLeaderboardTaskItem (_challengeComponent:gfx)
+	(scope
+		(event evShowTask)
+		(event evPlayTimerSound)
+		(event evAddedToStage)
+		(macro BATTLE_TIMER_SCOPE)
+
+		(var challengeNumber:number = 	"_challengeComponent.challengeNumber" (event "_challengeComponent.evChallengeInfoChanged"))
+		(var roundsCount:number = 	"_challengeComponent.roundsCount" (event "_challengeComponent.evChallengeInfoChanged"))
+		(var challengeType:number = 	"_challengeComponent.challengeType" (event "_challengeComponent.evChallengeInfoChanged"))
+		(var timeToNextPhase:number = 	"_challengeComponent.timeToNextPhase ?: 0" (event "_challengeComponent.evPhaseInfoChanged"))
+		(var phase:number = 			"_challengeComponent.phase" (event "_challengeComponent.evPhaseInfoChanged"))
+		(var timeLeft:number = "floor(timeToNextPhase - currentTime)")
+
+		(var disciplineToColor:dict = "	{	'CITADELS'		: '0xFF8DA8D1',
+											'REGATTA'		: '0xFF48C8F0',
+											'DAMAGE'		: '0xFFFFC658',
+											'FRAGS'			: '0xFFCA1031',
+											'SURVIVAL'		: '0xFF00EEB5',
+											'CATCHING_EGGS'	: '0x00000000'
+										}")
+
+		(var disciplineToColorBg:dict = "	{	'CITADELS'		: '0x998DA8D1',
+												'REGATTA'		: '0x9948C8F0',
+												'DAMAGE'		: '0x99FFC658',
+												'FRAGS'			: '0x99CA1031',
+												'SURVIVAL'		: '0x9900EEB5',
+												'CATCHING_EGGS'	: '0x99142C49'
+											}")
+
+		(var isTaskVisible:bool = "phase == SC.Battle.ROUND_STAGE.EXECUTION")
+	)
+
+	(style(width = 100%))
+
+	(dispatch evAddedToStage on='addedToStage')
+	(dispatch evShowTask delay="0.05" (bind enabled "isTaskVisible") (event "evAddedToStage"))
+	(dispatch evShowTask delay="0.05" (bind trigger "isTaskVisible"))
+
+	(dispatch evPlayTimerSound init=false (bind enabled "timeLeft >= 0 && timeLeft < 10 && isTaskVisible") (bind trigger "timeLeft"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['cosmoapril_Timer', 'regular']" init=false watch=false (event "evPlayTimerSound"))
+
+	(block 
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundColor "disciplineToColorBg[SC.Battle.DISCIPLINE_TYPES.VALUE_TO_NAME[challengeType]]")
+			(alpha = 0)
+		)
+		(controller $Animation
+			(bindcall play
+				duration="0.15"
+				from="{alpha: 0}"
+				to="{alpha: 1}"
+				reverse="!isTaskVisible"
+				watch=false
+				(event "evShowTask")
+			)
+		)
+	)
+	(block 
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = 0x99142C49))
+
+		(controller $Animation
+			(bindcall play
+				duration="0.15"
+				from="{alpha: 0}"
+				to="{alpha: 1}"
+				reverse="isTaskVisible"
+				watch=false
+				(event "evShowTask")
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(height = 0%)
+			(width = 4px)
+			(bind backgroundColor "disciplineToColor[SC.Battle.DISCIPLINE_TYPES.VALUE_TO_NAME[challengeType]]")
+		)
+		(controller $Animation
+			(bindcall play
+				duration="0.15"
+				from="{height: 0%}"
+				to="{height: 100%}"
+				reverse="!isTaskVisible"
+				watch=false
+				(event "evShowTask")
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefaultBold13NM)
+		(style (margin = "SXS") (alpha = "TS"))
+		(bind text "roundsCount > 1 ? toUpper(subst('IDS_ROUND_NUMBER', [], { _round: challengeNumber })) : 'IDS_TASK_UPPER'")
+	)
+
+	(hblock
+		(style
+			(width = 100%)
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+			(scaleY = 0)
+			(alpha = 0)
+		)
+		(controller $Animation
+			(bindcall play
+				duration="0.15"
+				from="{scaleY: 0, alpha: 0}"
+				to="{scaleY: 1, alpha: 1}"
+				reverse="!isTaskVisible"
+				watch=false
+				(event "evShowTask")
+			)
+		)
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 186px)
+				(marginBottom = "SXS")
+			)
+			(bind text "tr('IDS_DISCIPLINE_' + SC.Battle.DISCIPLINE_TYPES.VALUE_TO_NAME[challengeType] + '_DESCRIPTION')")
+		)
+
+		(block
+			(style (width = 100%))
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(bind class "timeLeft < 10 ? '$TextColorWarning' : '$TextColorNeutral'")
+			(style
+				(textAlign = "right")
+				(marginLeft = "SXS")
+				(marginBottom = "SXS")
+			)
+			(bind text "countdownFormat(max(0, timeLeft), 0, true)")
+		)
+	)
+)
+
+(def element BattleChallengesLeaderboardPlayerItem (_avatarEntity:gfx, _avatarCollectionLength:number, _challengeComponent:gfx, _playersCloseToLose:number)
+	(scope
+		(var challengeParticipantComponent:gfx = "_avatarEntity.challengeParticipant")
+		(var scoresInCurrentRound:number = "challengeParticipantComponent.scoresInCurrentRound ?: 0" (event "challengeParticipantComponent.evScoresInCurrentRoundChanged"))
+		(var indexInBoard:number = "challengeParticipantComponent.indexInBoard ?: $index + 1" (event "challengeParticipantComponent.evIndexInBoardChanged"))
+
+		(var challengeType:number = "_challengeComponent.challengeType" (event "_challengeComponent.evChallengeInfoChanged"))
+		(var challengePhase:number = "_challengeComponent.phase" (event "_challengeComponent.evPhaseInfoChanged"))
+		(var scoresUnits:str = "challengeType == SC.Battle.DISCIPLINE_TYPES.SURVIVAL ? ' %' : ''")
+		(var scoresString:str = "toString(formatSeparator(scoresInCurrentRound)) + scoresUnits")
+
+		(var avatarComponent:gfx = "_avatarEntity.avatar")
+		(var pureName:str = "avatarComponent.pureName")
+
+		(macro PLAYER_CLAN_SCOPE "_avatarEntity")
+
+		(var relation:number = "_avatarEntity.relation.value" (event "_avatarEntity.relation.evChanged"))
+		(var isSelf:bool = "relation == SC.Battle.DIPLOMACY_RELATIONS.SELF")
+		(var isDisqualificationEnabled:bool = "_avatarCollectionLength > _playersCloseToLose")
+		(var playersToDisqualificationCount:number = "_avatarCollectionLength - _playersCloseToLose")
+		(var isPlayerCloseToLose:bool = "	isDisqualificationEnabled &&
+											playersToDisqualificationCount < indexInBoard &&
+											challengePhase in SC.Battle.ROUND_STAGE.SHOW_CLOSE_TO_LOSE")
+
+		(var bgColor:str = "isSelf	? isPlayerCloseToLose	? '0x4dFF6600'
+															: '0x4dFFFFFF'
+									: '0x33142C49'")
+		(var borderColorTransform:dict = "isSelf && isPlayerCloseToLose	? { redOffset:0, greenOffset:-153, blueOffset:-255, alphaMultiplier: 0.45 }
+																		: { redOffset:0, greenOffset:0, blueOffset:0, alphaMultiplier: 0.45 }")
+
+		(var itemHeight:number = "35")
+		(var itemMargins:number = "1")
+		(var itemMarginFromTaskItem:number = "18")
+		(var itemWithMarginsHeight:number = "itemMargins + itemHeight")
+		(var marginFromTop:number = "(itemWithMarginsHeight * (indexInBoard-1))+itemMarginFromTaskItem")
+	)
+
+	(style
+		(position = "absolute")
+		(width = 100%)
+		(height = "itemHeight")
+		(top = "marginFromTop")
+		(pivotY = 50%)
+		(bind backgroundColor "bgColor")
+	)
+
+	(controller $Animation 
+		(bindcall play
+			duration="0.15"
+			to="{scaleY: 0}"
+			(bind trigger "indexInBoard || challengeType")
+		)
+
+		(bindcall play
+			duration="0.05"
+			delay="0.15"
+			to="{top: marginFromTop}"
+			(bind trigger "indexInBoard || challengeType")
+		)
+
+		(bindcall play
+			duration="0.15"
+			delay="0.2"
+			to="{scaleY: 1}"
+			(bind trigger "indexInBoard || challengeType")
+		)
+	)
+
+	(block
+		(bind visible "isSelf")
+		(class $FullsizeAbsolute)
+
+		(style
+			(hitTest = false)
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+			(scale9grid = 2)
+		)
+		(bind colorTransform "borderColorTransform")
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style (paddingLeft = "SXS") (paddingRight = "SXS") (align = "middle|center"))
+
+		(element PlayerNameAndClanTag 
+			_isTextBold = "isSelf"
+			_playerName = "pureName"
+			_clanTag = "clanTag"
+		)
+
+		(tf
+			(bind class "isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+			(style
+				(minWidth = 30px)
+				(textAlign = "right")
+			)
+			(bind text "scoresString")
+		)
+	)
+)

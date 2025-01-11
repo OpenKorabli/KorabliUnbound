@@ -1,0 +1,533 @@
+(def constant BUTTON_FOCUS_STATE "{
+	UNFOCUSABLE: -1
+}")
+
+
+
+(def element DefaultButton (_name:str='', _enabled:bool=true, _type:str="SC.Ui_styles.BUTTON_TYPE.DEFAULT", _isExternal:bool=false, _isTransactionBtn:bool=false,
+							_icon:str='', _size:number="SIZE.MEDIUM", _width:number=0, _label:str='',
+							_focusIndex:number="BUTTON_FOCUS_STATE.UNFOCUSABLE", _clickInterval:number=500, _defaultFocused:bool=false,
+							_dispatchedEv:str='', _dispatchParams:gfx={}, _methods:array=[], _tooltipText:str='', _externalRollover:bool=null,
+							_externalMouseDown:bool=null)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(event evOperationsAccountLockedChanged)
+
+		(var accountResourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
+		(var accountResource:gfx = "accountResourceEntity ? accountResourceEntity.accountResource : null")
+		(var operationsAccountLocked:bool = "accountResource ? accountResource.operationsLocked : null" (event "accountResource.evOperationsLockChanged"))
+		(var isOperationsLocked:bool = "_isTransactionBtn && operationsAccountLocked")
+		(var enabled:bool = "_enabled && !isOperationsLocked")
+
+		(var isFocused:bool = false)
+		(var isKeyDown:bool = false)
+
+		
+		(dispatch evOperationsAccountLockedChanged dir="EventDirection.NONE" delay="0.3" reset=true (bind trigger "operationsAccountLocked"))
+		(var showOperationsLock:bool = false)
+		(bind showOperationsLock "operationsAccountLocked" init=false watch=false (event "evOperationsAccountLockedChanged"))
+		(var isDisabledVisual:bool = "!_enabled || (isOperationsLocked && showOperationsLock)")
+		
+
+		(var isDown:bool = "!isDisabledVisual && (_externalMouseDown || mouseDown || isKeyDown)")
+		(var isRollover:bool = "!isDisabledVisual && (_externalRollover || rollOver)")
+
+		(var isIconBtn:bool = "_type == SC.Ui_styles.BUTTON_TYPE.ICON || _type == SC.Ui_styles.BUTTON_TYPE.ICON_SECONDARY")
+		(var isSecondaryBtn:bool = "_type == SC.Ui_styles.BUTTON_TYPE.SECONDARY || _type == SC.Ui_styles.BUTTON_TYPE.ICON_SECONDARY")
+
+		
+		
+		(var btnHeight:number = "	isIconBtn				? MS :
+									_size == SIZE.LARGE		? _type == SC.Ui_styles.BUTTON_TYPE.ACCENT	? 44
+																										: LM :
+									_size == SIZE.SMALL		? MS
+															: L")
+		(var btnWidth:number = "	isIconBtn				? MS :
+									_width					? _width
+															: auto")
+		(var isAutoWidth:bool = "btnWidth == auto")
+
+		(var isFocusEnabled:bool = "_enabled && (_focusIndex != BUTTON_FOCUS_STATE.UNFOCUSABLE) && !isIconBtn")
+		
+		
+
+		
+		(var ctRollOver:dict = "isSecondaryBtn	?	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+													  redOffset: 45,	greenOffset: 45,	blueOffset: 45,		alphaOffset: 0 }
+												:	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+													  redOffset: 15,	greenOffset: 15,	blueOffset: 15,		alphaOffset: 0 }")
+		(var ctDown:dict = "	isSecondaryBtn	?	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+													  redOffset: -45,	greenOffset: -45,	blueOffset: -45,	alphaOffset: 0 }
+												:	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+													  redOffset: -15,	greenOffset: -15,	blueOffset: -15,	alphaOffset: 0 }")
+		
+
+		(var focusImage:str = "_type	? 'url:../service_kit/buttons/backgrounds/' + _type + '_focused.png'
+										: 'url:../service_kit/buttons/backgrounds/default_focused.png'")
+		(var backgroundImage:str = "isDisabledVisual && _type	? 'url:../service_kit/buttons/backgrounds/' + _type + '_disabled.png' :
+									_type						? 'url:../service_kit/buttons/backgrounds/' + _type + '.png' :
+									isDisabledVisual 			? 'url:../service_kit/buttons/backgrounds/default_disabled.png'
+																: 'url:../service_kit/buttons/backgrounds/default.png'")
+	)
+	(dispatch evClicked dir="EventDirection.NONE" (bind trigger "isKeyDown") (bind enabled "!isKeyDown"))
+
+	(bind name "_name ? _name : null")
+
+	(style
+		(bind width "btnWidth")
+		(bind height "btnHeight")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Focus
+		tabIndex = "_focusIndex"
+		defaultFocus = "_defaultFocused"
+		clickFocus = "false"
+		clickInterval = "_clickInterval"
+		(bind enabled "isFocusEnabled")
+		(bind isFocused "$event" init=false on='evFocused')
+		(bind isKeyDown "$event && isFocused && enabled" init=false on='evKeyboardClick')
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(bind backgroundImage "backgroundImage")
+			(scale9grid = 10)
+		)
+	)
+
+	(block
+		(bind visible "isRollover || isDown")
+		(bind colorTransform "	isRollover && !isDown	? ctRollOver :
+								isDown					? ctDown
+														: CT_NONE")
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(bind backgroundImage "backgroundImage")
+			(scale9grid = 10)
+		)
+	)
+
+	(hblock
+		(style
+			(hitTest = false)
+			(align = "middle|center")
+			(height = 100%)
+			(bind width "isAutoWidth ? auto : 100%")
+		)
+
+		(bind alpha "	isDown || isDisabledVisual					? TS :
+						isRollover									? 1.1 :
+						_type == SC.Ui_styles.BUTTON_TYPE.SECONDARY	? TC
+																	: TA")
+
+		(block
+			(bind visible "isFocused && !isDisabledVisual")
+			(class $FullsizeAbsolute)
+			(style (backgroundImage = "focusImage") (scale9grid = 2))
+		)
+
+		(block
+			(bind visible "_label && !isIconBtn")
+
+			(style
+				(align = "center|middle")
+				(bind width "isAutoWidth ? btnWidth : 100%")
+				(bind minWidth "!isAutoWidth	? 0 :
+								_isExternal		? 78
+												: 110")
+				(bind paddingLeft "	_isExternal			? 28 :
+									_size == SIZE.SMALL	? S
+														: SXS")
+				(bind paddingRight "_isExternal			? 28 :
+									_size == SIZE.SMALL	? S
+														: SXS")
+				(bind marginTop "_size == SIZE.MEDIUM ? -1 : 0")
+			)
+
+			(tf
+				(style (elideMode = true) (textAlign = "center"))
+				(bind class "	_type == SC.Ui_styles.BUTTON_TYPE.ACCENT && _size == SIZE.LARGE	? '$TextDefaultBold25NM' :
+								_size == SIZE.LARGE												? '$TextDefaultBold17NM' :
+								_size == SIZE.SMALL												? '$TextDefaultBold12NM'
+																								: '$TextDefaultBoldNM'")
+
+				(bind text "toUpper(tr(_label))")
+			)
+		)
+
+		(block
+			(bind visible "isIconBtn")
+
+			(style
+				(position = "absolute")
+				(width = 24px)
+				(height = 24px)
+				(bind backgroundImage "'url:../service_kit/buttons/icons/' + _icon + '.png'" (bind enabled "isIconBtn"))
+			)
+		)
+
+		(block
+			(bind visible "_isExternal")
+			(name = 'externalArrow')
+
+			(class $MiddleVAligned)
+			(style
+				(position = "absolute")
+				(right = "S")
+				(width = 14px)
+				(height = 14px)
+				(backgroundImage = 'url:../service_kit/buttons/icons/out.png')
+			)
+		)
+	)
+
+	(macro INPUT
+		_btnName = "_name"
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled = "enabled"
+		_dispatchedEv = "_dispatchedEv"
+		_dispatchParams = "_dispatchParams"
+		_methods = "_methods"
+		_soundSet = "_type	? 'button_' + _type
+							: 'button_default'"
+	)
+
+	(controller $Tooltip
+		(renderer='SimpleStatusTooltip')
+		(bind enabled "_tooltipText")
+		(args
+			_text = "_tooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		(align = "right|innerTop")
+		(offset = { x: 6, y: -26 })
+	)
+)
+
+(def element ImageButton (	_name:str='', _enabled:bool=true, _mouseDown:bool = false, _width:number=0, _height:number=0, _backgroundImage:str='', _hitAreaMargin:array=[0], _soundSet:str='',
+							_dispatchedEv:str='', _dispatchParams:gfx={}, _methods:array=[], _tooltipText:str='') layout=true
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var btnWidth:number = "_width ? _width : 50")
+		(var btnHeight:number = "_height ? _height : 50")
+
+		
+		(var ctRollOver:dict = "{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								  redOffset: 15,	greenOffset: 15,	blueOffset: 15,		alphaOffset: 0 }")
+		(var ctDown:dict = "	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								  redOffset: -15,	greenOffset: -15,	blueOffset: -15,	alphaOffset: 0 }")
+		
+
+		(var isDown:bool = "_enabled && (mouseDown || _mouseDown)")
+		(var isRollover:bool = "_enabled && rollOver")
+	)
+
+	(bind name "_name")
+
+	(style
+		(bind width "btnWidth")
+		(bind height "btnHeight")
+		(bind backgroundImage "_backgroundImage")
+		(backgroundSize = "fill")
+	)
+
+	(bind colorTransform "	isRollover && !isDown	? ctRollOver :
+							isDown					? ctDown
+													: CT_NONE")
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (bind padding "_hitAreaMargin"))
+
+		(macro INPUT
+			_btnName = "_name"
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(macro MOUSE_HANDLER
+				_enabled = "_enabled"
+				_dispatchedEv = "_dispatchedEv"
+				_dispatchParams = "_dispatchParams"
+				_methods = "_methods"
+				_soundSet = "_soundSet ? _soundSet : 'button_context'"
+			)
+		)
+
+		(controller $Tooltip
+			(renderer='SimpleStatusTooltip')
+			(bind enabled "_tooltipText")
+			(args
+				_text = "_tooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+			(align = "right|innerTop")
+			(offset = { x: 6, y: -26 })
+		)
+	)
+)
+
+(def constant IMAGE_RADIO_BUTTON_ALPHA  "{
+	SC.Ui_styles.BUTTON_STATE.DOWN		: TC,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 1,
+	SC.Ui_styles.BUTTON_STATE.UP		: TA
+}")
+
+(def element ImageRadioButton (	_name:str='', _enabled:bool=true, _selected:bool=false, _renderElement:str='', _renderArgs:dict={}, _soundSet:str='',
+								_dispatchedEv:str='', _dispatchParams:gfx={}, _methods:array=[], _tooltipText:str='') layout=true
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var isDown:bool = "_enabled && mouseDown")
+		(var isRollover:bool = "_enabled && rollOver")
+
+		(var state:number = "	_selected		? SC.Ui_styles.BUTTON_STATE.UP :
+								isDown 			? SC.Ui_styles.BUTTON_STATE.DOWN :
+								isRollover		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var buttonAlpha:number = "IMAGE_RADIO_BUTTON_ALPHA[state]")
+	)
+	(bind name "_name")
+
+	(style
+		(align = "center|middle")
+		(width = 39px)
+		(height = 27px)
+		(bind alpha "_enabled ? 1 : 0.4")
+		(macro DESATURATION_DEFAULT "_enabled")
+	)
+
+	(block
+		(bind visible "!_selected && isRollover")
+		(class $FullsizeAbsolute)
+		(style (hitTest = false) (backgroundColor = 0x16FFFFFF) (alpha = 0))
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.1
+				from	 = { alpha: 0 }
+				to		 = { alpha: 1 }
+				reverse	 = "!rollOver"
+				(bind trigger "rollOver")
+			)
+		)
+	)
+
+	(block
+		(bind visible "_selected")
+		(class $FullsizeAbsolute)
+		(style (hitTest = false) (backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png') (scale9grid = 2))
+		
+		(bind colorTransform "COLOR_TRANSFORM_WHITE_TO_YELLOW")
+	)
+
+
+	(block
+		(class $Fullsize)
+		(style (hitTest = false) (align = "center|middle"))
+
+		(controller $Instance
+			(bind renderer "_renderElement")
+			(bind enabled "_renderElement")
+			(args "_renderArgs")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(macro MOUSE_HANDLER
+			_enabled = "_enabled && !_selected"
+			_dispatchedEv = "_dispatchedEv"
+			_dispatchParams = "_dispatchParams"
+			_methods = "_methods"
+			_soundSet = "_soundSet ? _soundSet : 'button_context'"
+		)
+	)
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger	= "state"
+		_alpha		= "buttonAlpha"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "_tooltipText")
+		(args
+			_text = "_tooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(align = "right|innerTop")
+		(offset = { x: 6, y: -26 })
+	)
+)
+
+(def element DockButton (	_label:str, _enabled:bool=true, _isCustomVisualStateUsed:bool=false, _isVisuallyEnabled:bool=true,
+							_methods:array=[], _isTextBold:bool=false, _mouseDown:bool=false)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var backgroundPath:str = "	_mouseDown		?	'url:../service_kit/buttons/button_dock/down.png' :
+									mouseDown		?	'url:../service_kit/buttons/button_dock/down.png' :
+									rollOver		?	'url:../service_kit/buttons/button_dock/over.png'
+													:	''")
+		(var isVisuallyEnabled:bool = "_isCustomVisualStateUsed ? _isVisuallyEnabled : _enabled")
+	)
+	(style (macro DESATURATION_DEFAULT "!isVisuallyEnabled"))
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(bind backgroundImage "backgroundPath")
+			(backgroundSize = "fill")
+			(scale9grid = 4)
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger	= "backgroundPath"
+			_alpha		= "1"
+		)
+	)
+
+	(block
+		(style
+			(paddingTop = "S")
+			(paddingBottom = "S")
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+		)
+
+		(tf
+			(style
+				(bind alpha "isVisuallyEnabled ? TA : TS")
+				(hitTest = false)
+			)
+			(bind class "_isTextBold ? '$TextDefaultBoldNM': '$TextDefaultNM'")
+			(bind text "_label")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(macro MOUSE_HANDLER
+			_enabled = "_enabled"
+			_methods = "_methods"
+			_soundSet = "'button_secondary'"
+		)
+	)
+)
+
+
+(def constant TEXT_SWITCH_TAB_BACKGROUND_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 0.7,
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.7,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 1,
+	SC.Ui_styles.BUTTON_STATE.UP		: 0
+})
+
+(def constant TEXT_SWITCH_TAB_LABEL_ALPHA "{
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.25,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 1,
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.45,
+	SC.Ui_styles.BUTTON_STATE.OVER		: TA,
+	SC.Ui_styles.BUTTON_STATE.UP		: 0.6
+}")
+
+(def element TEXT_SWITCH_TABS_BACKGROUND ()
+	(style
+		(flow = "horizontal")
+		(padding = "XXS")
+		(backgroundImage = 'url:../service_kit/buttons/tab_bar/bg.png')
+		(scale9grid = 4)
+	)
+)
+
+(def element TextSwitchTab (_label:str='', _size:number="SIZE.MEDIUM", _isReadyBtn:bool=true, _name:str='', _isSelected:bool=false, _isEnabled:bool=true, _selectedClickable:bool=false,
+							_width:number=0, _height:number=0, _dispatchedEv:str='', _dispatchParams:gfx={}, _methods:array=[])
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(event stateAnimationStarted)
+
+		(var state:number = "	!_isEnabled		? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								_isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var selectionBGAlpha:number = "TEXT_SWITCH_TAB_BACKGROUND_ALPHA[state]")
+		(var labelAlpha:number = "TEXT_SWITCH_TAB_LABEL_ALPHA[state]")
+
+		(var labelColor:number = "	state == SC.Ui_styles.BUTTON_STATE.SELECTED		? _isReadyBtn	? SC.Ui_styles.SERVICE_COLORS.GREEN
+																									: SC.Ui_styles.SERVICE_COLORS.RED
+																					: SC.Ui_styles.SERVICE_COLORS.WHITE"
+									watch=false (event "stateAnimationStarted"))
+	)
+
+	(bind name "_name")
+
+	(style
+		(bind width "_width ? _width : 93")
+		(bind height "_height ? _height : 23")
+		(align = "center|middle")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(bind name "_isSelected")
+		(class $FullsizeAbsolute)
+		(style
+			(bind alpha "selectionBGAlpha" watch=false)
+			(hitTest = false)
+			(scale9grid = [3, 2, 3, 2])
+			(bind backgroundImage "_isReadyBtn	? 'url:../service_kit/buttons/text_switcher/over.png'
+												: 'url:../service_kit/buttons/text_switcher/over_orange.png'")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="selectionBGAlpha")
+	)
+
+	(tf
+		(controller $Animation
+			(bindcall play
+				duration = "0.1"
+				to = "{alpha: labelAlpha}"
+				easing = "Easing.quad_in"
+				
+				(bind trigger "state")
+			)
+			(dispatch stateAnimationStarted on=evAnimStarted)
+		)
+
+		(bind class "_size == SIZE.LARGE ? '$TextDefaultBold25NM' : '$TextDefaultBold13NM'")
+		(style
+			(width = 100%)
+			(textAlign = "center")
+			(wordWrap = false)
+			(hitTest = false)
+			(bind textColor "labelColor")
+			(bind alpha "labelAlpha" watch=false)
+		)
+
+		(bind text "toUpper(_label)")
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled = "!(!_isEnabled || (!_selectedClickable && _isSelected))"
+		_dispatchedEv = "_dispatchedEv"
+		_dispatchParams = "_dispatchParams"
+		_methods = "_methods"
+		_soundSet = "'button_text_switch'"
+	)
+)

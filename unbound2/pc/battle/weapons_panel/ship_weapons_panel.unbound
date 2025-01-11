@@ -1,0 +1,137 @@
+(def constant PANEL_APPEAR_Y_OFFSET 15)
+(def constant PANEL_ITEM_MARGIN 5)
+(def constant PANEL_GROUP_MARGIN 15)
+
+
+(def macro WEAPON_PANEL_ANIMATION (isVisible:expression)
+	(alpha = "isVisible ? 1 : 0")
+	(controller $Animation
+		(bindcall play 	duration=0.15
+						from="{ alpha: 0}" 
+						to="{ alpha: 1}"
+						action="killAll"
+						reverse="!(isVisible)"
+						(bind trigger "isVisible")
+		)
+	)
+)
+
+(def element ShipWeaponsPanel ()
+	(scope
+		(var atbaEntity:gfx = "$datahub.getSingleEntity(CC.shipATBA)")
+
+		(macro SELF_AVATAR_ID)
+		(var consumablesCollection:gfx = "$datahub.getCollection(CC.battleConsumable)")
+		(var shipConsumablesCollectionByViewTypes:gfx = "consumablesCollection.getChildByPath('byAvatarIdAndSquadronOwner.' + selfAvatarId + '_' + DEFAULT_SQUADRON_OWNER_ID + '.byViewType')")
+		(var shipConsumablesCollectionByViewTypesLength:number = "shipConsumablesCollectionByViewTypes.childrenCount" (event "shipConsumablesCollectionByViewTypes.evChildrenCountChanged"))
+
+		(var drumFireModeEntity:gfx = "$datahub.getSingleEntity(CC.drumFireMode)")
+		(var drumFireModeComponent:gfx = "drumFireModeEntity.drumFireMode")
+		(var isSwitchable:bool = "drumFireModeComponent.isSwitchable")
+
+		
+		(var aircarrier:gfx = "$datahub.getSingleComponent(CC.aircarrier)")
+		(var squadronCameraMode:str = "aircarrier.squadronCameraMode" (event "aircarrier.evSquadronCameraModeChanged"))
+		(var activeSquadron:number = "aircarrier.activeSquadron" (event "aircarrier.evStateChanged"))
+
+		(var isAircarrier:bool = "selfAvatarEntity.avatar.ship.ref.ship.subtype == ShipTypes.AIRCARRIER" (event "selfAvatarEntity.avatar.evShipRefChanged"))
+		(var showPanel:bool = "aircarrier == null || (activeSquadron == ActiveSquadron.NONE && squadronCameraMode == SquadronCameraModes.DEFAULT)")
+
+		(var rageModeSlotEntity:gfx = "$datahub.getPrimaryEntity(CC.visualSlotData, SC.Ships.SHIP_INFO_WEAPON_TYPE.VALUE_TO_NAME[SC.Ships.SHIP_INFO_WEAPON_TYPE.RAGE_MODE] + '_' + DEFAULT_AVATAR_ID)")
+	)
+
+	(macro WEAPON_PANEL_ANIMATION "showPanel")
+
+	(style
+		(bind hitTest "showPanel")
+		(flow = "horizontal")
+		(align = "bottom")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(bottom = 0)
+			(left = "-SLOT_ATBA_ICON_WIDTH - PANEL_GROUP_MARGIN")
+		)
+		(controller $Instance renderer='ATBAIndicator'
+			(bind enabled "atbaEntity != null")
+			(args
+				_entityId = "atbaEntity.id"
+			)
+		)
+	)
+
+	
+	(block
+		
+		(element ShipWeaponSlots)
+	)
+
+	
+	(block
+		(controller $Instance renderer='SlotRageModeRenderer'
+			(bind enabled "rageModeSlotEntity")
+			(args
+				_entityId = "rageModeSlotEntity.id"
+			)
+		)
+	)
+
+	
+	(block
+		(controller $Instance renderer='FireModeSwitcher'
+			(bind enabled "isSwitchable")
+			(args
+				_ownerEntityId = "selfAvatarEntity.id"
+			)
+		)
+	)
+
+	
+	(controller $Instance renderer='ConsumableWeaponGroup'
+		(bind enabled "shipConsumablesCollectionByViewTypesLength > 0")
+		(args
+			isAircarrier = "isAircarrier"
+			_children = "shipConsumablesCollectionByViewTypes"
+		)
+	)
+
+)
+
+(def constant CONSUMABLE_WEAPON_RENDER_MAP "['CommonConsumableWeaponGroup', 'ModifierConsumableWeaponGroup']")
+
+(def element ConsumableWeaponGroup (_children:gfx, isAircarrier:bool = false) layout=true
+	(style (flow = "horizontal"))
+
+	(controller $Repeat layout=true
+		(bind count "_children.childrenCount" (event "_children.evChildrenCountChanged"))
+		(exprs
+			(controller $Instance renderer="CONSUMABLE_WEAPON_RENDER_MAP[$index]"
+				(args
+					isAircarrier = "isAircarrier"
+					_collection = "_children.child($index)"
+				)
+			)
+		)
+	)
+)
+
+(def element CommonConsumableWeaponGroup (_collection:gfx, isAircarrier:bool = false)
+	(style (flow = "horizontal"))
+
+	(controller $Repeat renderer='SlotConsumableRenderer' layout=true
+		(bind count "_collection.items.length" (event "_collection.evAdded") (event "_collection.evRemoved"))
+		(args
+			isAircarrier = "isAircarrier"
+			totalCount = "_collection.items.length"
+			_col = "_collection"
+		)
+		(exprs
+			(scope
+				(bind col "_collection")
+			)
+		)
+		(bind enabled "_collection != null") 
+	)
+)

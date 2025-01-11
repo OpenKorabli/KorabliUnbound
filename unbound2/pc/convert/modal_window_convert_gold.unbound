@@ -1,0 +1,241 @@
+(def element ModalWindowConvertGold ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope 
+		(event evGoldInputChanged)
+		(event evCreditsInputChanged)
+		(event evCreditsInputFocusChanged)
+		(event evInputDelayPassed)
+
+		(struct goldCreditsExchange = PULL_PRICE(_entityId = "'CREDITS_RATE_PER_GOLD'" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountGold:number	= "resourceEntity.accountResource.gold ?: 0" (event "resourceEntity.accountResource.evChangedGold"))
+
+		(var isCreditsInputFocused:bool = "$event ?: false" watch=false (event "evCreditsInputFocusChanged"))
+
+		(var goldToChange:number	= "toNumber($event.value) ?: 0" watch=false	(event "evGoldInputChanged"))
+		(var creditsToChange:number = "toNumber($event.value) ?: 0" watch=false	(event "evCreditsInputChanged"))
+		(bind goldToChange "goldCreditsExchange.info.finalPrice > 0 ? round(creditsToChange / goldCreditsExchange.info.finalPrice) : 0"	init=false watch=false (event "evInputDelayPassed"))
+		(bind creditsToChange "goldCreditsExchange.info.finalPrice * goldToChange ?: 0" init=false watch=false	(event "evGoldInputChanged") (event "evInputDelayPassed"))
+
+		(var currenciesPanelPrices:array = "[	{	currency: SC.Common.CURRENCIES.GOLD,	finalPrice: -goldToChange},
+												{	currency: SC.Common.CURRENCIES.CREDITS, finalPrice: accountGold > 0			?
+																										isCreditsInputFocused	? goldCreditsExchange.info.finalPrice * goldToChange
+																																: creditsToChange : 0}]")
+
+		(var isButtonLocked:bool = false)
+		(bind isButtonLocked "true"		init=false watch=false (event "evCreditsInputChanged"))
+		(bind isButtonLocked "false"	init=false watch=false (event "evInputDelayPassed"))
+
+		(var isButtonVisible:bool = "accountGold > 0 && goldToChange > 0")
+	)
+
+	(dispatch evInputDelayPassed delay=1 reset=true (event "evCreditsInputChanged"))
+
+	(style (align = "center"))
+
+	(block
+		(class $EyeLevelAligned)
+		(style (width = "DEFAULT_MODAL_WINDOW_WIDTH") (align = "center"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(element ModalWindowShortHeader
+				_header = 'IDS_ACCOUNT_GOLD_EXCHANGE_HEADING'
+				_hasDivider = false
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(element CurrenciesPanel
+				_priceInfo = "currenciesPanelPrices" 
+				_width = "DEFAULT_MODAL_WINDOW_WIDTH"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style 
+				(width = 100%) (align = "center|middle") 
+				(marginBottom = "M") 
+				(paddingTop = 6px) (paddingBottom = 6px)
+			)
+
+			(hblock
+				(tf
+					(class $TextDefault17NM)
+					(style (marginRight = 10px) (alpha = "TC"))
+					(text = 'IDS_CONVERT_RATE_COLON')
+				)
+
+				(element PriceTag
+					_priceInfo = { finalPrice: 1, currency: "SC.Common.CURRENCIES.GOLD" }
+					_size = "SIZE.MEDIUM"
+				)
+
+				(tf
+					(class $TextDefault17NM)
+					(style (marginLeft = 3px) (marginRight = 10px) (alpha = "TC"))
+					(text = '=')
+				)
+
+				(element PriceTag
+					_priceInfo = "goldCreditsExchange.info"
+					_size = "SIZE.MEDIUM"
+					_showDiscountTag = true
+				)
+			)
+		)
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+			(bind visible "accountGold <= 0")
+			(style (width = 100%))
+			(element HorizontalDividerTwoPx)
+
+			(hblock
+				(style (width = 100%) (paddingTop = 22px) (paddingBottom = 22px) (align = "center|middle"))
+				(block
+					(style
+						(backgroundImage = 'url:../service_kit/icons/warning_icon.png')
+						(width = 15px) (height = 13px)
+						(marginRight = "XS")
+					)
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+					(text = 'IDS_NO_GOLD_TO_EXCHANGE')
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+			(style (width = 100%))
+			(element HorizontalDividerTwoPx)
+
+			(hblock
+				(bind visible "accountGold > 0")
+				(style 
+					(align = "center|middle")
+					(width = 100%)
+					(paddingTop = "SXS") (paddingBottom = "SXS")
+				)
+
+				(tf
+					(class $TextDefault25NM)
+					(style (marginRight = 10px) (alpha = "TA"))
+					(text = 'IDS_FOR_EXCHANGE')
+				)
+
+				(block
+					(name = 'ConvertGoldInput')
+					(element InputTextDefaultNumeric
+						_onInputChangedEvent = 'evGoldInputChanged'
+						_defaultText = "toString(goldToChange)"
+						_width = '106px'
+						_maxNumericValue = "accountGold"
+						_textColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW"
+						_focusIndex = 0
+					)
+				)
+
+				(block
+					(style (marginLeft = "XS") (marginTop = 6px))
+					(element Currency
+						_currency = "SC.Common.CURRENCIES.GOLD"
+						_size = "SIZE.LARGE"
+					)
+				)
+
+				(tf
+					(class $TextDefault25NM)
+					(style (marginLeft = "XS") (marginRight = 10px) (marginTop = -1px) (alpha = "TA"))
+					(text = '=')
+				)
+
+				(block
+					(name = 'ConvertGoldResult')
+					(element InputTextDefaultNumeric
+						_onInputChangedEvent = 'evCreditsInputChanged'
+						_onInputFocusChangedEvent = 'evCreditsInputFocusChanged'
+						_defaultText = "toString(creditsToChange)"
+						_width = '154px'
+						_maxNumericValue = "goldCreditsExchange.info.finalPrice * accountGold"
+						_focusIndex = 1
+					)
+				)
+
+				(block
+					(style (marginLeft = "XS") (marginTop = 6px))
+					(element Currency
+						_currency = "SC.Common.CURRENCIES.CREDITS"
+						_size = "SIZE.LARGE"
+					)
+				)
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "accountGold > 0"))
+			)
+
+			(hblock
+				(style (marginTop = "M") (width = 100%) (align = "center"))
+				(block
+					(name = 'Modal_window_confirm_convert_exp_buttons')
+					(style (ubScaleX = "isButtonVisible ? 1 : 0") (marginRight = "isButtonVisible ? M : 0"))
+
+					(block
+						(class $FullsizeAbsolute)
+						(isMask = true)
+						(style (backgroundColor = 0xFFFFFFFF))
+					)
+
+					(controller $Animation
+						(bindcall play
+							delay = 0.05
+							duration = 0.15
+							from = " {alpha:0, visible:false, ubScaleX:0, marginRight: 0}"
+							to = "{alpha:1, visible:true, ubScaleX:1, marginRight: M}"
+							easing = "Easing.line"
+							action = "kill"
+							reverse = "!isButtonVisible"
+							(bind trigger "isButtonVisible")
+						)
+					)
+
+					(element DefaultButton
+						_label = 'IDS_EXCHANGE_UPPER_CASE'
+						_enabled = "isButtonVisible && !isButtonLocked"
+						_width = 139px
+						_isTransactionBtn = true
+						_methods = "[{	type: 'inputMapping.onRequest',
+										name: 'openConfirmationWindow',
+										args: { _action: 'convertGold', 
+												_actionParams: 		{	goldToChange: goldToChange }, 
+												_secondPriceInfo: 	{	finalPrice: creditsToChange, 
+																		currency: SC.Common.CURRENCIES.CREDITS }, 
+												_firstPriceInfo: 	{	finalPrice: goldToChange, 
+																		currency: SC.Common.CURRENCIES.GOLD }, 
+												_type: 				SC.Ui_common.CONFIRMATION_WINDOW_TYPE.EXCHANGE }
+									}]"
+						_focusIndex = 2
+						_name = 'btn_ok'
+					)
+				)
+
+				(element DefaultButton
+					_width = 139px
+					_label = 'IDS_CLOSE_UPPER_CASE'
+					_focusIndex = 3
+					_name = 'btn_cancel'
+				)
+			)
+		)
+	)
+)

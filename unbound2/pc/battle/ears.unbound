@@ -1,0 +1,375 @@
+(def constant HEALTH_POINTS_CONTAINER_HEIGHT 33)
+(def constant AVATAR_EARS_CONTAINER_HEIGHT 27)
+(def constant NICKNAME_EARS_CONTAINER_WIDTH 103)
+(def constant SHIP_STEREOTYPE_EARS_CONTAINER_WIDTH 153)
+
+(def constant C_RED_HEALTH_POINTS_CONTAINER 0xFFFF2E05)
+(def constant C_GREEN_HEALTH_POINTS_CONTAINER 0xFF00CC7A)
+
+(def element EarsContent ()
+	(scope
+		(macro GET_PREF 'showNickname' "'battle.ears.showNickname'")
+		 
+		(var earsWithoutNicknameWidth:number = "SXS + SHIP_STEREOTYPE_EARS_CONTAINER_WIDTH + SXS")
+		 
+		(var earsWithNicknameWidth:number = "SXS + NICKNAME_EARS_CONTAINER_WIDTH + SXS + SHIP_STEREOTYPE_EARS_CONTAINER_WIDTH + SXS")
+		(var earsContainerWidth:number = "showNickname ? earsWithNicknameWidth : earsWithoutNicknameWidth")
+	)
+
+	(class $Fullsize)
+
+	(block
+		(style (position = "absolute"))
+
+		(element AllyTeamInEars
+			_earsContainerWidth = "earsContainerWidth"
+			_showNickname = "showNickname"
+		)
+	)
+
+	(block
+		(style (position = "absolute") (right = 0px))
+
+		(element EnemyTeamInEars
+			_earsContainerWidth = "earsContainerWidth"
+			_showNickname = "showNickname"
+		)
+	)
+)
+
+
+(def element AllyTeamInEars (_earsContainerWidth:number, _showNickname:bool)
+	(scope
+		(var allyCollection:dhCollection = "getCollectionByPath(CC.avatar, 'team.ally.sortedAlive')")
+		(var allyCollectionArray:array = "allyCollection.items" (event "allyCollection.evUpdated"))
+
+		(var teamsHealthComponent:dhComponent = "getSingleEntity(CC.teamsHealth).teamsHealth")
+		(var allyHealthPoints:number = "teamsHealthComponent.allyHealthPoints" (event "teamsHealthComponent.evAllyHealthPointsChanged"))
+		(var allyMaxHealthPoints:number = "teamsHealthComponent.allyMaxHealthPoints" (event "teamsHealthComponent.evAllyMaxHealthPointsChanged"))
+		(var allyHealthProgress:number = "allyMaxHealthPoints ? allyHealthPoints * 100 / allyMaxHealthPoints : 0")
+		(var allyHealthPointsRounded:str = "allyHealthPoints ? formatFloatingPoint(allyHealthPoints / 1000, 0) : '0'")
+
+		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
+		(var alphaTeamName:str = "battleInfoComponent.alphaTeamName")
+	)
+
+	(style (bind width "_earsContainerWidth"))
+
+	(hblock
+		(bind visible "teamsHealthComponent != null && allyCollectionArray.length")
+		(style
+			(width = 100%)
+			(height = "HEALTH_POINTS_CONTAINER_HEIGHT")
+			(align = "center|middle")
+			(marginBottom = "SXS")
+		)
+
+		(element BackgroundBlack)
+		(block
+			(style
+				(position = "absolute")
+				(height = 100%)
+				(backgroundColor = "C_GREEN_HEALTH_POINTS_CONTAINER")
+				(alpha = 0.7)
+				(bind width "allyHealthProgress + '%'")
+			)
+		)
+
+		(block
+			(style (marginLeft = "SXS"))
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(bind text "alphaTeamName")
+			)
+		)
+		(block
+			(style (width = 100%) (marginRight = "SXS") (align = "right"))
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(bind text "allyHealthPointsRounded + ' ' + tr('IDS_KILO')")
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Repeat renderer='AllyAvatarInEars'
+			(bind count "allyCollectionArray.length")
+			(args
+				_collection = "allyCollection"
+				_showNickname = "_showNickname"
+			)
+		)
+	)
+)
+
+(def element AllyAvatarInEars (_collection:dhCollection, _showNickname:bool)
+	(scope
+		(var avatarEntity:dhEntity = "_collection.getEntityAtIndex($index)" (event "_collection.evUpdated"))
+		(var avatarComponent:dhComponent = 	"avatarEntity.avatar")
+		(var name:str = 	"avatarComponent.name")
+		(var pureName:str = "avatarComponent.pureName")
+		(var isBot:bool = 	"avatarComponent.isBot")
+		(var shipId:number = "avatarComponent.ship.ref.ship.id" (event "avatarComponent.evShipRefChanged"))
+
+		(var relation:number = "avatarEntity.relation.value" (event "avatarEntity.relation.evChanged"))
+		(var isSelf:bool = "relation == SC.Battle.DIPLOMACY_RELATIONS.SELF")
+		(var isEnemy:bool = "relation == SC.Battle.PLAYER_RELATION.ENEMY")
+
+		(macro IS_SPECTATOR_MODE)
+
+		(struct shipData = SHIP_DATA_SCOPE("shipId"))
+		(struct avatarHealth = GET_AVATAR_HEALTH_PROGRESS("avatarEntity.health"))
+
+		(var divisionMemberComponent:dhComponent = "avatarEntity.divisionMember")
+		(var isInSameDivision:bool = "divisionMemberComponent.isInSameDivision" (event "divisionMemberComponent.evDivisionChanged"))
+
+		(macro PULL_PLAYER_COLOR _isSelf="isSelf" _isInSameDivision="isInSameDivision")
+		(var playerShipColor:number = "!isSelf && isInSameDivision	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																	: SC.Ui_styles.SERVICE_COLORS.WHITE")
+
+		(var alphaOfText:number = "avatarHealth.isAlive 	? playerNameColor == SC.Ui_styles.SERVICE_COLORS.WHITE 	? TA
+																													: 1
+															: TS")
+
+		(var vehicleComponent:dhComponent = "avatarEntity.vehicle" (event "avatarEntity.evAdded") (event "avatarEntity.evRemoved"))
+		(var visibilityFlags:number = "vehicleComponent.visibilityFlags ?: 0" (event "vehicleComponent.evVisibilityFlagsChanged"))
+		(var isTeamVisibleInSpectate:bool = "isSpectatorTrainingMode || !isEnemy")
+		(macro GET_PREF 'showLampVisibility' "'ui.showLampVisibility'")
+		(var isLampVisibility:bool = "visibilityFlags > 0 && showLampVisibility && isTeamVisibleInSpectate")
+	)
+
+	(style
+		(width = 100%)
+		(height = "AVATAR_EARS_CONTAINER_HEIGHT")
+		(flow = "horizontal")
+		(marginBottom = 1px)
+	)
+
+	
+	(element BackgroundBlack)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundColor "isSelf ? SC.Ui_styles.SERVICE_COLORS.WHITE: C_DARK")
+			(bind alpha "isSelf 				? 0.15 :
+						!avatarHealth.isAlive 	? 0.15
+												: 0")
+		)
+	)
+
+	
+	(block
+		(bind visible "isSpectatorTrainingMode")
+		(style
+			(position = "absolute")
+			(height = 100%)
+			(backgroundColor = "C_GREEN_HEALTH_POINTS_CONTAINER")
+			(alpha = "TS")
+			(bind width "avatarHealth.healthProgress + '%'")
+		)
+	)
+
+	
+	(block
+		(bind visible "_showNickname")
+		(style
+			(width = "NICKNAME_EARS_CONTAINER_WIDTH")
+			(height = 100%)
+			(marginLeft = "SXS")
+			(align = "center|middle")
+			(bind alpha "alphaOfText")
+		)
+		(element PlayerNameAndClanTag
+			_isSelf =			"isSelf"
+			_isInSameDivision =	"isInSameDivision"
+			_playerName =		"pureName"
+			_isBot =			"isBot"
+			_isTextBold =		"isSelf"
+		)
+	)
+
+	
+	(block
+		(style
+			(marginLeft = "SXS") (marginRight = "SXS")
+			(width = "SHIP_STEREOTYPE_EARS_CONTAINER_WIDTH")
+			(height = 100%)
+		)
+		(element ShipIconAndLevelAndName
+			_shipIDS =			"shipData.shipIDS"
+			_shipLevelRome =	"shipData.shipLevelRome"
+			_shipLevelIcon =	"shipData.shipLevelIcon"
+			_shipType =			"shipData.subType ? toLower(shipData.subType): ''"
+			_name =				"name"
+			_isSelf =			"isSelf"
+			_isDead =			"!avatarHealth.isAlive"
+			_isInSameDivision =	"isInSameDivision"
+			_alpha =			"alphaOfText"
+			_playerShipColor =	"playerShipColor"
+			_isLampVisibility = "isLampVisibility"
+		)
+	)
+)
+
+
+(def element EnemyTeamInEars (_earsContainerWidth:number, _showNickname:bool)
+	(scope
+		(var enemyCollection:dhCollection = "getCollectionByPath(CC.avatar, 'team.enemy.sortedAlive')")
+		(var enemyCollectionArray:array = "enemyCollection.items" (event "enemyCollection.evUpdated"))
+
+		(var teamsHealthComponent:dhComponent = "getSingleEntity(CC.teamsHealth).teamsHealth")
+		(var enemyHealthPoints:number = "teamsHealthComponent.enemyHealthPoints" (event "teamsHealthComponent.evEnemyHealthPointsChanged"))
+		(var enemyMaxHealthPoints:number = "teamsHealthComponent.enemyMaxHealthPoints" (event "teamsHealthComponent.evEnemyMaxHealthPointsChanged"))
+		(var enemyHealthProgress:number = "enemyMaxHealthPoints ? enemyHealthPoints * 100 / enemyMaxHealthPoints : 0")
+		(var enemyHealthPointsRounded:str = "enemyHealthPoints ? formatFloatingPoint(enemyHealthPoints / 1000, 0) : '0'")
+
+		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
+		(var isFogOfWar:bool = "battleInfoComponent.isFogOfWar")
+		(var bravoTeamName:str = "battleInfoComponent.bravoTeamName")
+	)
+
+	(style (bind width "_earsContainerWidth"))
+
+	(hblock
+		(bind visible "teamsHealthComponent != null && enemyCollectionArray.length")
+		(style
+			(width = 100%)
+			(height = "HEALTH_POINTS_CONTAINER_HEIGHT")
+			(align = "center|middle")
+			(marginBottom = "SXS")
+		)
+
+		(element BackgroundBlack)
+		(block
+			(style
+				(position = "absolute")
+				(backgroundColor = "C_RED_HEALTH_POINTS_CONTAINER")
+				(alpha = 0.7)
+				(right = 0)
+				(height = 100%)
+				(bind width "enemyHealthProgress + '%'")
+			)
+		)
+
+		(block
+			(style (marginLeft = "SXS"))
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(bind text "enemyHealthPointsRounded + ' ' + tr('IDS_KILO')")
+			)
+		)
+		(block
+			(style (width = 100%) (marginRight = "SXS")  (align = "right"))
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (textAlign = "right") (alpha = "TA"))
+				(bind text "bravoTeamName")
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Repeat renderer='EnemyAvatarInEars'
+			(bind count "enemyCollectionArray.length")
+			(args
+				_collection = "enemyCollection"
+				_showNickname = "_showNickname"
+				_isFogOfWar = "isFogOfWar"
+			)
+		)
+	)
+)
+
+(def element EnemyAvatarInEars (_collection:dhCollection, _showNickname:bool, _isFogOfWar:bool=false)
+	(scope
+		(var avatarDHEntity:dhEntity = "_collection.getEntityAtIndex($index)" (event "_collection.evUpdated"))
+		(var avatarComponent:dhComponent = 	"avatarDHEntity.avatar")
+		(var name:str = 	"avatarComponent.name")
+		(var pureName:str = "avatarComponent.pureName")
+		(var isBot:bool = 	"avatarComponent.isBot")
+		(var shipId:number = "avatarComponent.ship.ref.ship.id" (event "avatarComponent.evShipRefChanged"))
+
+		(macro PULL_INFO_ABOUT_SHIP_DETECTION "avatarDHEntity.id" "_isFogOfWar")
+		(macro IS_SPECTATOR_MODE)
+
+		(struct shipData = SHIP_DATA_SCOPE("shipId"))
+		(struct avatarHealth = GET_AVATAR_HEALTH_PROGRESS("avatarDHEntity.health"))
+
+		(var alphaOfText:number = "avatarHealth.isAlive ? TA : TS")
+
+		(var visibilityFlags:number = "avatarDHEntity.vehicle.visibilityFlags" (event "avatarDHEntity.vehicle.evVisibilityFlagsChanged"))
+		(macro GET_PREF 'showLampVisibility' "'ui.showLampVisibility'")
+		(var isLampVisibility:bool = "visibilityFlags > 0 && showLampVisibility && isSpectatorTrainingMode")
+	)
+
+	(style
+		(width = 100%)
+		(height = "AVATAR_EARS_CONTAINER_HEIGHT")
+		(flow = "horizontal")
+		(marginBottom = 1px)
+	)
+
+	
+	(element BackgroundBlack)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundColor "C_DARK")
+			(bind alpha "avatarHealth.isAlive ? 0 : 0.15")
+		)
+	)
+
+	
+	(block
+		(bind visible "isSpectatorTrainingMode")
+		(style
+			(position = "absolute")
+			(height = 100%)
+			(right = 0)
+			(backgroundColor = "C_RED_HEALTH_POINTS_CONTAINER")
+			(alpha = "TS")
+			(bind width "avatarHealth.healthProgress + '%'")
+		)
+	)
+
+	
+	(block
+		(style
+			(marginLeft = "SXS") (marginRight = "SXS")
+			(width = "SHIP_STEREOTYPE_EARS_CONTAINER_WIDTH")
+			(height = 100%)
+		)
+		(element ShipIconAndLevelAndName
+			_shipIDS =					"shipData.shipIDS"
+			_shipLevelRome =			"shipData.shipLevelRome"
+			_shipLevelIcon =			"shipData.shipLevelIcon"
+			_shipType =					"shipData.subType ? toLower(shipData.subType): ''"
+			_name =						"name"
+			_isDead =					"!avatarHealth.isAlive"
+			_alpha =					"alphaOfText"
+			_isLampVisibility = 		"isLampVisibility"
+			_isShipHidedByFogOfWar =	"isDetectionInfoHidden"
+		)
+	)
+
+	
+	(block
+		(bind visible "_showNickname")
+		(style
+			(width = "NICKNAME_EARS_CONTAINER_WIDTH")
+			(height = 100%)
+			(marginLeft = "SXS")
+			(align = "center|middle")
+			(bind alpha "alphaOfText")
+		)
+		(element PlayerNameAndClanTag
+			_playerName =		"pureName"
+			_isBot =			"isBot"
+		)
+	)
+)

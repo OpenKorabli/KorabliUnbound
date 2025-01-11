@@ -1,0 +1,442 @@
+(def constant BATTLES_COUNT_TO_COLLAPSED_ALL_BANNER 15)
+(def constant DARK_BANNER_COLOR 0x20000000)
+
+(def macro ACCOUNT_LEVEL_BANNER_STATUS_ANIM (_eventName:expression, _visibleResult:bool, _dispatchName:expression = "''")
+	(controller $Animation
+		(bindcall play
+			duration = 0.1
+			from = 	{ alpha: 0, visualOffsetY: -10px }
+			to = 	{ alpha: 1, visualOffsetY: 0px }
+			easing = "Easing.quad_in"
+			watch = false
+			reverse = "!_visibleResult"
+			(event "_eventName")
+		)
+		(dispatch "_dispatchName" on='evAnimEnded')
+	)
+)
+
+(def macro ACCOUNT_LEVEL_BANNER_HIDDEN_ELEMENT ( _eventName:expression, _dispatchName:expression, _delay:number = 0)
+	(controller $Animation
+		(bindcall play
+			duration = 0.1
+			to = "{ alpha: 0, visualOffsetY: -10px }"
+			easing = "Easing.quad_out"
+			(event "_eventName")
+		)
+		(dispatch "_dispatchName" delay = "_delay" on='evAnimEnded')
+	)
+)
+
+(def macro ACCOUNT_LEVEL_BANNER_SHOW_ELEMENT ( _eventName:expression, _dispatchName:expression = "''", _alpha:number = 1)
+	(controller $Animation
+		(bindcall play
+			duration = 0.1
+			from = 	"{ visualOffsetY: 10px,	alpha: 0 }"
+			to = 	"{ visualOffsetY: 0px, 	alpha: _alpha }"
+			easing = "Easing.quad_in"
+			(event "_eventName")
+		)
+		(dispatch "_dispatchName" on='evAnimEnded')
+	)
+)
+
+(def css $PortBannerAccountLevelElementsWrapper ()
+	(width = 100%)
+	(paddingLeft = "SXS")
+	(paddingRight = "SXS")
+	(paddingBottom = "SXS")
+)
+
+(def element AccountLevelBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(event evPlayNextVoicePromptPart)
+		(event changePointsToShowAnimation)
+		(event evBlickShown)
+		(event evBannerAnimationStart)
+		(event evImageHid)
+		(event evTitleHid)
+		(event evProgressHid)
+		(event evStatusLineHid)
+		(event evImageShown)
+		(event evTitleShown)
+		(event evProgressShown)
+
+		(event AudioPromptHid)
+		(event BannerCountTaskHid)
+
+		(var accountLevelEntity:dhEntity = "getSingleEntity(CC.accountLevel)")
+		(var accountLevel:dhComponent = "accountLevelEntity.accountLevel")
+		(var curAccountLevel:number = "accountLevel.level" (event "accountLevel.evLevelChanged"))
+
+		(var currentLevelStep:dhComponent = "getPrimaryEntity(CC.accountLevelingStep, curAccountLevel).accountLevelingStep")
+		(var nextLevelStep:dhComponent = 	"getPrimaryEntity(CC.accountLevelingStep, curAccountLevel + 1).accountLevelingStep")
+		(var lastLevelStep:dhComponent = 	"getPrimaryEntity(CC.accountLevelingStep, curAccountLevel - 1).accountLevelingStep")
+
+		(var accountStepPoints:number = "currentLevelStep.thisStepPoints ?: 0")
+		(var nextStepPoints:number = 	"nextLevelStep.thisStepPoints ?: 0")
+		(var lastStepMinPoints:number =	"lastLevelStep.thisStepPoints ?: 0")
+
+		(var currentStepFeatures:number = 	"currentLevelStep.features" (event "lastLevelStep.evFeaturesChanged"))
+		(var nextStepFeatures:number = 		"nextLevelStep.features" 	(event "nextLevelStep.evFeaturesChanged"))
+
+		(var lastStepsCount:number = "accountStepPoints - lastStepMinPoints")
+
+		
+		
+
+		
+		(var battleAmountPerStep:number = "nextStepPoints > 0 ? nextStepPoints - accountStepPoints : 0" watch=false (event "accountLevel.evLevelChanged"))
+
+		(var levelPointsEntity:dhEntity = "getSingleEntity(CC.accountLevelPoints)")
+		(var levelPoints:dhComponent = "levelPointsEntity.accountLevelPoints")
+		(var currentPoints:number = "levelPoints.currentLevelPoints ?: 0" (event "levelPoints.evCurrentLevelPointsChanged"))
+
+		(var pointsToShowAnimation:number = "levelPoints.lastSeenAccountLevelPoints" (event "levelPoints.evLastSeenAccountLevelPointsChanged"))
+
+		(var doneCountSteps:number = "currentPoints - accountStepPoints")
+		(var lineProgress:number = "battleAmountPerStep ? doneCountSteps / battleAmountPerStep : null")
+
+		(var isAnimationUnwatched:bool = "currentPoints != pointsToShowAnimation")
+		(var isLastStepJustFinished:bool = "currentPoints == accountStepPoints")
+		(var isShowLastStep:bool = "isLastStepJustFinished && isAnimationUnwatched")
+
+		(var battleAmountPerStepAnimation:number = 	"isShowLastStep  && accountStepPoints ? lastStepsCount : battleAmountPerStep")
+
+		(var accountLevelNumber:number = "isShowLastStep ? curAccountLevel : curAccountLevel + 1")
+		(var battlesToStep:number = "isShowLastStep && isAnimationUnwatched ? 1 : nextStepPoints - currentPoints")
+
+		(var feature:number = "isShowLastStep && isAnimationUnwatched ? currentStepFeatures : nextStepFeatures")
+		(var accountFeature:dhComponent = "getPrimaryEntity(CC.accountFeature, feature).accountFeature")
+
+		(var imageUrl:str = "'url:' + accountFeature.iconPath + '.png'" (event "accountFeature.evStateChanged"))
+		(var titleFeature:str = "accountFeature.title" (event "accountFeature.evStateChanged"))
+
+		(var accountSelfEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var accountInfo:dhComponent = "accountSelfEntity.accountInfo")
+		(var abuseStatus:number = "accountInfo.abuseStatus" (event "accountInfo.evAbuseStatusChanged"))
+		(var isAbuseStatusConfirmed:bool = "abuseStatus == SC.Common.ABUSE_STATUS.CONFIRMED")
+
+		(var splitRunTest:dhComponent = "getPrimaryEntity(CC.splitRunTest, 'Promoreward_Research').splitRunTest")
+		(var battlesToMinimize:number = "splitRunTest.data.battlesToMinimize ?: BATTLES_COUNT_TO_COLLAPSED_ALL_BANNER" (event "splitRunTest.evDataChanged"))
+		(var isCollapsedBanner:bool = "currentPoints >= battlesToMinimize")
+
+		(macro PULL_CURRENT_TOP_WINDOW_NAME)
+		(var isOnTop:bool = "currentTopWindowName == 'Dock'")
+		(struct mainRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.MAIN"))
+		(var isSceneReadyForAnimation:bool = "isOnTop && mainRoute.isActive")
+		(var isHeaderBannerMotion:bool = "isShowLastStep && isSceneReadyForAnimation")
+
+		(var voicePromptEntity:dhEntity = "getSingleEntity(CC.voicePrompt)")
+		(var voicePrompt:dhComponent = "voicePromptEntity.voicePrompt")
+		(var isAudioVisible:bool = "false")
+		(bind isAudioVisible "false"	init=false (event "AudioPromptHid"))
+		(bind isAudioVisible "true"		init=false (event "BannerCountTaskHid"))
+	)
+	(name = 'account_level_banner')
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setLastSeenAccountLevelPoints', { 'points': currentPoints } ]" init=false watch=false (event "changePointsToShowAnimation"))
+	(bindcall externalCall "'inputMapping.onAction'" "['playVoiceNext', { } ]" init=false (event "evPlayNextVoicePromptPart"))
+
+	(dispatch evPlayNextVoicePromptPart delay=0.2 (bind enabled "isHeaderBannerMotion") (bind trigger "isHeaderBannerMotion"))
+
+	(dispatch changePointsToShowAnimation (bind enabled "!isLastStepJustFinished") (event "evBlickShown"))
+	(dispatch changePointsToShowAnimation (event "evStatusLineHid"))
+
+	(dispatch evBannerAnimationStart (bind enabled "isLastStepJustFinished") (event "evBlickShown"))
+
+	(style (width = "BANNER_SIZE_WIDTH"))
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.LEVELING }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'AccountLevelBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+	)
+
+	(controller $Tooltip
+		(bind enabled "isAbuseStatusConfirmed")
+		(renderer = 'AbuseStatusProfileTooltip')
+		(args
+			_mouseInstructionText = 'IDS_GO_TO_ACCESS_LEVEL_MOUSE_INSTRUCTION'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "1")
+	)
+
+	(block
+		(style (width = 100%))
+		(block
+			(class $PortBanner)
+
+			(style 
+				(width = 100%)
+				(bind backgroundColor "!isCollapsedBanner ? DARK_BANNER_COLOR : NO_COLOR")
+			)
+
+			(element BannerItemTitle
+				_title = 'IDS_DOCK_BANNER_ACCESS_LEVEL'
+				_isMultiline = true
+			)
+
+			(block
+				(class $PortBannerStatus)
+
+				(block
+					(bind visible "!isAudioVisible")
+
+					(macro ACCOUNT_LEVEL_BANNER_STATUS_ANIM _eventName = "voicePrompt.evPlay" _visibleResult = false _dispatchName = "'BannerCountTaskHid'")
+					(macro ACCOUNT_LEVEL_BANNER_STATUS_ANIM _eventName = "AudioPromptHid" _visibleResult = true)
+
+					(element BannerCountTask
+						_count = "accountLevelNumber"
+					)
+				)
+
+				(block
+					(bind visible "isAudioVisible")
+
+					(macro ACCOUNT_LEVEL_BANNER_STATUS_ANIM _eventName = "voicePrompt.evStop" _visibleResult = false _dispatchName = "'AudioPromptHid'")
+					(macro ACCOUNT_LEVEL_BANNER_STATUS_ANIM _eventName = "BannerCountTaskHid" _visibleResult = true)
+
+					(mc audio_prompt)
+				)
+			)
+		)
+
+		(block
+			(bind visible "isCollapsedBanner")
+			(class $PortBannerAccountLevelElementsWrapper)
+
+			(controller $Instance renderer = 'BannerProgressBar'
+				(bind enabled "isCollapsedBanner")
+				(args
+					_progress = "lineProgress"
+				)
+			)
+		)
+
+		(block
+			(bind visible "isAbuseStatusConfirmed")
+			(class $PortBannerAccountLevelElementsWrapper)
+
+			(style
+				(paddingTop = "XXS")
+				(backgroundColor = "!isCollapsedBanner ? DARK_BANNER_COLOR : NO_COLOR")
+			)
+
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "isAbuseStatusConfirmed")
+				(args
+					_text = 'IDS_ACCOUNT_PROGRESS_ABUSED_TOOLTIP_AL_BANNER'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+					_width = 100%
+				)
+			)
+		)
+
+		(block
+			(bind visible "!isAbuseStatusConfirmed && !isCollapsedBanner")
+			(class $PortBannerAccountLevelElementsWrapper)
+
+			(style (align = "center"))
+
+			(block
+				(style
+					(width = 100%)
+					(height = 128px)
+					(align = "middle|center")
+				)
+
+				(block
+					(style
+						(width = 128px)
+						(height = 100%)
+						(bind backgroundImage "imageUrl")
+						(backgroundSize = "fill")
+					)
+
+					(macro ACCOUNT_LEVEL_BANNER_HIDDEN_ELEMENT _eventName = "evBannerAnimationStart" _dispatchName = "'evImageHid'") 
+
+					(controller $Animation
+						(bindcall play
+							keyframes="[
+								{ time: 0,		to: { scaleX: 1.9, 	scaleY: 1.9,	visualOffsetY: 0px, alpha: 0 } },
+								{ time: 0.3, 	to: { scaleX: 0.98,	scaleY: 0.98,	visualOffsetY: 0px, alpha: 1 } },
+								{ time: 0.4, 	to: { scaleX: 1.08, scaleY: 1.08 } },
+								{ time: 0.5, 	to: { scaleX: 1,	scaleY: 1 } }]"
+							
+							(event "evStatusLineHid")
+						)
+						(dispatch "evImageShown" on='evAnimEnded')
+					)
+				)
+			)
+
+			(block
+				(style (width = 100%) (gap = "S"))
+
+				(block
+					(style (width = 100%) (alpha = "TA"))
+
+					(macro ACCOUNT_LEVEL_BANNER_HIDDEN_ELEMENT 	_eventName = "evImageHid" 	_dispatchName = "'evTitleHid'")
+					(macro ACCOUNT_LEVEL_BANNER_SHOW_ELEMENT 	_eventName = "evImageShown"	_dispatchName = "'evTitleShown'" _alpha = 0.9)
+
+					(tf
+						(class $TextDefaultBold17NM)
+						(style (width = 100%) (leading = -4))
+						(bind text "titleFeature")
+					)
+				)
+
+				(block
+					(style (width = 100%))
+
+					(macro ACCOUNT_LEVEL_BANNER_HIDDEN_ELEMENT 	_eventName = "evTitleHid" 	_dispatchName = "'evProgressHid'")
+					(macro ACCOUNT_LEVEL_BANNER_SHOW_ELEMENT 	_eventName = "evTitleShown"	_dispatchName = "'evProgressShown'")
+
+					(element ProgressBarAlBannerSteps
+						_stepsCount = "battleAmountPerStepAnimation"
+						_isLastStepAnimation = "isLastStepJustFinished"
+						_lastBarStepCount = "lastStepsCount"
+						_doneCountSteps = "doneCountSteps"
+						_isAnimationUnwatched = "isAnimationUnwatched"
+						_isSceneReadyForAnimation = "isSceneReadyForAnimation"
+					)
+				)
+
+				(block
+					(style (width = 100%) (alpha = "TA"))
+
+					(macro ACCOUNT_LEVEL_BANNER_HIDDEN_ELEMENT 	_eventName = "evProgressHid"	_dispatchName = "'evStatusLineHid'"	_delay = 0.1)
+					(macro ACCOUNT_LEVEL_BANNER_SHOW_ELEMENT 	_eventName = "evProgressShown"	_alpha = 0.9)
+
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "!isAbuseStatusConfirmed && !isCollapsedBanner")
+						(args
+							_text = "subst('IDS_BATTLES_TO_NEXT_STEP', [], {battles: battlesToStep}, battlesToStep)"
+							_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.LOCK"
+						)
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element ProgressBarAlBannerSteps (	_stepsCount:number, _isLastStepAnimation:bool, _lastBarStepCount:number, _doneCountSteps:number,
+										_isAnimationUnwatched:bool, _isSceneReadyForAnimation:bool)
+	(scope
+		(var widthAlSteps:number = "BANNER_SIZE_WIDTH - SXS*2")
+		(var gapVal:number = "XXS")
+		(var accessWidth:number = "widthAlSteps - gapVal * (_stepsCount - 1)")
+		(var stepWidth:number = "_stepsCount ? floor(accessWidth /_stepsCount) : 0")
+		(var pixelDeficit:number = "accessWidth - stepWidth * _stepsCount")
+	)
+
+	(style (flow = "horizontal") (gap = "gapVal") (height = 8px))
+	
+	(controller $Repeat renderer='StepsProgressItem'
+		(bind count "_stepsCount")
+		(args
+			_width = "$index < pixelDeficit ? stepWidth + 1 : stepWidth"
+			_isAnimateStep = "_isLastStepAnimation 	? ($index == _lastBarStepCount - 1)	&& _isAnimationUnwatched
+													: ($index == _doneCountSteps - 1) 	&& _isAnimationUnwatched"
+
+			_isStepDone = "	_isLastStepAnimation 	? (($index < _lastBarStepCount - 1) && _isAnimationUnwatched) :
+							_isAnimationUnwatched 	? ($index <= _doneCountSteps - 2)
+													: ($index <= _doneCountSteps - 1)"
+
+			_isSceneReadyForAnimation = "_isSceneReadyForAnimation"
+		)
+	)
+)
+
+(def element StepsProgressItem (_width:number, _isAnimateStep:bool, _isStepDone:bool, _isSceneReadyForAnimation:bool)
+	(style
+		(height = 100%)
+		(bind width "_width")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundColor "_isStepDone ? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+			(bind alpha "_isStepDone ? 1 : 0.3")
+		)
+	)
+
+	(controller $Instance renderer='AccountLevelingStepsAnimation'
+		(bind enabled "_isSceneReadyForAnimation && _isAnimateStep")
+		(args
+			_width = "_width"
+		)
+	)
+)
+
+(def element AccountLevelingStepsAnimation (_width:number)
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpLineProgress']" delay=0.1 on='addedToStage')
+	
+	(class $FullsizeAbsolute)
+	
+	(block	
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW"))
+
+		(controller $Animation
+			(bindcall play
+				keyframes="[
+					{ time: 0, 		to: { scaleX: 0 } },
+					{ time: 0.3, 	to: { scaleX: 0,  	colorTransform: { redOffset: 255, 	greenOffset: 255, 	blueOffset: 255 } } },
+					{ time: 0.9, 	to: { scaleX: 1, 	colorTransform: { redOffset: 0, 	greenOffset: 0,		blueOffset: 0 } } } ]"
+				easing = "Easing.quad_out"
+				on = 'addedToStage'
+			)
+		)
+	)
+
+	(block
+		(class $ZeroSize)
+
+		(style
+			(position = "absolute")
+			(top = 50%)
+			(align = "center|middle")
+		)
+
+		(block
+			(style
+				(width = 112px)
+				(height = 200px)
+				(hitTest = false)
+				(backgroundImage = 'url:../accountLevel/progressBarIcons/big_blink.png')
+				(backgroundSize = "fill")
+			)
+
+			(controller $Animation
+				(bindcall play
+					keyframes="[
+						{ time: 0, 		to: { alpha: 0, scaleX: 0, 		scaleY: 0, 		visualOffsetX: 0 } },
+						{ time: 0.3, 	to: { alpha: 1, scaleX: 1, 		scaleY: 1, 		visualOffsetX: 0 } },
+						{ time: 0.9, 	to: { alpha: 1, scaleX: 0.4, 	scaleY: 0.4, 	visualOffsetX: _width } },
+						{ time: 0.95, 	to: { alpha: 0 } } ]"
+					easing = "Easing.quad_out"
+					on = 'addedToStage'
+				)
+				(dispatch "'evBlickShown'" dir="EventDirection.UP" init=false on='evAnimEnded')
+			)
+		)
+	)
+)

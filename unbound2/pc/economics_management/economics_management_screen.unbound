@@ -1,0 +1,626 @@
+(def element FilledEconomicBoostSlotTooltip (_ecoBoostSlotEntityId:number, _boostTypeModifier:str, _showPermoboostStatusIfActive:bool, _hasMouseInstruction:bool=false, _mouseInstruction:dict=null)
+	(scope
+		
+		(macro PULL_SHIP_ID)
+		(macro PULL_OWN_SHIP_SCOPE "viewedShipId" "'shipEntity'" "'shipInfo'")
+		(var ownShipInfo:gfx = "shipEntity ? shipEntity.ownShip : null")
+
+		(var isLocked:bool =		"ownShipInfo ? ownShipInfo.isLocked : false"		(event "ownShipInfo.evUpdateLock"))
+		(var isInFormation:bool =	"ownShipInfo ? ownShipInfo.isInFormation : false"	(event "ownShipInfo.evUpdateLock"))
+		(var isNeedRepair:bool =	"ownShipInfo ? ownShipInfo.isNeedRepair : false"	(event "ownShipInfo.evUpdateDockState"))
+		
+
+		(var shipAttrs:gfx = "$datahub.getSingleEntity(CC.shipEconomicAttributes)")
+		(var modifiers:dict = "shipAttrs ? shipAttrs.attributes.modifiers : null" (event "shipAttrs.attributes.evChanged"))
+		
+		(var ecoBoostSlotEntity:gfx = "$datahub.getEntity(_ecoBoostSlotEntityId)")
+		(var installedCommonEcoboostId:number = "ecoBoostSlotEntity ? ecoBoostSlotEntity.equipmentSlot.installedEntityId : null" (event "ecoBoostSlotEntity.equipmentSlot.evInstalledEntityIdChanged"))
+	
+		(var ecoBoostEntity:gfx = "installedCommonEcoboostId ? $datahub.getEntity(installedCommonEcoboostId) : null")
+		(var ecoBoostId:number = "ecoBoostEntity ? ecoBoostEntity.ecoBoost.id : null" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(struct ecoBoostPrice = PULL_PRICE(_entityId = "toString(ecoBoostId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var canBeBought:bool = "ecoBoostEntity ? ecoBoostEntity.ecoBoost.canBuy : false" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var name:str = "ecoBoostEntity ? ecoBoostEntity.ecoBoost.name : ''" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var type:number = "ecoBoostEntity ? ecoBoostEntity.ecoBoost.type : 0" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var rarity:number = "ecoBoostEntity ? ecoBoostEntity.ecoBoost.rarity : 0" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var amount:number = "ecoBoostEntity ? ecoBoostEntity.countComponent.value : 0" (event "ecoBoostEntity.countComponent.evUpdate"))
+
+		(var ecoBoostSubheaderText:str = "rarity	? tr('IDS_ECONOMIC_BOOST_TYPE_EXPENDABLE_' + rarity)
+													:''")
+
+		(var unvailableForPurchaseHeaderText:str = "canBeBought		?	'' :
+													rarity == 3		?	'IDS_UNAVAILABLE_RARE_ECOBOOST_FOR_PURCHASE'
+																	:	'IDS_UNAVAILABLE_UNIQUE_ECOBOOST_FOR_PURCHASE'")
+	
+		(var isInstalledAndActive:bool = "installedCommonEcoboostId && amount > 0")
+		(var isInstalledAndInactive:bool = "installedCommonEcoboostId && !amount")
+
+		(var expendableAttributesPositive:array = "ecoBoostEntity ? ecoBoostEntity.attributes.positive : []" (event "ecoBoostEntity.attributes.evChanged"))
+		(var expendableBoostInfluence:str = "expendableAttributesPositive[0]['measuredValue'] + expendableAttributesPositive[0]['measure']")
+		(var isExpendableParamsModifiersVisible:bool = "expendableAttributesPositive.length && isInstalledAndActive")
+
+		(var permanentAttributesPositive:array = "ecoBoostSlotEntity ? ecoBoostSlotEntity.attributes.positive : []" (event "ecoBoostSlotEntity.attributes.evChanged"))
+		(var isInstalledPermanentEcoboost:bool = "!permanentAttributesPositive.empty")
+	
+		
+		(var amountPermanentAttributes:array = "ecoBoostSlotEntity ? ecoBoostSlotEntity.attributes.neutral : []" (event "ecoBoostSlotEntity.attributes.evChanged"))
+		(var permanentBoostInfluence:str = "amountPermanentAttributes[0]['measuredValue'] + amountPermanentAttributes[0]['measure']")
+
+		(var commonBoostTooltipHeaderText:str = "tr('IDS_ECONOMIC_BOOST_TYPE_' + toUpper(_boostTypeModifier) + '_SIMPLE_SUMMARY_TOOLTIP') + tr('IDS_TOOLTIP_SPACE') + expendableBoostInfluence")
+		(var permanentBoostTooltipHeaderText:str = "tr('IDS_ECONOMIC_BOOST_TYPE_' + toUpper(_boostTypeModifier) + '_SIMPLE_SUMMARY_TOOLTIP') + tr('IDS_TOOLTIP_SPACE') + permanentBoostInfluence")
+		(var headerUnifiedStatus:str = "isInstalledAndActive ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+
+		(var mouseInstruction:dict = "	_hasMouseInstruction	?	_mouseInstruction :
+										isInFormation			?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																		_text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										isLocked				?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																		_text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										isNeedRepair			?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																		_text: 'IDS_SERVICE_SHIP_TO_OPERATE_ECONOMIC_BOOSTS' }
+																:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																		_text: 'IDS_ECONOMIC_BOOST_SLOT_OPEN_INFOTIP' }")
+	)
+	(style (width = 320px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHeaderWithIconAndText'
+				(bind enabled "installedCommonEcoboostId")
+				(args
+					_imageHeight = 80
+					_imageWidth = 80
+					_unifiedStatus = "headerUnifiedStatus"
+					_headerText = "commonBoostTooltipHeaderText"
+					_subheaderText = "ecoBoostSubheaderText"
+					_headerIconType = "SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.ECO_BOOST"
+					_data = "{ paramsId: name, type: type }"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInstalledAndInactive"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isInstalledAndInactive")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text = 'IDS_PREINSTALLED_ECOBOOST'
+				)
+			)
+		)
+
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "installedCommonEcoboostId"))
+		)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(bind visible "installedCommonEcoboostId")
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "isInstalledAndActive")
+				(controller $Instance renderer='TooltipSystemCounterLine'
+					(bind enabled "isInstalledAndActive")
+					(args
+						_title = 'IDS_IN_WAREHOUSE'
+						_count = "amount"
+						_isAutoWidth = true
+					)
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "canBeBought")
+				(controller $Instance renderer='TooltipSystemPriceTagLine'
+					(bind enabled "canBeBought")
+					(args
+						_title = 'IDS_COST_COLON'
+						_priceInfo = "ecoBoostPrice.info"
+						_isAutoWidth = true
+					)
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "!canBeBought")
+				(controller $Instance renderer='TooltipSystemDescriptionText'
+					(bind enabled "!canBeBought")
+					(args
+						_descriptionText = "unvailableForPurchaseHeaderText"
+					)
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "installedCommonEcoboostId"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "installedCommonEcoboostId")
+				(args
+					_attributesNegative = "expendableAttributesPositive"
+				)
+			)
+		)
+		
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "installedCommonEcoboostId && isInstalledPermanentEcoboost"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHeaderWithIconAndText'
+				(bind enabled "isInstalledPermanentEcoboost")
+				(args
+					_imageWidth = 60
+					_imageHeight = 60
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_headerText = "permanentBoostTooltipHeaderText"
+					_subheaderText = 'IDS_ECONOMIC_BOOST_TYPE_MULTIBOOST'
+					_imageUrl = 'url:../eco_boosts/cards/tokens/marker_bonus.png'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInstalledPermanentEcoboost"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "isInstalledPermanentEcoboost")
+				(args
+					_attributesNegative = "permanentAttributesPositive"
+					_attributesPositive = "[]"
+					_attributesNeutral = "[]"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "mouseInstruction._unifiedStatus"
+			_text = "mouseInstruction._text"
+		)
+	)
+
+)
+
+(def element EmptyEconomicBoostSlotTooltip (_type:number, _boostTypeModifier:str, _slotId:number)
+	(scope
+		(var ecoBoostCollection:gfx = "$datahub.getCollection(CC.ecoBoost)")
+		(var purchasableEcoBoostsColByAmountCollection:gfx = "ecoBoostCollection ? ecoBoostCollection.getChildByPath('availableToUser.' + 'byType.' + SC.Common.ECOBOOST_TYPES.COMMON + '.bySubtype.' + _type) : null")
+		(var purchasableEcoBoostsColByAmount:array = "purchasableEcoBoostsColByAmountCollection ? purchasableEcoBoostsColByAmountCollection.items : []" (event "purchasableEcoBoostsColByAmountCollection.evAdded")
+																																						(event "purchasableEcoBoostsColByAmountCollection.evRemoved"))
+
+		(macro PULL_SHIP_ID)
+		(macro PULL_OWN_SHIP_SCOPE "viewedShipId" "'shipEntity'" "'shipInfo'")
+
+		(var isLocked:bool =		"shipEntity ? shipEntity.ownShip.isLocked : false"		(event "shipEntity.ownShip.evUpdateLock"))
+		(var isInFormation:bool =	"shipEntity ? shipEntity.ownShip.isInFormation : false"	(event "shipEntity.ownShip.evUpdateLock"))
+		(var isNeedRepair:bool =	"shipEntity ? shipEntity.ownShip.isNeedRepair : false"	(event "shipEntity.ownShip.evUpdateDockState"))
+
+		(var mouseInstruction:dict = "	isInFormation	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																_text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										isLocked		?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																_text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										isNeedRepair	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																_text: 'IDS_SERVICE_SHIP_TO_OPERATE_ECONOMIC_BOOSTS' }
+														:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																_text: 'IDS_ECONOMIC_BOOST_SLOT_OPEN_INFOTIP' }")
+	)
+
+	(style (width = 360px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "'IDS_ECONOMIC_BOOST_TYPE_' + toUpper(_boostTypeModifier) + '_SIMPLE_SUMMARY_TOOLTIP'"
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+		)
+		
+		(element TooltipSystemHorizontalDivider)
+		(block
+			(style (width = 100%) (paddingRight = "-M") (paddingLeft = "-M") (paddingBottom = "-SXS") (paddingTop = "-SXS"))
+			(controller $Repeat renderer='EconomicBoostInfotipItem'
+				(bind count "purchasableEcoBoostsColByAmount.length")
+				(args
+					_entityId = "purchasableEcoBoostsColByAmount[$index].id"
+					_slotId = "_slotId"
+					_slotType = "_type"
+				)
+			)
+		)
+		
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "mouseInstruction._unifiedStatus"
+			_text = "mouseInstruction._text"
+		)
+	)
+)
+
+(def element EconomicBoostInfotipItem (_entityId:number, _slotId:number, _slotType:number, _installedId:number=null, _width:number=null)
+	(scope
+		(macro PULL_SHIP_ID)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var ecoBoostEntity:gfx = " $datahub.getEntity(_entityId)")
+		(var ecoBoostId:number = "ecoBoostEntity.ecoBoost.id" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(struct ecoBoostPrice = PULL_PRICE(_entityId = "toString(ecoBoostId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		
+		(var canBeBought:bool = "ecoBoostEntity ? ecoBoostEntity.ecoBoost.canBuy : false" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var name:str = "ecoBoostEntity ? ecoBoostEntity.ecoBoost.name : ''" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var amount:number = "ecoBoostEntity ? ecoBoostEntity.countComponent.value : 0" (event "ecoBoostEntity.countComponent.evUpdate"))
+		(var isPriceTagVisible:bool = "canBeBought && amount == 0 && ecoBoostPrice.info")
+
+		(var hasAnyBoosts:bool =			"amount > 0")
+
+		(var isInstalled:bool =				"_installedId == ecoBoostId")
+		(var isInstalledAndActive:bool =	"isInstalled && hasAnyBoosts")
+		(var isExpired:bool =				"isInstalled && !hasAnyBoosts")
+		(var isUnclickable:bool =			"!canBeBought && !isInstalled && !hasAnyBoosts")
+
+		(var boostTitle:str = "'IDS_' + toUpper(name)")
+		(var ecoBoostAlphaParam:number = "isUnclickable ? 0.5 : 1")
+
+		(var attributesPositive:array = "ecoBoostEntity ? ecoBoostEntity.attributes.positive : []" (event "ecoBoostEntity.attributes.evChanged"))
+		(var boostInfluence:str = "attributesPositive.length ? attributesPositive[0]['measuredValue'] : ''")
+		(var boostMeasure:str = "attributesPositive.length ? attributesPositive[0]['measure'] : ''")
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:dhComponent = "resourceEntity.accountResource")
+		(var operationsAccountLocked:bool = "accountResourceComponent.operationsLocked"		(event "accountResourceComponent.evOperationsLockChanged"))
+		
+		(var clickAction:str = "operationsAccountLocked || isUnclickable			? '' :
+								!hasAnyBoosts && canBeBought						? ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL :
+								isInstalled											? ECOBOOST_ACTION.UNINSTALL :
+								hasAnyBoosts || (!hasAnyBoosts && !canBeBought)		? ECOBOOST_ACTION.INSTALL
+																					: ''")
+
+		(var infotipItemBGState:number = "	isUnclickable	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+											mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+											rollOver		? SC.Ui_styles.BUTTON_STATE.OVER :
+											isInstalled		? SC.Ui_styles.BUTTON_STATE.SELECTED
+															: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(bind name "'EconomicBoostInfotipItem_' + name")
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "$index > 0"))
+	)
+
+	(block
+		
+		
+
+		(class $FullsizeAbsolute)
+		(style (paddingTop = 1px))
+
+		(controller $Tooltip
+			(renderer = 'EconomicBoostTooltip')
+			(args
+				_id =					"ecoBoostId"
+				_isInstalled =			"isInstalled"
+				_noMouseInstructions =	"isUnclickable"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element MenuItemBackground
+			_state =			"infotipItemBGState"
+			_isAttentionState =	"isExpired"
+		)
+
+		(macro MOUSE_HANDLER
+			_soundSet =	"clickAction ? 'button_card' : ''"
+			_methods =	"[	{ type:	clickAction != ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL ? 'inputMapping.onAction' : '',	name: clickAction,	args: { boostId: ecoBoostId } },
+							{ type:	clickAction == ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL ? 'inputMapping.onRequest' : '',	name: clickAction,	args: { _ecoBoostId: ecoBoostId, _isCommonBoost: true } }]"
+		)
+	)
+
+	(hblock
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(width = 100%)
+			(height = 96px)
+			(paddingTop = "S")
+			(paddingBottom = "S")
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+		)
+
+		(block
+			(style
+				(width = 80px)
+				(height = 80px)
+				(marginRight = "S")
+				(bind alpha "ecoBoostAlphaParam")
+				(bind backgroundImage "'url:../eco_boosts/common/' + name + '.png'")
+				(macro DESATURATION_DEFAULT "hasAnyBoosts || canBeBought || isInstalled")
+			)
+		)
+
+		(block
+			(style
+				(width = 150px)
+				(bind alpha "ecoBoostAlphaParam")
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(width = 100%)
+					(leading = -2)
+					(bind textColor "isInstalledAndActive ?  SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(bind alpha "isInstalledAndActive ? 1 : TA")
+				)
+
+				(bind text "boostInfluence + boostMeasure")
+			)
+
+			
+			(block
+				(bind name "'AmountOfBought_' + name")
+
+				(style (marginTop = "SXS"))
+
+				(tf
+					(bind visible "hasAnyBoosts")
+					(class $TextDefaultNM)
+					(style (alpha = "TC"))
+					(bind text "tr('IDS_IN_WAREHOUSE') + ' ' + formatSeparator(amount)")
+				)
+
+				(tf
+					(bind visible "!hasAnyBoosts")
+					(class $TextDefaultNM)
+					(style (alpha = "TC"))
+					(text = 'IDS_OUT_OF_STOCK')
+				)
+			)
+			
+		)
+
+		
+		(block
+			(style
+				(hitTest = false)
+				(position = "absolute")
+				(align = "middle")
+				(right = 0px)
+				(height = 100%)
+			)
+
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "canBeBought && !hasAnyBoosts")
+				(args
+					_priceInfo =		"ecoBoostPrice.info"
+					_showDiscountTag =	true
+				)
+			)
+
+			(controller $Instance renderer='CloseButton'
+				(bind enabled "isInstalledAndActive && rollOver")
+				(args
+					_isDisabled = true
+				)
+			)
+
+			(block
+				(bind visible "isInstalledAndActive && !rollOver")
+				(style
+					(marginRight = "-XXS")
+					(width = 19px)
+					(height = 19px)
+					(backgroundSize = "cover")
+					(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
+				)
+			)
+		)
+		
+	)
+)
+
+(def element InstallEconomicBoostsRaritiesButton (_isAnyBoostInstalled:bool)
+	(scope
+		(event evHideInfotip)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var expendableBoostsInStorageCollection:dhCollection =	"getCollection(CC.ecoBoost).getChildByPath('availableToUser.' + 'byType.' + SC.Common.ECOBOOST_TYPES.COMMON + '.expendableBoostsInStorage')")
+		(var hasExpendableBoostsInStorage:bool = "expendableBoostsInStorageCollection.length > 0")
+
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShip:dhComponent = "shipEntity.ownShip")
+
+		(var isLocked:bool =		"ownShip.isLocked"		(event "ownShip.evUpdateLock"))
+		(var isInFormation:bool =	"ownShip.isInFormation"	(event "ownShip.evUpdateLock"))
+		(var isNeedRepair:bool =	"ownShip.isNeedRepair"	(event "ownShip.evUpdateDockState"))
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var operationsAccountLocked:bool = "resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
+
+		(var isInFormationOrLocked:bool =	"isInFormation || isLocked || isNeedRepair")
+		(var isActionsAvailable:bool =		"!(operationsAccountLocked || isInFormationOrLocked) && (hasExpendableBoostsInStorage || _isAnyBoostInstalled)")
+
+		(var isVisuallyEnabled:bool = "(_isAnyBoostInstalled || hasExpendableBoostsInStorage) && !isInFormationOrLocked")
+		(var backgroundPath:str = "	mouseDown	?	'url:../service_kit/buttons/button_dock/down.png' :
+									rollOver	?	'url:../service_kit/buttons/button_dock/over.png'
+												:	'url:../service_kit/buttons/button_dock/default.png'")
+		(var isInfotipVisible:bool = false)
+		(var isInfotipAvailable:bool = "isVisuallyEnabled && !_isAnyBoostInstalled")
+
+		(var mouseInstruction:dict = "	isInFormation					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										isLocked						? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										isNeedRepair					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_SERVICE_SHIP_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										!hasExpendableBoostsInStorage &&
+										!_isAnyBoostInstalled			? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_NO_EXPANDABLE_ECONOMIC_BOOSTS_IN_STORAGE'}
+																		: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																			text: _isAnyBoostInstalled	? 'IDS_UNINSTALL_ALL_ECONOMIC_BOOSTS_HINT'
+																										: 'IDS_INSTALL_ECONOMIC_BOOSTS_RARITY_LEVEL_HINT' }")
+
+		(struct ecoBonusFinalNewTip = PULL_GUIDING_TIP( _type = "SC.Context_guiding_tip.TIP_TYPE.ECO_BONUS_FINAL" ))
+		(struct ecoBonusFinalRepeatNewTip = PULL_GUIDING_TIP( _type = "SC.Context_guiding_tip.TIP_TYPE.ECO_BONUS_FINAL_REPEAT" ))
+
+		(var ecoBonusTipId:number = "	ecoBonusFinalNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.ECO_BONUS_FINAL :
+										ecoBonusFinalRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.ECO_BONUS_FINAL_REPEAT
+																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var ecoBonusTipVisible:bool = "ecoBonusTipId != SC.Context_guiding_tip.TIP_TYPE.NONE && !_isAnyBoostInstalled")
+	)
+
+	(style (width = 100%) (align = "right") (macro DESATURATION_DEFAULT "!isVisuallyEnabled"))
+	(block
+		(element DockButton
+			_enabled = "isActionsAvailable"
+			_isVisuallyEnabled = "isVisuallyEnabled"
+			_isCustomVisualStateUsed = true
+			_mouseDown = "isInfotipVisible"
+			_label = "_isAnyBoostInstalled	? 'IDS_MODAL_WINDOW_ECONOMIC_BOOSTS_EXPENDABLE_UNMOUNT_ALL'
+											: 'IDS_MODAL_WINDOW_ECONOMIC_BOOSTS_EXPENDABLE_INSTALL'"
+			_methods = "[	{	type: !isInfotipAvailable ? 'inputMapping.onAction' : '',
+								name: SC.Ui_common.ECOBOOST_ACTIONS.UNINSTALL_ALL,
+								args: { shipId: viewedShipId } }]"
+		)
+
+		(element GuidingTipHub
+			_tipId = "ecoBonusTipId"
+			_tipPositioning = "TIP_POSITION_LEFT"
+			_offsetX =			15px
+			_pointerOffset =	55px
+			_modalWindowName = 'ModalWindowEconomicsManagement'
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "isInfotipAvailable")
+		(renderer = 'EconomicBoostsRaritiesInfotip')
+
+		(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+		(macro TOOLTIP_HIDE_ON_EVENT "evHideInfotip")
+
+		(align = "center|bottom")
+
+		(screenBoundsOffset = {	left:	10,
+								top:	10,
+								right:	10,
+								bottom:	10 })
+
+		(pinTop='InfotipPinTop')
+		(pinBottom='InfotipPinBottom')
+		(bind isInfotipVisible "true" on='evStartShow')
+		(bind isInfotipVisible "false" on='evHide')
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "mouseInstruction.text"
+			_unifiedStatus = "mouseInstruction.unifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element EconomicBoostsRaritiesInfotip ()
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+		(var ecoBoostCollection:dhCollection = "getCollection(CC.ecoBoost)")
+	)
+	(style (width = 160px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+		(controller $Repeat renderer='EconomicBoostsRarityInfotipSlot'
+			(bind count "SC.Ui_common.ECOBOOST_RARITY.ALL.length")
+			(args
+				_ecoBoostCollection = "ecoBoostCollection"
+			)
+		)
+	)
+)
+
+(def element EconomicBoostsRarityInfotipSlot (_ecoBoostCollection:dhCollection)
+	(scope
+		(event evHideInfotip)
+		(event evFireInfotipHiding)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var rarityLevel:number = "$index")
+
+		(var ecoBoostsOnStorageCollection:dhCollection = "_ecoBoostCollection.getChildByPath('availableToUser.byType.' + SC.Common.ECOBOOST_TYPES.COMMON + '.expendableBoostsInStorage.byRarity.' + toString(rarityLevel + 1))")
+		(var isAvailable:bool = "ecoBoostsOnStorageCollection.length > 0")
+
+		(var infotipItemBGState:number = "	!isAvailable	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+											mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+											rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+															: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(bind name "'EconomicBoostsRarityInfotipSlot_' + toString(rarityLevel + 1)")
+	(style (width = 100%))
+
+	(dispatch evHideInfotip dir="EventDirection.UP" args="{}" delay=0.1 (event "evFireInfotipHiding"))
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "rarityLevel > 0"))
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (paddingTop = 1px))
+
+		(element MenuItemBackground
+			_state = "infotipItemBGState"
+		)
+
+		(macro MOUSE_HANDLER
+			_enabled = "isAvailable"
+			_methods =	"[{	type: 'inputMapping.onAction',
+							name: SC.Ui_common.ECOBOOST_ACTIONS.SET_RARITY_LEVEL,
+							args: {rarityLevel: rarityLevel + 1} }]"
+			_dispatchedEv = "'evFireInfotipHiding'"
+			_soundSet =	"'button_signal'"
+		)
+	)
+
+	(hblock
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(width = 100%)
+			(height = 28px)
+			(padding = "S")
+			(bind alpha "isAvailable ? 1 : 0.3")
+		)
+		(block
+			(style (width = 16px) (height = 16px) (marginRight = "S")
+			(bind backgroundImage "'swf:../service_kit/rarities/svg/svg.swf:rarity_' + toString(rarityLevel)"))
+		)
+		(tf
+			(class $TextDefaultNM)
+			(bind text "'IDS_ECONOMIC_BOOST_INFOTIP_RARITY_TYPE_' + toString(rarityLevel + 1)")
+		)
+	)
+)

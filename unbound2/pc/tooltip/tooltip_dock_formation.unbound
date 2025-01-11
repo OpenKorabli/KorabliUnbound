@@ -1,0 +1,1152 @@
+(def css $DefaultFormationWidgetSize ()
+	(width = 302px)
+	(height = 410px)
+)
+
+(def element ButtonDivisionTooltip (_battleType:str, _isFormationsEnabled:bool = false)
+	(scope
+		(var rankSeasonEntity:gfx = "$datahub.getSingleEntity(CC.rankSeason)")
+		(var isDivisionAllowedInRanked:bool = "rankSeasonEntity.rankSeason.isDivisionAllowed" (event "rankSeasonEntity.rankSeason.evChanged"))
+	)
+	(style (width = 260px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "_isFormationsEnabled")
+				(args
+					_descriptionText = 'IDS_HINT_CREATE_DIVISION'
+				)
+			)
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isFormationsEnabled")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+					_text = "	_battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE && !isDivisionAllowedInRanked	? 'IDS_DIVISIONS_ARE_NOT_ALLOWED_IN_RANK_BATTLES' :
+								_battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE								? 'IDS_DIVISIONS_ARE_NOT_ALLOWED_IN_TRAINING_BATTLES'
+																													: 'UNKNOWN_DENY_REASON'"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text = 'IDS_CHOOSE_DIVISION_HINT'
+		)
+	)
+)
+
+(def element DivisionEntranceInfotip (_teamId:number=0, _isFromDockFormationBtn:bool=false, _isFromTrainingRoomBtn:bool=false, _isResizeInfotip:bool=false)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var isBotsEnabled:bool = "trainingRoomEntity.trainingRoom.isBotsEnabled" (event "trainingRoomEntity.trainingRoom.evUpdate"))
+
+		(struct dragInfotip = DRAG_INFOTIP_DATA_SCOPE(_type="SC.Common.DRAG_INFOTIP_TYPE.DIVISIONS"))
+
+		(var clanBattleDivisionCollection:gfx = "$datahub.getCollection(CC.clanTeam).child('sorted')")
+		(var availableClanTeams:array = "clanBattleDivisionCollection.items ?: []" (event "clanBattleDivisionCollection.evAdded") (event "clanBattleDivisionCollection.evRemoved"))
+		(var clanTeamEntityId:gfx = "availableClanTeams[0].clanTeam.id")
+
+		(var chatEntity:gfx = "$datahub.getSingleEntity(CC.chat)")
+		(var isChatServerAvailable:bool = "chatEntity.chat.isConnected" (event "chatEntity.chat.evConnected") (event "chatEntity.chat.evDisConnected"))
+
+		(macro USER_PREF_DATA)
+		(event evChangeSearchState)
+		(event evTextInputSearchCancelled)
+
+		(var isActiveSearch:bool = false)
+		(bind isActiveSearch "true" init=false watch=false (event "evChangeSearchState"))
+		(bind isActiveSearch "false" init=false watch=false (event "evTextInputSearchCancelled") (event "chatEntity.chat.evDisConnected") (event "evHide"))
+
+		(var isActiveSearchResultsList:bool = "isActiveSearch && (isChatServerAvailable || !_isFromTrainingRoomBtn)")
+		(var isActiveFormationWidget:bool = "!isActiveSearch && (isChatServerAvailable || !_isFromTrainingRoomBtn)")
+
+		(var searchRequests:array = "[['contacts', 13]]")
+		(var resultsDisplay:array = "['myContacts', 'contacts', 'ignoredContacts']")
+
+		(var playerContextType:str = "_isFromTrainingRoomBtn ? 'inviteToTrainingRoom': 'inviteToDivision'")
+
+		
+		(event evCacheFormationWidget)
+		(var isCacheFormationWidget:bool = "isActiveFormationWidget" watch=false)
+		(bind isCacheFormationWidget "true" init=false watch=false (event "evCacheFormationWidget"))
+	)
+	(bindcall externalCall "_isResizeInfotip ? 'inputMapping.onAction' : ''" "['AccountClanComponent.getClanTeams', {}]" init=false watch=false (event "evStartShow")) 
+	(bindcall externalCall "clanTeamEntityId ? 'inputMapping.onAction' : ''" "['DockProxy.getPreBattleInfo', { preBattleId: clanTeamEntityId }]" init=false watch=false (event "evStartShow")) 
+	(bindcall externalCall "'inputMapping.onRequest'" "['updateSuitableShipsForBot', { teamId: _teamId }]" init=false watch=false (event "evStartShow")) 
+	(bindcall externalCall "!_isFromTrainingRoomBtn ? 'inputMapping.onAction' : ''" "['requestUpdateSeekersList', {}]" init=false watch=false (event "evStartShow")) 
+	(dispatch evCacheFormationWidget (bind enabled "isActiveFormationWidget") (bind trigger "isActiveFormationWidget"))
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(style
+		(width = 302px)
+		(bind height "_isResizeInfotip ? dragInfotip.infotipHeight : 400px")
+	)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+		(class $Fullsize)
+		(block
+			(class $Fullsize)
+			(bind visible "isActiveFormationWidget")
+
+			(controller $Instance renderer='FormationWidget'
+				(bind enabled "isActiveFormationWidget || isCacheFormationWidget")
+				(args
+					_searchRequests = "searchRequests"
+					_resultsDisplay = "resultsDisplay"
+					_playerContext = "{ type: playerContextType }"
+					_isFromTrainingRoomBtn = "_isFromTrainingRoomBtn"
+					_teamId = "_teamId"
+				)
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(bind visible "isActiveSearchResultsList")
+
+			(controller $Instance renderer='SearchResultsList'
+				(bind enabled "isActiveSearchResultsList")
+				(args
+					_searchRequests = "searchRequests"
+					_resultsDisplay = "resultsDisplay"
+					_playerContext = "{ type: playerContextType }"
+					_isFromTrainingRoomBtn = "_isFromTrainingRoomBtn"
+					_teamId = "_teamId"
+				)
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(controller $Instance renderer='ServerIsUnavailable'
+				(bind enabled "!isChatServerAvailable && _isFromTrainingRoomBtn")
+			)
+		)
+
+		(block
+			(bind visible "_isResizeInfotip")
+			(style (width = 100%) (position = "absolute") (bottom = 0px))
+			(element DefaultInfotipDragGripper _type="SC.Common.DRAG_INFOTIP_TYPE.DIVISIONS")
+		)
+	)
+)
+
+(def element FormationWidget(_searchRequests:array, _resultsDisplay:array, _playerContext:dict, _isFromTrainingRoomBtn:bool, _teamId:number)
+	(scope
+		(event evDivisionCommentChanged)
+
+		(var chatEntity:gfx = "$datahub.getSingleEntity(CC.chat)")
+		(var isChatServerAvailable:bool = "chatEntity.chat.isConnected" (event "chatEntity.chat.evConnected") (event "chatEntity.chat.evDisConnected"))
+
+		(var divisionDataWatcher:gfx = "$datahub.getFirstWatcher(CC.division)")
+		(var divisionDataEntity:gfx = "divisionDataWatcher.entity" (event "divisionDataWatcher.event"))
+
+		(var divisionEntranceInfoEntity:gfx = "$datahub.getSingleEntity(CC.divisionEntranceInfo)")
+		(var divisionEntranceInfo:gfx = "divisionEntranceInfoEntity.divisionEntranceInfo")
+
+		(var commentMaxChars:number = "divisionEntranceInfo.commentMaxChars ?: 0")
+		(var isSelfSeeker:bool = "divisionEntranceInfo.isSelfSeeker" (event "divisionEntranceInfo.evIsSelfSeekerChanged"))
+		(var isBanned:bool = "divisionEntranceInfo.isBanned" (event "divisionEntranceInfo.evIsBannedChanged"))
+
+		(var isSeekersListUpdateInProgress:bool = "divisionEntranceInfo.isSeekersListUpdateInProgress" (event "divisionEntranceInfo.evIsSeekersListUpdateInProgressChanged"))
+
+		(var chatRestrictionsEntity:gfx = "$datahub.getSingleEntity(CC.chatRestrictions)")
+		(var isDescriptionTextFieldsBlocked:bool = "chatRestrictionsEntity.chatRestrictions.isBlockDescriptionTextFields" (event "chatRestrictionsEntity.chatRestrictions.evBlockDescriptionTextFieldsChanged"))
+
+		
+		(macro USER_PREF_DATA)
+		(var commentWantToDivision:str = "userPrefs.commentWantTo_division == null	? ''
+																					: userPrefs.commentWantTo_division")
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var clanman:gfx = "selfPlayerEntity.clanman" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+
+		(var isAllContactsGroupVisible:bool = "!_isFromTrainingRoomBtn && isChatServerAvailable")
+		(var isClanBattleDivisionsListVisible:bool = "clanman != null && !_isFromTrainingRoomBtn && isChatServerAvailable")
+		(var isTrainingRoomContextGroupVisible:bool = "_isFromTrainingRoomBtn && isChatServerAvailable")
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'commentWantTo_division', value: $event.value }]" init=false watch=false (event "evDivisionCommentChanged"))
+	(bindcall externalCall "'inputMapping.onAction'" "['updateSeekerComment', { comment: $event.value }]" init=false watch=false (event "evDivisionCommentChanged"))
+
+	(class $Fullsize)
+
+	(element DEFAULT_EXPAND_CONTAINER "divisionDataEntity == null && !_isFromTrainingRoomBtn"
+		(block
+			(style (width = 100%) (height = 34px))
+			(name = 'wantToDivision')
+
+			(block
+				(class $FullsizeAbsolute)
+				(element DockSubmenuItem
+					_selected = false
+					_soundSet = 'dropdown'
+					_methods = "[ {
+								type:	'inputMapping.onAction',
+								name:	'toggleDivisionSeekerStatus',
+								args:	{ comment: commentWantToDivision, status: isSelfSeeker }
+							}]"
+				)
+
+				(controller $Tooltip
+					(renderer ='SimpleStatusTooltip')
+					(args
+						_text = "isSelfSeeker	? 'IDS_NOT_VISIBLE_FOR_OTHER_PLAYERS_DIVISION'
+												: 'IDS_VISIBLE_FOR_OTHER_PLAYERS_DIVISION'"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(block
+				(name = 'closeSeekDivision')
+				(style (position = "absolute") (hitTest = false) (right = 10px) (top = "SXS"))
+
+				(controller $Instance renderer='CloseButton'
+					(bind enabled "isSelfSeeker")
+				)
+			)
+
+			(hblock
+				(style (hitTest = false) (position = "absolute") (width = 100%) (align = "center|middle") (marginTop = 5px))
+				
+				(block
+					(style
+						(marginTop = "XXS")
+						(marginRight = "XS")
+						(width = 16px)
+						(height = 20px)
+						(bind backgroundImage "'url:../service_kit/divisions_icons/division_wanted_' + (isSelfSeeker ? 'on' : 'off') + '.png'")
+					)
+				)
+
+				(tf
+					(class $TextDefaultBoldNM)
+					(style (bind textColor "isSelfSeeker	? SC.Ui_styles.SERVICE_COLORS.GREEN
+															: SC.Ui_styles.SERVICE_COLORS.WHITE"))
+					(text = 'IDS_WANT_IN_DIVISION')
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "!isDescriptionTextFieldsBlocked"))
+		)
+	)
+
+	
+	(element DEFAULT_EXPAND_CONTAINER "isSelfSeeker && !isDescriptionTextFieldsBlocked"
+		(block
+			(style (width = 100%) (paddingLeft = "S") (paddingRight = "S") (paddingTop = "S") (paddingBottom = "XS"))
+
+			(element DescriptionInputText
+				_onEnterEvent = 'evDivisionCommentChanged'
+				_onEnterTooltipText = 'IDS_SAVE_CHANGES'
+				_width = '100%'
+				_placeholderText = 'IDS_ENTER_STATUS'
+				_isSmallButtonEnter = true
+				_isEnabled = "!isBanned"
+				_restrictionText = "isBanned ? toUpper(tr('IDS_MESSAGES_BANNED')) : ''"
+				_maxChars = "commentMaxChars"
+				_defaultText = "commentWantToDivision"
+				_focusIndex = 1
+				_defaultFocused = false
+			)
+		)
+		(element HorizontalDividerTwoPx)
+	)
+
+	
+	(block
+		(class $Fullsize)
+		(bind visible "!_isFromTrainingRoomBtn")
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+		(scrollArea
+			(class $Fullsize)
+
+			(verticalSlider = 'ScrollBarVLight')
+
+			(hscrollPolicy = 'off')
+			(vscrollPolicy = 'auto')
+
+			(wheelScrollSpeed = 1.0)
+			(wheelScrollAcceleration = 0.8)
+			(maxScrollingAnimatedDistance = 280)
+
+			(activeControlsAlpha = 1)
+			(inactiveControlsAlpha = 0.5)
+			(animationDuration = 0.2)
+			(animationEasing = "Easing.cubic_out")
+			
+			(content
+				(style (width = 302px))
+
+				(block
+					(style (width = 100%))
+					
+					(controller $Instance renderer='ClanBattleDivisionsList'
+						(bind enabled "isClanBattleDivisionsListVisible")
+					)
+				)
+
+				(block
+					(style (width = 100%))
+					
+					(controller $Instance renderer='AllContactsGroup'
+						(bind enabled "isAllContactsGroupVisible")
+						(args
+							_playerContext = "_playerContext"
+							_teamId = "_teamId"
+						)
+					)
+				)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Instance renderer='FormationSeekersGroup'
+						(bind enabled "!_isFromTrainingRoomBtn")
+						(args
+							_playerContextType = "_playerContext.type"
+						)
+					)
+				)
+				
+			)
+		)
+	)
+
+	(block
+		(bind visible "isTrainingRoomContextGroupVisible")
+		(class $Fullsize)
+		
+		(controller $Instance renderer='AllContactsGroupGenetator'
+			(bind enabled "isTrainingRoomContextGroupVisible")
+			(args
+				_playerContext = "_playerContext"
+				_teamId = "_teamId"
+			)
+		)
+	)
+	
+	(block
+		(style (width = 100%) (height = 42px))
+
+		(element HorizontalDividerTwoPx)
+
+		(block
+			(name = 'searchPlayersDivision')
+			(class $Fullsize)
+			(style (align = "right|middle") (paddingRight = "S"))
+
+			(controller $Tooltip
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = "isChatServerAvailable	? 'IDS_HINT_SEARCH_PLAYERS'
+													: 'IDS_SERVICE_IS_UNAVAILABLE_CHAT'"
+					_unifiedStatus = "isChatServerAvailable	? SC.Ui_styles.UNIFIED_STATUS.DEFAULT
+															: SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR "1")
+			)
+
+			(element ImageButton
+				_width = 18px
+				_height = 18px
+				_enabled = "!isSeekersListUpdateInProgress && isChatServerAvailable"
+				_backgroundImage = 'url:../service_kit/buttons/context/search.png'
+				_dispatchedEv = 'evChangeSearchState'
+			)
+		)
+	)
+)
+
+(def element AllContactsGroup (_teamId:number, _playerContext:dict)
+	(scope
+		(var groupEntity:gfx = "$datahub.getSingleEntity(CC.contactsGroup)")
+
+		(var contactsCollection:gfx = "$datahub.getCollection(CC.elementInGroups).getChildByPath('elementsOfGroup_' + groupEntity.id)")
+		(var contacts:array = "contactsCollection.items ?: []" (event "contactsCollection.evAdded") (event "contactsCollection.evRemoved"))
+
+		(var countTotal:number = "groupEntity.contactsGroup.countTotal ?: 0" (event "groupEntity.contactsGroup.evCountTotalChanged"))
+		(var countOnline:number = "groupEntity.contactsGroup.countOnline ?: 0" (event "groupEntity.contactsGroup.evCountOnlineChanged"))
+
+		(event evExpandAllContactsGroupChanged)
+		(var isGroupExpanded:bool = true)
+		(bind isGroupExpanded "!isGroupExpanded" init=false watch=false (event "evExpandAllContactsGroupChanged"))
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+		
+		(element SimpleListGroupHeader
+			_groupLabel = 'IDS_MY_CONTACTS'
+			_isGroupExpanded = "isGroupExpanded"
+			_dispatchedEv = 'evExpandAllContactsGroupChanged'
+			_rollOver = "rollOver"
+		)
+
+		(hblock
+			(style (position = "absolute") (right = "SXS") (top = 10px))
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(bind alpha "countOnline != 0 ? 1 : 0.5")
+					(marginRight = "XS")
+				)
+				(bind text "countOnline")
+			)
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = 0.5))
+				(bind text "'/ ' + countTotal")
+			)
+
+			(controller $Tooltip
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = "tr('IDS_ONLINE_PLAYERS') + ' / ' + tr('IDS_PLAYERS_IN_GROUP')"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+		(macro MOUSE_EVENTS_DISPATCHER)
+	)
+
+	(block
+		(style (width = 100%))
+		(style  (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+		(element DEFAULT_EXPAND_CONTAINER "isGroupExpanded"
+
+			(block
+				(bind visible "contacts.length > 0")
+				(style (width = 100%))
+				
+				
+				(controller $DynamicRepeat renderer='PlayerContactItemWithRollover'
+					(bind count "contacts.length")
+					(args
+						_entityId = "contacts[$index].id"
+						_teamId = "_teamId"
+						_playerContext = "_playerContext"
+					)
+					(itemWidth = 100%)
+					(itemHeight = 30px)
+					(itemOffset = 60px)
+				)
+			)
+
+			(block
+				(bind visible "contacts.length == 0")
+				(style (width = 100%) (align = "middle") (paddingTop = "SXS") (paddingBottom = "SXS") (hitTest = false))
+
+				(controller $Instance renderer='EmptyStatusParagraph'
+					(bind enabled "contacts.length == 0")
+					(args
+						_text = 'IDS_NO_CONTACTS_IN_GROUP'
+						_textClass = '$TextDefaultNM'
+					)
+				)
+			)
+			(element HorizontalDividerTwoPx)
+		)
+	)
+)
+
+(def element AllContactsGroupGenetator (_teamId:number, _playerContext:dict)
+	(scope
+		(var groupEntity:gfx = "$datahub.getSingleEntity(CC.contactsGroup)")
+
+		(var contactsCollection:gfx = "$datahub.getCollection(CC.elementInGroups).getChildByPath('elementsOfGroup_' + groupEntity.id)")
+		(var contacts:array = "contactsCollection.items ?: []" (event "contactsCollection.evAdded") (event "contactsCollection.evRemoved"))
+
+
+		(var countTotal:number = "groupEntity.contactsGroup.countTotal ?: 0" (event "groupEntity.contactsGroup.evCountTotalChanged"))
+		(var countOnline:number = "groupEntity.contactsGroup.countOnline ?: 0" (event "groupEntity.contactsGroup.evCountOnlineChanged"))
+
+		(event evExpandAllContactsGroupChanged)
+		(var isGroupExpanded:bool = true)
+		(bind isGroupExpanded "!isGroupExpanded" init=false watch=false (event "evExpandAllContactsGroupChanged"))
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(class $Fullsize)
+
+	(block
+		(style (width = 100%) (height = 30px) (align = "middle") (paddingLeft = "SXS"))
+		(tf
+			(class $TextDefaultBold17NM)
+			(style (width = 100%) (textAlign = "center") (alpha = "TC"))
+			(text = 'IDS_MY_CONTACTS')
+		)
+
+		(hblock
+			(style (position = "absolute") (right = "SXS") (top = 10px))
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(bind alpha "countOnline != 0 ? 1 : 0.5")
+					(marginRight = "XS")
+				)
+				(bind text "countOnline")
+			)
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = 0.5))
+				(bind text "'/ ' + countTotal")
+			)
+
+			(controller $Tooltip
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = "tr('IDS_ONLINE_PLAYERS') + ' / ' + tr('IDS_PLAYERS_IN_GROUP')"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(class $Fullsize)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+		
+		(scrollArea
+			(bind visible "contacts.length > 0")
+			(class $Fullsize)
+
+			(verticalSlider = 'ScrollBarVLight')
+
+			(hscrollPolicy = 'off')
+			(vscrollPolicy = 'auto')
+			(scrollPerItem = true)
+
+			(wheelScrollSpeed = 1.0)
+			(wheelScrollAcceleration = 0.8)
+			(maxScrollingAnimatedDistance = 280)
+
+			(activeControlsAlpha = 1)
+			(inactiveControlsAlpha = 0.5)
+			(animationDuration = 0.2)
+			(animationEasing = "Easing.cubic_out")
+			
+			(repeatController = 'contactContainer')
+
+			(content
+				(style (width = 100%))
+
+				(controller $DynamicRepeat renderer='PlayerContactItemWithRollover' name='contactContainer'
+					(bind count "contacts.length")
+					(args
+						_entityId = "contacts[$index].id"
+						_teamId = "_teamId"
+						_playerContext = "_playerContext"
+					)
+
+					(itemHeight = 30px)
+					(itemWidth = 100%)
+					(itemOffset = 120px)
+				)
+			)
+		)
+
+		(block
+			(bind visible "contacts.length == 0")
+			(style (width = 100%) (align = "middle") (paddingTop = "SXS") (paddingBottom = "SXS") (hitTest = false))
+
+			(controller $Instance renderer='EmptyStatusParagraph'
+				(bind enabled "contacts.length == 0")
+				(args
+					_text = 'IDS_NO_CONTACTS_IN_GROUP'
+					_textClass = '$TextDefaultNM'
+				)
+			)
+		)
+	)
+)
+
+(def element ClanBattleDivisionsList ()
+	(scope
+		(event evExpandMyClanBattleDivisionListGroupChanged)
+		(var isGroupExpanded:bool = true)
+		(bind isGroupExpanded "!isGroupExpanded" init=false watch=false (event "evExpandMyClanBattleDivisionListGroupChanged"))
+
+		(var clanBattleDivisionCollection:gfx = "$datahub.getCollection(CC.clanTeam).child('sorted')")
+		(var availableClanTeams:array = "clanBattleDivisionCollection.items ?: []" (event "clanBattleDivisionCollection.evAdded") (event "clanBattleDivisionCollection.evRemoved"))
+
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+
+		(element SimpleListGroupHeader
+			_groupLabel = 'IDS_MY_CLAN_BATTLES'
+			_isGroupExpanded = "isGroupExpanded"
+			_dispatchedEv = 'evExpandMyClanBattleDivisionListGroupChanged'
+			_rollOver = "rollOver"
+		)
+
+		(block
+			(style (position = "absolute") (right = 9px) (top = "S"))
+
+			(element ImageButton
+				_width = 18px
+				_height = 18px
+				_enabled = true
+				_backgroundImage = 'url:../service_kit/buttons/context/update.png'
+				_methods = "[ {
+								type:	'inputMapping.onAction',
+								name:	'AccountClanComponent.getClanTeams',
+								args:	{}
+							}]"
+			)
+
+			(controller $Tooltip
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = 'IDS_HINT_UPDATE_CLAN_DIVISIONS_LIST'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+		(macro MOUSE_EVENTS_DISPATCHER)
+	)
+
+	(block
+		(style (width = 100%) (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+		(element DEFAULT_EXPAND_CONTAINER "isGroupExpanded"
+			(block
+				(style (width = 100%))
+
+				(controller $DynamicRepeat renderer='ClanBattleDivisionsItem'
+					(bind count "availableClanTeams.length")
+					(args
+						_id = "availableClanTeams[$index].id"
+					)
+					(itemWidth = 100%)
+					(itemHeight = 50px)
+					(itemOffset = 100px)
+				)
+			)
+			
+			(block
+				(bind visible "availableClanTeams.length == 0")
+				(style (width = 100%) (align = "middle") (paddingTop = "SXS") (paddingBottom = "SXS") (hitTest = false))
+
+				(controller $Instance renderer='EmptyStatusParagraph'
+					(bind enabled "availableClanTeams.length == 0")
+					(args
+						_text = 'IDS_INSTRUCTION_YOU_HAVE_NO_CLAN_BATTLES'
+						_textClass = '$TextDefaultNM'
+					)
+				)
+			)
+			(element HorizontalDividerTwoPx)
+		)
+	)
+)
+
+(def element SimpleListGroupHeader (_groupLabel:str, _isGroupExpanded:bool=false, _dispatchedEv:str='', _rollOver:bool=false, _mouseDown:bool=false)
+	(scope
+		(event evMenuItemClicked)
+	)
+	(style (width = 100%) (height = 33px))
+
+	(block
+		(class $Fullsize)
+		(style (align = "middle"))
+
+		(block
+			(class $FullsizeAbsolute)
+
+			(element DockSubmenuItem
+				_dispatchedEv = "_dispatchedEv"
+				_rollOver = "_rollOver"
+				_mouseDown = "_mouseDown"
+			)
+		)
+
+		(hblock
+			(style (width = 100%) (paddingLeft = "S") (align = "middle") (hitTest = false))
+
+			(element ButtonExpand
+				_isInOverState = "_rollOver"
+				_isInDownState = "_mouseDown"
+				_expanded = "_isGroupExpanded"
+			)
+			(block
+				(style (width = 100%) (paddingLeft = "XS"))
+				(tf
+					(class $TextDefaultBoldNM)
+					(style (width = 100%) (alpha = "TC"))
+					(bind text "_groupLabel")
+				)
+			)
+		)
+
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = "_isGroupExpanded	? 'IDS_HINT_COLLAPSE_GROUP'
+											: 'IDS_HINT_EXPAND_GROUP'"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+)
+
+(def element ClanBattleDivisionsItem (_id:number)
+	(scope
+		(var clanTeamEntity:gfx = "$datahub.getEntity(_id)")
+		(var clanTeam:gfx = "clanTeamEntity.clanTeam")
+		(var clanTeamIndex:number = "clanTeam.teamIndex ?: 0" (event "clanTeam.evTeamIndexChanged"))
+		(var playersCount:number = "clanTeam.playersCount ?: 0" (event "clanTeam.evPlayersCountChanged"))
+		(var playersLimit:number = "clanTeam.playersLimit ?: 0" (event "clanTeam.evPlayersLimitChanged"))
+
+		(var battleType:str = "clanTeam.battleType ?: ''" (event "clanTeam.evBattleTypeChanged"))
+		(var isInBattle:bool = "clanTeam.isInBattle" (event "clanTeam.evIsInBattleChanged"))
+		(var ownerName:str = "clanTeam.ownerName ?: ''" (event "clanTeam.evOwnerNameChanged"))
+		(var isLocked:bool = "clanTeam.isLocked" (event "clanTeam.evIsLockedChanged"))
+		(var hasNonClanMembers:bool = "clanTeam.hasNonClanMembers" (event "clanTeam.evHasNonClanMembersChanged"))
+		(var squadId:number = "clanTeam.squadId ?: 0" (event "clanTeam.evSquadIdChanged"))
+		(var isClanBattleType:bool = "clanTeam.isClanBattleType" (event "clanTeam.evIsClanBattleTypeChanged"))
+
+		
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattleSelfPlayerSimple:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var playerInvitedToPrebattleInfo:gfx = "selfPlayerEntity.playerInvitedToPrebattleInfo" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var myDivisionId:number = "preBattleSelfPlayerSimple.preBattleId" (event "preBattleSelfPlayerSimple.evPreBattleIdChanged"))
+		(var isInDivision:bool = "preBattleSelfPlayerSimple != null && playerInvitedToPrebattleInfo == null")
+
+		(var clanTeamId:number = "clanTeam.id")
+		(var isOtherDivision:bool = "!(isInDivision && myDivisionId == clanTeamId)")
+		(var isOwnerSelfPlayer:bool = "selfPlayerEntity.accountName.name == ownerName")
+		(var hasClanSquadModifier:bool = "selfPlayerEntity.clanmanSupplyInfo.hasClanSquadModifier" (event "selfPlayerEntity.clanmanSupplyInfo.evHasClanSquadModifierChanged"))
+
+		(var iconType:str = "isOtherDivision ? 'player_ready_division_other_division' : 'player_ready_division'")
+		
+
+		(var battleTypeEntity:gfx = "$datahub.getPrimaryEntity(CC.battleTypeCommonRestrictions, battleType)")
+		(var battleTypeMaxShipsCount:number = "battleTypeEntity.divisionRestrictions.shipsCount[1] ?: 0" (event "battleTypeEntity.divisionRestrictions.evUpdate"))
+
+		(var brawlSeasonEntity:gfx = "$datahub.getSingleEntity(CC.brawlBattlesSeason)")
+		(var isBrawlBattle:bool = "battleType == SC.Common.BATTLE_TYPES.BRAWL_BATTLE")
+		(var brawlShipCountRestrictions:number = "brawlSeasonEntity.divisionRestrictions.shipsCount[1] ?: 0" (event "brawlSeasonEntity.evAdded") (event "brawlSeasonEntity.evRemoved") (event "brawlSeasonEntity.divisionRestrictions.evUpdate"))
+
+		(var clanCurrentSeasonEntitySingleCollection:gfx = "$datahub.getCollection(CC.clanBattleSeason).child('current')")
+		(var clanCurrentSeasonEntity:gfx = "clanCurrentSeasonEntitySingleCollection.items.length > 0 ? clanCurrentSeasonEntitySingleCollection.items[0] : null" (event "clanCurrentSeasonEntitySingleCollection.evAdded") (event "clanCurrentSeasonEntitySingleCollection.evRemoved"))
+		(var clanShipCountRestrictions:number = "clanCurrentSeasonEntity.divisionRestrictions.shipsCount[1] ?: 0" (event "clanCurrentSeasonEntity.evAdded") (event "clanCurrentSeasonEntity.evRemoved") (event "clanCurrentSeasonEntity.divisionRestrictions.evUpdate"))
+		(var maxAllowedMercenaries:number = "clanCurrentSeasonEntity.clanBattleSeason.maxAllowedMercenaries ?: 0" (event "clanCurrentSeasonEntity.clanBattleSeason.evChanged"))
+
+		(var isClanWarningVisible:bool = "hasNonClanMembers && maxAllowedMercenaries > 1")
+
+		(var selectedBattleTypes:gfx = "$datahub.getCollection(CC.battleType).child('selected')")
+		(var selectedBattleTypesItems:array = " selectedBattleTypes.items ?: []" (event "selectedBattleTypes.evAdded") (event "selectedBattleTypes.evRemoved"))
+		(var selectedBattleTypeEntity:gfx = "selectedBattleTypesItems.length > 0 ? selectedBattleTypesItems[0] : null")
+		(var eventBattleName:str = "selectedBattleTypeEntity.eventBattleState.name ?: ''")
+
+		(var maxPlayersInFormation:number = "isClanBattleType	?	clanShipCountRestrictions :
+											isBrawlBattle		?	brawlShipCountRestrictions 
+																:	battleTypeMaxShipsCount > 0	? battleTypeMaxShipsCount
+																								: playersLimit")
+																
+		(var isDivisionFull:bool = "playersCount == maxPlayersInFormation")
+
+		(macro PULL_SHIP_ID)
+
+		(var battleTypePrefix:str = "isLocked ? '_disabled' : ''")
+		(var battleTypeIcon:str = "battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? eventBattleName + battleTypePrefix
+																						: battleType + battleTypePrefix")
+
+		(var formationTextColor:number = " isOtherDivision	|| isDivisionFull	? SC.Ui_styles.SERVICE_COLORS.WHITE
+																				: SC.Ui_styles.SERVICE_COLORS.YELLOW")
+
+		(var isIconWarningVisible:bool = "(isInDivision || isDivisionFull) && !isLocked && isOtherDivision")
+	)
+	(style (width = 100%) (height = 50px))
+	
+	(block
+		(class $FullsizeAbsolute)
+		(element DockSubmenuItem
+			_methods = "[ {
+						type:	!isLocked && !isInBattle && !isInDivision ? 'inputMapping.onAction' : '',
+						name:	'DockProxy.joinToPreBattle',
+						args:	{ preBattleId: clanTeamId, shipId: 0 }
+					}]"
+		)
+
+		(controller $Tooltip
+			(renderer ='ClanBattleDivisionsTooltip')
+			(args
+				_clanTeamIndex			= "clanTeamIndex"
+				_clanTeamId				= "clanTeamId"
+				_squadId				= "squadId"
+				_showClanSquadModifier	= "hasClanSquadModifier"
+				_iconType				= "iconType"
+				_isOtherTeam			= "isOtherDivision"
+				_isLocked				= "isLocked"
+				_isClanWarningVisible	= "isClanWarningVisible"
+				_isInBattle				= "isInBattle"
+				_isInDivision			= "isInDivision"
+				_isDivisionFull			= "isDivisionFull"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(hblock
+		(class $Fullsize)	
+
+		(style (paddingLeft = "S") (paddingRight = "SXS") (hitTest = false) (align = "middle"))
+		
+		(block
+			(style
+				(width = 35px)
+				(height = 35px)
+				(backgroundSize = "cover")
+				(bind backgroundImage "'url:../service_kit/battle_types/' + battleTypeIcon + '_small.png'")
+			)
+		)
+
+		(block
+			(style (width = 100%) (paddingLeft = "S"))
+			(tf
+				(bind class "isOwnerSelfPlayer ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+				(style
+					(width = 100%)
+					(bind textColor "isOtherDivision	? SC.Ui_styles.SERVICE_COLORS.WHITE
+														: SC.Ui_styles.SERVICE_COLORS.YELLOW")
+				)
+				(bind text "ownerName")
+			)
+		)
+
+		(hblock
+			(style (height = 100%) (align = "middle"))
+
+			(block
+				(bind visible "isClanBattleType && hasClanSquadModifier")
+				(style (paddingLeft = "S") (paddingRight = "XS"))
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(bind textColor "isOtherDivision	? SC.Ui_styles.SERVICE_COLORS.GRAY
+															: SC.Ui_styles.SERVICE_COLORS.YELLOW")
+					)
+					(bind text "tr('IDS_CLAN_SQUAD_' + squadId)")
+				)
+			)
+			(block
+				(bind visible "isIconWarningVisible")
+				(style
+					(width = 19px)
+					(height = 19px)
+					(bind backgroundImage "'url:../service_kit/unified_status_icons/icon_' + SC.Ui_styles.UNIFIED_STATUS.ATTENTION + '.png'")
+				)
+			)
+			
+			(block
+				(bind visible "isInBattle")
+				(style
+					(width = 19px)
+					(height = 19px)
+					(bind backgroundImage "'url:../service_kit/unified_status_icons/icon_' + SC.Ui_styles.UNIFIED_STATUS.IN_BATTLE + '.png'")
+				)
+			)
+
+			(block
+				(bind visible "isLocked")
+				(style
+					(width = 19px)
+					(height = 19px)
+					(bind backgroundImage "'url:../service_kit/unified_status_icons/icon_' + SC.Ui_styles.UNIFIED_STATUS.LOCK + '.png'")
+				)
+			)
+
+			(hblock
+				(bind visible "!isLocked")
+				(style (marginLeft = "XXS") (marginTop = 1px) (align = "middle") (hgap = "XS"))
+
+				(element DivisionIconWithIndex
+					_divisionIndex = "clanTeamIndex"
+					_iconType = "iconType"
+				)
+
+				(tf
+					(class $TextDefaultBoldNM)
+					(style (bind textColor "formationTextColor"))
+					(bind text "playersCount")
+				)
+
+				(tf
+					(class $TextDefaultBoldNM)
+					(style 
+						(alpha = 0.5)
+						(bind textColor "formationTextColor")
+					)
+					(bind text "'/ ' + maxPlayersInFormation")
+				)
+			)
+		)
+	)
+	(element HorizontalDividerTwoPx)
+)
+
+(def element ClanBattleDivisionsTooltip (	_clanTeamIndex:number, _clanTeamId:number, _squadId:number, _showClanSquadModifier:bool=false, _iconType:str='',
+											_isOtherTeam:bool=false, _isLocked:bool=false, _isClanWarningVisible:bool=false, _isInBattle:bool=false, _isInDivision:bool=false,
+											_isDivisionFull:bool=false)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(var preBattleClanPlayersCollection:dhCollection = "getCollection(CC.preBattlePlayerSimple)")
+		(var clanPlayersCollection:dhCollection = "preBattleClanPlayersCollection.getChildByPath('byPreBattle.' + _clanTeamId)" (event "preBattleClanPlayersCollection.evChildAdded")
+																																(event "preBattleClanPlayersCollection.evChildRemoved"))
+		(var clanPlayers:array = "clanPlayersCollection.items ?: []" (event "clanPlayersCollection.evAdded") (event "clanPlayersCollection.evRemoved"))
+
+		(var tooltipDataArray:array = "	_isInDivision	? 	_isOtherTeam			? [ { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,		text: 'IDS_YOU_ARE_IN_DIVISION_ALREADY'} ] :
+															_isClanWarningVisible	? [ { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,		text: 'IDS_STRANGERS_IN_THE_CLAN_DIVISION'} ] 
+																					: []
+														:	_isLocked				? [ { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,		text: 'IDS_CLAN_DIVISION_IS_PRIVATE'} ] :
+															_isDivisionFull			? [	{ unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,		text: 'IDS_CLAN_DIVISION_IS_FULL'} ] :
+															_isInBattle				? [ { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,		text: 'IDS_CLAN_DIVISION_IN_BATTLE'} ] :
+															_isClanWarningVisible	? [ { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,		text: 'IDS_STRANGERS_IN_THE_CLAN_DIVISION'},
+																						{ unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	text: 'IDS_JOIN_DYNAMIC_DIVISION_MOUSE_HINT'} ]
+																					: [	{ unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	text: 'IDS_JOIN_DYNAMIC_DIVISION_MOUSE_HINT'} ]")
+	)
+	(style (width = 330px) (hitTest = false))
+	
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+			(block
+				(style (width = 100%))
+				
+				(tf
+					(class $TextDefaultBold21NM)
+					(style
+						(width = 100%)
+						(bind textColor "_isOtherTeam	? SC.Ui_styles.SERVICE_COLORS.WHITE
+														: SC.Ui_styles.SERVICE_COLORS.YELLOW")
+					)
+					(bind text "_isInBattle ? 'IDS_IN_BATTLE' : tr('IDS_DIVISION') + (_showClanSquadModifier ? '. ' + tr('IDS_CLAN_SQUAD_' + _squadId) : '')")
+				)
+			)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "clanPlayers.length > 0"))
+		)
+		(block
+			(style (width = 100%))
+
+			(controller $Repeat renderer='ClanBattleDivisionsTooltipPlayerSlot'
+				(bind count "clanPlayers.length")
+				(args
+					_id = "clanPlayers[$index].id"
+					_isOtherTeam = "_isOtherTeam"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!(!_isOtherTeam && !_isClanWarningVisible)"))
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Repeat renderer='TooltipSystemRepeatStatusLine'
+				(bind enabled "!(!_isOtherTeam && !_isClanWarningVisible)")
+				(bind count "tooltipDataArray.length")
+				(args
+					_text = "tooltipDataArray[$index].text"
+					_unifiedStatus = "tooltipDataArray[$index].unifiedStatus"
+				)
+			)
+		)
+	)
+)
+
+(def element ClanBattleDivisionsTooltipPlayerSlot (_id:number, _isOtherTeam:bool)
+	(scope
+		(var playerEntity:gfx = "$datahub.getEntity(_id)")
+		(var nickName:str = "playerEntity.accountName.nickName ?: ''" (event "playerEntity.accountName.evChanged"))
+
+		(var preBattlePlayerSimple:gfx = "playerEntity.preBattlePlayerSimple" (event "playerEntity.evAdded") (event "playerEntity.evRemoved"))
+
+		(var shipId:number = "preBattlePlayerSimple.shipId ?: 0" (event "preBattlePlayerSimple.evShipIdChanged"))
+		(var isReady:bool = "preBattlePlayerSimple.isReady" (event "preBattlePlayerSimple.evIsReadyChanged"))
+		(var isMercenary:bool = "preBattlePlayerSimple.isMercenary" (event "preBattlePlayerSimple.evIsMercenaryChanged"))
+		
+		(var isSelf:bool = "playerEntity.accountSimple.isSelfPlayer")
+	)
+	(style (width = 100%) (height = 26px) (flow = "horizontal") (hgap = "S") (align = "middle"))
+
+	(block
+		(style (marginTop = 3px))
+		(element DHFormationPlayerIcon
+			_entityAccountId = "_id"
+			_isOtherTeam = "_isOtherTeam"
+		)
+	)
+
+	(block
+		(style (bind width "isReady ? 47% : 100%"))
+
+		(tf 
+			(bind class "isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+			(style
+				(width = 100%)
+				(wordWrap = false) (elideMode = true)
+				(bind textColor "(isSelf || !_isOtherTeam) && !isMercenary	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																			: SC.Ui_styles.SERVICE_COLORS.WHITE")
+			)
+			(bind text "nickName")
+		)
+	)
+
+
+	(block
+		(bind visible "isReady")
+		(style (width = 53%))
+
+		(controller $Instance renderer='ShipLineItemNM'
+			(bind enabled "isReady")
+			(args
+				_shipId = "shipId"
+				_hideUpgradableStatus = true
+			)
+		)
+	)
+)
+
+(def element DivisionIconWithIndex (_iconType:str, _divisionIndex:number)
+	(style
+		(width = 13px)
+		(height = 18px)
+		(align = "center|middle")
+		(bind backgroundImage "'url:../service_kit/divisions_icons/' + _iconType + '.png'")
+	)
+	
+	(tf
+		(class $BlackLabel)
+		(style (fontSize = 10px) (marginTop = "-XXS"))
+		(bind text "_divisionIndex")
+	)
+)
+
+(def element FormationSeekersGroup(_playerContextType:str)
+	(scope
+		(var divisionEntranceInfoEntity:gfx = "$datahub.getSingleEntity(CC.divisionEntranceInfo)")
+		(var IsSeekersListUpdateInProgress:bool = "divisionEntranceInfoEntity.divisionEntranceInfo.IsSeekersListUpdateInProgress" (event "divisionEntranceInfoEntity.divisionEntranceInfo.evIsSeekersListUpdateInProgressChanged"))
+
+		(var divisionSeekersCollection:gfx = "$datahub.getCollection(CC.divisionSeeker)")
+		(var divisionSeekers:array = "divisionSeekersCollection.items ?: []" (event "divisionSeekersCollection.evAdded") (event "divisionSeekersCollection.evRemoved"))
+
+		(event evExpandFormationSeekersGroupChanged)
+		(var isGroupExpanded:bool = true)
+		(bind isGroupExpanded "!isGroupExpanded" init=false watch=false (event "evExpandFormationSeekersGroupChanged"))
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+
+		(element SimpleListGroupHeader
+			_groupLabel = 'IDS_LOOKING_FOR_DIVISION'
+			_isGroupExpanded = "isGroupExpanded"
+			_dispatchedEv = 'evExpandFormationSeekersGroupChanged'
+			_rollOver = "rollOver"
+		)
+		(block
+			(style (position = "absolute") (right = 9px) (top = "S"))
+			(name = 'UpdateSeekersList')
+
+			(element ImageButton
+				_width = 18px
+				_height = 18px
+				_enabled = "!IsSeekersListUpdateInProgress"
+				_backgroundImage = 'url:../service_kit/buttons/context/update.png'
+				_methods = "[ {
+								type:	'inputMapping.onAction',
+								name:	'requestUpdateSeekersList',
+								args:	{}
+							}]"
+			)
+
+			(controller $Tooltip
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = 'IDS_HINT_UPDATE_FORMATION_SEEKERS_LIST'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+		(macro MOUSE_EVENTS_DISPATCHER)
+	)
+	
+	(block
+		(style (width = 100%) (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+		(element DEFAULT_EXPAND_CONTAINER "isGroupExpanded"
+			(block
+				(style (width = 100%))
+
+				(controller $DynamicRepeat renderer='FormationSeekerPlayer'
+					(bind count "divisionSeekers.length")
+					(args
+						_id = "divisionSeekers[$index].id"
+						_playerContextType = "_playerContextType"
+					)
+					(itemWidth = 100%)
+					(itemHeight = 30px)
+					(itemOffset = 60px)
+				)
+			)
+			
+			(block
+				(bind visible "divisionSeekers.length == 0")
+				(style (width = 100%) (align = "middle") (paddingTop = "SXS") (paddingBottom = "SXS") (hitTest = false))
+
+				(controller $Instance renderer='EmptyStatusParagraph'
+					(bind enabled "divisionSeekers.length == 0")
+					(args
+						_text = 'IDS_INSTRUCTION_NO_PLAYERS_WANTED_IN_DIVISION'
+						_textClass = '$TextDefaultNM'
+					)
+				)
+			)
+			(element HorizontalDividerTwoPx)
+		)
+	)
+)
+
+(def element FormationSeekerPlayer(_id:number, _playerContextType:str)
+	(scope
+		(var divisionSeekerEntity:gfx = "$datahub.getEntity(_id)")
+		(var accountId:number = "divisionSeekerEntity.divisionSeeker.accountId")
+		(var seekerComment:str = "divisionSeekerEntity.divisionSeeker.seekerComment" (event "divisionSeekerEntity.divisionSeeker.evSeekerCommentChanged"))
+	)
+	(style (width = 100%) (height = 30px))
+
+	(element PlayerContactItemWithRollover
+		_entityId = "accountId"
+		_playerContext = "{ type: _playerContextType, seekerComment: seekerComment, isFormationSeeker: true }"
+	)
+)

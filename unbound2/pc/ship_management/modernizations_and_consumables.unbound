@@ -1,0 +1,601 @@
+(def css $ManagementBaseSlotItem ()
+	(width = 64px)
+	(height = 64px)
+)
+
+(def element BaseWeaponItem (_weaponSlotEntity:gfx, _selectedWeaponId:number)
+	(scope
+		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var visualSlotData:gfx = "_weaponSlotEntity.visualSlotData")
+		(var weaponType:number = "visualSlotData.weaponType")
+		(var commandId:number = "visualSlotData.commandId")
+		(var iconPath:str = "visualSlotData.iconPath" (event "visualSlotData.evIconPathChanged"))
+
+		(var fireModeSlotEntity:dhEntity = "getSingleEntity(CC.fireModeSlot)")
+		(var fireModeSlot:dhComponent = "fireModeSlotEntity.fireModeSlot")
+		(var isFireModeSlot:bool = "_weaponSlotEntity.id == fireModeSlotEntity.id")
+
+		(var isActiveFireMode:bool = "fireModeSlot.isActive" (event "fireModeSlot.evIsActiveChanged"))
+		(var isSwitchableFireMode:bool = "fireModeSlot.isSwitchable")
+		(var isDrumFire:bool = "fireModeSlot.isDrumFire")
+		(var isCanDrum:bool = "isDrumFire && weaponType == SC.Ships.SHIP_WEAPON_TYPES.ARTILLERY")
+		(var isDrumModeActive:bool = "isSwitchableFireMode && isCanDrum ? isActiveFireMode : isCanDrum")
+		(var isHideFireModeSlot:bool = "isFireModeSlot ? isSwitchableFireMode : true")
+
+		(var strokeIconName:str = "isActiveFireMode ? 'button_selected_slot.png' : 'button_full_slot_up.png'")
+		(var slotState:number = "	mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
+									rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
+															: SC.Ui_styles.BUTTON_STATE.UP")
+		(var slotAlpha:number = "FRAME_SLOT_STATE_ALPHA[slotState]")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(bindcall externalCall "isFireModeSlot ? 'inputMapping.onAction' : ''" "['changeFireModeState', {}]" init=false watch=false on='leftClick')
+
+	(bind visible "isHideFireModeSlot")
+	(class $ManagementBaseSlotItem)
+	(style (align = "center|middle"))
+
+	(block
+		(bind visible "isSwitchableFireMode && isFireModeSlot")
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "'url:../service_kit/slots/' + strokeIconName")
+			(hitTest = false)
+			(alpha = "slotAlpha")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotState" _alpha="slotAlpha")
+	)
+
+	(block
+		(style (width = 60px) (height = 60px))
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (bind backgroundImage "iconPath") (backgroundSize = "fill"))
+			(macro MOUSE_OVER_DOWN_COLORTRANSFORM _isActive="isFireModeSlot" _isSelected="false")
+
+			(controller $Tooltip
+				(renderer = 'WeaponTooltip')
+				(args
+					_slotEntityId = "_weaponSlotEntity.id"
+					_isActiveBurst = "isDrumModeActive"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(block
+			(bind visible "isCanDrum && isDrumModeActive")
+			(class $FullsizeAbsolute)
+			(style (backgroundSize = "fill") (hitTest = false) (backgroundImage = 'url:../consumables/drumMode_indicator.png'))
+		)
+	)
+)
+
+(def element BaseConsumableItem (_equipmentSlotEntity:gfx)
+	(scope	
+		(var installedEntityId:number = "_equipmentSlotEntity.equipmentSlot.installedEntityId" (event "_equipmentSlotEntity.equipmentSlot.evInstalledEntityIdChanged"))
+		(var abilityEntity:dhEntity = "getEntity(installedEntityId)")
+		(var abilityName:str = "abilityEntity.ability.name" (event "abilityEntity.ability.evNameChanged"))
+		(var slotId:number = "abilityEntity.ability.slotId")
+		(var numConsumables:number = "abilityEntity.ability.numConsumables" (event "abilityEntity.ability.evNumConsumablesChanged"))
+
+		(var consumePostfix:str = "numConsumables == 0 ? '_empty' : ''")
+		(var itemImageUrl:str = "'url:../consumables/consumable_' + abilityName + consumePostfix + '.png'")
+
+		(var isSquadronAbility:bool = "abilityEntity.ability.isSquadronAbility")
+		(macro USER_PREF_DATA)
+		(var isOrderCustomizationActive:bool = "userPrefs.consumablesOrderCustomizationActive && !isSquadronAbility")
+
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+
+		(var isShipLocked:bool = "ownShipEntity.ownShip.isLocked" (event "ownShipEntity.ownShip.evUpdateLock"))
+		(var isInFormation:bool = "ownShipEntity.ownShip.isInFormation" (event "ownShipEntity.ownShip.evUpdateLock"))
+
+		(var abilitiesBySlotCollection:dhCollection = "getCollection(CC.ability).getChildByPath('shipAbilsBySlotId.' + slotId)")
+		(var abilitiesBySlot:array = "abilitiesBySlotCollection.items ?: []" (event "abilitiesBySlotCollection.evAdded") (event "abilitiesBySlotCollection.evRemoved"))
+		(var hasAlternatives:bool = "abilitiesBySlot.length > 1 && !isShipLocked && !isInFormation")
+
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(var consumablesInfotipIsVisible:bool = false)
+		(var slotState:number = "	mouseDown					? SC.Ui_styles.BUTTON_STATE.DOWN :
+									consumablesInfotipIsVisible	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+									rollOver					? SC.Ui_styles.BUTTON_STATE.OVER
+																: SC.Ui_styles.BUTTON_STATE.UP")
+		
+		(var slotAlpha:number = "FRAME_SLOT_STATE_ALPHA[slotState]")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(class $ManagementBaseSlotItem)
+	(style (align = "center|middle"))
+	(bind visible "installedEntityId > 0")
+
+	(block
+		(bind visible "hasAlternatives")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "cover")
+			(backgroundImage = 'url:../service_kit/frames/64px_not_empty_field.png')
+		)
+		(alpha = "FRAME_SLOT_STATE_ALPHA[slotState]")
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotState" _alpha="slotAlpha")
+	)
+
+	(block
+		(style
+			(width = 60px)
+			(height = 60px)
+			(backgroundSize = "fill")
+			(bind backgroundImage "itemImageUrl")
+		)
+
+		(controller $Tooltip
+			(renderer = 'ConsumableTooltip')
+			(args
+				_abilityEntityId = "installedEntityId"
+				_hasAlternatives = "hasAlternatives"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		)
+
+		(controller $Tooltip
+			(bind enabled "hasAlternatives")
+			(renderer = 'ConsumablesInfotip')
+			(args
+				_slotId = "slotId"
+				_isPreview = true
+			)
+			(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+			(pinBottom='InfotipPinBottom')
+			(hideOnMove = true)
+			(pinOffset = "{across: 0px, along: 1px}")
+
+			(bind consumablesInfotipIsVisible "true" on='evStartShow')
+			(bind consumablesInfotipIsVisible "false" on='evHide')
+		)
+	)
+
+
+	(block
+		(bind visible "numConsumables > 0 && !isOrderCustomizationActive")
+		(style (top = "XS") (right = 5px) (position = "absolute") (backgroundColor = "NO_COLOR"))
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style (alpha = "TA"))
+			(bind text "numConsumables")
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = 'IDS_NUMCONSUMABLES'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element ConsumablesInfotip (_slotId:number, _isPreview:bool=false)
+	(scope
+		(macro STAGE_SIZE)
+		(var contentScrollHeight:number = 0)
+		(var currentScrollHeight:number = "min(contentScrollHeight, stageHeight - 20)")
+
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var isInFormation:bool = "ownShipEntity.ownShip.isInFormation" (event "ownShipEntity.ownShip.evUpdateLock"))
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var abilitiesBySlotCollection:dhCollection = "getCollection(CC.ability).getChildByPath('shipAbilsBySlotId.' + _slotId)")
+		(var abilitiesBySlot:array = "abilitiesBySlotCollection.items ?: []" (event "abilitiesBySlotCollection.evAdded") (event "abilitiesBySlotCollection.evRemoved"))
+	)
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(style (width = 400px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND "true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+		(style (width = 100%))
+
+		(scrollArea
+			(style (width = 100%) (bind height "currentScrollHeight") (backgroundColor = "NO_COLOR"))
+
+			(verticalSlider = 'ScrollBarVLight')
+
+			(hscrollPolicy = 'off')
+			(vscrollPolicy = 'auto')
+			
+			(wheelScrollSpeed = 1.0)
+			(wheelScrollAcceleration = 0.8)
+			(maxScrollingAnimatedDistance = 280)
+
+			(topShadow = 'ScrollAreaShadowTop')
+			(bottomShadow = 'ScrollAreaShadowBottom')
+
+			(activeControlsAlpha = 1)
+			(inactiveControlsAlpha = 0.5)
+			(animationDuration = 0.2)
+			(animationEasing = "Easing.cubic_out")
+			
+			(content
+				(style (width = 100%))
+				(bind contentScrollHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))
+
+				(block
+					(style (width = 100%))
+
+					(controller $Repeat renderer='ConsumablesInfotipItem'
+						(bind count "abilitiesBySlot.length")
+						(args
+							_abilityEntity = "abilitiesBySlot[$index]"
+							_isPreview = "_isPreview"
+						)
+					)
+				)
+			)
+		)
+
+		(block
+			(bind visible "isOwned && isInFormation")
+			(style (width = 100%))
+			(element HorizontalDividerTwoPx)
+			
+			(block
+				(style
+					(width = 100%) (marginTop = "SXS") (marginBottom = "SXS")
+					(paddingLeft = "M") (paddingRight = "M")
+				)
+				(element StatusLine
+					_text = 'IDS_SET_UNREADY_DIVISION_FIRST_TO_CHANGE_CONSUMABLES'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_width = 100%
+				)
+			)
+		)
+	)
+)
+
+(def element ConsumablesInfotipItem (_abilityEntity:gfx, _isPreview:bool=false)
+	(scope
+		(var slotId:number = "_abilityEntity.ability.slotId")
+		(var isInstalled:bool = "_abilityEntity.ability.isInstalled" (event "_abilityEntity.ability.evIsInstalledChanged"))
+		(var hasLimitation:bool = "_abilityEntity.ability.hasLimitation")
+		(var name:str = "_abilityEntity.ability.name ?: ''" (event "_abilityEntity.ability.evNameChanged"))
+		
+		(var attributesNegative:array = "_abilityEntity.attributes.negative ?: []" (event "_abilityEntity.attributes.evChanged"))
+		(var attributesNeutral:array = "_abilityEntity.attributes.neutral ?: []" (event "_abilityEntity.attributes.evChanged"))
+		(var attributesPositive:array = "_abilityEntity.attributes.positive ?: []" (event "_abilityEntity.attributes.evChanged"))
+		
+		(var equipmentSlotPk:str = "SC.Ships.SHIP_SLOT_TYPES.ABILITY + '_' + slotId + '_'")
+		(var equipmentSlotEntity:dhEntity = "getPrimaryEntity(CC.equipmentSlot, equipmentSlotPk)")
+		(var slotComandId:number = "equipmentSlotEntity.equipmentSlot.commandId" (event "equipmentSlotEntity.equipmentSlot.evCommandIdChanged"))
+	
+		(macro PULL_SHIP_ID)
+		(macro PULL_OWN_SHIP_SCOPE _shipId="viewedShipId" _entityField="'ownShipEntity'" _componentField="'ownShipInfo'")
+		(var isLocked:bool = "ownShipEntity.ownShip.isLocked" (event "ownShipEntity.ownShip.evUpdateLock"))
+
+		(var isOwned:bool = "ownShipEntity != null")
+		(var isVerifiedInstalled:bool = "isOwned ? isInstalled : false")
+	)
+	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "$index > 0"))
+	)
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR") (bind paddingTop "$index > 0 ? 1px : 0px"))
+
+		(element DockSubmenuItem
+			_selected = "isVerifiedInstalled"
+			_enabled = "isOwned && !isLocked && !_isPreview"
+			_dispatchedEv = 'consumableInfotipItemClicked'
+			_soundSet = 'dropdown'
+			_methods = "[ {
+							type:	'inputMapping.onRequest',
+							name:	isOwned && !isLocked ? 'consumableClicked' : '',
+							args:	{ abilityId: _abilityEntity.ability.abilId, slotId: slotId }
+						}]"
+		)
+
+		(controller $Tooltip
+			(renderer = 'ConsumableTooltip')
+			(args
+				_abilityEntityId = "_abilityEntity.id"
+				_noMouseInstructions = "_isPreview"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(hblock
+		(style (width = 100%) (padding = "SXS"))
+		
+		(block
+			
+			(block
+				(style
+					(width = 60px)
+					(height = 60px)
+					(backgroundSize = "fill")
+					(hitTest = false)
+					(bind backgroundImage "'url:../consumables/consumable_' + name + '.png'")
+				)
+			)
+
+			
+			(block
+				(bind visible "hasLimitation")
+				(style
+					(position = "absolute")
+					(width = 17px)
+					(height = 15px)
+					(bottom = 7px)
+					(right = 7px)
+					(backgroundImage = 'bitmap:icon_consumable_attention')
+				)
+			)
+
+			
+			(block
+				(bind visible "isVerifiedInstalled")
+				(style (position = "absolute") (left = 30px) (bottom = "-MS"))
+
+				(element HotkeyIndicator
+					_commandId = "slotComandId"
+					_size = "SIZE.SMALL"
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_HINT_BATTLE_COMMAND_KEY'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+		)
+		
+		(block
+			(style (width = 300px) (hitTest = false) (marginLeft = "SXS") (marginTop = "XS"))
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(width = 100%)
+					(bind textColor "isVerifiedInstalled	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+															: SC.Ui_styles.SERVICE_COLORS.WHITE")
+				)
+				(bind text "tr(toUpper('IDS_DOCK_CONSUME_TITLE_' + name))")
+			)
+
+			(block
+				(bind visible "isVerifiedInstalled")
+				(style
+					(position = "absolute")
+					(right = 0px)
+					(top = -3px)
+					(width = 19px) (height = 19px) (backgroundSize = "cover")
+					(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
+				)
+			)
+
+			(block
+				(style (marginTop = "MS") (width = 100%) (paddingBottom = -11px) (alpha = 0.9))
+
+				(element ParamsModifierList
+					_attributesPositive = "attributesPositive"
+					_attributesNegative = "attributesNegative"
+					_attributesNeutral = "attributesNeutral"
+					_isShrinkHeight = true
+				)
+			)
+		)
+	)
+)
+
+(def element RageModeDockTooltip (_rageModeEntityId:number)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var rageModeEntity:dhEntity = "getEntity(_rageModeEntityId)")
+		(var description:str = "rageModeEntity.rageMode.description" (event "rageModeEntity.rageMode.evUpdated"))
+
+		(var attributesNegative:array = "rageModeEntity.attributes.negative ?: []" (event "rageModeEntity.attributes.evChanged"))
+		(var attributesNeutral:array = "rageModeEntity.attributes.neutral ?: []" (event "rageModeEntity.attributes.evChanged"))
+		(var attributesPositive:array = "rageModeEntity.attributes.positive ?: []" (event "rageModeEntity.attributes.evChanged"))
+		(var isRageModeTriggersAttributesVisible:bool = "attributesPositive.length > 0 || attributesNegative.length > 0 || attributesNeutral.length > 0")
+
+		
+		(var rageModeStateEntity:dhEntity = "getPrimaryEntity(CC.rageModeState, rageModeEntity.rageMode.ownerId)")
+		(var attributesRageModeNegative:array = "rageModeStateEntity.attributes.negative ?: []" (event "rageModeStateEntity.attributes.evChanged"))
+		(var attributesRageModeNeutral:array = "rageModeStateEntity.attributes.neutral ?: []" (event "rageModeStateEntity.attributes.evChanged"))
+		(var attributesRageModePositive:array = "rageModeStateEntity.attributes.positive ?: []" (event "rageModeStateEntity.attributes.evChanged"))
+		(var isRageModeAttributesVisible:bool = "attributesRageModePositive.length > 0 || attributesRageModeNegative.length > 0 || attributesRageModeNeutral.length > 0")
+	)
+	(style (hitTest = false) (width = 340px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl = "'url:' + rageModeEntity.rageMode.iconPath"
+			_imageWidth = 60
+			_imageHeight = 60
+			_unifiedStatus = "isOwned	?	SC.Ui_styles.UNIFIED_STATUS.CHECK
+									:	SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_headerText = "rageModeEntity.rageMode.title"
+			_subheaderText = 'IDS_RAGE_MODE_SUBTITLE'
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isOwned"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isOwned")
+				(args
+					_text = 'IDS_COMMON_MOUNTED'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemInnerHeaderText
+			_headerText = 'IDS_RAGE_MODE_DESCRIPTION_HEADER'
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+		)
+
+		(block
+			(style (width = 100%) (marginTop = "SXS"))
+			(element TooltipSystemSubstituteDescriptionText
+				_descriptionText = "tr(description)"
+			)
+		)
+
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRageModeTriggersAttributesVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "isRageModeTriggersAttributesVisible")
+				(args
+					_attributesPositive = "attributesPositive"
+					_attributesNegative = "attributesNegative"
+					_attributesNeutral = "attributesNeutral"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRageModeAttributesVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemInnerHeaderText'
+				(bind enabled "isRageModeAttributesVisible")
+				(args
+					_headerText = 'IDS_RAGE_MODE_PARAMS_HEADER'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRageModeAttributesVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "isRageModeAttributesVisible")
+				(args
+					_attributesPositive = "attributesRageModePositive"
+					_attributesNegative = "attributesRageModeNegative"
+					_attributesNeutral = "attributesRageModeNeutral"
+				)
+			)
+		)
+	)
+)
+
+(def element AltFireModeTooltip (fireModeSlotEntityId:number)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var fireModeSlotEntity:dhEntity = "getEntity(fireModeSlotEntityId)")
+		(var paramsDescriptor:str = "fireModeSlotEntity.slotOptions.paramsDescriptor")
+
+		(var iconPath:str = "fireModeSlotEntity.fireModeSlot.iconPath ?: ''" (event "fireModeSlotEntity.fireModeSlot.evUpdated"))
+		(var isActiveFireMode:bool = "fireModeSlotEntity.fireModeSlot.isActive" (event "fireModeSlotEntity.fireModeSlot.evUpdated"))
+		(var description:str = "fireModeSlotEntity.fireModeSlot.description" (event "fireModeSlotEntity.fireModeSlot.evUpdated"))
+		(var mouseInstructionText:str = "isActiveFireMode ? 'IDS_INSTRUCTION_DEACTIVATE_FIRE_MODE' : 'IDS_INSTRUCTION_ACTIVATE_FIRE_MODE'")
+
+		(var attributesNegative:array = "fireModeSlotEntity.attributes.negative ?: []" (event "fireModeSlotEntity.attributes.evChanged"))
+		(var attributesNeutral:array = "fireModeSlotEntity.attributes.neutral ?: []" (event "fireModeSlotEntity.attributes.evChanged"))
+		(var attributesPositive:array = "fireModeSlotEntity.attributes.positive ?: []" (event "fireModeSlotEntity.attributes.evChanged"))
+		(var isAttributesVisible:bool = "attributesPositive.length > 0 || attributesNegative.length > 0 || attributesNeutral.length > 0")
+	)
+	(style (width = 340) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl = "iconPath"
+			_imageWidth = 60
+			_imageHeight = 60
+			_unifiedStatus = "isOwned	?	SC.Ui_styles.UNIFIED_STATUS.CHECK
+										:	SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_headerText = "fireModeSlotEntity.fireModeSlot.title"
+			_subheaderText = 'IDS_DOCK_FIRE_MODE_SUBHEADER'
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isOwned"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isOwned")
+				(args
+					_text = 'IDS_COMMON_MOUNTED'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemSubstituteDescriptionText
+			_descriptionText = "tr(description)"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isAttributesVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "isAttributesVisible")
+				(args
+					_attributesPositive = "attributesPositive"
+					_attributesNegative = "attributesNegative"
+					_attributesNeutral = "attributesNeutral"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isOwned")
+				(args
+					_text = "mouseInstructionText"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				)
+			)
+		)
+	)
+)

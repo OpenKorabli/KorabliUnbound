@@ -1,0 +1,940 @@
+(def constant TRAINING_ROOM_SWITCHER_CONFIG "{
+	ROOM_CLOSED:				{ label: 'IDS_MAKE_TRAINING_ROOM_CLOSED',		tooltip: 'IDS_MAKE_TRAINING_ROOM_CLOSED_TOOLTIP',		option: 'ui.trainingRoom.isClosed',					name: 'room_closed'},
+	COMMANDERS_MANAGEMENT:		{ label: 'IDS_DISABLE_COMMANDERS_MANAGEMENT',	tooltip: 'IDS_DISABLE_COMMANDERS_MANAGEMENT_TOOLTIP',	option: 'ui.trainingRoom.commandersManagement',		name: 'commanders_management'},
+	ENABLE_SPECTATORS:			{ label: 'IDS_ENABLE_SPECTATORS',				tooltip: 'IDS_ENABLE_SPECTATORS_TOOLTIP',				option: 'ui.trainingRoom.observersAvailable',		name: 'enable_spectators',		disabledTooltip: 'IDS_DISABLE_SPECTATORS_TOOLTIP'},
+	HIDE_ENEMY_SHIPS:			{ label: 'IDS_HIDE_ENEMY_SHIPS',				tooltip: 'IDS_HIDE_ENEMY_SHIPS_TOOLTIP',				option: 'ui.trainingRoom.hideShips',				name: 'hide_enemy_ships'},
+	FOG_OF_WAR_IN_TRAINING:		{ label: 'IDS_FOG_OF_WAR_IN_TRAINING',			tooltip: 'IDS_FOG_OF_WAR_IN_TRAINING_TOOLTIP',			option: 'ui.trainingRoom.isFogOfWar',				name: 'fog_of_war_in_training'},
+	DISABLE_SELECT_SHIP_INFO:	{ label: 'IDS_DISABLE_VIEW_SHIP_INFO',			tooltip: 'IDS_DISABLE_VIEW_SHIP_INFO_TOOLTIP',			option: 'ui.trainingRoom.isViewShipInfoDisabled',	name: 'disable_select_ship_info'}
+}")
+
+
+(def constant NOT_DISTRIBUTED_TEAM_SIZE 40)
+
+
+(def element TrainingRoomSettingsInset ()
+	(scope
+		(event startShow)
+		(event startHide)
+		(macro PULL_TRAINING_ROOM_ENTITY)
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var isSelfPlayerCommander:bool ="selfPlayerEntity.preBattlePlayerSimple.isCommander" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved") (event "selfPlayerEntity.preBattlePlayerSimple.evIsCommanderChanged"))
+		
+		(var isCreation:bool = "windowState == SC.Ui_styles.TRAINING_ROOM_STATE.CREATION")
+		(var headerText:str = "isCreation 	? toUpper(tr('IDS_TRAINING_ROOM_CREATION'))
+											: toUpper(tr('IDS_TRAINING_ROOM_PARAMS'))")
+	)
+	(name = 'trainingRoomSettings')
+	(class $Fullsize)
+	(style (align = "center"))
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style (width = 100%))
+	
+		(element ModalWindowHeaderFullSize
+			_windowName = "headerText"
+			_backButtonText = "isCreation ? 'IDS_RETURN_TO_ROOMS_LIST' : 'IDS_GO_BACK_TO_ROOM'"
+			_backButtonName = "isCreation ? 'backToRoomList' : 'backToRoom'"
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_closeIconTooltipText = "isCreation ? 'IDS_LEAVE_ROOM_CREATION' : 'IDS_GO_BACK_TO_ROOM'"
+		)
+	)
+
+	
+	(block
+		(class $Fullsize)
+		(style (align = "center") (marginTop = "{ 720:0,1080:100 }"))
+
+		(element TrainingRoomSettingsContent)
+	)
+)
+
+(def element TrainingRoomSettingsContent ()
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(event ItemChooser_mapSelected)
+		(event ItemChooser_durationSelected)
+		(event ItemChooser_playersNumSelected)
+		(event ItemChooser_weatherSelected)
+		(event ItemChooser_scenarioSelected)
+
+		(event evTextInputDescriptionChanged)
+		(event evTextInputPasswordChanged)
+		(event evTextInputPasswordFocusChanged)
+		(event evTextInputPasswordWrongSymbolInputed)
+
+		(event evHideWrongMessage)
+
+		(event evClosedTrainingRoomChanged)
+		(macro PULL_TRAINING_ROOM_ENTITY)
+
+		(var isTextInputPasswordFocused:bool = false)
+		(bind isTextInputPasswordFocused "$event" init=false (event "evTextInputPasswordFocusChanged"))
+
+		(var preferenceDeltaCollection:gfx = "$datahub.getCollection(CC.preferenceDelta)")
+		(var mainDiffCollection:gfx = "preferenceDeltaCollection.getChildByPath('byLevel.' + 0)")
+		(var diffItems:array = "mainDiffCollection.items" (event "mainDiffCollection.evAdded") (event "mainDiffCollection.evRemoved"))
+		(var isAnyDiff:bool = "diffItems.length > 0")
+
+		(var realmConstantsEntity:gfx = "$datahub.getSingleEntity(CC.realmConstants)")
+		(var passRestrict:str = "realmConstantsEntity.realmConstants.passRestrict")
+
+		(var chatRestrictionsEntity:gfx = "$datahub.getSingleEntity(CC.chatRestrictions)")
+		(var isDescriptionTextFieldsBlocked:bool = "chatRestrictionsEntity.chatRestrictions.isBlockDescriptionTextFields" (event "chatRestrictionsEntity.chatRestrictions.evBlockDescriptionTextFieldsChanged"))
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattleSelfPlayerSimple:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isSelfPlayerCommander:bool = "preBattleSelfPlayerSimple.isCommander ?: false" (event "preBattleSelfPlayerSimple.evIsCommanderChanged"))
+		(var selfPreBattleId:number = "preBattleSelfPlayerSimple.preBattleId ?: 0" (event "preBattleSelfPlayerSimple.evPreBattleIdChanged"))
+
+		(var isCreation:bool = "windowState == SC.Ui_styles.TRAINING_ROOM_STATE.CREATION")
+		(var isCommander:bool = "isCreation || isSelfPlayerCommander")
+
+		(macro GET_PREF_NUMBER 'mapIdDH'					"'ui.trainingRoom.mapId'")
+		(macro GET_PREF_NUMBER 'teamSizeDH'					"'ui.trainingRoom.teamSize'")
+		(macro GET_PREF_NUMBER 'durationDH'					"'ui.trainingRoom.duration'")
+		(macro GET_PREF 'scenarioDH'						"'ui.trainingRoom.scenario'")
+		(macro GET_PREF 'isBadWeather'						"'ui.trainingRoom.isBadWeather'")
+		(macro GET_PREF_BOOL 'isClosedTrainingRoom'			"'ui.trainingRoom.isClosed'")
+		(macro GET_PREF_BOOL 'hideShips'					"'ui.trainingRoom.hideShips'")
+
+		(macro GET_PREF 'descriptionDH'				"'ui.trainingRoom.description'")
+		(macro GET_PREF 'passwordDH'				"'ui.trainingRoom.password'")
+
+		(event evDefaultSet)
+
+		(var trainingRoomComponent:gfx = "trainingRoomEntity.trainingRoom")
+		(var ownerNameDH:str = "trainingRoomComponent.ownerName ?: ''" (event "trainingRoomComponent.evUpdate"))
+
+		(var preBattlePlayersCollectionDH:gfx = "$datahub.getCollection(CC.preBattlePlayerSimple)")
+		(var preBattleMembersTeam0Collection:gfx = "preBattlePlayersCollectionDH.getChildByPath('byPreBattleAndTeam.' + selfPreBattleId + '_0.preBattleMembers')" (event "preBattlePlayersCollectionDH.evChildAdded") (event "preBattlePlayersCollectionDH.evChildRemoved"))
+		(var preBattleMembersTeam1Collection:gfx = "preBattlePlayersCollectionDH.getChildByPath('byPreBattleAndTeam.' + selfPreBattleId + '_1.preBattleMembers')" (event "preBattlePlayersCollectionDH.evChildAdded") (event "preBattlePlayersCollectionDH.evChildRemoved"))
+		(var preBattleSpectatorCollection:gfx = "preBattlePlayersCollectionDH.getChildByPath('byPreBattleAndTeam.' + selfPreBattleId + '_-1.preBattleMembers')" (event "preBattlePlayersCollectionDH.evChildAdded") (event "preBattlePlayersCollectionDH.evChildRemoved"))
+		(var preBattleUnallocatedCollection:gfx = "preBattlePlayersCollectionDH.getChildByPath('byPreBattleAndTeam.' + selfPreBattleId + '_100.preBattleMembers')" (event "preBattlePlayersCollectionDH.evChildAdded") (event "preBattlePlayersCollectionDH.evChildRemoved"))
+
+		(var preBattlePlayersTeam0:array = "preBattleMembersTeam0Collection.items ?: []" (event "preBattleMembersTeam0Collection.evAdded") (event "preBattleMembersTeam0Collection.evRemoved"))
+		(var preBattlePlayersTeam1:array = "preBattleMembersTeam1Collection.items ?: []" (event "preBattleMembersTeam1Collection.evAdded") (event "preBattleMembersTeam1Collection.evRemoved"))
+		(var preBattleSpectators:array = "preBattleSpectatorCollection.items ?: []" (event "preBattleSpectatorCollection.evAdded") (event "preBattleSpectatorCollection.evRemoved"))
+		(var preBattleUnallocated:array = "preBattleUnallocatedCollection.items ?: []" (event "preBattleUnallocatedCollection.evAdded") (event "preBattleUnallocatedCollection.evRemoved"))
+
+		(var isSpectatorEnabled:bool = "preBattleSpectators.length + preBattleUnallocated.length <= NOT_DISTRIBUTED_TEAM_SIZE")
+		(var currentMaxPlayers:number = "preBattlePlayersTeam0.length > preBattlePlayersTeam1.length ? preBattlePlayersTeam0.length : preBattlePlayersTeam1.length")
+
+		
+		(var mapsCollection:gfx = "$datahub.getCollection(CC.mapInfo).getChildByPath('available.sorted')")
+		(var maps:array = "mapsCollection ? mapsCollection.items : []" (event "mapsCollection.evAdded") (event "mapsCollection.evRemoved"))
+		(var selectedMap:gfx = "$datahub.getPrimaryEntity(CC.mapInfo, mapIdDH)")
+		(var selectedMapIndex:number = "indexOf(selectedMap, maps)")
+
+		(var durations:array = "selectedMap.mapInfo.durations ?: []" (event "selectedMap.mapInfo.evUpdate"))
+		(var curWeatherItemIndex:number = "isBadWeather ? 1 : 0")
+
+		(var scenarios:array = "selectedMap.mapInfo.scenarios ?: []" (event "selectedMap.mapInfo.evUpdate"))
+		(var scenarioIdx:number = "indexOf(scenarioDH, scenarios)")
+		(var curScenarioItemIndex:number = "scenarioIdx != -1 ? scenarioIdx : 0")
+
+		(var weathersMap:dict = "selectedMap.mapInfo.weathersMap")
+		(var isWeatherItemChooserEnabled:bool = "isCommander && selectedMap.mapInfo.weathersMap[scenarios[curScenarioItemIndex]]")
+
+		(var playersNums:array = "selectedMap ? selectedMap.mapInfo.teamSizes[scenarios[curScenarioItemIndex]] : [0]")
+		(var curDurationItemIndex:number = "isIn(durationDH / 60, durations)	? indexOf(durationDH / 60, durations)
+																				: 0")
+		(var curPlayersNumItemIndex:number = "isIn(teamSizeDH, playersNums)		? indexOf(teamSizeDH, playersNums)
+																				: 0")
+
+		(var divisionEntranceInfoEntity:gfx = "$datahub.getSingleEntity(CC.divisionEntranceInfo)")
+		(var isBanned:bool = "divisionEntranceInfoEntity.divisionEntranceInfo.isBanned ?: false" (event "divisionEntranceInfoEntity.divisionEntranceInfo.evIsBannedChanged"))
+	)
+	(dispatch evClosedTrainingRoomChanged (bind trigger "isClosedTrainingRoom"))
+
+	
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.trainingRoom.mapId',		 	maps[$event.selectedIndex].mapInfo.id	]]"  init=false watch=false (event "ItemChooser_mapSelected"))
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.trainingRoom.scenario',		scenarios[$event.selectedIndex]			]]"  init=false watch=false (event "ItemChooser_scenarioSelected"))
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.trainingRoom.duration',		durations[$event.selectedIndex] * 60	]]"  init=false watch=false (event "ItemChooser_durationSelected"))
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.trainingRoom.teamSize',		playersNums[$event.selectedIndex]		]]"  init=false watch=false (event "ItemChooser_playersNumSelected"))
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.trainingRoom.isBadWeather',	$event.selectedIndex !=0				]]"  init=false watch=false (event "ItemChooser_weatherSelected"))
+	
+
+	
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.trainingRoom.description',	$event.value ]]"  init=false watch=false (event "evTextInputDescriptionChanged"))
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.trainingRoom.password',		$event.value ]]"  init=false watch=false (event "evTextInputPasswordChanged"))
+	
+
+	(hblock
+		(style (paddingTop = "{720:4,1080:32}") )
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+			(style	(height = "{ 720:580px, 1080:666px }") (width = 420px) (backgroundColor = 0x50000000)
+					(marginRight = "{ 1280:XS, 1920:LS }")
+					(paddingRight = "M") (paddingLeft = "M"))
+
+			(block
+				(style (width = 100%) (marginBottom = "M") (paddingRight = "-M") (paddingLeft = "-M"))
+
+				(element CategoryPanelHeader 'IDS_TRAINING_MAP')
+			)
+
+			
+			(block
+				(style (width = 388px) (height = 388px) (marginBottom = "M") (backgroundColor = 0x66000000))
+				
+				(element MinimapBackgroundBlock
+					_minimapWaterPath = "selectedMap.mapInfo.minimapWaterPath"
+					_minimapPath = "selectedMap.mapInfo.minimapPath"
+				)
+			)
+
+			
+			(hblock
+				(style (marginBottom = "SXS") (width = 100%))
+				(element DropdownLabel
+					_label = 'IDS_TRAINING_MAP'
+				)
+
+				(element MapItemChooser
+					_curItemIndex = "selectedMapIndex"
+					_items = "maps"
+				)
+			)
+
+			
+			(block
+				(style (width = 100%) (paddingRight = "-M") (paddingLeft = "-M"))
+				(element HorizontalDividerTwoPx)
+			)
+			(hblock
+				(style (width = 100%) (marginTop = "M") (marginBottom = "M"))
+				(element DropdownLabel
+					_label = 'IDS_TRAINING_TYPE_OF_BATTLE'
+				)
+
+				(element ScenarioItemChooser
+					_curItemIndex = "curScenarioItemIndex"
+					_items = "scenarios"
+				)
+			)
+
+			
+			(block
+				(bind visible "isWeatherItemChooserEnabled")
+				(style (width = 100%) (paddingRight = "-M") (paddingLeft = "-M "))
+				(element HorizontalDividerTwoPx)
+			)
+			(hblock
+				(bind visible "isWeatherItemChooserEnabled")
+				(style (width = 100%) (marginTop = "M") (marginBottom = "M"))
+				(element DropdownLabel
+					_label = 'IDS_TRAINING_WEATHER'
+				)
+
+				(element WeatherItemChooser
+					_curItemIndex = "curWeatherItemIndex"
+					_items = "['IDS_NO_WEATHER', 'IDS_WITH_CYCLONE']"
+					_enabled = "isWeatherItemChooserEnabled"
+				)
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style	(height = "{ 720:580px, 1080:666px }") (width = 420px) (backgroundColor = 0x50000000)
+					(paddingRight = "M") (paddingLeft = "M"))
+
+			(block
+				(style (width = 100%) (marginBottom = "S") (paddingRight = "-M") (paddingLeft = "-M"))
+
+				(element CategoryPanelHeader 'IDS_TRAINING_CONDITIONS')
+			)
+
+			
+			(hblock
+				(style (width = 100%) (marginTop = "M") (marginBottom = "M"))
+				(element DropdownLabel
+					_label = 'IDS_SELECTED_TRAINING_BATTLE_TIME'
+				)
+
+				(element DurationItemChooser
+					_curItemIndex = "curDurationItemIndex"
+					_items = "durations"
+				)
+			)
+
+			
+			(block
+				(style (width = 100%) (paddingRight = "-M") (paddingLeft = "-M"))
+				(element HorizontalDividerTwoPx)
+			)
+			(hblock
+				(style (width = 100%) (marginTop = "M") (marginBottom = "M"))
+				(element DropdownLabel
+					_label = 'IDS_TRAINING_PLAYERS_COUNT'
+				)
+				(element PlayersNumItemChooser
+					_curItemIndex = "curPlayersNumItemIndex"
+					_items = "playersNums"
+					_playersCount = "currentMaxPlayers"
+				)
+			)
+
+			
+			(block
+				(style (width = 100%) (paddingRight = "-M") (paddingLeft = "-M"))
+				(element HorizontalDividerTwoPx)
+			)
+			(block
+				(style (width = 100%) (marginTop = "M") (marginBottom = "S") )
+				(block
+					(style (width = 100%) (marginBottom = "S"))
+					(element DropdownLabel
+						_label = 'IDS_TRAINING_TEAM_RESTRICTIONS'
+					)
+				)
+				(block
+					(style (width = 100%) (paddingLeft = -10px) (paddingRight = -10px))
+					
+					(element ShipRestrictionsChooser)
+				)
+			)
+
+			
+			(block
+				(style (width = 100%) (paddingRight = "-M") (paddingLeft = "-M"))
+				(element HorizontalDividerTwoPx)
+			)
+
+			(block
+				(bind visible "!isDescriptionTextFieldsBlocked")
+				(style (width = 100%) (marginTop = "SXS"))
+				(name = 'battleDescription')
+
+				(controller $Instance renderer='DescriptionInputText'
+					(bind enabled "!isDescriptionTextFieldsBlocked")
+					(args
+						_onInputChangedEvent = 'evTextInputDescriptionChanged'
+						_onEnterTooltipText = 'IDS_SAVE_CHANGES'
+						_placeholderText = 'IDS_TRAINING_ROOM_DESCRIPTION_PLACEHOLDER'
+						_width = '100%'
+						_hideButtonEnter = true
+						_isEnabled = "!isBanned"
+						_restrictionText = "isBanned ? toUpper(tr('IDS_MESSAGES_BANNED')) : ''"
+						_maxChars = 105
+						_defaultText = "descriptionDH ?: ''"
+						_focusIndex = 1
+						_defaultFocused = false
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(height = "{ 720:580px, 1080:666px }")
+				(width = 420px)
+				(backgroundColor = 0x50000000)
+				(marginLeft = "{1280:XS, 1920:LS}")
+			)
+
+			(block
+				(style (width = 100%) (marginBottom = "S"))
+				(element CategoryPanelHeader 'IDS_TRAINING_MODE')
+			)
+
+			(block
+				(class $Fullsize)
+				(scrollArea
+					(class $Fullsize)
+					(verticalSlider='ScrollBarVLight')
+
+					(hscrollPolicy='off')
+					(vscrollPolicy='auto')
+
+					(animationDuration = 0.2)
+					(animationEasing = "Easing.cubic_out")
+
+					(wheelScrollSpeed = 1.0)
+					(wheelScrollAcceleration = 0.9)
+					(maxScrollingAnimatedDistance = 280)
+
+					(content
+						(style (width = 100%) (paddingRight = "M") (paddingLeft = "M"))
+
+						(element TrainingRoomSettingSwitcher "TRAINING_ROOM_SWITCHER_CONFIG.ROOM_CLOSED")
+						(block
+							(style (width = 100%) (paddingLeft = "-M") (paddingRight = "-M"))
+							(element DEFAULT_EXPAND_CONTAINER "isClosedTrainingRoom"
+								(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+								(block
+									(style (width = 100%) (paddingLeft = "M") (paddingRight = "M"))
+
+									(block
+										(style (height = 29px) (width = 300px) (marginTop = "M") (marginBottom = "M"))
+
+										(element InputTextDefault
+											_onInputChangedEvent = 'evTextInputPasswordChanged'
+											_onInputFocusChangedEvent = 'evTextInputPasswordFocusChanged'
+											_onEnterTooltipText = 'IDS_SAVE_PASSWORD'
+											_placeholderText = 'IDS_TRAINING_ENTER_PWD'
+											_defaultText = "passwordDH ?: ''"
+											_hideButtonEnter = true
+											_maxChars = 8
+											_restrict = "'[' + passRestrict + ']+'"
+											_onWrongSymbolInputedEvent = 'evTextInputPasswordWrongSymbolInputed'
+											_focusIndex = 2
+											_defaultFocused = false
+										)
+
+										(controller $Tooltip
+											(renderer = 'WrongTextInputNotificationInfotip')
+											(args
+												_text = 'IDS_TRAINING_ROOM_PASSWORD_WRONG_CHARACTERS'
+											)
+											(macro CUSTOM_INFOTIP_BEHAVIOUR "evTextInputPasswordWrongSymbolInputed")
+											(macro TOOLTIP_HIDE_ON_EVENT "evClosedTrainingRoomChanged")
+											(macro TOOLTIP_HIDE_ON_EVENT "evTextInputPasswordChanged")
+											(macro TOOLTIP_HIDE_ON_EVENT "evHideWrongMessage")
+										)
+									)
+
+									(tf
+										(class $TextDefaultNM)
+										(style (alpha = 0.6) (width = 100%) (marginBottom = "M"))
+										(bind text "isTextInputPasswordFocused ? 'IDS_TRAINING_ROOM_INPUT_PASSWORD_INFO' : 'IDS_TRAINING_ROOM_PASSWORD_INFO'")
+									)
+								)
+								(element HorizontalDividerTwoPx)
+							)
+						)
+
+						(element TrainingRoomSettingSwitcher "TRAINING_ROOM_SWITCHER_CONFIG.COMMANDERS_MANAGEMENT")
+						(element TrainingRoomSettingSwitcher
+							_data = "TRAINING_ROOM_SWITCHER_CONFIG.ENABLE_SPECTATORS"
+							_isEnabled = "isSpectatorEnabled"
+						)
+
+						(element TrainingRoomSettingSwitcher "TRAINING_ROOM_SWITCHER_CONFIG.HIDE_ENEMY_SHIPS")
+						(block
+							(style (width = 100%) (paddingLeft = "-M") (paddingRight = "-M"))
+							(element DEFAULT_EXPAND_CONTAINER "hideShips"
+								(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+								(block
+									(style (width = 100%) (paddingLeft = "M") (paddingRight = "M"))
+									(element TrainingRoomSettingSwitcher "TRAINING_ROOM_SWITCHER_CONFIG.FOG_OF_WAR_IN_TRAINING")
+								)
+							)
+						)
+
+						(element TrainingRoomSettingSwitcher "TRAINING_ROOM_SWITCHER_CONFIG.DISABLE_SELECT_SHIP_INFO")
+					)
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style (width = 100%) (align = "center") (paddingTop = "{720:S,1080:L}"))
+
+		(block	
+			(controller $Instance renderer='DefaultButton'
+				(bind enabled "isCreation")
+				(args
+					_width = 180px
+					_label = 'IDS_CREATE'
+					_name = 'createButton'
+					_focusIndex = 3
+					_methods = "[	{	type: 'inputMapping.onAction',
+										name: 'trainingRoomCreate',
+										args: {}
+									}
+								]"
+				)
+			)
+		)
+
+		(block
+			(style (position = "absolute") (right = 0px))
+
+			(element DefaultButton
+				_width = 180px
+				_name = 'setDefaultButton'
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_label = "toUpper(tr('IDS_APPLY_DEFAULT'))"
+				_focusIndex = 4
+				_dispatchedEv = 'evDefaultSet'
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'resetAllFilters',
+									args: { ident: toString(SHIP_RESTRICTION_TYPE.TRAINING_ROOM) + ',' + toString(trainingRoomEntity ? trainingRoomEntity.id : '') }
+								},
+								{
+									type: 'inputMapping.onAction',
+									name: 'setDefaultPrefs',
+									args:
+									{
+										resetList: [
+											{ option: 'ui.trainingRoom.mapId' },
+											{ option: 'ui.trainingRoom.scenario' },
+											{ option: 'ui.trainingRoom.duration' },
+											{ option: 'ui.trainingRoom.teamSize' },
+											{ option: 'ui.trainingRoom.description' },
+											{ option: 'ui.trainingRoom.password' },
+											{ option: 'ui.trainingRoom.isClosed' },
+											{ option: 'ui.trainingRoom.commandersManagement' },
+											{ option: 'ui.trainingRoom.observersAvailable' },
+											{ option: 'ui.trainingRoom.hideShips' },
+											{ option: 'ui.trainingRoom.isFogOfWar' },
+											{ option: 'ui.trainingRoom.isViewShipInfoDisabled' }
+										]
+									}
+								}
+							]"
+			)
+		)
+
+		(hblock
+			(bind visible "!isCreation")
+			(style (width = 100%) (align = "center"))
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+				(style (ubScaleX = "isAnyDiff ? 1 : 0") (marginRight = "isAnyDiff ? M : 0"))
+
+				(block
+					(class $FullsizeAbsolute)
+					(isMask = true)
+					(style (backgroundColor = 0xFFFFFFFF))
+				)
+
+				(controller $Animation
+					(bindcall play
+						delay = 0.05
+						duration = 0.15
+						from = " {alpha:0, visible:false, ubScaleX:0, marginRight: 0}"
+						to = "{alpha:1, visible:true, ubScaleX:1, marginRight: 16}"
+						easing = "Easing.line"
+						action = "kill"
+						reverse = "!isAnyDiff"
+						(bind trigger "isAnyDiff")
+					)
+				)
+
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "!isCreation")
+					(args
+						_name = 'applyButton'
+						_enabled = "isAnyDiff"
+						_size = "SIZE.MEDIUM"
+						_width = 180
+						_label = 'IDS_APPLY'
+						_focusIndex = 0
+						_defaultFocused = true
+					)
+				)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "!isCreation")
+					(args
+						_name = 'btn_back'
+						_size = "SIZE.MEDIUM"
+						_width = 180
+						_label = 'IDS_RETURN'
+						_focusIndex = 1
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element ShipRestrictionsChooser (_enabled:bool=true)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var shipListRestrictions:gfx = "trainingRoomEntity.shipListRestrictions" (event "trainingRoomEntity.evAdded") (event "trainingRoomEntity.evRemoved"))
+		(var divisionRestrictions:gfx = "trainingRoomEntity.divisionRestrictions" (event "trainingRoomEntity.evAdded") (event "trainingRoomEntity.evRemoved"))
+		
+		(var selectedFilters:array = "shipListRestrictions.selectedFilters ?: []" (event "shipListRestrictions.evUpdate"))
+		(var typesCount:dict = "divisionRestrictions.typesCount" (event "divisionRestrictions.evUpdate"))
+
+		(var defaultRestrictionsEntity:gfx = "$datahub.getPrimaryEntity(CC.battleTypeCommonRestrictions, SC.Common.BATTLE_TYPES.TRAINING_BATTLE)")
+		(var defaultTypesCount:dict = "defaultRestrictionsEntity.divisionRestrictions.typesCount" (event "defaultRestrictionsEntity.divisionRestrictions.evUpdate"))
+
+		(var isCarriersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.AIRCARRIER]	&& typesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1] != defaultTypesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1]")
+		(var isBattleShipsRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.BATTLESHIP]	&& typesCount[SC.Common.SHIP_TYPE.BATTLESHIP][1] != defaultTypesCount[SC.Common.SHIP_TYPE.BATTLESHIP][1]")
+		(var isCruisersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.CRUISER]	&& typesCount[SC.Common.SHIP_TYPE.CRUISER][1] != defaultTypesCount[SC.Common.SHIP_TYPE.CRUISER][1]")
+		(var isDestroyersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.DESTROYER]	&& typesCount[SC.Common.SHIP_TYPE.DESTROYER][1] != defaultTypesCount[SC.Common.SHIP_TYPE.DESTROYER][1]")
+		(var isSubmarinesRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.SUBMARINE]	&& typesCount[SC.Common.SHIP_TYPE.SUBMARINE][1] != defaultTypesCount[SC.Common.SHIP_TYPE.SUBMARINE][1]")
+		(var isAnyShipRestricted:bool = "isCarriersRestricted || isBattleShipsRestricted || isCruisersRestricted || isDestroyersRestricted || isSubmarinesRestricted || selectedFilters.length > 0")
+
+		(event evShowInfotip)
+		(event evHideInfotip)
+
+		(var isShowShipRestrictionsInfotip:bool = false)
+		(bind isShowShipRestrictionsInfotip "true" init=false watch=false (event "evShowInfotip"))
+		(bind isShowShipRestrictionsInfotip "false" init=false watch=false (event "evHideInfotip"))
+
+		(var state:number = "	!_enabled						? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								isShowShipRestrictionsInfotip	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown						? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver						? SC.Ui_styles.BUTTON_STATE.OVER
+																: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var arrowAlpha:number =		"ITEM_CHOOSER_ARROW_ALPHA[state]")
+		(var borderAlpha:number =		"ITEM_CHOOSER_BORDER_ALPHA[state]")
+		(var backplateAlpha:number =	"ITEM_CHOOSER_BACKPLATE_ALPHA[state]")
+		(var labelAlpha:number =		"ITEM_CHOOSER_LABEL_ALPHA[state]")
+	)
+	(style (width = 100%) (flow = "horizontal"))
+
+	
+	(block
+		(bind visible "_enabled")
+		(class $FullsizeAbsolute)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(alpha = "backplateAlpha")
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger	= "state"
+				_alpha		= "backplateAlpha"
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(alpha = "borderAlpha")
+				(scale9grid = 10)
+				(backgroundImage = 'url:../service_kit/buttons/backgrounds/secondary.png')
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger	= "state"
+				_alpha		= "borderAlpha"
+			)
+		)
+	)
+	
+
+	(hblock
+		(style (width = 100%) (paddingLeft = "S") (paddingRight = "S") (paddingTop = "XS") (paddingBottom = "XS") (hitTest = false) (align = "middle"))
+		(block
+			(style (width = 100%) (backgroundColor = 0x01000000) (paddingRight = "M") (paddingLeft = "M"))
+
+			(controller $Instance renderer='TrainingRoomAppliedFilter'
+				(bind enabled "isAnyShipRestricted")
+				(args
+					_trainingRoomEntityId = "trainingRoomEntity.id"
+					_align = "center"
+					_width = '100%'
+					_withShipTypeCounters = true
+					_showShipRestrictions = true
+				)
+			)
+
+			(block
+				(bind visible "!isAnyShipRestricted")
+				(style (width = 100%) (height = 30px) (align = "center|middle"))
+				(tf
+					(class $TextDefaultBold17NM)
+					(style (alpha = "TA"))
+					(text = 'IDS_NO_RESTRICTIONS')
+				)
+
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+					_trigger	= "state"
+					_alpha		= "labelAlpha"
+				)
+			)
+		)
+		(block
+			(style (height = 100%) (align = "middle") (position = "absolute") (right = 0px))
+			(block
+				(bind visible "_enabled")
+				(style
+					(width = 16px)
+					(height = 16px)
+					(bind alpha "ITEM_CHOOSER_ARROW_ALPHA[SC.Ui_styles.BUTTON_STATE.UP]" watch=false)
+					(backgroundImage = 'url:../service_kit/buttons/navigate_arrow/down.png')
+				)
+			)
+		)
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled = "_enabled"
+		_soundSet = "'dropdown'"
+	)
+
+	(controller $Tooltip
+		(renderer='ShipRestrictionsInfotip')
+		(macro VERTICAL_INFOTIP_BEHAVIOUR)
+		(align="bottom|center")
+
+		(dispatch "'evShowInfotip'" init=false watch=false on='leftClick')
+		(dispatch "'evHideInfotip'"	init=false watch=false on='evClickOutside')
+
+		(pinTop='InfotipPinTop')
+	)
+)
+
+(def element CategoryPanelHeader (_label:str)
+	(style 
+		(width = 100%) (height = 30px) (align = "center")
+		(backgroundImage = 'url:../service_kit/panel_backgrounds/pbs/grey.png') (scale9grid = 2)
+	)
+	(tf
+		(style (marginTop = 9px))
+		(class $TextDefaultBold19NM)
+		(bind text "toUpper(tr(_label))")
+	)
+)
+
+
+(def element MapItemChooser (_items:array, _curItemIndex:number)
+	(style (paddingTop = -10px) (paddingBottom = -10px) (paddingRight = "-XS"))
+
+	(element ItemChooser
+		_items = "_items"
+		_choosedItemRenderer = 'MapItemChoosedRenderer'
+		_listItemRenderer = 'MapItemChooserItemRenderer'
+		_onItemSelectedEvent = 'mapSelected'
+		_selectedMaxWidth = 240
+		_dropDownWidth = 300
+		_maxDropDownHeight = 280
+		_curIndex = "_curItemIndex"
+		_name = 'MapItemChooser'
+	)
+)
+
+(def element ScenarioItemChooser (_items:array, _curItemIndex:number)
+	(style (paddingTop = -10px) (paddingBottom = -10px) (paddingRight = "-XS"))
+
+	(element ItemChooser
+		_items = "_items"
+		_choosedItemRenderer = 'ScenarioItemChoosedRenderer'
+		_listItemRenderer = 'ScenarioItemChooserItemRenderer'
+		_onItemSelectedEvent = 'scenarioSelected'
+		_selectedMaxWidth = 290
+		_dropDownWidth = 340
+		_maxDropDownHeight = 300
+		_curIndex = "_curItemIndex"
+		_name = 'ScenarioItemChooser'
+	)
+)
+
+(def element WeatherItemChooser (_items:array, _curItemIndex:number, _enabled:bool=false)
+	(style (paddingTop = -10px) (paddingBottom = -10px) (paddingRight = "-XS"))
+
+	(element ItemChooser
+		_items = "_items"
+		_choosedItemRenderer = 'WeatherChoosedRenderer'
+		_listItemRenderer = 'TextListItemRenderer'
+		_onItemSelectedEvent = 'weatherSelected'
+		_selectedMaxWidth = 210
+		_dropDownWidth = 140
+		_maxDropDownHeight = 150
+		_curIndex = "_curItemIndex"
+		_disabled = "!_enabled"
+		_name = 'WeatherItemChooser'
+	)
+)
+
+(def element DurationItemChooser (_items:array, _curItemIndex:number)
+	(style (paddingTop = -10px) (paddingBottom = -10px) (paddingRight = "-XS"))
+
+	(element ItemChooser
+		_items = "_items"
+		_choosedItemRenderer = 'DurationItemChoosedRenderer'
+		_listItemRenderer = 'DurationItemChooserItemRenderer'
+		_onItemSelectedEvent = 'durationSelected'
+		_selectedMaxWidth = 140
+		_dropDownWidth = 140
+		_maxDropDownHeight = 360
+		_curIndex = "_curItemIndex"
+		_name = 'DurationItemChooser'
+	)
+)
+
+(def element PlayersNumItemChooser (_items:array, _playersCount:number, _curItemIndex:number)
+	(style (paddingTop = -10px) (paddingBottom = -10px) (paddingRight = "-XS"))
+
+	(element ItemChooser
+		_items = "_items"
+		_choosedItemRenderer = 'PlayersNumItemChoosedRenderer'
+		_listItemRenderer = 'PlayersNumItemChooserItemRenderer'
+		_listItemRendererData = "_playersCount > 0 ? { playersCount: _playersCount } : {}"
+		_onItemSelectedEvent = 'playersNumSelected'
+		_selectedMaxWidth = 140
+		_dropDownWidth = 140
+		_maxDropDownHeight = 360
+		_curIndex = "_curItemIndex"
+		_name = 'PlayersNumItemChooser'
+	)
+)
+
+
+
+(def element MapItemChoosedRenderer (_item:gfx, _choosedItemRendererParams:gfx, _labelMaxWidth:number)
+	(element DefaultItemChooserPickedItemRenderer
+		_item = "_item.mapInfo.nameIds"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+(def element ScenarioItemChoosedRenderer (_item:str, _choosedItemRendererParams:gfx, _labelMaxWidth:number)
+	(element DefaultItemChooserPickedItemRenderer
+		_item = "tr('IDS_SCENARIO_' + _item)"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+(def element DurationItemChoosedRenderer (_item:gfx, _choosedItemRendererParams:gfx, _labelMaxWidth:number)
+	(element DefaultItemChooserPickedItemRenderer
+		_item = "_item + ' ' + tr('IDS_MINUTE')"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+(def element PlayersNumItemChoosedRenderer (_item:gfx, _choosedItemRendererParams:gfx, _labelMaxWidth:number)
+	(element DefaultItemChooserPickedItemRenderer
+		_item = "_item + 'x' + _item"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+(def element WeatherChoosedRenderer (_item:str, _choosedItemRendererParams:gfx, _labelMaxWidth:number)
+	(element DefaultItemChooserPickedItemRenderer
+		_item = " _item"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+
+
+(def element MapItemChooserItemRenderer (_item:gfx, _curItemIndex:number, _listItemRendererData:gfx, _isInactive:bool)
+	(bind name "_item.mapInfo.nameIds")
+	(style (width = 100%))
+	
+	(element TextListItemRenderer
+		_curItemIndex = "_curItemIndex"
+		_item = "_item.mapInfo.nameIds"
+		_isInactive = "_isInactive"
+	)
+)
+
+(def element ScenarioItemChooserItemRenderer (_item:gfx, _curItemIndex:number, _listItemRendererData:gfx, _isInactive:bool)
+	(bind name "toUpper('IDS_SCENARIO_' + _item)")
+	(style (width = 100%))
+	
+	(element TextListItemRenderer
+		_curItemIndex = "_curItemIndex"
+		_item = "tr('IDS_SCENARIO_' + _item)"
+		_isInactive = "_isInactive"
+	)
+)
+
+(def element DurationItemChooserItemRenderer (_item:gfx, _curItemIndex:number, _listItemRendererData:gfx, _isInactive:bool)
+	(bind name "_item")
+	(style (width = 100%))
+	
+	(element TextListItemRenderer
+		_curItemIndex = "_curItemIndex"
+		_item = "_item + ' ' + tr('IDS_MINUTE')"
+		_isInactive = "_isInactive"
+	)
+)
+
+(def element PlayersNumItemChooserItemRenderer (_item:gfx, _curItemIndex:number, _listItemRendererData:dict, _isInactive:bool)
+	(scope
+		(var isEnabled:bool = "'playersCount' in _listItemRendererData	? toNumber(_item) >= _listItemRendererData.playersCount
+																		: true")
+	)
+	(bind name "toUpper(_item + 'x' + _item)")
+	(style (width = 100%) (bind alpha "isEnabled ? 1.0 : 0.5"))
+
+	(element TextListItemRenderer
+		_curItemIndex = "_curItemIndex"
+		_item = "_item + 'x' + _item"
+		_isInactive = "_isInactive || !isEnabled"
+	)
+
+	(controller $Tooltip
+		(bind enabled "!isEnabled")
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = 'IDS_TOOLTIP_CANNOT_SET_TEAM_SIZE_LESS_THAN_CURRENT'
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+
+(def element TrainingRoomSettingSwitcher (_data:dict, _isEnabled:bool=true)
+	(scope
+		(event evTrainingRoomSettingSwitcherClicked)
+		(macro GET_PREF_BOOL 'optionValue' "_data.option")
+	)
+	(style
+		(width = 100%)
+		(backgroundColor = "NO_COLOR")
+	)
+	(bindcall externalCall "'direct.action'" "['option.set', [ _data.option, !optionValue ]]"  init=false watch=false (event "evTrainingRoomSettingSwitcherClicked"))
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "_data.tooltip")
+		(args
+			_text = "_isEnabled ? _data.tooltip : _data.disabledTooltip"
+			_unifiedStatus = "_isEnabled ? SC.Ui_styles.UNIFIED_STATUS.DEFAULT : SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(hblock
+		(style (width = 100%) (marginTop = "M") (marginBottom = "M"))
+
+		(block
+			(style (width = 100%))
+			(tf
+				(class $TextDefault17NM)
+				(style (alpha = "TC") (hitTest = false))
+				(bind text "_data.label")
+			)
+		)
+
+		(element SwitchWithoutLabel
+			_state = "optionValue"
+			_dispatchedEv = 'evTrainingRoomSettingSwitcherClicked'
+			_name = "'switch_' + _data.name"
+			_enabled = "_isEnabled"
+		)
+	)
+
+	(block
+		(style (width = 100%) (paddingRight = "-M") (paddingLeft = "-M"))
+		(element HorizontalDividerTwoPx)
+	)
+)

@@ -1,0 +1,433 @@
+(def constant INFOTIP_DEFAULT_TEXT_LIST_ITEM_RENDERER_ITEM_HEIGHT 29)
+
+(def macro DEFAULT_INFOTIP_ANIMATIONS ()
+	(showAnimation=	{	duration:	"0.15",
+						easing:		"Easing.quint_in",
+						from:		{ alpha: 0, top: 10 },
+						to:			{ alpha: 1, top: 0 }
+					})
+	(hideAnimation=	{	duration:	"0.15",
+						easing:		"Easing.quint_out",
+						from:		{ alpha: 1, top: 0 },
+						to:			{ alpha: 0, top: 10 }
+					})
+)
+
+(def css $SimpleDropdownElement ()
+	(width = 100%)
+	(padding = 9px)
+)
+
+(def css $DropdownSimpleOptionText ()
+	(extends $TextDefaultNM)
+	(maxWidth = 100%)
+	(leading = 0)
+)
+
+(def css $DropdownSimpleOptionTextSelected ()
+	(extends $DropdownSimpleOptionText)
+	(extends $TextDefaultBoldNM)
+)
+
+(def constant ITEM_CHOOSER_ARROW_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.2,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 0.5,
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.4,
+	SC.Ui_styles.BUTTON_STATE.OVER		: "TA",
+	SC.Ui_styles.BUTTON_STATE.UP		: "TC"
+})
+
+(def constant ITEM_CHOOSER_LABEL_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.2,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 0.5,
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.4,
+	SC.Ui_styles.BUTTON_STATE.OVER		: "TA",
+	SC.Ui_styles.BUTTON_STATE.UP		: "TC"
+})
+
+(def constant ITEM_CHOOSER_BORDER_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: "TC",
+	SC.Ui_styles.BUTTON_STATE.DOWN		: "TS",
+	SC.Ui_styles.BUTTON_STATE.OVER		: "TA",
+	SC.Ui_styles.BUTTON_STATE.UP		: 0
+})
+
+(def constant ITEM_CHOOSER_BACKPLATE_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: "TC",
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 1,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 0,
+	SC.Ui_styles.BUTTON_STATE.UP		: 0
+})
+
+(def element ItemChooser (	_name:str='', _disabled:bool=false, _items:array=[], _listItemRenderer:str='TextListItemRenderer', _listItemRendererData:gfx={}, _onItemSelectedEvent:str='',
+							_curIndex:number=0, _curDirection:bool=true, _itemChooserTooltipText:str='', _itemChooserTooltipUnifiedStatus:str="SC.Ui_styles.UNIFIED_STATUS.DEFAULT",
+							_customDropdown:str='', _maxDropDownHeight:number=220, _dropDownWidth:number=140, _selectedMaxWidth:number=0, _selectedFixedWidth:number=0,
+							_itemHeight:number="INFOTIP_DEFAULT_TEXT_LIST_ITEM_RENDERER_ITEM_HEIGHT", _choosedItemRenderer:str='DefaultItemChooserPickedItemRenderer', _choosedItemRendererParams:gfx={})
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evMenuClosed)
+		(event evItemChooserInner)
+
+		(event evClickedElem)
+		(event evClickedOutside)
+		(event evMenuItemClicked)
+		(event evCloseDropdownByOuterEvent)
+		(event evHideInfotip)
+
+		(event evInnerDropdownShown)
+		(event evInnerDropdownHidden)
+
+		(var isSelected:bool = false)
+		(bind isSelected "false" init=false watch=false (event "evClickedOutside") (event "evMenuItemClicked") (event "evHideInfotip"))
+		(bind isSelected "!isSelected" init=false watch=false (event "evClickedElem"))
+
+		
+		(var _curItemIndex:number = "_curIndex")
+		(bind _curItemIndex "$event._curItemIndex" init=false (event "evItemChooserInner"))
+
+		
+		
+		(var _lastItemIndex:number = "_curIndex")
+		(bind _lastItemIndex "_curItemIndex" init=false)
+		(var _direction:bool = "_curDirection")
+		(bind _direction "_curItemIndex == _lastItemIndex ? !_direction : false" init=false watch=false (event "evItemChooserInner"))
+
+		(var isEnabled:bool = "!_disabled")
+		(var isItemNavigateVisible:bool = "_items.length > 1 && isEnabled")
+		(var selectedItemMaxWidth:number = "_selectedFixedWidth	? _selectedFixedWidth :
+											_selectedMaxWidth	? _selectedMaxWidth
+																: 9999")
+		(var selectedItemRightPadding:number = "isItemNavigateVisible ? 23 : 0")
+		(var selectedItemLeftPadding:number = 9) 
+
+		(var tooltipData:dict = "!_itemChooserTooltipText || (_items.length <= 1) ? null : { _text: _itemChooserTooltipText, _unifiedStatus: _itemChooserTooltipUnifiedStatus}")
+		(var dropdownElemName:str = "_customDropdown ? _customDropdown : 'ItemChooserDropdown'")
+
+
+		(var state:number = "	_disabled	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var arrowAlpha:number =		"ITEM_CHOOSER_ARROW_ALPHA[state]")
+		(var borderAlpha:number =		"ITEM_CHOOSER_BORDER_ALPHA[state]")
+		(var backplateAlpha:number =	"ITEM_CHOOSER_BACKPLATE_ALPHA[state]")
+	)
+	(bind name "_name")
+
+	
+	(dispatch "'ItemChooser_' + _onItemSelectedEvent" args="{ selectedIndex: _curItemIndex, direction: _direction }" dir="EventDirection.UP" (event "evItemChooserInner"))
+	(dispatch evClickedElem dir="EventDirection.NONE" on='click')
+
+	(dispatch evClickedOutside dir="EventDirection.NONE" (event "evCloseDropdownByOuterEvent"))
+	(dispatch evMenuClosed dir="EventDirection.NONE" (event "evCloseDropdownByOuterEvent"))
+
+	(controller $Tooltip
+		(renderer = "dropdownElemName")
+		(args
+			_items = "_items"
+			_listItemRenderer = "_listItemRenderer"
+			_listItemRendererData = "_listItemRendererData"
+			_curItemIndex = "_curItemIndex"
+			_maxDropDownHeight = "_maxDropDownHeight"
+			_dropDownWidth = "_dropDownWidth"
+			_itemHeight = "_itemHeight"
+		)
+
+		(macro DEFAULT_INFOTIP_ANIMATIONS)
+		(bindcall show on='click')
+		(bindcall hide on='evClickOutside' (event "evMenuClosed"))
+
+		
+		(dispatch evMenuItemClicked		dir="EventDirection.UP"		(event "evMenuClosed"))
+		
+		(dispatch evClickedOutside		dir="EventDirection.UP"		on='evClickOutside')
+		(dispatch evHideInfotip			dir="EventDirection.NONE"	on='evHide')
+
+		
+		(dispatch evInnerDropdownShown	dir="EventDirection.DOWN" on='click')
+		(dispatch evInnerDropdownHidden	dir="EventDirection.DOWN" on='evClickOutside' (event "evMenuClosed"))
+
+		(hideOnEsc = true)
+		(priority = 1)
+		(offset = { x: 0, y: 4 })
+		(align = "bottom|center")
+		(position = "border")
+		(screenBoundsOffset = "{ left: M, top: M, right: M, bottom: M }")
+
+		(pinTop='InfotipPinTop')
+		(pinBottom='InfotipPinBottom')
+	)
+
+	(controller $Tooltip
+		(bind enabled "tooltipData")
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "tooltipData._text"
+			_unifiedStatus = "tooltipData._unifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+	)
+
+	(style
+		(bind hitTest "isItemNavigateVisible")
+		(flow = "horizontal")
+		(bind maxWidth "selectedItemMaxWidth")
+		(bind width "_selectedFixedWidth ? _selectedFixedWidth : 'auto'")
+		(align = "right")
+	)
+
+	
+	(block
+		(bind visible "isEnabled")
+		(class $FullsizeAbsolute)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(bind alpha "0" watch=false)
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger	= "state"
+				_alpha		= "backplateAlpha"
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(bind alpha "0" watch=false)
+				(scale9grid = 10)
+				(backgroundImage = 'url:../service_kit/buttons/backgrounds/secondary.png')
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger	= "state"
+				_alpha		= "borderAlpha"
+			)
+		)
+	)
+	
+
+	(block
+		(bind name "_items[_curIndex]")
+		(style (bind paddingRight "selectedItemRightPadding"))
+		
+		(controller $Instance renderer="_choosedItemRenderer"
+			(args
+				_state = "state"
+				_item = "_items[_curIndex]"
+				_choosedItemRendererParams = "_choosedItemRendererParams"
+				_labelMaxWidth = "selectedItemMaxWidth - (selectedItemRightPadding + selectedItemLeftPadding)"
+			)
+		)
+	)
+
+	(block
+		(bind visible "isItemNavigateVisible")
+
+		(style
+			(position = "absolute")
+			(right = 0px)
+			(top = 1px)
+			(align = "middle")
+			(height = 100%)
+			(marginRight = 6px)
+			(hitTest = "false")
+		)
+
+		(block
+			(style
+				(width = 16px)
+				(height = 16px)
+				(bind alpha "ITEM_CHOOSER_ARROW_ALPHA[SC.Ui_styles.BUTTON_STATE.UP]" watch=false)
+				(backgroundImage = 'url:../service_kit/buttons/navigate_arrow/down.png')
+			)
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger	= "state"
+				_alpha		= "arrowAlpha"
+			)
+		)
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled = "isEnabled"
+		_soundSet = "'dropdown'"
+	)
+)
+
+(def element ItemChooserDropdown (	_items:array=[], _listItemRenderer:str='TextListItemRenderer', _curItemIndex:number=0, _listItemRendererData:gfx={},
+									_dropDownWidth:number=140, _maxDropDownHeight:number=220, _itemHeight:number="INFOTIP_DEFAULT_TEXT_LIST_ITEM_RENDERER_ITEM_HEIGHT")
+	(scope
+		(var dockDataEntity:gfx = "$datahub.getSingleEntity(CC.dockData)")
+		(var isShipOverviewEnabled:bool = "dockDataEntity ? dockDataEntity.dockData.isShipOverviewEnabled : false" (event "dockDataEntity.dockData.evIsShipOverviewEnabledChanged"))
+
+		
+		(var infotipHeight:number = "_maxDropDownHeight >= _items.length * _itemHeight	? _items.length * _itemHeight
+																						: _maxDropDownHeight")
+		
+	)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND "true")
+
+	(style
+		(position = "absolute")
+		(bind width "_dropDownWidth")
+		(backgroundImage = 'url:../service_kit/panel_backgrounds/infotip_panel.png')
+		(scale9grid = 3)
+		(bind hitTest "!isShipOverviewEnabled")
+		(bind maxHeight "infotipHeight")
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = "isShipOverviewEnabled ? 0.4 : 0.25"
+			delay	 = "!isShipOverviewEnabled ? 0.15 : 0.5"
+			easing	 = "Easing.quad_in"
+			from	 = { alpha: 1 }
+			to		 = { alpha: 0 }
+			reverse	 = "!isShipOverviewEnabled"
+			(bind trigger "isShipOverviewEnabled")
+		)
+	)
+
+	(block
+		(name = 'ItemChooserDropdown')
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "NO_COLOR")
+			(hitTest = false)
+		)
+	)
+
+	(scrollArea
+		(style
+			(width = 100%)
+			(bind height "infotipHeight")
+		)
+
+		(verticalSlider = 'ScrollBarVLight')
+		(topShadow = 'InfotipShadowTop')
+		(bottomShadow = 'InfotipShadowBottom')
+
+		(hscrollPolicy = 'off')
+		(vscrollPolicy = 'auto')
+
+		(repeatController = 'item_chooser')
+
+		(scrollPerItem = true)
+		(wheelScrollSpeed = 1.0)
+		(wheelScrollAcceleration = 0.85)
+		(maxScrollingAnimatedDistance = 150)
+
+		(content
+			(style (width = 100%))
+
+			(controller $DynamicRepeat renderer="_listItemRenderer" name='item_chooser'
+				(bind count "_items.length")
+				(args
+					_curItemIndex = "_curItemIndex"
+					_listItemRendererData = "_listItemRendererData"
+					_item = "_items[$index]"
+				)
+
+				(itemWidth = 100%)
+				(itemHeight = "_itemHeight")
+				(itemOffset = "INFOTIP_DEFAULT_TEXT_LIST_ITEM_RENDERER_ITEM_HEIGHT * 3") 
+			)
+		)
+	)
+)
+
+(def element TextListItemRenderer (_curItemIndex:number=0, _item:gfx='', _listItemRendererData:gfx={}, _isInactive:bool=false)
+	(scope
+		(event evAddedToStage)
+		(event evMenuClosed)
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(var isSelected:bool = "_curItemIndex == $index")
+
+		(var state:number = "	_isInactive		? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(bind name "_item")
+	(style (width = 100%))
+
+	(element MenuItemBackground
+		_state = "state"
+	)
+
+	(block
+		(class $SimpleDropdownElement)
+		(style
+			(bind alpha "_isInactive ? 0.5 : 1")
+		)
+
+		(tf
+			(bind name "'menu_item_' + _item")
+
+			(bind class "isSelected ? '$DropdownSimpleOptionTextSelected': '$DropdownSimpleOptionText'")
+			(style
+				(alpha = "TA")
+				(elideMode = true)
+			)
+
+			(bind text "tr(_item)")
+		)
+	)
+
+	(dispatch evMenuClosed dir="EventDirection.UP" on='click' (bind enabled "!_isInactive"))
+	(dispatch evAddedToStage dir="EventDirection.NONE" on=addedToStage)
+	(dispatch "'evItemChooserInner'" args="{ _curItemIndex: $index }" dir="EventDirection.UP" on='click' (bind enabled "!_isInactive"))
+
+	(macro MOUSE_HANDLER
+		_enabled = "!_isInactive"
+		_soundSet = "'button_default'"
+	)
+)
+
+
+(def element DefaultItemChooserPickedItemRenderer (_state:number, _item:gfx='', _choosedItemRendererParams:gfx={}, _labelMaxWidth:number=0)
+	(style
+		(height = "L")
+		(hitTest = false)
+		(paddingLeft = 9px)
+		(paddingRight = 5px)
+		(paddingTop = 10px)
+		(paddingBottom = 10px)
+	)
+
+	(tf
+		(class $TextDefaultBold17NM)
+		(style
+			(alpha = "ITEM_CHOOSER_LABEL_ALPHA[SC.Ui_styles.BUTTON_STATE.UP]")
+			(maxWidth = "_labelMaxWidth")
+			(elideMode = true)
+		)
+
+		(bind text "tr(_item)")
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger	= "_state"
+			_alpha		= "ITEM_CHOOSER_LABEL_ALPHA[_state]"
+		)
+	)
+)
+
+(def element SmallItemChooserPickedItemRenderer (_state:number, _item:gfx='', _labelMaxWidth:number=0)
+	(style (padding = "-XXS"))
+
+	(element DefaultItemChooserPickedItemRenderer
+		_state = "_state"
+		_item = "_item"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)

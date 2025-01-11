@@ -1,0 +1,1240 @@
+(def constant BANNER_SIZE_WIDTH 280px)
+
+(def constant BANNER_SIZE_HEIGHT {
+	SMALL: 	36px,
+	MEDIUM:	69px
+})
+
+(def constant MOTIVATOR_BANNER_MIN_HEIGHT 98px)
+
+(def constant MOTIVATOR_SYMBOLS_MAX 23)
+
+(def css $PortBanner ()
+	(padding = "SXS")
+	(gap = "SXS")
+)
+
+(def css $PortBannerStatus ()
+	(position = "absolute")
+	(right = 0)
+	(width = 32px)
+	(align = "center")
+)
+
+(def constant ALPHA_BANNER_STATE {	SC.Ui_styles.BUTTON_STATE.OVER:	1,
+									SC.Ui_styles.BUTTON_STATE.DOWN:	0,
+									SC.Ui_styles.BUTTON_STATE.UP:	0
+})
+
+(def macro MOUSE_HANDLER_BANNER (_methods:expression=[])
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "'button_banner'")
+	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT _methods = "_methods")
+)
+
+(def element SseBannerMain ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var sseOpenEndedCounter:dhComponent = "getSingleEntity(CC.sseOpenEndedCounter).sseOpenEndedCounter")
+		(var activeOpenEndedTasksCount:number = "sseOpenEndedCounter.activeAmount ?: 0" (event "sseOpenEndedCounter.evChanged"))
+
+		(var itemsFirstLineCollection:dhCollection = "getCollection(CC.sseCore).child('bannerSSEItems')")
+		(var commonTasksCount:number = "itemsFirstLineCollection.items.length ?: 0"	(event "itemsFirstLineCollection.evAdded")
+																					(event "itemsFirstLineCollection.evRemoved"))
+		
+		(var sseCountTasks:number = "commonTasksCount + activeOpenEndedTasksCount")
+		(var isTasksExist:bool = "sseCountTasks > 0")
+
+		(var sseWindowState:dhComponent = "getSingleEntity(CC.sseWindowState).sseWindowState")
+		(var isReward:bool = "sseWindowState.unclaimedRewardCount > 0 ? true : false" (event "sseWindowState.evChanged"))
+
+		(struct featureActionUse = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
+		(var isFeatureLocked:bool = "featureActionUse.state == 'locked'")
+
+		(var title:str = "isFeatureLocked ? 'IDS_DOCK_BANNER_SSE_NEWBIE_QUESTS' : 'IDS_DOCK_BANNER_SSE_BATTLE_TASKS'")
+
+		(var newbieQuestCollection:dhCollection = "getCollection(CC.newbieQuest)")
+
+		(var newbieQuestAllCollection:dhCollection = "newbieQuestCollection.child('byTier')")
+		(var isNewbieQuestAvailable:bool = "newbieQuestAllCollection.items.length > 0 " (event "newbieQuestAllCollection.evAdded")
+																						(event "newbieQuestAllCollection.evRemoved"))
+
+		(var newbieQuestActiveCollection:dhCollection = "newbieQuestCollection.getChildByPath('notDone.byTier')")
+		(var newbieQuestActiveCount:number = "newbieQuestActiveCollection.items.length ?: 0"	(event "newbieQuestActiveCollection.evAdded")
+																								(event "newbieQuestActiveCollection.evRemoved"))
+		(var isNewbieQuestCountVisible:bool = "isFeatureLocked && newbieQuestActiveCount > 0")
+
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var isShipAcesAvailable:bool = "shipAcesSeasonEntity != null")
+
+		(var sseOpenEndedEntity:dhEntity = "getSingleEntity(CC.sseOpenEnded)")
+
+		(var newContent:dhComponent = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SSETAGS).newContent")
+		(var isNewContent:bool = "newContent.count > 0" (event "newContent.evCountChanged"))
+
+		(var isNewShipAcesSeason:bool = "shipAcesSeasonEntity.hasComponent(CC.newItem)" (event "shipAcesSeasonEntity.evAdded") (event "shipAcesSeasonEntity.evRemoved"))
+		(var isNewSseOpenEnded:bool = 	"sseOpenEndedEntity.hasComponent(CC.newItem)" (event "sseOpenEndedEntity.evAdded") (event "sseOpenEndedEntity.evRemoved"))
+
+		(var isNewMarkerVisible:bool = "isTasksExist && isNewContent || isNewShipAcesSeason || isNewSseOpenEnded")
+
+		
+		(struct sseIntroNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO"))
+		(struct sseIntroRepeatNewTip = 	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO_REPEAT"))
+		(struct shipAcesNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES"))
+		(struct nqIntroNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_INTRO"))
+
+		(var sseTipId:number = "sseIntroNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO :
+								sseIntroRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO_REPEAT :
+								shipAcesNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES :
+								nqIntroNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_INTRO 
+																: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isSseTipVisible:bool = "sseTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+	(name = 'quest_banner')
+
+	(style (width = "BANNER_SIZE_WIDTH") (height = "BANNER_SIZE_HEIGHT.SMALL"))
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: isFeatureLocked ? SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS : SC.Ui_windows.ROUTE.SSE }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SseBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+		(block
+			(style (width = 100%))
+			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM 
+				_duration = "0.15"
+				_fromAlpha = 1
+				_toAlpha = 0.5
+				_triggerExpression="!(isTasksExist || isNewbieQuestAvailable || isReward || isShipAcesAvailable)"
+			)
+			(element BannerItemTitle
+				_title = "title"
+				_isNewMarker = "isNewMarkerVisible"
+				_isStateOwn = "isReward"
+			)
+		)
+
+		(block
+			(class $PortBannerStatus)
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "!isReward")
+				(args
+					_count = " sseCountTasks + newbieQuestActiveCount "
+				)
+			)
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isReward")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
+					_isAnimate = true
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isSseTipVisible")
+		(args
+			_tipId = "sseTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_pointerOffset = 9px
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element SseBanner ()
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(var sseMotivatorCollection:dhCollection = "getCollection(CC.sseCore).getChildByPath('byMotivationPriority.sorted')")
+		(var isSseMotivatorActive:bool = "sseMotivatorCollection.items.length > 0"	(event "sseMotivatorCollection.evAdded")
+																					(event "sseMotivatorCollection.evRemoved"))
+	)
+	(name = 'sse_banner')
+	(element SseBannerMain)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='SseMotivatorSubBanner'
+			(bind enabled "isSseMotivatorActive")
+		)
+	)
+)
+
+(def element SseMotivatorSubBanner ()
+	(scope
+		(var sseMotivatorCollection:dhCollection = "getCollection(CC.sseCore)")
+
+		(var sseMotivatorSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.sorted')"	(event "sseMotivatorCollection.evChildAdded")
+																																(event "sseMotivatorCollection.evChildRemoved")
+																																(event "sseMotivatorCollection.evChildUpdated"))
+		(var sseMotivatorTasks:array = "sseMotivatorSubCollection.items ?: []" (event "sseMotivatorSubCollection.evUpdated") (event "sseMotivatorSubCollection.evAdded"))
+
+		(var sseMotivatorComingSoonSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.comingSoon.sorted')"	(event "sseMotivatorCollection.evChildAdded")
+																																					(event "sseMotivatorCollection.evChildRemoved")
+																																					(event "sseMotivatorCollection.evChildUpdated"))
+		(var sseMotivatorComingSoonTasks:array = "sseMotivatorComingSoonSubCollection.items ?: []" (event "sseMotivatorComingSoonSubCollection.evUpdated") (event "sseMotivatorComingSoonSubCollection.evAdded"))
+
+		(var sseMotivatorActiveSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.active')"	(event "sseMotivatorCollection.evChildAdded")
+																																	(event "sseMotivatorCollection.evChildRemoved")
+																																	(event "sseMotivatorCollection.evChildUpdated"))
+		(var sseMotivatorActiveTasks:array = "sseMotivatorActiveSubCollection.items ?: []" (event "sseMotivatorActiveSubCollection.evUpdated") (event "sseMotivatorActiveSubCollection.evAdded"))
+
+		(var isMotivatorStatusDone:bool = "sseMotivatorActiveTasks.length == 0")
+		(var tasksCounter:number = "isMotivatorStatusDone	? min(SC.Sse.SSE_MOTIVATION_BANNER.COMING_SOON_TASKS_ON_BANNER_MAX, sseMotivatorComingSoonTasks.length)
+															: min(SC.Sse.SSE_MOTIVATION_BANNER.ACTIVE_TASKS_ON_BANNER_MAX, sseMotivatorTasks.length)")
+		(var sseTasks:array = "isMotivatorStatusDone ? sseMotivatorComingSoonTasks : sseMotivatorTasks")
+
+		(struct sseMotivatorIntroNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_INTRO"))
+	)
+	(style (width = 100%))
+	(controller $Repeat renderer='SseMotivatorSubBannerItem'
+		(bind count "tasksCounter")
+		(args
+			_sseId = "sseTasks[$index].id"
+			_isSingleCard = "tasksCounter == 1 && isMotivatorStatusDone"
+			_tasksCount = "tasksCounter"
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "sseMotivatorIntroNewTip.isActive")
+		(args
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_INTRO"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element SseMotivatorSubBannerItem (_sseId:number = 0, _isSingleCard:bool = false)
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(event evSubBannerItemClicked)
+
+		(var sseEntity:dhEntity = "getEntity(_sseId)")
+		(var sseTaskId:str = "sseEntity.sseCore.id" (event "sseEntity.sseCore.evChanged"))
+		(var sseCategoryId:str = "sseEntity.sseCore.tag ?: ''" (event "sseEntity.sseCore.evChanged"))
+		(var isTaskHighlighted:bool = "sseEntity.sseCore.isMotivationHighlighted" (event "sseEntity.sseCore.evChanged"))
+		(var statusesCore:array = "sseEntity.sseCore.statuses ?: []" (event "sseEntity.sseCore.evStatusesChanged"))
+		(var isTaskCompletedBlock:bool = "	isIn(SC.Sse.SSE_STATUSES.DONE, statusesCore) ||
+											isIn(SC.Sse.SSE_STATUSES.LOCKED_BY_TIME, statusesCore) ||
+											isIn(SC.Sse.SSE_STATUSES.LOCKED_BECAUSE_NOT_PRIME_TIME, statusesCore)")
+
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(
+			_alphaBannerVariants = "ALPHA_BANNER_STATE"
+			_isMouseDown = "isTaskCompletedBlock ? false : mouseDown"
+			_isRollOver = "isTaskCompletedBlock ? false : rollOver"
+		))
+		(var elementName:str = "isTaskCompletedBlock ? 'SseMotivatorTaskCompleted' : 'SseMotivatorTaskActive'")
+	)
+	(name = 'sse_motivator_banner')
+	(dispatch evSubBannerItemClicked dir="EventDirection.DOWN" on='leftClick')
+	(bindcall externalCall "'inputMapping.onAction'" "[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_INTRO } ]" watch=false (event "evSubBannerItemClicked"))
+
+	(style (width = "BANNER_SIZE_WIDTH") (minHeight = "MOTIVATOR_BANNER_MIN_HEIGHT") (align = "middle"))
+
+	(macro PORT_BANNER_BG
+		_bgColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"
+	)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[	{ type: 'inputMapping.onAction', name: isTaskCompletedBlock ? '' : 'navigateTo', args: { route: 'sse_' + sseCategoryId }},
+						{ type: 'inputMapping.onAction', name: isTaskCompletedBlock ? '' : 'SSEProxyCommonUSS.selectItem', args: { itemId: sseTaskId }}]"
+	)
+
+	(block
+		(bind visible "isTaskHighlighted && !isTaskCompletedBlock")
+		(class $FullsizeAbsolute)
+		(style (hitTest = false) (backgroundImage = 'url:../animations/spine/sse/motivator/sse_motivator_bg.skel') (backgroundSize = "fill"))
+	)
+	(block
+		(bind visible "isTaskCompletedBlock")
+		(style (position = "absolute") (width = 280px) (height = 98px) (backgroundImage = 'url:../sse/motivator/task_completed.png'))
+	)
+	(block
+		(style (width = 100%) (padding = [20px, 12px, 12px]))
+		(controller $Instance
+			(bind renderer "elementName")
+			(args
+				_sseId = "_sseId"
+				_isSingleCard = "_isSingleCard"
+			)
+		)
+	)
+	(block
+		(style (position = "absolute") (top = 0) (width = 100%))
+		(element HorizontalDividerTwoPx)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(controller $Tooltip
+			(renderer = 'SseMotivatorBannerTooltip')
+			(bind enabled "!isTaskCompletedBlock")
+			(args
+				_sseId = "_sseId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element SseMotivatorTaskActive (_sseId:number = 0)
+	(scope
+		(event evSubBannerItemClicked)
+		(event evDeactivateTip)
+
+		(var sseEntity:dhEntity = "getEntity(_sseId)")
+		(var progressCurrent:number = "sseEntity.progress.value" (event "sseEntity.progress.evChanged"))
+		(var progressMax:number = "sseEntity.progress.max" (event "sseEntity.progress.evChanged"))
+		(var sseTaskId:str = "sseEntity.sseCore.id" (event "sseEntity.sseCore.evChanged"))
+
+		(var isChain:bool = "sseEntity && sseEntity.hasComponent(CC.sseChain)" (event "sseEntity.evAdded") (event "sseEntity.evRemoved"))
+		(var currentTaskId:str = "isChain ? sseEntity.sseChain.currentTaskId : ''" (event "sseEntity.sseChain.evChanged"))
+		(var sseCoreEntity:dhEntity = "getPrimaryEntity(CC.sseCore, currentTaskId)")
+		(var sseTaskComponent:dhComponent = "isChain ? sseCoreEntity.sseTask : sseEntity.sseTask" (event "sseEntity.evAdded") (event "sseEntity.evRemoved"))
+		(var sseTaskEntityId:number = "isChain ? sseCoreEntity.id : _sseId")
+		(var sseChainName:str = "sseEntity.sseChain.name ?: ''" (event "sseEntity.sseChain.evChanged"))
+		(var sseChainDisplayName:str = "sseChainName == '' || sseChainName.length > MOTIVATOR_SYMBOLS_MAX	? tr('IDS_SSE_MOTIVATOR_TASK_COMMON_TITLE_COLON')
+																											: sseChainName + ':'")
+		(var sseTaskName:str = "sseTaskComponent.name.length > MOTIVATOR_SYMBOLS_MAX ? tr('IDS_SSE_MOTIVATOR_TASK_COMMON_TITLE') : sseTaskComponent.name")
+		(var nameToDisplay:str = "isChain ? sseChainDisplayName : sseTaskName")
+
+		(var taskConditions:array = "sseTaskComponent.conditions ?: []" (event "sseTaskComponent.evChanged"))
+		(var conditionId:number = "taskConditions[0]")
+		(var sseConditionEntity:dhEntity = "getEntity(conditionId)")
+		(var countablesIds:array = "sseConditionEntity.sseConditions.countablesIds" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
+
+		(var sseTaskRewards:array = "sseTaskComponent.rewards ?: []" (event "sseTaskComponent.evChanged"))
+		(var rewardEntity:dhEntity = "getEntity(sseTaskRewards[0])")
+		(var reward:dict = "{	id: rewardEntity.rewardComponent.id,
+								amount: 0,
+								name: rewardEntity.rewardComponent.name,
+								type: rewardEntity.rewardComponent.type,
+								subtype: rewardEntity.rewardComponent.subtype,
+								params: rewardEntity.rewardComponent.params,
+								isPRMP: rewardEntity.rewardComponent.isPRMP }")
+		(var rewardCounter:number = "rewardEntity.rewardComponent.amount ?: 0")
+
+		(struct sseMotivatorTaskChangedNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_TASK_CHANGED"))
+
+		
+		(var sseTaskChainId:str = "sseCoreEntity.sseCore.id" (event "sseCoreEntity.sseCore.evChanged"))
+		(var sseIdUI:str = "isChain ? sseTaskChainId : sseTaskId")
+		(var sseMotivatorEventName:str = "SC.Common.SSE_MOTIVATOR_STATISTICS.BANNER_CLICKED + sseIdUI")
+	)
+	(dispatch evDeactivateTip (event "evSubBannerItemClicked") (bind enabled "sseTaskId == sseMotivatorTaskChangedNewTip.targetId"))
+	(bindcall externalCall 'direct.action' "[SC.Common.STATISTICS_EVENTS.LOG, [sseMotivatorEventName]]" watch=false (event "evSubBannerItemClicked"))
+	(bindcall externalCall	"'inputMapping.onAction'" "[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_TASK_CHANGED } ]" watch=false (event "evDeactivateTip"))
+
+	(style (width = 100%) (backgroundColor = "NO_COLOR"))
+
+	(block
+		(style (width = 100%) (marginBottom = "S") (minHeight = 68px) (paddingRight = 68px))  
+		(hblock
+			(style (width = 100%) (marginBottom = "S") (marginTop = 6px))  
+			(tf
+				(class $TextDefaultBold13NM)
+				(style (alpha = "TA") (marginRight = "S") (bind width "isChain ? 'auto' : 100%"))
+				(bind text "toUpper(nameToDisplay)")
+			)
+			(block
+				(controller $Instance renderer='DefaultDividedCounter'
+					(bind enabled "isChain")
+					(args
+						_curValueTextClass = '$TextDefaultBold13NM'
+						_curValue = "progressCurrent"
+						_maxValue = "progressMax"
+						_doNotAlphaOnZeroCurValue = true
+					)
+				)
+			)
+		)
+		(tf
+			(class $TextDefaultNM)
+			(style (width = 100%) (alpha = "TA"))
+			(bind text "countablesIds[0].ids")
+		)
+	)
+
+	(block
+		(style (position = "absolute") (right = 0))
+		(block
+			(style (bind scaleX "0.75") (bind scaleY "0.75"))
+			(element RewardItem
+				_reward = "reward"
+				_withTooltip = false
+			)
+		)
+		(block
+			(style (position = "absolute") (bottom = 0) (right = "XXS"))
+			(element ImageItemsCounter _amount = "rewardCounter")
+		)
+	)
+	(element SseProgress
+		_sseId="sseTaskEntityId"
+		_conditionId="conditionId"
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "sseMotivatorTaskChangedNewTip.isActive && sseTaskId == sseMotivatorTaskChangedNewTip.targetId")
+		(args
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_TASK_CHANGED"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "SXS"
+		)
+	)
+)
+
+(def element SseMotivatorTaskCompleted (_sseId:number = 0, _isSingleCard:bool = false)
+	(scope
+		(var sseMotivatorCollection:dhCollection = "getCollection(CC.sseCore)")
+		(var sseMotivatorComingSoonCollection:dhCollection = "	getCollection(CC.sseCore).getChildByPath('byMotivationPriority.comingSoon.sorted')"
+																									(event "sseMotivatorCollection.evChildAdded")
+																									(event "sseMotivatorCollection.evChildRemoved")
+																									(event "sseMotivatorCollection.evChildUpdated"))
+		(var sseMotivatorComingSoonTasks:array = "sseMotivatorComingSoonCollection.items ?: []"	(event "sseMotivatorComingSoonCollection.evUpdated")
+																								(event "sseMotivatorComingSoonCollection.evAdded"))
+
+		(var sseEntity:dhEntity = "getEntity(_sseId)")
+		(var statuses:array = "sseEntity.sseCore.statuses ?: []" (event "sseEntity.sseCore.evStatusesChanged"))
+		(var weekly:number = "sseEntity.sseRefresh.weekly" (event "sseEntity.sseRefresh.evChanged"))
+		(var isChain:bool = "sseEntity && sseEntity.hasComponent(CC.sseChain)")
+		(var currentTaskId:str = "isChain ? sseEntity.sseChain.currentTaskId : ''")
+		(var sseCoreEntity:dhEntity = "getPrimaryEntity(CC.sseCore, currentTaskId)")
+
+		(var isTaskLockedByTime:bool = "isIn(SC.Sse.SSE_STATUSES.LOCKED_BY_TIME, statuses)")
+		(var sseName:str = "_isSingleCard	? 'IDS_SSE_MOTIVATOR_TASKS_COMPLETED' :
+							weekly > 0		? 'IDS_SSE_MOTIVATOR_BP_WEEKLY_TASKS_COMPLETED'
+											: 'IDS_SSE_MOTIVATOR_BP_DAILY_TASKS_COMPLETED'")
+		(var sseStatusId:number = "	_isSingleCard	? sseMotivatorComingSoonTasks[0].id :
+									isChain			? isTaskLockedByTime ? _sseId : sseCoreEntity.id
+													: _sseId")
+
+		(struct sseMotivatorTaskCompletedNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_COMPLETED"))
+	)
+	(style (width = 100%))
+	(tf
+		(class $TextDefaultBold17NM)
+		(style (marginRight = "S") (marginBottom = "M") (alpha = "TA"))
+		(bind text "sseName")
+	)
+	(element SseMotivatorTimeStatus
+		_sseId = "sseStatusId"
+		_isSseMotivator = true
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "sseMotivatorTaskCompletedNewTip.isActive")
+		(args
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_COMPLETED"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "SXS"
+		)
+	)
+)
+
+(def element CampaignBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var campaignTaskPlayerCollection:dhCollection = "getCollection(CC.campaignTaskPlayer)")
+
+		(var taskPlayerActiveCollection:dhCollection = "campaignTaskPlayerCollection.child('active')")
+		(var taskPlayerCount:number = "taskPlayerActiveCollection.items.length ?: 0"	(event "taskPlayerActiveCollection.evAdded")
+																						(event "taskPlayerActiveCollection.evRemoved"))
+		
+		(var accountResourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResource:dhComponent = "accountResourceEntity.accountResource")
+		(var isPremiumAccount:bool = "accountResource.activePremiumType != SC.Common.PREMIUM_TYPE.NONE" (event "accountResource.evActivePremiumTypeChanged"))
+
+		(var constantsCampaignSlotsEntity:dhEntity = "getSingleEntity(CC.constantsCampaignSlots)")
+		(var constantsCampaignSlots:dhComponent = "constantsCampaignSlotsEntity.constantsCampaignSlots")
+		(var commonCount:number = "constantsCampaignSlots.common")
+		(var premiumCount:number = "constantsCampaignSlots.premium")
+		(var slotsCount:number = "commonCount + premiumCount")
+		(var isSlotsCount:bool = "isPremiumAccount || taskPlayerCount == slotsCount")
+		(var totalAvailableTaskCount:number = "isSlotsCount ? slotsCount : commonCount")
+
+		(var activeTaskStateDoneCollection:dhCollection = "campaignTaskPlayerCollection.getChildByPath('active.taskStateDone')")
+		(var isReward:bool = "activeTaskStateDoneCollection.items.length > 0"	(event "activeTaskStateDoneCollection.evAdded")
+																				(event "activeTaskStateDoneCollection.evRemoved"))
+
+		(struct featureCampaign = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.CAMPAIGNS"))
+		(var isNewMarkerVisible:bool = "featureCampaign.state == 'new'")
+
+		
+		(struct campaignIntroNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO"))
+		(struct campaignIntroRepeatNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO_REPEAT"))
+
+		(var campaignTipId:number = "	campaignIntroNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO : 
+										campaignIntroRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO_REPEAT
+																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isCampaignTipVisible:bool = "(featureCampaign.state != 'locked') && (campaignTipId != SC.Context_guiding_tip.TIP_TYPE.NONE)")
+	)
+	(name = 'campaigns_banner')
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_CAMPAIGN }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'CampaignBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_DOCK_BANNER_CAMPAIGNS'
+			_isNewMarker = "isNewMarkerVisible"
+			_isStateOwn = "isReward"
+			_newMarkerType = "SC.Common.CONTENT_CATEGORY.CAMPAIGNS"
+		)
+
+		(block
+			(class $PortBannerStatus)
+			
+			(controller $Instance renderer = 'DefaultDividedCounter'
+				(bind enabled "!isReward")
+				(args
+					_curValue = "taskPlayerCount"
+					_maxValue = "totalAvailableTaskCount"
+					_doNotAlphaOnZeroCurValue = true
+					_curValueTextClass = '$TextDefaultBold17NM'
+				)
+			)
+			
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isReward")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_star.png'
+					_isAnimate = true
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isCampaignTipVisible")
+		(args
+			_tipId = "campaignTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_pointerOffset = 9px
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element MetaShopBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var metashopBannerStateEntity:dhEntity = "getSingleEntity(CC.metashopBannerState)")
+		(var metashopBannerState:dhComponent = "metashopBannerStateEntity.metashopBannerState")
+		(var isReward:bool = "metashopBannerState.isActive" (event "metashopBannerState.evUpdate"))
+		(var isNewMarkerVisible:bool = "metashopBannerState.isNew" (event "metashopBannerState.evUpdate"))
+
+		
+		(struct metashopIntroNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.METASHOP_INTRO"))
+		(struct metashopIntroRepeatNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.METASHOP_INTRO_REPEAT"))
+		(struct metashopSpecialNewTip = 	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.METASHOP"))
+
+		(var metashopChainId:number = "	metashopIntroNewTip.isActive		? SC.Context_guiding_tip.TIP_CHAIN_ID.METASHOP : 
+										metashopIntroRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_CHAIN_ID.METASHOP_REPEAT :
+										metashopSpecialNewTip.isActive		? SC.Context_guiding_tip.TIP_CHAIN_ID.METASHOP_SPECIAL
+																			: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE")
+		
+		(var metashopTipId:number = "	metashopIntroNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.METASHOP_INTRO : 
+										metashopIntroRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.METASHOP_INTRO_REPEAT :
+										metashopSpecialNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.METASHOP
+																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isMetashopTipActive:bool = "metashopTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+	(name = 'meta_shop_banner')
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[
+						{
+							type: 'inputMapping.onAction',
+							name: isMetashopTipActive ? 'deactivateTipChain' : '',
+							args: { tip_chain_id: metashopChainId }
+						},
+						{
+							type: 'inputMapping.onAction',
+							name: 'featureSeen',
+							args: { featureIndex: SC.Common.ACCOUNT_FEATURE.METASHOP }
+						},
+						{
+							type: 'inputMapping.onRequest',
+							name: 'openMetashop',
+							args: {}
+						},
+						{	
+							type: 'inputMapping.onAction',
+							name: 'metashopBannerClicked',
+							args: {}
+						}
+					]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'MetaShopBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_DOCK_BANNER_METASHOP'
+			_isNewMarker = "isNewMarkerVisible"
+			_isStateOwn = "isReward"
+		)
+
+		(block
+			(class $PortBannerStatus)
+			(element MarkerReward
+				_iconReward = "isReward ? 'url:../service_kit/port_banner/icon_banner_arsenal_active.png'
+										: 'url:../service_kit/port_banner/icon_banner_arsenal.png'"
+				_isAnimate = "isReward"
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isMetashopTipActive")
+		(args
+			_tipId = "metashopTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element BattlePassBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var unclaimedRewardsCollection:dhCollection = "getCollection(CC.battlePassReward).child('unclaimedRewards')")
+		(var isReward:bool = "unclaimedRewardsCollection.items.length > 0"	(event "unclaimedRewardsCollection.evAdded")
+																			(event "unclaimedRewardsCollection.evRemoved"))
+
+		(var battlePass:dhComponent = "getSingleEntity(CC.battlePass).battlePass")
+		(var battlePassId:number = "battlePass.id" (event "battlePass.evChanged"))
+
+		(var battlePassCurrentLevelEntity:dhEntity = "getSingleEntity(CC.battlePassCurrentLevel)")
+
+		(var battlePassLevel:dhComponent = "battlePassCurrentLevelEntity.battlePassLevel")
+
+		(var curLevel:number = "battlePassLevel.level" (event "battlePassLevel.evChanged"))
+		(var curPoints:number = "battlePassLevel.points" (event "battlePassLevel.evChanged"))
+		(var maxPoints:number = "battlePassLevel.pointsPerLevel" (event "battlePassLevel.evChanged"))
+
+		(var mainProgressionCollection:dhCollection = "getCollection(CC.battlePassLevel).getChildByPath('mainProgression')")
+		(var mainProgressionArray:array = "mainProgressionCollection.items ?: []" (event "mainProgressionCollection.evAdded") (event "mainProgressionCollection.evRemoved"))
+
+
+		(var battlePassPostProgressionLevel:dhComponent = "battlePassCurrentLevelEntity.battlePassPostProgressionLevel")
+		(var countCompleted:number = "battlePassPostProgressionLevel.countCompleted" (event "battlePassPostProgressionLevel.evChanged"))
+		(var level:number = "countCompleted ? curLevel + countCompleted : curLevel")
+		(var isPostProgression:bool = "battlePassPostProgressionLevel != null")
+
+		(var currentRewardEntity:dhEntity = "getPrimaryEntity(CC.battlePassReward, curLevel + '_' + SC.Common.BATTLEPASS_REWARD_TYPES.PAID + '_' +'0')")
+
+		
+		(struct battlePassSeasonFinishFreeTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_FREE"))
+		(struct battlePassSeasonFinishPaidTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_PAID"))
+		(struct battlePassEventStartTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_EVENT_START"))
+		
+		(var battlePassTipId:number = "	battlePassSeasonFinishFreeTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_FREE : 
+										battlePassSeasonFinishPaidTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_PAID :
+										battlePassEventStartTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_EVENT_START
+																				: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isBattlePassTipActive:bool = "battlePassTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+
+	(name = 'battlepass_banner')
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'BattlePassProxyUSS.updateObservableReward',
+			args: { battlePassRewardEntityId: currentRewardEntity.id }
+		},
+		{
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.BATTLE_PASS }
+		}]"
+	)
+	
+	(controller $Tooltip
+		(renderer = 'BattlePassBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_DOCK_BANNER_BATTLEPASS'
+			_isStateOwn = "isReward"
+		)
+
+		(block
+			(class $PortBannerStatus)
+
+			(controller $Instance renderer = 'DefaultDividedCounter'
+				(bind enabled "!isReward && !isPostProgression")
+				(args
+					_curValue = "curLevel-1"
+					_maxValue = "mainProgressionArray.length"
+					_doNotAlphaOnZeroCurValue = true
+					_curValueTextClass = '$TextDefaultBold17NM'
+				)
+			)
+
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "!isReward && isPostProgression")
+				(args
+					_count = "level-1"
+				)
+			)
+
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isReward")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
+					_isAnimate = true
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isBattlePassTipActive")
+		(args
+			_tipId = "battlePassTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element IngameNewsBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var ingamePortalEntity:dhEntity = "getSingleEntity(CC.ingamePortal)")
+		(var ingamePortal:dhComponent = "ingamePortalEntity.ingamePortal")
+		(var isReward:bool = "ingamePortal.isGiftAwaiting" (event "ingamePortal.evUpdate"))
+		(var unreadRecomendedNewsCount:number = "ingamePortal.unreadNewsCount" (event "ingamePortal.evUpdate"))
+		(var isUnreadRecomendedNews:bool = "unreadRecomendedNewsCount > 0")
+
+		(var url:str = "isReward	? 	SC.Ui_windows.GUI_URL.NEWS_VERSION_IN_GAME
+									:	isUnreadRecomendedNews	? SC.Ui_windows.GUI_URL.NEWS_IN_GAME
+																: SC.Ui_windows.GUI_URL.NEWS_ALL_IN_GAME")
+	)
+	(name = 'ingame_news_banner')
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.PORTAL,  data: {url: url} }
+		},
+		{
+			type: 'inputMapping.onAction',
+			name: 'ServerUIDataUSS.setUserTaskExecuted',
+			args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_NEWS] }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'IngameNewsTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_NEWS'
+			_isStateOwn = "isReward"
+		)
+
+		(block
+			(class $PortBannerStatus)
+
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "isUnreadRecomendedNews && !isReward")
+				(args
+					_count = "unreadRecomendedNewsCount"
+				)
+			)
+
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isReward")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
+					_isAnimate = true
+				)
+			)
+		)
+	)
+
+	(element GuidingTipHub
+		_tipId = "SC.Context_guiding_tip.TIP_TYPE.INGAME_NEWS"
+		_tipPositioning = "TIP_POSITION_RIGHT"
+		_modalWindowName = 'Dock'
+		_offsetX = "-XXS"
+	)
+)
+
+(def element LootboxBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		
+		(var dailyLootboxesEntity:dhEntity = "getPrimaryEntity(CC.splitRunTest, 'Return_daily_lootboxes')")
+		(var isDailyLootboxesAvailable:bool = "dailyLootboxesEntity.splitRunTest.data.isDailyLootboxesAvailable" (event "dailyLootboxesEntity.splitRunTest.evDataChanged"))
+
+		(var dockDataEntity:dhEntity = "getSingleEntity(CC.dockData)")
+		(var dockData:dhComponent = "dockDataEntity.dockData")
+		(var isArmorVisible:bool = "dockData.isArmorVisible" (event "dockData.evIsArmorVisibleChanged"))
+
+		(struct featureLootboxes = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.LOOTBOXES"))
+
+		(var lootboxEntity:dhEntity = 		"getSingleEntity(CC.lootboxConfigComponent)")
+		(var lootboxStorage:dhComponent = 	"lootboxEntity.lootboxStorageComponent")
+		(var lootboxConfig:dhComponent = 	"lootboxEntity.lootboxConfigComponent")
+
+		(var lootboxInStorage:number = 	"lootboxStorage.inStorage"	(event "lootboxStorage.evUpdate"))
+		(var lootboxExp:number = 		"lootboxStorage.lootExp" 	(event "lootboxStorage.evUpdate"))
+		(var lootboxPrices:array = 		"lootboxConfig.prices" 		(event "lootboxConfig.evUpdate"))
+
+		(var isMaxDailyExp:bool = "lootboxExp >= lootboxPrices[2]")
+
+		(var isDailyLootboxesBlockVisible:bool = "!isMaxDailyExp && isDailyLootboxesAvailable")
+
+		(var isReward:bool = "lootboxEntity.hasComponent(CC.newItem)" (event "lootboxEntity.evAdded") (event "lootboxEntity.evRemoved"))
+		(var isNewMarkerVisible:bool = "featureLootboxes.state == 'new'")
+
+		
+		
+
+		(var expToNextLootbox:number = "lootboxExp >= lootboxPrices[1]	? lootboxPrices[2] - lootboxExp :
+										lootboxExp >= lootboxPrices[0]	? lootboxPrices[1] - lootboxExp
+																		: lootboxPrices[0] - lootboxExp")
+
+		(var curLootExpStep:number = "	lootboxExp >= lootboxPrices[1]	? lootboxExp - lootboxPrices[1] :
+										lootboxExp >= lootboxPrices[0]	? lootboxExp - lootboxPrices[0]
+																		: lootboxExp")
+
+		(var maxLootExpStep:number = "	lootboxExp >= lootboxPrices[1]	? lootboxPrices[2] - lootboxPrices[1] :
+										lootboxExp >= lootboxPrices[0]	? lootboxPrices[1] - lootboxPrices[0]
+																		: lootboxPrices[0]")
+
+		(var dailyLootProgress:number = "maxLootExpStep ? curLootExpStep / maxLootExpStep : null")
+
+		
+		(var isShowLootBox:bool = "featureLootboxes.state != 'locked'")
+
+		(struct lootboxNewTip =						PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO"))
+		(struct lootboxRepeatNewTip = 				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO_REPEAT"))
+		(struct lootboxEmptyStorageNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO_EMPTY_STORAGE"))
+		(struct lootboxEmptyStorageRepeatNewTip = 	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO_EMPTY_STORAGE_REPEAT"))
+
+		(var lootboxTipId:number = "lootboxNewTip.isActive						? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO :
+									lootboxRepeatNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO_REPEAT :
+									lootboxEmptyStorageNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO_EMPTY_STORAGE :
+									lootboxEmptyStorageRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_INTRO_EMPTY_STORAGE_REPEAT
+																				: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		
+		(var isLootboxTipVisible:bool = "isShowLootBox && (lootboxTipId != SC.Context_guiding_tip.TIP_TYPE.NONE)")
+	)
+	(name = 'lootboxes_banner')
+
+	(style
+		(width = "BANNER_SIZE_WIDTH")
+		(bind height "isDailyLootboxesBlockVisible ? BANNER_SIZE_HEIGHT.MEDIUM : BANNER_SIZE_HEIGHT.SMALL")
+	)
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.BARGE }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: isArmorVisible ? 'hideArmour' : '',
+			args: { }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'LootboxBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_LOOTBOXES'
+			_isStateOwn = "isReward"
+			_isNewMarker = "isNewMarkerVisible"
+		)
+
+		(block
+			(class $PortBannerStatus)
+
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "!isReward && lootboxInStorage > 0")
+				(args
+					_count = "lootboxInStorage"
+				)
+			)
+
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isReward")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_container.png'
+					_isAnimate = true
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'BannerProgressBar'
+				(bind enabled "isDailyLootboxesBlockVisible")
+				(args
+					_progress = "dailyLootProgress"
+					_text = 'IDS_EXP_LEFT'
+					_currencyIcon = 'url:../service_kit/currencies/icon_exp_small.png'
+					_costAmount = "expToNextLootbox"
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isLootboxTipVisible")
+		(args
+			_tipId = "lootboxTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_pointerOffset = 9px
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element StrategicActionsBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var strategicActionsEntity:dhEntity = "getSingleEntity(CC.strategicActionsEvent)")
+		(var strategicActionsEvent:dhComponent = "strategicActionsEntity.strategicActionsEvent")
+
+		(var isTerritoryAvailable:bool = "strategicActionsEvent.selectedTerritory == 0" (event "strategicActionsEvent.evChanged"))
+
+		(var state:number = "strategicActionsEvent.state" (event "strategicActionsEvent.evStateChanged"))
+
+		(var isAnyRewardClaim:bool = "strategicActionsEvent.isAnyRewardClaim" (event "strategicActionsEvent.evChanged"))
+
+		(var isActive:bool = "state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.ACTIVE")
+		(var isCompleted:bool = "state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.COMPLETED")
+		(var isFinishedWithResults:bool = "state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.FINISHED_WITH_RESULTS")
+
+		(var bannerDescription:str = "isActive && isTerritoryAvailable && !isAnyRewardClaim	? 'IDS_STRATEGIC_ACTIONS_BANNER_TEXT_TERRITORY' : ''")
+
+		(var isReward:bool = "isAnyRewardClaim && !isFinishedWithResults")
+
+		(var isNew:bool = "strategicActionsEntity.hasComponent(CC.newItem)"	(event "strategicActionsEntity.evAdded") (event "strategicActionsEntity.evRemoved"))
+		(var isNewMarkerVisible:bool = "isNew && !isAnyRewardClaim && !isFinishedWithResults")
+
+		
+		(struct strategicEventTip = 				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_EVENT"))
+		(struct strategicTaskChangedTip = 			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TASK_CHANGED"))
+		(struct strategicTerritoryCompletedTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_COMPLETED"))
+
+		(var strategicChainId:number = "strategicEventTip.isActive					? SC.Context_guiding_tip.TIP_CHAIN_ID.STRATEGIC_ACTIONS_EVENT : 
+										strategicTaskChangedTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.STRATEGIC_ACTIONS_TASK_CHANGED :
+										strategicTerritoryCompletedTip.isActive		? SC.Context_guiding_tip.TIP_CHAIN_ID.STRATEGIC_ACTIONS_TERRITORY_COMPLETED
+																					: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE")
+		
+		(var strategicTipId:number = "	strategicEventTip.isActive					? SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_EVENT : 
+										strategicTaskChangedTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TASK_CHANGED :
+										strategicTerritoryCompletedTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_COMPLETED
+																					: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isStrategicTipActive:bool = "strategicTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+	(name = 'strategic_actions')
+
+	(style
+		(width = "BANNER_SIZE_WIDTH")
+		(height = "BANNER_SIZE_HEIGHT.SMALL")
+
+	)
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onRequest',
+			name: isFinishedWithResults ? 'showStrategicActionsResults' : '',
+			args: { }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.STRATEGIC_ACTIONS }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: isNew ? 'makeSeen' : '',
+			args: { entityId: strategicActionsEntity.id }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: isStrategicTipActive ? 'deactivateTipChain' : '',
+			args: { tip_chain_id: strategicChainId }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'StrategicActionsTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(block
+			(style (width = 100%) (gap = "SXS"))
+			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM 
+				_duration = "0.15"
+				_fromAlpha = 1
+				_toAlpha = 0.5
+				_triggerExpression="isCompleted && !isAnyRewardClaim || isFinishedWithResults"
+			)
+
+			(element BannerItemTitle
+				_title = 'IDS_STRATEGIC_ACTIONS_COMMON_EVENT_TITLE'
+				_isStateOwn = "isReward"
+				_isNewMarker = "isNewMarkerVisible"
+				_isMultiline = true
+			)
+
+
+
+
+
+
+		)
+
+		(block
+			(class $PortBannerStatus)
+
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isReward")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
+					_isAnimate = true
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isStrategicTipActive")
+		(args
+			_tipId = "strategicTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element RepairDockBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
+		(var isReward:bool = "repairDockDataEntity.hasComponent(CC.newItem)" (event "repairDockDataEntity.evAdded") (event "repairDockDataEntity.evRemoved"))
+		
+		(var newShipContent:dhComponent = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SHIP_COMPONENTS).newContent")
+		(var isNewMarkerVisible:bool = "newShipContent.count > 0" (event "newShipContent.evCountChanged"))
+
+		(var shipComponentCollection:dhCollection = "getCollection(CC.shipComponent).child('sorted')")
+		(var shipsCount:number = "shipComponentCollection.items.length" (event "shipComponentCollection.evAdded") (event "shipComponentCollection.evRemoved"))
+		(var isInactive:bool = "shipsCount == 0")
+
+		
+		(struct shipShardsIntroWithShipMaterialTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_MATERIAL"))
+		(struct shipShardsIntroWithShipComponentTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_COMPONENT"))
+		(struct shipShardsShipCraftingIntroTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FIRST_REPAIR_INTRO"))
+		
+		(var repairDockTipId:number = "	shipShardsIntroWithShipMaterialTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_MATERIAL : 
+										shipShardsIntroWithShipComponentTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_COMPONENT :
+										shipShardsShipCraftingIntroTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FIRST_REPAIR_INTRO
+																						: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isRepairDockTipActive:bool = "repairDockTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+
+	(name = 'repair_dock_banner')
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	
+	
+	(macro PORT_BANNER_BG)
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.REPAIR_DOCK }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'RepairDockTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(block
+			(style (width = 100%))
+			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM 
+				_duration = "0.15"
+				_fromAlpha = 1
+				_toAlpha = 0.5
+				_triggerExpression="isInactive"
+			)
+			(element BannerItemTitle
+				_title = 'IDS_DOCK_BANNER_REPAIR_DOCK'
+				_isNewMarker = "isNewMarkerVisible"
+				_isStateOwn = "isReward"
+			)
+		)
+
+		(block
+			(class $PortBannerStatus)
+
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "!isReward && !isInactive")
+				(args
+					_count = "shipsCount"
+				)
+			)
+
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isReward")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_ship.png'
+					_isAnimate = true
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isRepairDockTipActive")
+		(args
+			_tipId = "repairDockTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)

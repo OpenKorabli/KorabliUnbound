@@ -1,0 +1,959 @@
+(def element nullLayout() layout=true)
+
+(def macro VAR_RELATION (_relationEntity:expression)
+	(var __relationComponent:gfx = "_relationEntity.relation" (event "_relationEntity.evAdded") (event "_relationEntity.evRemoved"))
+	(var relationIndex:number = "__relationComponent ? __relationComponent.value : SC.Battle.PLAYER_RELATION.NEUTRAL" (event "__relationComponent.evChanged"))
+	(var relation:str = "SC.Battle.PLAYER_RELATION.NAMES[SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationIndex]]")
+)
+
+(def macro SHIP_CLASS_STR (shipComponent:expression)
+	(var shipClass:str =	"(shipComponent.subtype == ShipTypes.CRUISER) 		? tr('IDS_CRUISER') :
+							(shipComponent.subtype == ShipTypes.AIRCARRIER)		? tr('IDS_AIRCARRIER') :
+							(shipComponent.subtype == ShipTypes.BATTLESHIP) 	? tr('IDS_BATTLESHIP') : 
+							(shipComponent.subtype == ShipTypes.AUXILIARYSHIP) 	? tr('IDS_AUXILIARY') :
+							(shipComponent.subtype == ShipTypes.SUBMARINE)		? tr('IDS_SUBMARINE') 
+																				: tr('IDS_DESTROYER')"
+	)			
+)
+
+(def macro PULL_TRAINING_ROOM_ENTITY ()
+	(var trainingRoomWatcher:gfx = "$datahub.getFirstWatcher(CC.trainingRoomWindowState)")
+ 	(var trainingRoomEntity:gfx = "trainingRoomWatcher ? trainingRoomWatcher.entity : null" (event "trainingRoomWatcher.event"))
+ 	(var trainingRoomWindowStateComponent:gfx = "trainingRoomEntity ? trainingRoomEntity.trainingRoomWindowState : null")
+
+	(var windowState:str =				"trainingRoomWindowStateComponent.state					" (event "trainingRoomWindowStateComponent.evStateChanged"))
+	(var windowInsetLabel:str	=		"trainingRoomWindowStateComponent.insetLabel			" (event "trainingRoomWindowStateComponent.evInsetLabelChanged"))
+	(var notReadyWindowState:number = 	"trainingRoomWindowStateComponent.notReadyWindowState	" (event "trainingRoomWindowStateComponent.evNotReadyWindowStateChanged"))
+
+	(var trainingRouteEntity:gfx = "$datahub.getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.TRAINING_ROOM)")
+	(var trainingRoomActiveChild:str = "trainingRouteEntity.route.activeChild" (event "trainingRouteEntity.route.evActiveChildChanged"))
+)
+
+
+(def macro trace(expr:expression)
+	(block
+		(style 
+			(backgroundColor = "0x88000000")
+		)
+		(tf
+			(class $TextDefault)
+			(autoSize='left')
+			(style
+				(autoSize=true) 
+			)
+			(bind text "expr")
+		)
+	)
+)
+
+
+(def macro traceChange(expr:expression)
+	(scope
+		(var traceChangeCount:number = 0)
+		(bind traceChangeCount "traceChangeCount + 1" watch=false init=false (bind trigger "expr"))
+	)
+	(block
+		(controller $Repeat layout=true
+			(bind count "traceChangeCount")
+			(exprs
+					(style
+						(backgroundColor = "0x88FFFFFF")
+					)
+					(tf
+						(class $TextHUD16Bold)
+						(style (textColor = "0xFFFF00FF"))
+						(autoSize='left')
+						(text = "expr")
+					)
+			)
+		)
+	)
+)
+
+
+(def macro eventChecker (eventName:expression = "'eventName'")
+	(scope
+		(event eventName)
+
+		(var test:number = 0)
+		(bind test "test+1" watch=false init=false (event "eventName"))
+	)
+
+	(block
+		(style
+			(padding = 8)
+			(bind backgroundColor "test%2 == 0 ? C_WARNING : C_POSITIVE")
+		)
+		(tf
+			(class $TextHUDBold)
+			(bind text "test")
+		)
+
+		(controller $Animation
+					(bindcall play duration=0.1 to={scaleX:1.5, scaleY:1.5} (bind trigger "test"))
+					(bindcall play delay=0.1 duration=0.1 to={scaleX:1, scaleY:1} (bind trigger "test"))
+		)
+	)
+
+
+)
+
+
+(def macro log(expr:expression)
+	(scope
+		(var logVar:str = "log(expr)")
+	)
+
+	(block
+		(visible = false)
+		(style
+			(position = "absolute")
+		)
+		(tf
+			(bind text "logVar")
+		)
+	)
+)
+
+(def macro DRAW_RECT (x:expression = 0, y:expression = 0, w:expression = 0, h:expression = 0, c:expression = 0xFFFFFF, a:expression = 1)
+	(.graphics
+		(beginFill "c" "a")
+		(drawRect "x" "y" "w" "h")
+		(endFill)
+	)
+)
+
+(def macro DRAW_GRADIENT_RECT ( w:expression = 0, h:expression = 0, 
+	type:expression = "'linear'", colors:expression = "[0xffffff,0x0]", alphas:expression="[1,1]", ratios:expression="[0,255]" )
+	(.graphics
+		(beginGradientFill "type" "colors" "alphas" "ratios")
+		(drawRect 0 0 "w" "h")
+		(endFill)
+	)
+)
+
+(def macro BIND_SCALE (scale:expression)
+	(bind scaleX "scale")
+	(bind scaleY "scale")
+)
+
+
+(def macro MODAL_WINDOW_BACKGROUND_BATTLE () layout=true
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "fill")
+			(alpha = "0.8")
+			(backgroundImage = "'url:../service_kit/panel_backgrounds/modal_battle.png'")
+		)
+	)
+)
+
+(def macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND ()
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(paddingLeft = "-M")
+			(paddingRight = "-M")
+			(paddingTop = "-SXS")
+			(paddingBottom = "-SXS")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+		)
+	)
+)
+
+(def macro MODAL_WINDOW_INIT ()
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(var showState:number = "SC.Ui_windows.WINDOW_STATE.INIT")
+		(var stageComponent:gfx = "$datahub.getSingleEntity(CC.stage).stage")
+		(var stageWidth:number = "stageComponent.width" (event "stageComponent.evStageSizeChanged"))
+		(var stageHeight:number = "stageComponent.height" (event "stageComponent.evStageSizeChanged"))
+	)
+	(style (bind width "stageWidth") (bind height "stageHeight") (position = "absolute"))
+
+	(dispatch startShow dir="EventDirection.DOWN" (bind trigger "showState") (bind enabled "showState != SC.Ui_windows.WINDOW_STATE.SHOW"))
+	(dispatch startHide dir="EventDirection.DOWN" (bind trigger "showState") (bind enabled "showState == SC.Ui_windows.WINDOW_STATE.SHOW"))
+)
+
+(def macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS ()
+	(scope
+		(event startHide)
+		(event startShow)
+	)
+)
+
+(def macro MODAL_WINDOW_BG ()
+	(scope
+		(macro GET_PREF 'isBlurOptionEnabled' "'graphics.GUI.blur'")
+	)
+	(class $FullsizeAbsolute)
+
+	(block
+		(bind visible "!isBlurOptionEnabled")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../bg/nations_tree_v2.jpg')
+			(backgroundSize = "cover")
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play  id = 'modalWindowBgHighContrast'
+							duration = 0.2
+							to = "{ alpha: 1 }"
+							action="kill"
+							(event "startShow")
+			)
+			(bindcall play  id = 'modalWindowBgHighContrast'
+							duration = 0.2
+							delay = 0.2
+							to = "{ alpha: 0 }"
+							action="kill"
+							(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(bind visible "isBlurOptionEnabled")
+		(class $FullsizeAbsolute)
+		(element DeclareBlurLayer)
+
+		(mc mc_blurmap_medium
+			(class $FullsizeAbsolute)
+
+			(rendererString = blurMeBaby)
+			(controller $Animation
+				(bindcall play  id = 'modalWindowBgWithBlur'
+								duration=0.2
+								from = "{ blurIntensity: 0 }"
+								to = "{ blurIntensity: 1 }"
+								action="kill"
+								(event "startShow")
+				)
+				(bindcall play  id = 'modalWindowBgWithBlur'
+								duration=0.2
+								delay=0.2
+								from = "{ blurIntensity: 1 }"
+								to = "{ blurIntensity: 0 }"
+								action="kill"
+								(event "startHide")
+				)
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "SC.Ui_styles.SHARED_COLOR.MODAL_WINDOW"))
+			(alpha = 0)
+
+			(controller $Animation
+				(bindcall play  id = 'modalWindowBgWithBlur'
+								duration = 0.2
+								delay = 0.1
+								to = "{ alpha: 1 }"
+								action="kill"
+								(event "startShow")
+				)
+				(bindcall play  id = 'modalWindowBgWithBlur'
+								duration = 0.2
+								delay = 0.2
+								to = "{ alpha: 0 }"
+								action="kill"
+								(event "startHide")
+				)
+			)
+		)
+	)
+)
+
+(def macro DEFAULT_MODAL_WINDOW_ANIMATION (_positionY:number, hideEvent:expression='startHide', animationFinishedEvent:expression=null)
+	(alpha = 0)
+	(style (visualOffsetY = 10px))
+
+	(controller $Animation
+		(bindcall play
+			delay = "0.1 + _positionY * 0.075"
+			duration = 0.15
+			to = "{ alpha: 1, visualOffsetY: 0px }"
+			easing = "Easing.quad_out"
+			action = "killAll"
+			watch = false
+			on = 'addedToStage'
+			(event "startShow")
+		)
+	)
+	(controller $Animation
+		(bindcall play
+			delay = "_positionY * 0.055"
+			duration = 0.15
+			to = "{ alpha: 0, visualOffsetY: -10px }"
+			easing = "Easing.quad_in"
+			action = "killAll"
+			watch = false
+			(event "$scope[hideEvent]")
+		)
+		(dispatch "animationFinishedEvent ? animationFinishedEvent : 'startShow'" init=false on=evAnimEnded (bind enabled "animationFinishedEvent != null"))
+	)
+)
+
+(def macro DEFAULT_MODAL_WINDOW_ANIMATION_ALPHA (_positionY:number, hideEvent:expression='startHide', animationFinishedEvent:expression=null)
+	(alpha = 0)
+
+	(controller $Animation
+		(bindcall play
+			id = 'modalWindowAnim'
+			delay = "0.1 + _positionY * 0.075"
+			duration = 0.15
+			from = "{ alpha: 0 }"
+			to = "{ alpha: 1 }"
+			easing = "Easing.quad_out"
+			action = "kill"
+			watch = false
+			on = 'addedToStage'
+			(event "startShow")
+		)
+	)
+	(controller $Animation
+		(bindcall play
+			id = 'modalWindowAnim'
+			delay = "_positionY * 0.055"
+			duration = 0.15
+			to = "{ alpha: 0 }"
+			easing = "Easing.quad_in"
+			action = "kill"
+			watch = false
+			(event "$scope[hideEvent]")
+		)
+		(dispatch "animationFinishedEvent ? animationFinishedEvent : 'startShow'" init=false on=evAnimEnded (bind enabled "animationFinishedEvent != null"))
+	)
+)
+
+(def macro BANNER_APPEAR_ANIMATION ()
+	(style (alpha = 0))
+
+	(controller $Animation
+		(bindcall play	delay = 0.15
+						duration = 0.15
+						from = "{alpha: 0, visualOffsetY: 10px}"
+						to = "{alpha: 1, visualOffsetY: 0px}"
+						on = 'addedToStage'
+		)
+	)
+)
+
+(def macro CHANGE_ALPHA_BY_TRIGGER_ANIM (_duration:expression, _fromAlpha:number, _toAlpha:number, _triggerExpression:expression, _easing:expression="Easing.line")
+	(alpha = "_triggerExpression ? _toAlpha : _fromAlpha")
+	(controller $Animation
+		(bindcall play	duration="_duration"
+						to="{alpha: _toAlpha}"
+						action="kill"
+						easing="_easing"
+						(bind enabled "_triggerExpression")
+		)
+		(bindcall play	duration="_duration"
+						to="{alpha: _fromAlpha}"
+						action="kill"
+						easing="_easing"
+						(bind enabled "!_triggerExpression")
+		)
+	)
+)
+
+(def macro FAIR_SCALE (scale:expression)
+	(scaleX = "scale")
+	(scaleY = "scale")
+	(style
+		(ubScaleX = "scale")
+		(ubScaleY = "scale")
+	)
+)
+
+(def macro BIND_FAIR_SCALE (scale:expression)
+	(bind scaleX "scale")
+	(bind scaleY "scale")
+	(style
+		(bind ubScaleX "scale")
+		(bind ubScaleY "scale")
+	)
+)
+
+(def macro HIDE_UI_CMD ()
+	(scope
+		(var cmdEntity:gfx = "$datahub.getPrimaryEntity(CC.commandMappingCommandName, 'CMD_HIDE_INTERFACE')")
+		(var hudVisible:bool = "true")
+		(bind hudVisible "!hudVisible" init=false (event "cmdEntity.commandMappingCommand.evCall"))
+	)
+
+	(bind visible "hudVisible")
+)
+
+(def macro PULL_SHIP (shipId:expression)
+	(var shipEntity:gfx = "$datahub.getPrimaryEntity(CC.ship, shipId)")
+	(var shipInfo:gfx = "shipEntity ? shipEntity.ship : null")
+)
+
+(def macro PULL_EXTERIOR (exteriorId:expression)
+	(scope
+		(var exteriorEntity:gfx = "$datahub.getPrimaryEntity(CC.exteriorConfig, exteriorId)")
+		(var exteriorConfig:gfx = "exteriorEntity.exteriorConfig")
+	)
+)
+
+(def macro HUMAN_READABLE_COUNTDOWN_SCOPE (remainTime:expression)
+	(var formatDigitsNumber:number = "remainTime < 9.9 ? 1 : 0")
+	(var isShowMinutes:bool = "round(remainTime) > 59")
+	(var countdownText:str = "countdownFormat(remainTime, formatDigitsNumber, isShowMinutes, false)")
+)
+
+(def macro HUMAN_READABLE_COUNTDOWN_SCOPE_MM_SS (remainTime:expression)
+	(var countdownText:str = "countdownFormat(remainTime, 0, true, true)")
+)
+
+(def macro IS_ALT_VISION_MODE ()
+	(macro GET_PREF 'altVisionMode' "'battle.altVision.mode'")
+
+	(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
+	(var altVision:bool = "cameraEntity.camera.altVision" (event "cameraEntity.camera.evAltVisionChanged"))
+	(var isTactical:bool = "cameraEntity.camera.isTactical" (event "cameraEntity.camera.evTacticalStateChanged"))
+	(var isAltVisionMode:bool = "altVision || altVisionMode == AltVisionMode.ENABLED")
+)
+
+(def macro STAGE_SIZE ()
+	(var stageComponent:gfx = "$datahub.getSingleEntity(CC.stage).stage")
+	(var stageWidth:number = "stageComponent.width" (event "stageComponent.evStageSizeChanged"))
+	(var stageHeight:number = "stageComponent.height" (event "stageComponent.evStageSizeChanged"))
+)
+
+(def macro SCOPE_SELF_WEAPON_TYPE ()
+	(var selfVehicleEntity:gfx = "$datahub.getSingleEntity(CC.selfVehicle)")
+	(var weaponControllerComponent:gfx = "selfVehicleEntity.weaponController" (event "selfVehicleEntity.evAdded") (event "selfVehicleEntity.evRemoved"))
+	(var weaponType:number = "weaponControllerComponent ? weaponControllerComponent.selectedWeapon : SC.Ships.SHIP_WEAPON_TYPES.NONE" (event "weaponControllerComponent.evSelectedWeaponChanged"))
+)
+
+(def constant UNIFIED_STATUS_TEXT_COLOR_MAP "{	SC.Ui_styles.UNIFIED_STATUS.ATTENTION:				SC.Ui_styles.SERVICE_COLORS.ORANGE,
+												SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION:			SC.Ui_styles.SERVICE_COLORS.ORANGE,
+												SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION:		SC.Ui_styles.SERVICE_COLORS.ORANGE,
+												SC.Ui_styles.UNIFIED_STATUS.RETRAINING:				SC.Ui_styles.SERVICE_COLORS.ORANGE,
+												SC.Ui_styles.UNIFIED_STATUS.WITHOUT_COMMANDER:		SC.Ui_styles.SERVICE_COLORS.ORANGE,
+												SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_OFF:			SC.Ui_styles.SERVICE_COLORS.ORANGE,
+												SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_MUTED:		SC.Ui_styles.SERVICE_COLORS.ORANGE,
+												SC.Ui_styles.UNIFIED_STATUS.CHECK:					SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE:		SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.CAMPAIGN_REWARD:		SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.CONTAINER_REWARD:		SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.BROTHERHOOD_REWARD:		SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.SALE_AVAILABLE:			SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.EARLY_ACCESS:			SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.OUT_BATTLE:				SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.UNIQUE_CREW:			SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.RECOMMENDED:			SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.BATTLEPASS:				SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.SHIP_CRAFT_AVAILABLE:	SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.VICTORY:				SC.Ui_styles.SERVICE_COLORS.GREEN,
+												SC.Ui_styles.UNIFIED_STATUS.DEFEAT:					SC.Ui_styles.SERVICE_COLORS.RED,
+												SC.Ui_styles.UNIFIED_STATUS.NEGATIVE:				SC.Ui_styles.SERVICE_COLORS.RED,
+												SC.Ui_styles.UNIFIED_STATUS.WARNING:				SC.Ui_styles.SERVICE_COLORS.RED,
+												SC.Ui_styles.UNIFIED_STATUS.ABUSE_CONFIRMED:		SC.Ui_styles.SERVICE_COLORS.RED,
+												SC.Ui_styles.UNIFIED_STATUS.ABUSE_SUSPECT:			SC.Ui_styles.SERVICE_COLORS.PINK,
+												SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_ON:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.DEFAULT:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.DATE:					SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.LOCK:					SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.MOUSE_DOUBLE_LEFT:		SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.MOUSE_SCROLL:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.HIDDEN:					SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED:		SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.REWARD_DEFAULT:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.INFO:					SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.LINKED:					SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.REPAINTED:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.UPDATE:					SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.EPIC_SKILL:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.ADVANCED_CREW:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.IN_BATTLE:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.TO_ARMORY:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.INFINITE:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.PERMOBOOST_ACTIVE:		SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.ABUSE:					SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.ABUSE_NORMAL:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.KEY_TARGET:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.CALENDAR:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.BURST_FIRE:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.NO_ICON:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.PVE_MODIFIER:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.NOTIFICATION:			SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.HAS_BATTLE_MODIFIERS:	SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.COMMANDER_READY:		SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.COMMANDER_NOT_READY:	SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.REFERAL:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.REFERAL_VETERAN:		SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.OFFLINE:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.DISIVION_WANTED_ON:		SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.DISIVION_WANTED_OFF:	SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.DIVISION_INVITE:		SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.PRIMARY:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.OBSERVER:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.SELECTED:				SC.Ui_styles.SERVICE_COLORS.WHITE,
+												SC.Ui_styles.UNIFIED_STATUS.SHIP_INFO_HIDDEN:		SC.Ui_styles.SERVICE_COLORS.WHITE }")
+
+(def macro UNIFIED_STATUS_TO_COLOR_AND_ALPHA (_unifiedStatus:expression, _textColorField:expression, _textAlphaField:expression)
+	(scope
+		(var textColorReal:number = "_unifiedStatus ? UNIFIED_STATUS_TEXT_COLOR_MAP[_unifiedStatus] : SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var name="_textColorField" type=number value="textColorReal")
+		(var name="_textAlphaField" type=number value="textColorReal != SC.Ui_styles.SERVICE_COLORS.WHITE ? 1 : 0.9")
+	)
+)
+
+(def macro IS_ALIVE ()
+	(var selfAvatarEntity:gfx =  "$datahub.getSingleEntity(CC.playerAvatar)")
+	(var healthComponent:gfx = "selfAvatarEntity.health")
+	(var isAlive:bool = "healthComponent ? healthComponent.isAlive : false" (event "healthComponent.evIsAliveChanged"))
+)
+
+(def macro IS_ON_PLANE ()
+	(var ownCarrierEntity:gfx = "$datahub.getSingleEntity(CC.aircarrier)")
+	(var activeSquadron:number = "ownCarrierEntity ? ownCarrierEntity.aircarrier.activeSquadron : ActiveSquadron.NONE" (event "ownCarrierEntity.aircarrier.evStateChanged"))
+	(var isOnPlane:bool = "activeSquadron != ActiveSquadron.NONE")
+)
+
+(def macro IS_SPECTATOR_MODE ()
+	(var spectatorWatcher:gfx = "$datahub.getFirstWatcher(CC.spectatorState)")
+	(var spectatorEntity:gfx = "spectatorWatcher.entity" (event "spectatorWatcher.event"))
+	(var spectatorState:number = "spectatorEntity ? spectatorEntity.spectatorState.state: null" (event "spectatorEntity.spectatorState.evStateChanged"))
+	(var isPreSpectator:bool = "spectatorState == SC.Common.SPECTATOR_STATE.PRE_SPECTATOR")
+	(var isSpectator:bool = "spectatorEntity && !isPreSpectator")
+	(var isSpectatorTrainingMode:bool = "spectatorState == SC.Common.SPECTATOR_STATE.TRAINING_SPECTATOR")
+)
+
+(def macro COLOR_TO_COLOR_TRANSFORM(_colorTransformField:expression, _color:expression)
+
+	(var name="_colorTransformField" type=dict value="{	redOffset:(((_color - 0xFF000000) & 0xFF0000) >> 16) - 255,
+														greenOffset:(((_color - 0xFF000000) & 0x00FF00) >> 8) - 255,
+														blueOffset:((_color - 0xFF000000) & 0x0000FF) - 255
+														}")
+)
+
+(def macro SCOPE_IS_BATTLE_IN_PROGRESS (scopeFieldName:expression='isBattleInProgress')
+	(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
+	(var battleState:number = "battleDataEntity.battleState.battleState" (event "battleDataEntity.battleState.evBattleStateChanged"))
+	(var name="scopeFieldName" type=bool value="battleState == SC.Common.CLIENT_BATTLE_STATE.STARTED || battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
+)
+
+(def macro ADAPTIVE_WIDTH (min:expression, stageMin:expression, max:expression, stageMax:expression, stageWidth:expression)
+	(bind width "	stageWidth < stageMin ? min :
+					stageWidth > stageMax ? max :
+					min + (max - min) * ((stageWidth - stageMin) / (stageMax - stageMin))")
+)
+
+(def macro ADAPTIVE_HEIGHT (min:expression, stageMin:expression, max:expression, stageMax:expression, stageHeight:expression)
+	(bind height "	stageHeight < stageMin ? min :
+					stageHeight > stageMax ? max :
+					min + (max - min) * ((stageHeight - stageMin) / (stageMax - stageMin))")
+)
+
+(def macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE ()
+	(event evMouseOvered)
+	(event evMouseDowned)
+	(var isMouseOvered:bool = "false")
+	(var isMouseDowned:bool = "false")
+	(bind isMouseOvered "$event.isMouseOvered" init=false watch=false (event "evMouseOvered"))
+	(bind isMouseDowned "$event.isMouseDowned" init=false watch=false (event "evMouseDowned"))
+)
+
+(def macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM (	_isActive:expression, _ctMouseDown:expression="{ redMultiplier: 0.85, greenMultiplier: 0.85, blueMultiplier: 0.85 }",
+															_ctRollOver:expression="{ redOffset: 40, greenOffset: 40, blueOffset: 40 }")
+	(dispatch evMouseOvered args={isMouseOvered: true} on='mouseOver')
+	(dispatch evMouseOvered args={isMouseOvered: false} on='mouseOut')
+
+	(dispatch evMouseDowned args={isMouseDowned: true} on='mouseDown')
+	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseUp')
+	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseOut')
+
+	(bind colorTransform "	_isActive && isMouseDowned	? _ctMouseDown :
+							_isActive && isMouseOvered	? _ctRollOver
+														: CT_NONE")
+)
+
+(def macro MOUSE_OVER_DOWN_COLORTRANSFORM (	_isActive:expression, _isSelected:expression, _ctMouseDown:expression="{ redMultiplier: 0.85, greenMultiplier: 0.85, blueMultiplier: 0.85 }",
+											_ctRollOver:expression="{ redOffset: 40, greenOffset: 40, blueOffset: 40 }")
+	(dispatch evMouseOvered args={isMouseOvered: true} on='mouseOver')
+	(dispatch evMouseOvered args={isMouseOvered: false} on='mouseOut')
+
+	(dispatch evMouseDowned args={isMouseDowned: true} on='mouseDown')
+	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseUp')
+	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseOut')
+
+	(bind colorTransform "	_isActive && isMouseDowned && !_isSelected	? _ctMouseDown :
+							_isActive && (isMouseOvered || _isSelected)	? _ctRollOver
+																		: CT_NONE")
+)
+
+(def macro SEND_QUICK_COMMAND (targetId:expression=-1, commandID:expression=-1)
+	(bindcall externalCall 'direct.action' "['battle.quickCommandUI', [commandID, targetId]]" init=false watch=false on='click')
+)
+
+(def macro USER_PREF_DATA ()
+	(var userPrefsCollection:gfx =	"$datahub.getCollection(CC.userPrefs)")
+	(var userPrefsEntity:gfx =		"userPrefsCollection.items[0]")
+	(var userPrefsComponent:gfx =	"userPrefsEntity ? userPrefsEntity.userPrefs : null")
+	(var userPrefs:dict =			"userPrefsComponent.userPrefs" (event "userPrefsComponent.evUserPrefsChanged"))
+)
+
+(def macro FEATURES (_state:expression)
+	(var name="'featureEntity_' + _state" type=gfx value="$datahub.getPrimaryEntity(CC.accountFeature, pow(2, _state)).accountFeature")
+	(var name="'feature_' + _state" type=str value="$scope['featureEntity_' + _state].state" (event "$scope['featureEntity_' + _state].evStateChanged"))
+)
+
+(def macro PULL_SHIP_ID ()
+	(var dockEntity:dhEntity = "getSingleEntity(CC.dockDataMarker)")
+	(var shipSelectionComponent:dhComponent = "dockEntity.shipSelection")
+	(var playerShipId:number = "shipSelectionComponent.playerShipId" (event "shipSelectionComponent.evPlayerShipIdChanged"))
+	(var viewedShipId:number = "shipSelectionComponent.viewedShipId" (event "shipSelectionComponent.evViewedShipIdChanged"))
+)
+
+(def macro PULL_CREW_DATA(_scopeName:expression)
+	(var dockEntity:gfx = "$datahub.getSingleEntity(CC.dockDataMarker)")
+	(var name="_scopeName" type=gfx value="dockEntity.crewData" (event "dockEntity.crewData.evUpdate"))
+)
+
+(def macro DESATURATION_DEFAULT(_isNotDesaturated:expression)
+	(filters
+		(colorMatrix
+			(bind matrix "_isNotDesaturated ? [0, 0, 0, 0] : [ 0, -100, 0, -15 ]")
+		)
+	)
+)
+
+(def macro PULL_CAMPAIGN_DATA_SCOPE(_curCampaignId:expression)
+	(var campaign:gfx = "$datahub.getPrimaryEntity(CC.campaignParams, _curCampaignId)")
+	(var campaignPlayer:gfx = "campaign ? campaign.campaignPlayer : null")
+	(var campaignParams:gfx = "campaign ? campaign.campaignParams : null")
+
+	
+	(var campaignState:number = "campaignPlayer.state" (event "campaignPlayer.evChanged"))
+	(var campaignMissionsStates:array = "campaignPlayer.missionsStates" (event "campaignPlayer.evChanged"))
+	(var campaignCountLootedTasks:number = "campaignPlayer.countLootedTasks" (event "campaignPlayer.evChanged"))
+	(var campaignCountCompletedTasks:number = "campaignPlayer.countCompletedTasks" (event "campaignPlayer.evChanged"))
+	
+	(var campaignName:str = "campaignParams.name")
+	(var campaignIsActivated:bool = "campaignParams.isActivated" (event "campaignParams.evChanged"))
+	(var campaignAllMissions:array = "campaignParams.allMissions")
+	(var campaignMainTask:number = "campaignParams.mainTask")
+	(var campaignMapPositions:array = "campaignParams.mapPositions")
+	(var campaignCountTasks:number = "campaignParams.countTasks")
+	(var campaignStartTime:number = "campaignParams.startTime" (event "campaignParams.evChanged"))
+	(var campaignEndTime:number = "campaignParams.endTime" (event "campaignParams.evChanged"))
+	(var campaignIsNarrative:bool = "campaignParams.isNarrative")
+	(var campaignToken:str = "campaignParams.token")
+	(var campaignIsViewed:bool = "campaignParams.isViewed" (event "campaignParams.evChanged"))
+	(var campaignNeedToken:bool = "campaignState == 0 && campaignToken != ''")
+)
+
+(def macro SERVER_TIME_SCOPE ()
+	(var serverTime:number = "currentServerSeconds()" (event "evInfrequent"))
+)
+
+(def macro BATTLE_TIMER_SCOPE ()
+	(var timerEntity:gfx = "$datahub.getSingleEntity(CC.battleTimer)")
+	(var currentTime:number = "timerEntity.battleTimer.battleTime" (event "timerEntity.battleTimer.evBattleTimeChanged"))
+)
+
+(def macro COUNTDOWN_SCOPE (_scopeName:expression, _time:expression, _format:expression, _declination:expression='', _isLocalTime:expression=false)
+	
+	(var name="_scopeName" type=str value="formatTime(_time - serverTime, _format, _declination, _isLocalTime)")
+)
+
+(def macro INPUT (_prefix:expression="''", _btnName:expression="''", _enabled:expression="true")
+	(bindcall externalCall "_enabled ? 'inputMapping.onButtonClick' : ''" "[_btnName]" init=false watch=false (event "$scope[_prefix + 'evClicked']"))
+)
+
+(def macro CAROUSEL_HEIGHT_SCOPE ()
+	(macro GET_PREF_NUMBER 'carouselHeight'		"'ui.carousel.carouselHeight'")
+	(macro GET_PREF_NUMBER 'carouselAreaHeight'	"'ui.carousel.carouselAreaHeight'")
+)
+
+(def macro PULL_SELF_PLAYER_SCOPE ()
+	(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+	(var selfPlayerDbId:number = "selfPlayerEntity.accountSimple.dbId")
+	(var selfPlayerName:str = "selfPlayerEntity.accountName.name" (event "selfPlayerEntity.accountName.evChanged"))
+	(var selfPlayerNickName:str = "selfPlayerEntity.accountName.nickName" (event "selfPlayerEntity.accountName.evChanged"))
+)
+
+(def macro PULL_CLANINFO (_clanId:expression)
+	(var clanEntity:gfx = "$datahub.getPrimaryEntity(CC.clan, _clanId)")
+	(var clanTag:str = "clanEntity ? clanEntity.clan.tag : ''" (event "clanEntity.clan.evTagChanged"))
+	(var clanName:str = "clanEntity ? clanEntity.clanExtended.name : ''" (event "clanEntity.clanExtended.evNameChanged"))
+)
+
+(def macro HIDE_UI_ON_SHIPOVERVIEW ()
+	(scope
+		(var dockDataEntity:gfx = "$datahub.getSingleEntity(CC.dockData)")
+		(var dockData:gfx = "dockDataEntity.dockData")
+		(var isShipOverviewEnabled:bool = "dockData.isShipOverviewEnabled ?: false" (event "dockData.evIsShipOverviewEnabledChanged"))
+	)
+	(style (bind hitTest "!isShipOverviewEnabled"))
+
+	(controller $Animation
+		(bindcall play
+			id = "'HIDE_UI_ON_SHIPOVERVIEW'"
+			to = "{ alpha: 0 }"
+			easing = "Easing.quad_in"
+			delay= 0.3
+			duration = 0.3
+			action = "kill"
+			(bind enabled "isShipOverviewEnabled")
+		)
+		(bindcall play
+			id = "'HIDE_UI_ON_SHIPOVERVIEW'"
+			to = "{ alpha: 1 }"
+			easing = "Easing.quad_in"
+			delay=0.15
+			duration = 0.15
+			action = "kill"
+			(bind enabled "!isShipOverviewEnabled")
+		)
+	)
+)
+
+(def macro PULL_SHIP_SCOPE (_shipId:expression, _entityField:expression, _componentField:expression)
+	(var name="_entityField" type=gfx value="$datahub.getPrimaryEntity(CC.ship, _shipId)")
+	(var name="_componentField" type=gfx value="$scope[_entityField].ship")
+)
+
+(def macro PULL_OWN_SHIP_SCOPE (_shipId:expression, _entityField:expression, _componentField:expression)
+	(var name="_entityField" type=gfx value="$datahub.getPrimaryEntity(CC.ownShip, _shipId)")
+	(var name="_componentField" type=gfx value="$scope[_entityField].ship")
+)
+
+(def macro GET_UNREAD_NEW_COUNTER_AND_GIFT_STATUS_SCOPE ()
+	(var portalEntity:gfx = "$datahub.getSingleEntity(CC.ingamePortal)")
+	(var ingamePortal:gfx = "portalEntity ? portalEntity.ingamePortal : null")
+
+	(var isRewardAvailable:bool = "ingamePortal ? ingamePortal.isGiftAwaiting : false" (event "ingamePortal.evUpdate"))
+	(var unreadRecomendedNewsCount:number = "ingamePortal ? ingamePortal.unreadNewsCount : 0" (event "ingamePortal.evUpdate"))
+	(var isUnreadRecomendedNews:bool = "unreadRecomendedNewsCount > 0")
+)
+
+(def macro GET_PREF (_name:str, _option:expression)
+	(var name="_name + 'Entity'" type=gfx value="$datahub.getPrimaryEntity(CC.preference, _option)")
+	(var name="_name" type=gfx value="(_option && $scope[_name + 'Entity']) ? $scope[_name + 'Entity'].preference.value : null" (event "(_option && $scope[_name + 'Entity']) ? $scope[_name + 'Entity'].preference.evValueChanged : null"))
+)
+
+(def macro GET_PREF_NUMBER (_name:str, _option:expression)
+	(var name="_name + 'Entity'" type=gfx value="$datahub.getPrimaryEntity(CC.preference, _option)")
+	(var name="_name" type=number value="(_option && $scope[_name + 'Entity']) ? toNumber($scope[_name + 'Entity'].preference.value) : null" (event "(_option && $scope[_name + 'Entity']) ? $scope[_name + 'Entity'].preference.evValueChanged : null"))
+)
+
+(def macro GET_PREF_BOOL (_name:str, _option:expression)
+	(var name="_name + 'Entity'" type=gfx value="$datahub.getPrimaryEntity(CC.preference, _option)")
+	(var name="_name" type=bool value="(_option && $scope[_name + 'Entity']) ? toBool($scope[_name + 'Entity'].preference.value) : null" (event "(_option && $scope[_name + 'Entity']) ? $scope[_name + 'Entity'].preference.evValueChanged : null"))
+)
+
+(def macro GET_COMMAND (_keyCode:str, _mods:str, _commandName:expression, _binding:expression = "1")
+	(var name="_keyCode + 'Entity'" type=gfx value="$datahub.getPrimaryEntity(CC.preference, 'commands.' + _commandName + '.VALUE' + _binding + '.KEY')")
+	(var name="_mods + 'Entity'"    type=gfx value="$datahub.getPrimaryEntity(CC.preference, 'commands.' + _commandName + '.VALUE' + _binding + '.MODS')")
+	
+	
+	
+	
+	(var name="_keyCode" type=number value="(_commandName && _binding && $scope[_keyCode + 'Entity']) ? $scope[_keyCode + 'Entity'].preference.value : 0" (event "(_commandName && _binding && $scope[_keyCode + 'Entity']) ? $scope[_keyCode + 'Entity'].preference.evValueChanged : null"))
+	(var name="_mods" type=number value="(_commandName && _binding && $scope[_mods + 'Entity']) ? $scope[_mods + 'Entity'].preference.value: 0" (event "(_commandName && _binding && $scope[_mods + 'Entity']) ? $scope[_mods + 'Entity'].preference.evValueChanged : null"))
+)
+
+(def macro PULL_ROUTE (_nodeId:expression, _fieldIsActive:expression)
+	(var routeEntity:gfx = "$datahub.getPrimaryEntity(CC.route, _nodeId)")
+	(var componentRoute:gfx = "routeEntity ? routeEntity.route : null")
+	(var name="_fieldIsActive"			type=bool	value="componentRoute.isActive"			(event "componentRoute.evIsActiveChanged"))
+)
+
+(def macro PULL_FULL_ROUTE (_nodeId:expression, _fieldIsActive:expression, _fieldActiveChild:expression, _fieldPrevActiveChild:expression, _fieldChildren:expression)
+	(var routeEntity:gfx = "$datahub.getPrimaryEntity(CC.route, _nodeId)")
+	(var componentRoute:gfx = "routeEntity ? routeEntity.route : null")
+	(var name="_fieldIsActive"			type=bool	value="componentRoute.isActive"			(event "componentRoute.evIsActiveChanged"))
+	(var name="_fieldActiveChild"		type=str	value="componentRoute.activeChild"		(event "componentRoute.evActiveChildChanged"))
+	(var name="_fieldPrevActiveChild"	type=str	value="componentRoute.prevActiveChild"	(event "componentRoute.evActiveChildChanged"))
+	(var name="_fieldChildren"			type=array	value="componentRoute.children" 		(event "componentRoute.evChildrenChanged"))
+)
+
+(def macro PULL_ACTIVE_CHILD_ROUTE (_nodeId:expression, _fieldActiveChild:expression)
+	(var routeEntity:gfx = "$datahub.getPrimaryEntity(CC.route, _nodeId)")
+	(var componentRoute:gfx = "routeEntity ? routeEntity.route : null")
+	(var name="_fieldActiveChild"	type=str	value="componentRoute.activeChild"		(event "componentRoute.evActiveChildChanged"))
+)
+
+(def macro PULL_NEW_CONTENT (_entity:expression, _component:expression, _counter:expression, _type:expression)
+	(var name="_entity" type=gfx value="$datahub.getPrimaryEntity(CC.newContent, _type)")
+	(var name="_component" type=gfx value="$scope[_entity] ? $scope[_entity].newContent : null")
+	(var name="_counter" type=number value="$scope[_component] ? $scope[_component].count : 0" (event "$scope[_component].evCountChanged"))
+)
+
+(def macro HIGH_CONTRAST_DATA_SCOPE ()
+	(macro GET_PREF 'isBlurOptionEnabled' "'graphics.GUI.blur'")
+	(macro GET_PREF 'isUIContrastOptionEnabled' "'graphics.GUI.contrast'")
+	(var isHighContrast:bool="isUIContrastOptionEnabled || !isBlurOptionEnabled")
+)
+
+(def macro RANK_SEASON_STAGES_FLAGS_SCOPE (_rankSeasonStage:expression)
+	(var isRankSeasonActive:bool = "_rankSeasonStage == SC.Common.SEASON_BATTLES_STAGES.ACTIVE")
+	(var isRankSeasonInactive:bool = "_rankSeasonStage == SC.Common.SEASON_BATTLES_STAGES.INACTIVE")
+	(var isRankSeasonFinished:bool = "_rankSeasonStage == SC.Common.SEASON_BATTLES_STAGES.FINISHED || _rankSeasonStage == SC.Common.SEASON_BATTLES_STAGES.CLOSED")
+	(var isRankSeasonWaiting:bool = "_rankSeasonStage == SC.Common.SEASON_BATTLES_STAGES.WAITING")
+)
+
+(def macro PULL_CURRENT_TOP_WINDOW_NAME ()
+	(var windowManagerComponent:gfx = "$datahub.getSingleComponent(CC.windowManager)")
+	(var currentTopWindowName:str = "windowManagerComponent.topWindowNodeName" (event "windowManagerComponent.evTopWindowNodeNameChanged"))
+)
+
+(def macro PULL_INFO_ABOUT_SHIP_DETECTION (_entityId:expression, _isFogOfWar:expression = "false")
+	(var avatarEntity:gfx = "$datahub.getEntity(_entityId)")
+	(var isShipUnderFogOfWar:bool= "avatarEntity.hasComponent(CC.underFogOfWar)" (event "avatarEntity.evAdded") (event "avatarEntity.evRemoved"))
+	(var isDetectionInfoHidden:bool = "_isFogOfWar && isShipUnderFogOfWar")
+)
+
+(def macro PULL_PLAYER_COLOR (_isSelf:expression=false, _ctkStatus:expression=false, _isAbuser:expression=false, _isPremiumAccount:expression=false, _isInSameDivision:expression=false)
+	(var playerNameColor:number = "	_isInSameDivision ?	_isSelf	? SC.Ui_styles.SERVICE_COLORS.WHITE
+																: SC.Ui_styles.SERVICE_COLORS.YELLOW :
+									_ctkStatus					? SC.Ui_styles.SERVICE_COLORS.RED :
+									_isAbuser					? SC.Ui_styles.SERVICE_COLORS.PINK :
+									_isPremiumAccount			? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																: SC.Ui_styles.SERVICE_COLORS.WHITE")
+)
+
+(def macro SELECTED_AVATAR_ID ()
+	(var selectedShipInfoEntity:gfx = "$datahub.getSingleEntity(CC.selectedShipInfo)")
+	(var selectedAvatarId:number = "selectedShipInfoEntity.selectedShipInfo.selectedAvatarId" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+)
+
+(def macro SELF_AVATAR_ID ()
+	(var selfAvatarEntity:gfx = "$datahub.getSingleEntity(CC.playerAvatar)")
+	(var selfAvatarId:number = "selfAvatarEntity ? selfAvatarEntity.avatar.id : INVALID_PLAYER_AVATAR_ID")
+)
+
+(def macro AVATAR_DATA_SCOPE (_avatarEntity:expression)
+	(var avatarEntityId:number =	"_avatarEntity.id")
+	(var avatarComponent:gfx = 		"_avatarEntity.avatar")
+	(var id:number = "			avatarComponent.id")
+	(var name:str = "			avatarComponent.name")
+	(var pureName:str = "		avatarComponent.pureName")
+	(var shipId:number = "		avatarComponent.ship.ref.ship.id" (event "avatarComponent.evShipRefChanged"))
+	(var subType:str = "		avatarComponent.shipType" (event "avatarComponent.evShipTypeChanged"))
+	(var isAbuser:bool = "		avatarComponent.isAbuser" (event "avatarComponent.evIsAbuserStatusChanged"))
+	(var hidden:bool = "		avatarComponent.hidden")
+	(var isBot:bool = "			avatarComponent.isBot")
+	(var isReady:bool = "		avatarComponent.isLoadedInBattle" (event "avatarComponent.evIsLoadedInBattleChanged"))
+	(var fragsCount:number = "	avatarComponent.frags" (event "avatarComponent.evFragsChanged"))
+
+	(var isAlive:bool = "_avatarEntity.health.isAlive" (event "_avatarEntity.health.evIsAliveChanged"))
+	(var playerEntityDbId:number = "_avatarEntity.accountSimple.dbId")
+)
+
+(def macro DIVISION_MEMBER_SCOPE (_avatarEntity:expression)
+	(var divisionMemberComponent:gfx = "_avatarEntity.divisionMember")
+	(var isInSameDivision:bool = "		divisionMemberComponent.isInSameDivision" (event "divisionMemberComponent.evDivisionChanged"))
+	(var isDivisionCommander:bool = "	divisionMemberComponent.isDivisionCommander" (event "divisionMemberComponent.evIsDivisionCommanderUpdated"))
+	(var division:number = "			divisionMemberComponent.division" (event "divisionMemberComponent.evDivisionChanged"))
+	(var divisionHidden:bool = "		divisionMemberComponent.divisionHidden" (event "divisionMemberComponent.evDivisionChanged") (event "divisionMemberComponent.evDivisionHiddenChanged"))
+	(var divisionSign:number = "		divisionMemberComponent.divisionSign" (event "divisionMemberComponent.evDivisionChanged"))
+)
+
+(def macro PLAYER_VOICE_STATE (_pureName:expression)
+	(var playerVoiceStateWatcher:gfx =	"$datahub.getPrimWatcher(CC.playerVoiceState, _pureName)")
+	(var playerVoiceStateEntity:gfx =	"playerVoiceStateWatcher.entity"			(event "playerVoiceStateWatcher.event"))
+	(var playerVoiceState:gfx =			"playerVoiceStateEntity.playerVoiceState"	(event "playerVoiceStateEntity.evAdded") (event "playerVoiceStateEntity.evRemoved"))
+	(var isSpeaking:bool =				"playerVoiceState.isSpeaking"				(event "playerVoiceState.evIsSpeakingChanged"))
+	(var isMuted:bool =					"playerVoiceState.isMuted"					(event "playerVoiceState.evIsMutedChanged"))
+)
+
+(def macro PLAYER_CLAN_SCOPE (_avatarEntity:expression)
+	(var clanId:number = "_avatarEntity.clanman.clanId" (event "_avatarEntity.clanman.evClanIdChanged"))
+	(var clanEntity:gfx = "$datahub.getPrimaryEntity(CC.clan, clanId)")
+	(var clanTag:str = "clanEntity.clan.tag" (event "clanEntity.clan.evTagChanged"))
+)
+
+(def macro PLAYER_RANK_SCOPE (_entity:expression)
+	(var accountRankComponent:gfx = "_entity.accountRank" (event "_entity.evAdded") (event "_entity.evRemoved"))
+	(var rank:number =				"accountRankComponent.rank"		(event "accountRankComponent.evRankChanged"))
+	(var league:number =			"accountRankComponent.league"	(event "accountRankComponent.evRankChanged"))
+	(var seasonId:number =			"accountRankComponent.seasonId"	(event "accountRankComponent.evRankChanged"))
+)
+
+(def macro SHIP_DATA_SCOPE (_shipId:expression)
+	(var shipEntity:gfx =		"$datahub.getPrimaryEntity(CC.ship, _shipId)")
+	(var shipIDS:str = 			"shipEntity.ship.nameIDS")
+	(var shipLevelRome:str =	"shipEntity.ship.levelRome")
+	(var shipLevelIcon:str =	"shipEntity.ship.levelIcon")
+	(var flagName:str =			"shipEntity.ship.flagName")
+)
+
+(def macro CUSTOM_ELEMENT_VISIBILITY_SCOPE ()
+	(var customElementsVisibilityComponent:gfx = "$datahub.getSingleEntity(CC.customElementsVisibility).customElementsVisibility")
+	(var enabledElements:number = "customElementsVisibilityComponent.enabledElements" (event "customElementsVisibilityComponent.evChanged"))
+	(var disabledElements:number = "customElementsVisibilityComponent.disabledElements" (event "customElementsVisibilityComponent.evChanged"))
+	(var customisedElements:number = "customElementsVisibilityComponent.customisedElements" (event "customElementsVisibilityComponent.evChanged"))
+)
+
+(def macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID (_id:expression, _positionY:number)
+	(style (visualOffsetY = 10px) (bind alpha "_id ? 0 : 1"))
+
+	(controller $Animation
+		(bindcall play  delay = "0.1 + _positionY * 0.075"
+						duration = 0.15
+						from = "{ alpha: 0, visualOffsetY: 10px }"
+						to = "{ alpha: 1, visualOffsetY: 0px }"
+						easing = "Easing.quad_out"
+						action = "killAll"
+						on='addedToStage'
+						(bind trigger "_id")
+		)
+	)
+)
+(def macro PORT_BANNER_BG (_bgColor:expression = "SC.Ui_styles.SERVICE_COLORS.BANNER_BACKGROUND")
+	(scope
+		(event startShow)
+		(event startHide)
+	)
+	(dispatch evBlurStartShow dir="EventDirection.DOWN" (event "startShow"))
+	(dispatch evBlurStartHide dir="EventDirection.DOWN" (event "startHide"))
+
+	(block
+		(bind visible "!isHighContrast")
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapCustom'
+			(bind enabled "!isHighContrast")
+			(args
+				_map = 'mc_blurmap_medium'
+			)
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style (bind backgroundColor "_bgColor"))
+		)
+	)
+
+	(block
+		(bind visible "isHighContrast")
+		(class $FullsizeAbsolute)
+		(style (padding = -1px))
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_high_contrast.png') (scale9grid = 3))
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL") (alpha = "portBannerAlpha.alpha"))
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="portBannerAlpha.state" _alpha="portBannerAlpha.alpha")
+	)
+)

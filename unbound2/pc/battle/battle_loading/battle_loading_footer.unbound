@@ -1,0 +1,306 @@
+(def constant BATTLE_STATS_STATES {
+	MATCHMAKING:			'RandomBattle',
+	BATTLE_LOADING:			'LoadingBattle',
+	FIRST_BATTLE_LOADING:	'ModalFirstBattleLoading',
+	BATTLE:					'Battle'
+})
+
+(def element FooterWrapperForBattle ()
+	(scope
+		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
+		(var battleType:str = "battleInfoComponent.battleType")
+		(var battleTypeGameParamsName:str = "battleInfoComponent.battleTypeGameParamsName")
+		(var customBattleName:str =	"battleTypeGameParamsName ?: battleType")
+
+		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
+		(var isCustomEventMap:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.CUSTOM_EVENT_MAP) > 0")
+		(var footerSubheader:str = "isCustomEventMap && battleTypeGameParamsName ? 'IDS_CUSTOM_MAP_' + battleTypeGameParamsName : battleInfoComponent.footerSubheader")
+	)
+	(element BattleStatsFooter
+		_footerIconPath = "customBattleName"
+		_headerText = "battleInfoComponent.footerHeader"
+		_subheaderText = "footerSubheader"
+	)
+)
+
+(def element FooterWrapperForMatchmaking ()
+	(scope
+		(var selectedBattleTypesEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
+		(var selectedBattleTypeComponent:dhComponent = "selectedBattleTypesEntity.battleType")
+
+		(var eventBattleStateComponent:dhComponent = "selectedBattleTypesEntity.eventBattleState")
+		(var selectedEventBattleName:str = "eventBattleStateComponent.name")
+
+		(var battleTypeGameParamId:number = "selectedBattleTypeComponent.battleTypeGameParamId")
+		(var battleType:str = "selectedBattleTypeComponent.type" (event "selectedBattleTypeComponent.evBattleTypeChanged"))
+
+		(var operationEntity:dhEntity =	"getPrimaryEntity(CC.operation, battleTypeGameParamId)")
+		(var operationComponent:dhComponent = "operationEntity.operation")
+		(var operationIconName:str =			"operationComponent.customIconName" (event "operationComponent.evStatusChanged"))
+		(var operationGPName:str =				"operationComponent.gpName")
+		(var operationHasMultipleMaps:bool =	"operationComponent.hasMultipleMaps")
+
+		(var isEventBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE")
+		(var isPVEBattle:bool =			"battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+		(var isCooprRandomBattle:bool =	"battleType == SC.Common.BATTLE_TYPES.COOPERATIVE_BATTLE || battleType == SC.Common.BATTLE_TYPES.RANDOM_BATTLE")
+
+		(var battleTypeIcon:str = "	isEventBattle		? selectedEventBattleName :
+									operationIconName	? operationIconName
+														: battleType")
+
+		(var headerText:str = "	isPVEBattle		? tr('IDS_' + toUpper(operationGPName) + '_NAME') :
+								isEventBattle	? tr(toUpper('IDS_' + selectedEventBattleName))
+												: tr('IDS_' + toUpper(battleType))")
+
+		(var subheaderText:str = "	isPVEBattle			? operationHasMultipleMaps	?'IDS_RANDOM_PVE_MATCHMAKER_SUBTITLE'
+																					:'IDS_' + toUpper(operationGPName) + '_GOAL' :
+									isEventBattle		? tr(toUpper('IDS_' + selectedEventBattleName + '_MATCHMAKER_DESCRIPTION')) :
+									isCooprRandomBattle	? tr(toUpper('IDS_' + battleType + '_MATCHMAKER_DESCRIPTION'))
+														: tr(toUpper('IDS_' + battleType + '_DESCRIPTION'))")
+	)
+	(element BattleStatsFooter
+		_footerIconPath = "battleTypeIcon"
+		_headerText = "headerText"
+		_subheaderText = "subheaderText"
+	)
+)
+
+(def element BattleStatsFooter (_footerIconPath:str='', _headerText:str='', _subheaderText:str='', _isStartButtonOnly:bool=false)
+	(scope
+		(macro PULL_CURRENT_TOP_WINDOW_NAME)
+
+		(var windowManagerSingleComponent:gfx = "$datahub.getSingleComponent(CC.windowManager)")
+		(var windowQueue:array = "windowManagerSingleComponent.windowQueue" (event "windowManagerSingleComponent.evChanged"))
+
+		(var isInMatchmaking:bool =		"isIn('Dock', windowQueue) || isIn('EmptyWindow', windowQueue)")		
+		(var isInBattleLoading:bool =	"currentTopWindowName == BATTLE_STATS_STATES.BATTLE_LOADING || currentTopWindowName == BATTLE_STATS_STATES.FIRST_BATTLE_LOADING")
+		(var isInBattleStats:bool =		"currentTopWindowName == BATTLE_STATS_STATES.BATTLE")
+
+		
+		(var divisionDataWatcher:gfx =	"$datahub.getFirstWatcher(CC.division)")
+		(var divisionDataEntity:gfx =	"divisionDataWatcher.entity" (event "divisionDataWatcher.event"))
+
+		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity.preBattlePlayerSimple")
+		(var isCommander:bool = "preBattlePlayerSimpleComponent.isCommander" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+		
+
+		(var battleDataWatcher:gfx =	"$datahub.getFirstWatcher(CC.battleData)")
+		(var battleDataEntity:gfx =		"battleDataWatcher.entity" (event "battleDataWatcher.event"))
+		(var battleInfoComponent:gfx =	"battleDataEntity.battleInfo")
+		(var battleStateComponent:gfx =	"battleDataEntity.battleState")
+		(var battleTimerComponent:gfx =	"battleDataEntity.battleTimer")
+
+		(var battleState:number =		"battleStateComponent.battleState"		(event "battleStateComponent.evBattleStateChanged"))
+		(var readyToBattle:bool =		"battleStateComponent.readyToBattle"	(event "battleStateComponent.evReadyToBattleChanged"))
+		(var battleTime:number =		"battleTimerComponent.battleTime ?: 0"	(event "battleTimerComponent.evBattleTimeChanged"))
+
+		(var battleType:str =			"battleInfoComponent.battleType")
+		(var isPveBattle:bool =			"battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+		(var isEventBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE")
+
+		(var isTimerAndStartBattleBtnShown:bool = "readyToBattle && battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN && battleTime != 0")
+
+		(macro HUMAN_READABLE_COUNTDOWN_SCOPE_MM_SS "battleTime")
+
+		(var winnerClanEntity:dhEntity = "getSingleEntity(CC.lastClanSeasonWinner)")
+		(var winnerClanId:number = "winnerClanEntity.clan.id")
+		(var showClanWinner:bool = " winnerClanId && !isPveBattle && !isEventBattle && isInBattleLoading")
+	)
+
+	(style
+		(width = 100%)
+		(height = 144px)
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../battle_loading/footer.png')
+			(backgroundSize = "fill")
+			(hitTest = false)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(paddingLeft = "L")
+			(paddingRight = "LS")
+			(paddingBottom = "{720:36,1080:48}")
+		)
+
+		(block
+			(bind visible "!_isStartButtonOnly")
+			(style
+				(position = "absolute")
+				(bottom = 0px)
+				(marginBottom = "{720:-8,1080:0}")
+			)
+
+			(element BattleTypeStereotypeForBattleLoadingFooter
+				_iconPath = "_footerIconPath"
+				_headerText = "_headerText"
+				_subheaderText = "_subheaderText"
+			)
+		)
+
+		(block
+			(bind visible "!isInBattleStats")
+			(class $MiddleAlignedAbsolutely)
+			(style (bottom = 0px))
+
+			(block
+				(bind visible "isInMatchmaking")
+
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "isInMatchmaking")
+					(args
+						_width = 170px
+						_enabled = "!divisionDataEntity || isCommander"
+						_name = 'buttonLeave'
+						_label = 'IDS_LEAVE_QUEUE'
+					)
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(bind enabled "divisionDataEntity && !isCommander")
+					(args
+						_text = 'IDS_TOOLTIP_RANDOMBATTLE_IMPOSSIBLE_TO_LEAVEQUEUE'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(block
+				(bind visible "isInBattleLoading || _isStartButtonOnly")
+
+				(style (align = "center"))
+
+				(tf
+					(bind visible "isTimerAndStartBattleBtnShown")
+					(class $TextDefaultBold27NM)
+					(style
+						(alpha = "TA")
+						(marginBottom = "SXS")
+					)
+					(name = 'loadingPreBattleTimer')
+					(bind text "countdownText")
+				)
+
+				(block
+					(controller $Instance renderer='DefaultButton'
+						(bind enabled "isTimerAndStartBattleBtnShown")
+						(args
+							_width = 170px
+							_name = 'btnStartBattle'
+							_focusIndex = 0
+							_defaultFocused = true
+							_methods = "[{ type: 'inputMapping.onRequest', name: 'showBattle', args: {} }]"
+							_label = 'IDS_START_BATTLE_BUTTON'
+						)
+					)
+				)
+
+				(hblock
+					(bind visible "!isTimerAndStartBattleBtnShown")
+
+					(tf
+						(class $TextDefault19NM)
+						(style
+							(alpha = "TC")
+							(marginRight = "SXS")
+						)
+						(text = 'IDS_BUSY_LOADING')
+					)
+
+					(mc indicator_busy_small
+						(style
+							(marginTop = "-XXS")
+							(alpha = 1.25)
+						)
+					)
+				)
+			)
+		)
+
+		(block
+			(bind visible "showClanWinner")
+			(style
+				(position = "absolute")
+				(bottom = 10px)
+				(right = 0px)
+			)
+			(controller $Instance renderer='ClanSeasonWinnersClanTag'
+				(bind enabled "showClanWinner")
+				(args
+					_winnerClanId = "winnerClanId"
+				)
+			)
+		)
+	)
+)
+
+(def element ClanSeasonWinnersClanTag (_winnerClanId:number)
+	(scope
+		(var clanEntity:dhEntity = "getPrimaryEntity(CC.clan, _winnerClanId)")
+		(var clanTag:str = "clanEntity.clan.tag")
+	)
+
+	(style (hitTest = false) (paddingTop = 6px))
+	(tf
+		(class $TextDefaultBold27NM)
+		(style (marginBottom = "M") (alpha = "TA"))
+		(bind text "'[' + clanTag + ']'")
+	)
+
+	(tf
+		(class $TextDefault19NM)
+		(style (leading = -3) (alpha = "TC"))
+		(text = 'IDS_CLAN_BATTLES_SEASON_WINNER')
+	)
+)
+
+(def element BattleTypeStereotypeForBattleLoadingFooter (_iconPath:str, _headerText:str, _subheaderText:str)
+	(style (flow = "horizontal"))
+
+	(block
+		(style
+			(marginRight = "M")
+			(width = 80px)
+			(height = 80px)
+			(bind backgroundImage "_iconPath ? 'url:../service_kit/battle_types/' + _iconPath + '.png' : ''")
+		)
+	)
+
+	(block
+		(style
+			(align = "middle")
+			(width = 380px)
+			(height = 80px)
+		)
+
+		(tf
+			(name = 'type_battle_id')
+			(class $TextDefaultBold27NM)
+			(style
+				(alpha = "TA")
+				(width = 100%)
+				(marginBottom = "M")
+			)
+			(bind text "_headerText")
+		)
+
+		(tf
+			(name = 'battle_description')
+			(class $TextDefault19NM)
+			(style
+				(alpha = "TC")
+				(width = 100%)
+			)
+			(bind text "_subheaderText")
+		)
+	)
+)

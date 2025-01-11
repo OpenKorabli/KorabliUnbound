@@ -1,0 +1,196 @@
+(def element CurrencyTooltip (	_currency:str, _iconPath:str, _headerText:str, _amount:number, _isReceived:bool = false, _isEventumReward:bool = false,
+								_isUnavailableStatusVisible:bool = false, _hasAdditionalInfo:bool = false, _hasMouseInstruction:bool = false, _subheaderText:str = '')
+	(scope
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:dhComponent =	"resourceEntity.accountResource")
+		(var accountResourcePrice:number = "accountResourceComponent.accountResource[_currency] ?: 0" 	(event	"accountResourceComponent.accountResource.evChangedGold")
+																										(event	"accountResourceComponent.accountResource.evChangedCredit")
+																										(event	"accountResourceComponent.accountResource.evChangedFreeXP"))
+		(var amount:number = "	_amount					? _amount :
+								accountResourcePrice	? accountResourcePrice
+														: 0")
+		(var accountResource:dict = "{currency: _currency, finalPrice: amount}")
+
+		(var isSplitGold:bool =					"accountResourceComponent.splitGold			?: false"	(event "accountResourceComponent.evUpdateSplitCurrency"))
+		(var accountGoldLooted:number =			"accountResourceComponent.goldLooted		?: -1"		(event "accountResourceComponent.evChangedSplitGold"))
+		(var accountGoldPurchased:number =		"accountResourceComponent.goldPurchased		?: -1"		(event "accountResourceComponent.evChangedSplitGold"))
+		(var isSplitCredits:bool =				"accountResourceComponent.splitCredits		?: false"	(event "accountResourceComponent.evUpdateSplitCurrency"))
+		(var accountCreditsLooted:number =		"accountResourceComponent.creditsLooted		?: -1"		(event "accountResourceComponent.evChangedSplitCredit"))
+		(var accountCreditsPurchased:number =	"accountResourceComponent.creditsPurchased	?: -1"		(event "accountResourceComponent.evChangedSplitCredit"))
+
+		(var isSplitCurrency:bool = "	_currency == SC.Common.CURRENCIES.GOLD		? isSplitGold :
+										_currency == SC.Common.CURRENCIES.CREDITS	? isSplitCredits
+																					: false")
+
+		(var lootedMoney:dict = "{	'gold': {finalPrice: accountGoldLooted, currency: 'gold' },
+									'credits': { finalPrice: accountCreditsLooted, currency: 'credits'}}")
+		(var purchasedMoney:dict = "{	'gold': {finalPrice: accountGoldPurchased, currency: 'gold' },
+										'credits': { finalPrice: accountCreditsPurchased, currency: 'credits'}}")
+
+		(var isLootedMoneySynced:bool =			"lootedMoney[_currency]		? lootedMoney[_currency].finalPrice >= 0	: false")
+		(var isPurchasedMoneySynced:bool =		"purchasedMoney[_currency]	? purchasedMoney[_currency].finalPrice >= 0	: false")
+	
+		(var isLootedMoneyVisible:bool =		"isSplitCurrency && isLootedMoneySynced")
+		(var isPurchasedMoneyVisible:bool =		"isSplitCurrency && isPurchasedMoneySynced")
+		(var isUnavailableStatusVisible:bool =	"isSplitCurrency && (!isLootedMoneySynced || !isPurchasedMoneySynced)")
+
+		(var imageUrl:str = "'url:../reward_icons/' + (_iconPath ?: _currency) + '.png'")
+		(var headerText:str = "_headerText ?: 'IDS_CURRENCY_' + toUpper(_currency)")
+		(var descriptionTextSpend:str = "'IDS_CURRENCY_' + toUpper(_currency) + '_SPEND_DESCRIPTION'")
+		(var descriptionTextGet:str = "'IDS_CURRENCY_' + toUpper(_currency) + '_GET_DESCRIPTION'")
+		(var priceTagLineTitle:str = "_isEventumReward ? 'IDS_COUNT' : 'IDS_CURRENCY_IN_STOCK_COLON'")
+		(var eventCurrencyText:str = "'IDS_CURRENCY_' + toUpper(_currency) + '_STATUS'")
+		(var descriptionTextAdditionalInfo:str = "'IDS_CURRENCY_' + toUpper(_currency) + '_ADDITIONAL_INFO'")
+		(var mouseInstructionText:str = "'IDS_CURRENCY_' + toUpper(_currency) + '_MOUSE_INSTRUCTION'")
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+	)
+	(bindcall externalCall "isSplitCurrency && lootedMoney[_currency] && (lootedMoney[_currency].finalPrice < 0) ? 'inputMapping.onAction' : ''" "['DockProxy.getSplitCurrencies', {}]" watch=false (event "evStartShow"))
+
+	(style (hitTest = false) (width = 340px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl = "imageUrl"
+			_imageWidth = 80
+			_imageHeight = 80
+			_headerText = "headerText"
+			_subheaderText = "_subheaderText"
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isReceived"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isReceived")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_TOOLTIP_REWARD_TAKEN'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isEventumReward"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isEventumReward")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
+					_text = "eventCurrencyText"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isUnavailableStatusVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isUnavailableStatusVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text = 'IDS_SERVICE_IS_UNAVAILABLE_WEB'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!isSplitCurrency"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemPriceTagLine'
+				(bind enabled "!isSplitCurrency")
+				(args
+					_title = "priceTagLineTitle"
+					_priceInfo = "accountResource"
+					_isAutoWidth = true
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isLootedMoneyVisible || isPurchasedMoneyVisible"))
+		)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="isLootedMoneyVisible || isPurchasedMoneyVisible"
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isLootedMoneyVisible"
+				(controller $Instance renderer='TooltipSystemPriceTagLine'
+					(bind enabled "isLootedMoneyVisible")
+					(args
+						_priceInfo = "lootedMoney[_currency]"
+						_title = 'IDS_CURRENCY_LOOTED'
+					)
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isPurchasedMoneyVisible"
+				(controller $Instance renderer='TooltipSystemPriceTagLine'
+					(bind enabled "isPurchasedMoneyVisible")
+					(args
+						_priceInfo = "purchasedMoney[_currency]"
+						_title = 'IDS_CURRENCY_PURCHASED'
+					)
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText _headerText = 'IDS_CURRENCY_EXPLANATION_TITLE')
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText _descriptionText = "descriptionTextSpend")
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText _headerText = 'IDS_CURRENCY_HOW_TO_GET_TITLE')
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText _descriptionText = "descriptionTextGet")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_hasAdditionalInfo"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "_hasAdditionalInfo")
+				(args
+					_descriptionText = "descriptionTextAdditionalInfo"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_hasMouseInstruction"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_hasMouseInstruction")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text = "mouseInstructionText"
+				)
+			)
+		)
+	)
+)

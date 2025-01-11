@@ -1,0 +1,632 @@
+(def css $IndicatorText ()
+	(extends $TextDefaultBold13NM)
+	(filters
+		(dropShadow
+			(distance = 0)
+			(angle = 0)
+			(color = 0x000000)
+			(alpha = 0.7)
+			(blurX = 2.0)
+			(blurY = 2.0)
+			(strength = 1.0)
+			(quality = 1)
+		)
+	)
+)
+
+(def css $IndicatorTextWarning ()
+	(textColor = 0xFF9900)
+)
+
+(def css $IndicatorTextCritical ()
+	(textColor = 0xFF3300)
+)
+
+(def constant VISIBILITY_ICONS	{
+	'fighters_warning': 	'IconVisibilityFightersWarning',
+	'fighters_critical': 	'IconVisibilityFightersCritical',
+	'interceptor_warning': 	'IconVisibilityInterceptorWarning',
+	'interceptor_critical': 'IconVisibilityInterceptorCritical',
+	'antiAir':				'IconVisibilityAntiAir',
+	'volley': 				'IconVisibilityVolley',
+	'ship': 				'IconVisibilityShip',
+	'plane': 				'IconVisibilityPlane',
+	'common_xray': 			'IconVisibilityCommonXray',
+	'attacked':				'IconVisibilityAircarrierAttacked',
+	'rls': 					'IconVisibilityRLS',
+	'sonar': 				'IconVisibilitySonar',
+	'hydrophone':			'IconVisibilityHydrophone',
+	'submarine_locator':	'IconVisibilitySubmarineLocator',
+	'none':					'IconVisibilityShip'
+})
+
+(def constant WARD_STATE_NORMAL 'normal')
+(def constant WARD_STATE_WARNING 'warning')
+(def constant WARD_STATE_CRITICAL 'critical')
+
+(def element BattleIndicatorsContainer () layout=true
+	(scope
+		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
+		(var tacticalMap:bool = "cameraEntity.camera.isTactical" (event "cameraEntity.camera.evTacticalStateChanged"))
+
+		(macro IS_ON_PLANE)
+		(var hasPlanes:bool = "ownCarrierEntity != null")
+
+		(macro IS_ALIVE)
+	)
+
+	(class $FullsizeAbsolute)
+	(style
+		(align = "center|middle")
+		(hitTest = "false")
+	)
+
+	(bind visible "(isAlive || isOnPlane) && !tacticalMap")
+
+	(block
+		(style
+			(width = "0")
+			(height = "0")
+		)
+		(block
+			(style
+				(position = "absolute")
+				(left = "250")
+				(bottom = "217")
+			)
+			(controller $Instance renderer='DetectIndicator'
+				(args
+					_isOnPlane = "isOnPlane"
+				)
+			)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(left = "340")
+				(bottom = "226")
+			)
+			(controller $Instance renderer='IntuitionIndicator'
+				(bind enabled "!isOnPlane")
+			)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(left = "340")
+				(bottom = "226")
+			)
+			(controller $Instance renderer='RLSDetectIndicator'
+				(bind enabled "!isOnPlane")
+			)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(left = "-250")
+				(bottom = "156")
+			)
+
+			(bind visible "hasPlanes && isOnPlane")
+
+			(controller $Instance renderer='FightersWardIndicator'
+				(bind enabled "hasPlanes")
+			)
+		)
+	)
+)
+
+
+(def element DetectIndicator (_isOnPlane:bool = false) layout=true
+	(scope
+		(event evStartAnimation)
+		(event evEndAnimation)
+
+		(event evShowFocusedEnemies)
+		(event evHideFocusedEnemies)
+
+		(var battleIndication:gfx = "$datahub.getSingleEntity(CC.battleIndication)")
+		(var selfAvatarEntity:gfx = "$datahub.getSingleEntity(CC.playerAvatar)")
+		(var vehicleComponent:gfx = "selfAvatarEntity.vehicle" (event "selfAvatarEntity.evAdded"))
+
+		(var shipSpotType:str = "battleIndication ? battleIndication.alertIndication.spotType : 'none'" (event "battleIndication.alertIndication.evSpottedChanged"))
+		(var shipSpotFlags:number = "vehicleComponent.visibilityFlags" (event "vehicleComponent.evVisibilityFlagsChanged"))
+		(var shipFocusedEnemies:number = "battleIndication.alertIndication.focusedEnemies" (event "battleIndication.alertIndication.evFocusedEnemiesChanged"))
+		(var squadronSpotType:str = "battleIndication ? battleIndication.alertIndication.squadronSpotType : 'none'" (event "battleIndication.alertIndication.evSquadronSpottedChanged"))
+		(var squadronSpotFlags:number = "battleIndication ? battleIndication.alertIndication.squadronSpotFlags : -1" (event "battleIndication.alertIndication.evSquadronSpottedChanged"))
+		(var isInterceptorAttack:bool = "battleIndication.alertIndication.isInterceptorAttack" (event "battleIndication.alertIndication.evUnderFighterAttackStatusChanged"))
+		(var underFighterAttack:number = "battleIndication ? battleIndication.alertIndication.underFighterAttackStatus : -1" (event "battleIndication.alertIndication.evUnderFighterAttackStatusChanged"))
+		(var underAntiAirAttack:bool = "battleIndication ? battleIndication.alertIndication.underAntiAirAttack : false" (event "battleIndication.alertIndication.evUnderAntiAirAttackChanged"))
+		(var antiAirThreatCount:number = "battleIndication ? battleIndication.alertIndication.antiAirThreatCount : -1" (event "battleIndication.alertIndication.evAntiAirThreatCountChanged"))
+		(var isUnderSquadronAttack:bool = "_isOnPlane && underFighterAttack > 0")
+		(var isUnderFighterAttack:bool = "isUnderSquadronAttack && !isInterceptorAttack")
+		(var isUnderInterceptorAttack:bool = "isUnderSquadronAttack && isInterceptorAttack")
+		(var isUnderAntiAirAttack:bool = "_isOnPlane && underAntiAirAttack")
+		(var spotType:str = "_isOnPlane ? squadronSpotType : shipSpotType")
+
+		(var focusedEnemies:number = "	!_isOnPlane			? shipFocusedEnemies :
+										underAntiAirAttack	? antiAirThreatCount
+															: 0")
+		(var isFocusedEnemiesEnable:bool = "focusedEnemies > 0")
+
+		(var isAlertVisible:bool = "_isOnPlane ? squadronSpotFlags > 0 : shipSpotFlags > 0")
+		(var isHydrophone:bool = "spotType == 'hydrophone'")
+		(var isSubmarineLocator:bool = "spotType == 'submarine_locator'")
+
+		(var isVolley:bool = "false")
+		(controller $Animation
+			(bindcall play  duration=1.0
+							from="{ isVolley: true }"
+							to="{ isVolley: false }"
+							(event "battleIndication.alertIndication.evArtilleryAlert")
+			)
+		)
+
+		(var iconName:str = "	isUnderFighterAttack && underFighterAttack == 1		? 'fighters_warning' :
+								isUnderFighterAttack && underFighterAttack != 1		? 'fighters_critical' :
+								isUnderInterceptorAttack && underFighterAttack == 1	? 'interceptor_warning' :
+								isUnderInterceptorAttack && underFighterAttack != 1	? 'interceptor_critical' :
+								isUnderAntiAirAttack								? 'antiAir' :
+								isVolley											? 'volley'
+																					: spotType")
+
+		(var iconLabel:str = "	isUnderInterceptorAttack ? 'IDS_UNDER_INTERCEPTOR_ATTACK'	:
+								isUnderFighterAttack	? 'IDS_UNDER_FIGHTERS_ATTACK'	:
+								isUnderAntiAirAttack	? 'IDS_UNDER_ANTI_AIR_ATTACK'	:
+								isVolley 				? 'IDS_VOLLEY'					:
+								isHydrophone			? 'IDS_HYDROPHONE'				:
+								isSubmarineLocator		? 'IDS_SUBMARINE_LOCATOR'
+														: 'IDS_DETECTED'")
+	)
+
+	(style
+		(alpha = "isAlertVisible ? 1 : 0")
+	)
+
+	(dispatch evStartAnimation (bind enabled "isAlertVisible") (bind trigger "isAlertVisible"))
+	(dispatch evEndAnimation (bind enabled "!isAlertVisible") (bind trigger "!isAlertVisible"))
+
+	(dispatch evShowFocusedEnemies (bind trigger "isFocusedEnemiesEnable") (bind enabled "isFocusedEnemiesEnable"))
+	(dispatch evHideFocusedEnemies (bind trigger "!isFocusedEnemiesEnable") (bind enabled "!isFocusedEnemiesEnable"))
+
+	(controller $Animation
+		(bindcall play  duration=0.3
+						easing="Easing.quad_in"
+						from="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						to="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						action="killAll"
+						(bind enabled "isAlertVisible")
+						(event "evStartAnimation")
+		)
+		(bindcall play  duration=0.3
+						easing="Easing.quad_out"
+						from="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						to="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						action="killAll"
+						(bind enabled "!isAlertVisible")
+						(event "evEndAnimation")
+		)
+	)
+
+	(block
+		(class $MiddleVHAbsolutely)
+		(block
+			(style
+				(align = "center")
+				(width = "64px")
+				(height = "64px")
+			)
+
+			(controller $Animation
+				(bindcall play  duration=0.2
+								easing="Easing.quad_in"
+								from="{ scaleX: 2, scaleY: 2, x: -32, y: -32 }"
+								to="{ scaleX: 1, scaleY: 1, x: 0, y: 0 }"
+								action="killAll"
+								(bind trigger "iconName")
+				)
+			)
+
+			(block
+				(style
+					(width = "32px")
+					(height = "32px")
+					(align = "center|bottom")
+				)
+				(controller $Instance
+					(bind renderer "VISIBILITY_ICONS[iconName]")
+				)
+			)
+			(tf
+				(class $IndicatorText)
+				(style
+					(width = "100px")
+					(marginTop = "5px")
+					(textAlign = "center")
+					(leading = "-3")
+				)
+				(bind class "isVolley || (underFighterAttack == 2 && _isOnPlane) ? '$IndicatorTextCritical' : '$IndicatorTextWarning'")
+				(bind text "iconLabel")
+			)
+		)
+	)
+
+	(block
+		(style
+			(alpha = 0)
+			(position = "absolute")
+			(top = "-27px")
+			(left = "17px")
+			(align = "center|middle")
+			(height = "0px")
+			(width = "0px")
+			(bind top "_isOnPlane ? -32 : -27")
+			(bind left "_isOnPlane ? 24 : 17")
+		)
+
+		(controller $Animation
+			(bindcall play  duration=0.15
+							from="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+							to="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+							action="killAll"
+							(bind enabled "isFocusedEnemiesEnable")
+							(event "evShowFocusedEnemies")
+			)
+			(bindcall play  duration=0.15
+							from="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+							to="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+							action="killAll"
+							(bind enabled "!isFocusedEnemiesEnable")
+							(event "evHideFocusedEnemies")
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(width = "32px")
+				(height = "32px")
+				(left = "50%")
+				(top = "50%")
+				(marginLeft = "-50%")
+				(marginTop = "-50%")
+				(backgroundImage = "'bitmap:icon_visibility_priority'")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(class $IndicatorTextWarning)
+			(style
+				(marginTop = "-1px")
+			)
+			(bind visible "focusedEnemies > 0")
+			(bind text "focusedEnemies")
+		)
+	)
+)
+
+(def element IconVisibilityFightersWarning () layout=true
+	(style
+		(width = "31px")
+		(height = "30px")
+		(backgroundImage = "'bitmap:icon_visibility_fighters_warning'")
+	)
+)
+
+(def element IconVisibilityFightersCritical () layout=true
+	(style
+		(width = "31px")
+		(height = "30px")
+		(backgroundImage = "'bitmap:icon_visibility_fighters_critical'")
+	)
+)
+
+(def element IconVisibilityInterceptorWarning ()
+	(style
+		(width = "31px")
+		(height = "30px")
+		(backgroundImage = "'url:../battle_hud/battle_indicators/icon_interceptor_warning.png'")
+	)
+)
+
+(def element IconVisibilityInterceptorCritical ()
+	(style
+		(width = "31px")
+		(height = "30px")
+		(backgroundImage = "'url:../battle_hud/battle_indicators/icon_interceptor_critical.png'")
+	)
+)
+
+(def element IconVisibilityAntiAir () layout=true
+	(style
+		(width = "32px")
+		(height = "32px")
+		(backgroundImage = "'bitmap:icon_visibility_antiair'")
+	)
+)
+
+(def element IconVisibilityVolley () layout=true
+	(style
+		(width = "6px")
+		(height = "24px")
+		(backgroundImage = "'bitmap:icon_visibility_volley'")
+	)
+)
+
+(def element IconVisibilityShip () layout=true
+	(style
+		(width = "6px")
+		(height = "24px")
+		(backgroundImage = "'bitmap:icon_visibility_ship'")
+	)
+)
+
+(def element IconVisibilityPlane () layout=true
+	(style
+		(width = "28px")
+		(height = "28px")
+		(backgroundImage = "'bitmap:icon_visibility_plane'")
+	)
+)
+
+(def element IconVisibilityAircarrierAttacked () layout=true
+	(style
+		(width = "30px")
+		(height = "30px")
+		(backgroundImage = "'bitmap:icon_aircarrier_attacked'")
+	)
+)
+
+(def element IconVisibilityRLS () layout=true
+	(style
+		(width = "33px")
+		(height = "32px")
+		(backgroundImage = "'bitmap:icon_visibility_rls'")
+	)
+)
+
+(def element IconVisibilitySonar () layout=true
+	(style
+		(width = "33px")
+		(height = "32px")
+		(backgroundImage = "'bitmap:icon_visibility_sonar'")
+	)
+)
+
+(def element IconVisibilityHydrophone () layout=true
+	(style
+		(width = "33px")
+		(height = "28px")
+		(backgroundImage = "'url:../battle_hud/battle_indicators/icon_visibility_hydrophone.png'")
+	)
+)
+
+(def element IconVisibilityCommonXray () layout=true
+	(style
+		(width = "34px")
+		(height = "29px")
+		(backgroundImage = "'bitmap:icon_visibility_xray'")
+	)
+)
+
+(def element IconVisibilitySubmarineLocator () layout=true
+	(style
+		(width = "33px")
+		(height = "28px")
+		(backgroundImage = "'url:../battle_hud/battle_indicators/icon_visibility_submarine_locator.png'")
+	)
+)
+
+
+
+(def element IntuitionIndicator () layout=true
+	(scope
+		(event evStartAnimation)
+		(event evEndAnimation)
+
+		(var battleIndication:gfx = "$datahub.getSingleEntity(CC.battleIndication)")
+		(var isIntuitionActive:bool = "battleIndication ? battleIndication.alertIndication.intuitionActive : false" (event "battleIndication.alertIndication.evIntuitionActiveChanged"))
+		(var isInRlsZone:bool = "battleIndication ? battleIndication.alertIndication.isInRlsZone : false" (event "battleIndication.alertIndication.evIsInRlsZoneChanged"))
+		(var isIndicatorVisible:bool = "isIntuitionActive && !isInRlsZone")
+		(var iconName:str = "'bitmap:icon_anti_intuition'")
+
+	)
+
+	(style
+		(alpha = "isIndicatorVisible ? 1 : 0")
+	)
+
+	(dispatch evStartAnimation (bind trigger "isIndicatorVisible") (bind enabled "isIndicatorVisible"))
+	(dispatch evEndAnimation (bind trigger "isIndicatorVisible") (bind enabled "!isIndicatorVisible"))
+
+	(controller $Animation
+		(bindcall play  duration=0.15
+						from="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						to="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						(bind enabled "isIndicatorVisible")
+						(event "evStartAnimation")
+		)
+		(bindcall play  duration=0.15
+						from="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						to="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						(bind enabled "!isIndicatorVisible")
+						(event "evEndAnimation")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(pivotX=50%)
+			(pivotY=50%)
+			(align = "center")
+		)
+		(block
+			(style
+				(width = "32px")
+				(height = "32px")
+				(align = "center|bottom")
+			)
+			(block
+				(style
+					(width = "25px")
+					(height = "25px")
+					(backgroundImage = "iconName")
+				)
+			)
+		)
+		(tf
+			(class $IndicatorText)
+			(style
+				(width = "100px")
+				(marginTop = "5px")
+				(textAlign = "center")
+			)
+			(text = 'IDS_DETECTED_BY_ENEMY_SHIP')
+		)
+	)
+)
+
+
+
+(def element RLSDetectIndicator () layout=true
+	(scope
+		(event evStartAnimation)
+		(event evEndAnimation)
+
+		(var battleIndication:gfx = "$datahub.getSingleEntity(CC.battleIndication)")
+		(var isInRlsZone:bool = "battleIndication ? battleIndication.alertIndication.isInRlsZone : false" (event "battleIndication.alertIndication.evIsInRlsZoneChanged"))
+	)
+
+	(style
+		(alpha = "isInRlsZone ? 1 : 0")
+	)
+
+	(dispatch evStartAnimation (bind trigger "isInRlsZone") (bind enabled "isInRlsZone"))
+	(dispatch evEndAnimation (bind trigger "!isInRlsZone") (bind enabled "!isInRlsZone"))
+
+	(controller $Animation
+		(bindcall play  duration=0.15
+						from="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						to="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						(bind enabled "isInRlsZone")
+						(event "evStartAnimation")
+		)
+		(bindcall play  duration=0.15
+						from="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						to="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						(bind enabled "!isInRlsZone")
+						(event "evEndAnimation")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(pivotX=50%)
+			(pivotY=50%)
+			(align = "center")
+		)
+		(block
+			(style
+				(width = "32px")
+				(height = "32px")
+				(align = "center|bottom")
+			)
+			(block
+				(style
+					(width = "28px")
+					(height = "28px")
+					(backgroundImage = "'url:../battle_hud/battle_indicators/icon_in_rls_zone.png'")
+				)
+			)
+		)
+		(tf
+			(class $IndicatorText)
+			(style
+				(width = "120px")
+				(textAlign = "center")
+				(marginTop = "5px")
+			)
+			(text = 'IDS_IN_RLS_ZONE')
+		)
+	)
+)
+
+
+
+(def element FightersWardIndicator () layout=true
+	(scope
+		(event evStartAnimation)
+		(event evEndAnimation)
+
+		(var battleIndication:gfx = "$datahub.getSingleEntity(CC.battleIndication)")
+		(var wardInsideLifeTime:number = "battleIndication.fightersWardIndication.wardInsideLifeTime" (event "battleIndication.fightersWardIndication.evWardTimerChanged"))
+		(var isImprovedFighter:bool = "battleIndication.fightersWardIndication.isImprovedFighter" (event "battleIndication.fightersWardIndication.evImprovedFighterChanged"))
+		(var state:str = "	wardInsideLifeTime == 0		? WARD_STATE_NORMAL :
+							wardInsideLifeTime <= 5		? WARD_STATE_CRITICAL :
+							wardInsideLifeTime <= 20	? WARD_STATE_WARNING
+														: WARD_STATE_NORMAL")
+		(var isIndicatorVisible:bool = "wardInsideLifeTime > 0.2")
+		(var iconName:str = "isImprovedFighter ? 'url:../battle_hud/battle_indicators/icon_inside_improved_fighters_' + state + '.png' : 'bitmap:icon_inside_fighters_ward_' + state")
+	)
+
+	(bind visible "wardInsideLifeTime > 0")
+
+	(dispatch evStartAnimation (bind trigger "isIndicatorVisible") (bind enabled "isIndicatorVisible"))
+	(dispatch evEndAnimation (bind trigger "isIndicatorVisible") (bind enabled "!isIndicatorVisible"))
+
+	(controller $Animation
+		(bindcall play  duration=0.15
+						from="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						to="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						(bind enabled "isIndicatorVisible")
+						(event "evStartAnimation")
+		)
+		(bindcall play  duration=0.15
+						from="{ alpha: 1, scaleX: 1, scaleY: 1 }"
+						to="{ alpha: 0, scaleX: 2, scaleY: 2 }"
+						(bind enabled "!isIndicatorVisible")
+						(event "evEndAnimation")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(pivotX=50%)
+			(pivotY=50%)
+			(align = "center")
+		)
+		(block
+			(style
+				(width = "32px")
+				(height = "32px")
+				(align = "center|bottom")
+			)
+			(block
+				(style
+					(width = "30px")
+					(height = "32px")
+					(align = "center|middle")
+					(bind backgroundImage "iconName")
+				)
+			)
+		)
+		(tf
+			(class $IndicatorText)
+			(style
+				(height = "20px")
+				(marginTop = "1px")
+				(bind alpha "wardInsideLifeTime != 0 ? 1 : 0")
+			)
+			(bind class "	state == WARD_STATE_CRITICAL	? '$IndicatorTextCritical' :
+							state == WARD_STATE_WARNING		? '$IndicatorTextWarning'
+															: '$None'")
+
+			(bind text "countdownFormat(wardInsideLifeTime,0,true)")
+		)
+	)
+)
+

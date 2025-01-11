@@ -1,0 +1,124 @@
+(def constant BATTLE_TYRES_MARGIN 40)
+
+(def constant BATTLE_TYRES_SIZE 160)
+
+(def element ModalWindowBattleTypeChooser ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(var battleTypesCollection:gfx = "$datahub.getCollection(CC.battleType)")
+		(var constantBattleTypes:gfx = "battleTypesCollection.getChildByPath('common.byOrder.constant')" (event "battleTypesCollection.evChildAdded") (event "battleTypesCollection.evChildRemoved"))
+		(var constantBattleTypesItems:array = "constantBattleTypes.items ?: []" (event "constantBattleTypes.evAdded") (event "constantBattleTypes.evRemoved"))
+
+		(var temporaryBattleTypes:gfx = "battleTypesCollection.getChildByPath('common.byOrder.temporary')" (event "battleTypesCollection.evChildAdded") (event "battleTypesCollection.evChildRemoved"))
+		(var temporaryBattleTypesItems:array = "temporaryBattleTypes.items ?: []" (event "temporaryBattleTypes.evAdded") (event "temporaryBattleTypes.evRemoved"))
+
+		(var constantBattlesWidth:number = "constantBattleTypesItems.length * (BATTLE_TYRES_SIZE + 2 * BATTLE_TYRES_MARGIN)")
+		(var temporaryBattlesWidth:number = "temporaryBattleTypesItems.length * (BATTLE_TYRES_SIZE + 2 * BATTLE_TYRES_MARGIN)")
+
+		(var maximumWidth:number = "max(constantBattlesWidth, temporaryBattlesWidth)")
+		(var rawScale:number = "maximumWidth ? stageWidth / maximumWidth : 0.75")
+		(var stageScale:number = "	rawScale >= 1 		? 1 :
+									rawScale < 0.75 	? rawScale
+														: 0.75")
+
+		(struct trainingRoomFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.TRAINING_BATTLE"))
+		(var trainingBattleEntity:gfx = "$datahub.getPrimaryEntity(CC.battleType, SC.Common.BATTLE_TYPES.TRAINING_BATTLE + '_0')")
+		(var isTrainingRoomAvailable:bool = "trainingBattleEntity != null && trainingRoomFeature.state != 'locked'")
+		(var isNewTrainingRoom:bool = "trainingRoomFeature.state == 'new'")
+
+		(var divisionEntity:gfx = "$datahub.getSingleEntity(CC.division)")
+		(var isInDivision:bool = "divisionEntity != null")
+	)
+
+	(block
+		(class $Fullsize)
+		(style (align = "center"))
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style (width = 100%))
+
+			(element ModalWindowHeaderFullSize
+				_windowName = "toUpper(tr('IDS_CHOOSE_BATTLETYPE_HEADER'))"
+				_paddingRight = "M"
+				_paddingLeft = "M"
+				_methods = "[{ type: 'inputMapping.onRequest', name: 'closeModalSelectBattleType', args: {} }]"
+			)
+		)
+		
+		(block
+			(class $Fullsize)
+			(style (align = "center|middle"))
+			(hblock
+				(style
+					(bind marginBottom "temporaryBattleTypesItems.length > 0 ? 0 : L")
+					(bind ubScaleX "stageScale") (bind ubScaleY "stageScale")
+				)
+				(controller $Repeat renderer='ModalBattleTypeRenderer'
+					(bind count "constantBattleTypesItems.length")
+					(args
+						_battleTypeEntityId = "constantBattleTypesItems[$index].id"
+					)
+				)
+			)
+			(hblock
+				(bind visible "temporaryBattleTypesItems.length > 0")
+				(style
+					(marginTop = "{720:XL,1080:XXL}") (marginBottom = "L")
+					(bind ubScaleX "stageScale") (bind ubScaleY "stageScale")
+				)
+				(controller $Repeat renderer='ModalBattleTypeRenderer'
+					(bind count "temporaryBattleTypesItems.length")
+					(args
+						_battleTypeEntityId = "temporaryBattleTypesItems[$index].id"
+					)
+				)
+			)
+		)
+		
+		(block
+			(bind visible "isTrainingRoomAvailable")
+			(style (width = 100%) (height = 70px) (align = "center") (marginBottom = "LM"))
+
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+
+			(block
+				(bind name "'typeItem' + SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+
+				(style (marginBottom = "SXS"))
+				(block
+					(controller $Instance renderer='DefaultButton'
+						(bind enabled "isTrainingRoomAvailable")
+						(args
+							_enabled = "!isInDivision"
+							_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+							_label = 'IDS_TRAININGBATTLE'
+							_methods = "[	{	type: 'inputMapping.onAction',
+												name: isNewTrainingRoom ? 'featureSeen' : '',
+												args: {featureIndex: SC.Common.ACCOUNT_FEATURE.TRAINING_BATTLE} },
+											{	type: 'inputMapping.onRequest', name: 'showTrainingRoomsList', args: {} }]"
+						)
+					)
+				)
+				(block
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNewTrainingRoom")
+					(style (position = "absolute") (top = -9px) (right = "-MS"))
+					(element MarkerNew)
+				)
+			)
+			(block
+				(bind visible "isInDivision")
+				(style (width = 100%) (align = "center"))
+				(controller $Instance renderer='StatusLine'
+					(bind enabled "isInDivision")
+					(args
+						_text = 'IDS_UNABLE_TO_CREATE_TRAINING_WHEN_IN_DIVISION'
+						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+					)
+				)
+			)
+		)
+	)
+)

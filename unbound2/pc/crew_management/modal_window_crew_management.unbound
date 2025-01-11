@@ -1,0 +1,828 @@
+(def constant CREW_ACTIONS {
+	OPEN_CREW_INFO_WINDOW:			'openModalWindowCrewInfo',
+	OPEN_CREW_RETRAIN_WINDOW:		'openRetrainCrewWindow',
+	OPEN_FREE_SKILL_POINTS_WINDOW:	'freeSkillPointsWindow',
+	OPEN_HIRE_WINDOW:				'openHireCrewWindow',
+	OPEN_HIRE_EMPTY:				'openHireEmptyCrew',
+	OPEN_LEARN_SKILLS_WINDOW:		'learnSkills',
+	OPEN_UNLOCK_SKILL_WINDOW:		'openUnlockSkillWindow',
+	OPEN_DENY_SKILL_WINDOW:			'openDenySkillWindow',
+	OPEN_UNLOCK_TALENT_WINDOW:		'openUnlockTalentWindow',
+	OPEN_DENY_TALENT_WINDOW:		'openDenyTalentWindow',
+	CLOSE_LEARN_SKILLS_WINDOW:		'closeModalWindowLearnSkills',
+	LEARN_SELECTED_SKILLS:			'learnSelectedSkills',
+	RESET_SELECTED_SKILLS:			'resetSelectedSkills',
+	SELECT_SKILL:					'selectSkill',
+	INCREASE_BARRACKS_CAPACITY:		'increaseBarracksCapacity',
+	DISASSIGN:						'disassignCrew',
+	ASSIGN_TO_SHIP:					'assignCrewToShip',
+	FAST_TRAINING:					'crewFastTraining',
+	UNLOCK_SKILL:					'unlockSkill',
+	UNLOCK_TALENT:					'unlockTalent',
+	DENY_SKILL:						'denySkill',
+	DENY_TALENT:					'denyTalent'
+})
+
+(def constant CREW_MANAGEMENT_HEADER_SPACING_BOTTOM 12px)
+(def constant CREW_MANAGEMENT_HEADER_SPACING_TOP "{ 720: 12px, 1080: 24px }")
+
+(def element ModalWindowCrewManagement ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	
+	(scope
+		(macro USER_PREF_DATA)
+
+		(event evAskToUpdateVisualInset)
+		(event evUpdateVisualInset)
+
+		(event evViewedShipIdChanged)
+		(event evDelayedViewedShipIdChanged)
+		(event evResetSelectedCrewSortType)
+
+		(macro MOUSE_HANDLER_SCOPE "'freeExp_'")
+
+		(macro PULL_ACTIVE_CHILD_ROUTE
+			_nodeId = "SC.Ui_windows.ROUTE.CREW_MANAGEMENT"
+			_fieldActiveChild = "'currentCrewRoute'"
+		)
+		(var renderedCrewRoute:str = "currentCrewRoute" watch=false)
+		(bind renderedCrewRoute "currentCrewRoute" init=false watch=false (event "evUpdateVisualInset"))
+
+		(var isInCrewManagementRoute:bool = "isIn(currentCrewRoute, [SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT, SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT])")
+
+		(macro GET_PREF_NUMBER 'carouselAreaHeight' "'ui.carousel.carouselAreaHeight'")
+
+		(macro PULL_SHIP_ID)
+
+		(var shipEntity:dhEntity =			"getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var shipComponent:dhComponent =	"shipEntity.ship"		(event "shipEntity.ship.evUpdate") (event "shipEntity.ship.evCurrentSkinChanged"))
+		(var ownShipComponent:dhComponent =	"shipEntity.ownShip"	(event "shipEntity.ship.evUpdate") (event "shipEntity.ship.evCurrentSkinChanged"))
+
+		(var crewId:number =	"ownShipComponent.crewId"	(event "ownShipComponent.evCrewChanged"))
+		(struct crew =			PULL_CREW(_crewId = "crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
+
+		(var isShipWithSkills:bool =		"isIn(shipComponent.subtype, SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES)")
+		(var isCrewAbilitiesInset:bool =	"renderedCrewRoute == SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT")
+
+		(var isSkillsAssignBlockVisible:bool = "((isShipWithSkills && crew.component.skillMatrixId && !permissions.isDisabledLearnSkills) || crewId == 0 || !isCrewAbilitiesInset) && playerShipId")
+
+		(var windowHeaderText:str = "isCrewAbilitiesInset ? 'IDS_MODAL_WINDOW_CREW_MANAGEMENT_ABILITIES_HEADER' : 'IDS_MODAL_WINDOW_CREW_MANAGEMENT_ASSIGN_HEADER'")
+
+		(var isManagementVisible:bool = true)
+		(bind isManagementVisible "false"	init=false watch=false	(event "evViewedShipIdChanged"))
+		(bind isManagementVisible "true"	init=false watch=false	(event "evDelayedViewedShipIdChanged"))
+
+		(macro FEATURES "5")
+		(var isFreeExpNew:bool = "feature_5 == 'new'")
+
+		(dispatch evViewedShipIdChanged			dir="EventDirection.NONE" (event "shipSelectionComponent.evViewedShipIdChanged"))
+		(dispatch evDelayedViewedShipIdChanged	dir="EventDirection.NONE" delay=0.3 reset=true (event "evViewedShipIdChanged"))
+
+		(dispatch evResetSelectedCrewSortType	dir="EventDirection.NONE" on='addedToStage' (bind trigger "playerShipId"))
+		(dispatch evResetSelectedCrewSortType	dir="EventDirection.NONE" (bind enabled "isCrewAbilitiesInset") (bind trigger "isCrewAbilitiesInset"))
+
+		
+		(var isModalClosing:bool = "showState == SC.Ui_windows.WINDOW_STATE.HIDE")
+		(dispatch evAskToUpdateVisualInset		dir="EventDirection.NONE" delay=0.01	(bind trigger "currentCrewRoute"))
+		(dispatch evUpdateVisualInset			dir="EventDirection.NONE"				(bind enabled "!isModalClosing") (event "evAskToUpdateVisualInset"))
+		
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['navigateTo', { route: SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT }]"	(bind enabled "isInCrewManagementRoute && crewId == 0") (bind trigger "crewId"))
+	(bindcall externalCall "'inputMapping.onAction'" "['navigateTo', { route: SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT }]"		(bind enabled "isInCrewManagementRoute && crewId > 0") (bind trigger "crewId"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortType',				value: SC.Ui_common.CREW_FILTERING_NATION_TYPE.CURRENT }]"	(event "evResetSelectedCrewSortType"))
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortSubType',			value: SC.Ui_common.CREW_SORTING_ALL_NATION_TYPE.NATION }]"	(event "evResetSelectedCrewSortType"))
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortSubTypeReversed',	value: false }]"											(event "evResetSelectedCrewSortType"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['featureSeen', { featureIndex: 5 }]" watch=false (event "freeExp_evClicked"))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(element ModalWindowHeaderFullSize
+			_windowName = "windowHeaderText"
+			_paddingRight = "M"
+			_paddingLeft = "M"
+		)
+
+		(hblock
+			(style
+				(position = "absolute")
+				(bottom = "XXS")
+				(right = "XLM")
+			)
+
+			(block
+				(name = 'crewEliteXp')
+
+				(element DockResourcesWidget
+					_name =		'eliteXPBalance'
+					_currency =	"SC.Common.CURRENCIES.ELITE_XP"
+					_label =	'IDS_CURRENCY_ELITE_XP'
+					_height =	47px
+				)
+			)
+
+			(block
+				(bind visible "feature_5 != 'locked'")
+
+				(macro MOUSE_EVENTS_DISPATCHER "'freeExp_'")
+				(name = 'buttonConvertExp')
+
+				(element DockResourcesWidget
+					_name = 'freeExpBalance'
+					_currency = "SC.Common.CURRENCIES.FREE_XP"
+					_label = 'IDS_CONVERT_FREE_EXPERIENCE'
+					_height = 47px
+					_isMarkerVisible = "isFreeExpNew"
+				)
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(paddingRight = 330px)	
+			(bind paddingBottom "carouselAreaHeight")
+		)
+
+		(hblock
+			(class $Fullsize)
+			(style (alpha = "isManagementVisible ? 1 : 0"))
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+				(style
+					(width = 220px)
+					(height = 100%)
+					(marginLeft = "{ 1280: 20px, 1500: 110px }")
+					(marginTop ="{ 720: XS, 1080: 30px }")
+				)
+
+				(element CrewPanel
+					_crewId =		"crewId"
+					_currentRoute =	"renderedCrewRoute"
+				)
+			)
+
+			(block
+				(bind visible "isSkillsAssignBlockVisible")
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+				(class $Fullsize)
+				(style
+					(align = "center")
+					(marginTop = "{ 720: XS, 1080: 30px }")
+				)
+
+				(block
+					(visible = "isCrewAbilitiesInset")
+
+					(class $FullsizeAbsolute)
+					(style
+						(align = "center")
+						(alpha = "isCrewAbilitiesInset ? 1 : 0")
+						(visualOffsetY = "isCrewAbilitiesInset ? 0px : 10px")
+					)
+
+					(element CrewAbilitiesInset
+						_crewId = "crewId"
+						_shipId = "playerShipId"
+					)
+
+					(controller $Animation
+						(bindcall play
+							duration = 0.1
+							from = "{ alpha: 0, visualOffsetY: 10px, visible: false }"
+							to = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+							reverse = "!isCrewAbilitiesInset"
+							(bind trigger "isCrewAbilitiesInset")
+						)
+					)
+				)
+
+				(block
+					(visible = "!isCrewAbilitiesInset")
+
+					(class $FullsizeAbsolute)
+					(style
+						(align = "center")
+						(alpha = "!isCrewAbilitiesInset ? 1 : 0")
+						(visualOffsetY = "!isCrewAbilitiesInset ? 0px : 10px")
+					)
+
+					(element CrewAssignInset)
+
+					(controller $Animation
+						(bindcall play
+							duration = 0.1
+							from = "{ alpha: 0, visualOffsetY: 10px, visible: false }"
+							to = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+							reverse = "isCrewAbilitiesInset"
+							(bind trigger "!isCrewAbilitiesInset")
+						)
+					)
+				)
+			)
+
+			(block
+				(bind visible "!isSkillsAssignBlockVisible")
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+				(style
+					(align = "center")
+					(width = 100%)
+					(marginTop = "{ 720: 165px, 1080: 229px }")
+				)
+
+				(element SimpleLockPlug
+					_text = 'IDS_CREW_SKILLS_UNAVAILABLE_FOR_THAT_SHIP'
+				)
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = "0.2"
+					from = "{ alpha: 0 }"
+					to = "{ alpha: 1 }"
+					easing = "Easing.quad_out"
+					action = "kill"
+					(bind enabled "isManagementVisible")
+					(bind trigger "isManagementVisible")
+				)
+				(bindcall play
+					duration = "0.001"
+					to = "{ alpha: 0 }"
+					easing = "Easing.quad_out"
+					action = "kill"
+					(bind enabled "!isManagementVisible")
+					(bind trigger "isManagementVisible")
+				)
+			)
+		)
+	)
+)
+
+(def element CrewAbilitiesInset (_crewId:number, _shipId:number)
+	(scope
+		(var crewId:number = "_crewId"	watch=false)
+		(bind crewId "_crewId"			init=false		(bind enabled "_crewId != 0"))
+
+		(struct crew =	PULL_CREW(_crewId = "crewId"))
+
+		(var classificationId:number = "crew.component.classificationId")
+		(var isCrewElite:bool =	"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+
+		(var isMaxLevel:bool =	"crew.component.isMaxLevel" (event "crew.component.evLevelUp"))
+
+		(var shipEntity:dhEntity =		"getPrimaryEntity(CC.ship, _shipId)")
+		(var shipInfo:dhComponent =		"shipEntity.ship")
+		(var selectedShipClass:str =	"shipInfo.subtype")
+
+		(var uniqueSkillSet:array =		"crew.component.uniqueSkillSet"	(event "crew.component.evUniqueSkillSetChanged"))
+		(var vanitiesSet:array =		"crew.component.vanitiesSet"	(event "crew.component.evVanitiesSetChanged"))
+
+		(var eliteCrewLearning:dhComponent =	"crew.entity.eliteCrewLearning"					(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
+		(var eliteLearnedSkillsTotal:number =	"eliteCrewLearning.exploredSkillsTotal ?: 0"	(event "eliteCrewLearning.evChanged"))
+
+		(var isTalentsAndVanitiesVisible:bool =	"uniqueSkillSet.length + vanitiesSet.length > 0")
+		(var isCrewAcademyBannerVisible:bool =	"(uniqueSkillSet.length + vanitiesSet.length + eliteLearnedSkillsTotal == 0) && isCrewElite")
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'openScreen']" on='addedToStage')
+
+	(style
+		(width = "{ 1280: 698px, 1920: 1046px }")
+		(height = 100%)
+	)
+
+	(block
+		(bind visible "isTalentsAndVanitiesVisible")
+
+		(style
+			(width = 100%)
+			(marginTop = "S")
+		)
+
+		(controller $Instance renderer='CrewTalentsAndVanities'
+			(bind enabled "isTalentsAndVanitiesVisible")
+			(args
+				_selectedShipClass =		"selectedShipClass"
+				_crewId =					"crewId"
+				_isCrewInfoModalWindow =	false
+			)
+		)
+	)
+
+	(block
+		(bind visible "isCrewAcademyBannerVisible")
+
+		(style (width = 100%))
+
+		(controller $Instance renderer='CrewAcademyBanner'
+			(bind enabled "isCrewAcademyBannerVisible")
+			(args
+				_isMaxLevel = "isMaxLevel"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "CREW_MANAGEMENT_HEADER_SPACING_BOTTOM")
+			(bind marginTop "(isTalentsAndVanitiesVisible || isCrewAcademyBannerVisible) ? CREW_MANAGEMENT_HEADER_SPACING_TOP : S")
+		)
+
+		(element CrewSkillsMatrixHeader
+			_crewId =				"crewId"
+			_selectedShipClass =	"selectedShipClass"
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(style (width = 100%) (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+		(element CrewAbilitiesMatrix
+			_crewId =					"crewId"
+			_selectedShipClass =		"selectedShipClass"
+			_isCrewInfoModalWindow =	false
+		)
+		(element HorizontalDividerTwoPx)
+	)
+
+	(block
+		(style
+			(marginTop = "{ 720: S, 1080: L }")
+			(width = 100%)
+		)
+
+		(element CrewAbilitiesManagementButtons
+			_crewId =				"crewId"
+			_selectedShipClass =	"selectedShipClass"
+		)
+	)
+)
+
+(def element CrewSkillsMatrixHeader (_crewId:number, _selectedShipClass:str)
+	(scope
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+
+		(var skillTreeEntity:dhEntity =	"getPrimaryEntity(CC.skillTree, toString(_crewId + '_' + _selectedShipClass))")
+		(var skillTree:dhComponent =	"skillTreeEntity.skillTree")
+		(var freeSkillPoints:number =	"skillTree.freeSkillPoints" (event "skillTree.evFreeSkillPointsChanged"))
+
+		(var crewSkillPickerEntity:dhEntity =	"getSingleEntity(CC.crewSkillPicker)")
+		(var crewSkillPicker:dhComponent =		"crewSkillPickerEntity.crewSkillPicker")
+		(var selectedSkillsLearnPrice:number =	"crewSkillPicker.selectedSkillsLearnPrice" (event "crewSkillPicker.evSelectedSkillsLearnPriceChanged"))
+
+
+		(struct crewSkillPointNewTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINT"))
+		(struct crewSkillPointRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINT_REPEAT"))
+		(struct crewSkillPointsInsuffTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINTS_INSUFF"))
+		(struct crewSkillPointsInsuffRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINTS_INSUFF_REPEAT"))
+
+		(var headerTipId:number = "	crewSkillPointNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINT :
+									crewSkillPointRepeatNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINT_REPEAT :
+									crewSkillPointsInsuffTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINTS_INSUFF :
+									crewSkillPointsInsuffRepeatTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CREW_SKILL_POINTS_INSUFF_REPEAT
+																				: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var hasNextButton:bool =	"crewSkillPointNewTip.isActive || crewSkillPointRepeatNewTip.isActive")
+		(var hasFinishButton:bool =	"crewSkillPointsInsuffTip.isActive || crewSkillPointsInsuffRepeatTip.isActive")
+		(var isNewTipVisible:bool =	"headerTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var skillPointsLeft:number =			"freeSkillPoints - selectedSkillsLearnPrice")
+		(var isPointsDeficit:bool =				"skillPointsLeft < 0")
+		(var isMaxSkillPointsDistributed:bool =	"freeSkillPoints == 0 && crew.component.isMaxLevel")
+		(var freeSkillPointsText:str =			"isMaxSkillPointsDistributed ? 'IDS_ALL_SKILLPOINTS_DISTRIBUTED' : 'IDS_FREE_SKILLPOINTS_LEFT'")
+
+		(var pointsLeft:number = "skillPointsLeft" watch=false)
+		(bind pointsLeft "isPointsDeficit ? skillPointsLeft : pointsLeft" init=false watch=false (bind trigger "skillPointsLeft"))
+	)
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+	)
+
+	(tf
+		(class $TextDefaultBold17NM)
+		(style
+			(width = 100%)
+			(alpha = "TA")
+		)
+
+		(bind text "'IDS_SKILLS_FOR_' + toUpper(_selectedShipClass)")
+	)
+
+	(hblock
+		(style
+			(marginTop = 1px)
+			(marginRight = -6px)
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginRight = "XS")
+				(alpha = "TA")
+			)
+
+			(bind text "freeSkillPointsText")
+		)
+
+		(block
+			(style
+				(marginTop = -6px)
+				(marginBottom = "-S")
+				(marginRight = "-XXS")
+			)
+
+			(controller $Instance renderer='MarkerNewCounterBig'
+				(bind enabled "!isMaxSkillPointsDistributed")
+				(args
+					_newContentCounter =	"isPointsDeficit ? 0 : skillPointsLeft"
+					_isNegative =			"skillPointsLeft <= 0"
+				)
+			)
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "isNewTipVisible")
+				(args
+					_tipId =			"headerTipId"
+					_tipPositioning =	"TIP_POSITION_BOTTOM"
+					_offsetY =			"S"
+					_noPointer =		true
+					_hasNextButton =	"hasNextButton"
+					_hasFinishButton =	"hasFinishButton"
+					_modalWindowName =	'ModalWindowCrewManagement'
+				)
+			)
+		)
+
+		(block
+			(style (ubScaleX = "isPointsDeficit ? 1 : 0"))
+
+			(block
+				(style
+					(marginLeft = "SXS")
+					(marginRight = "XXS")
+					(alpha = "isPointsDeficit ? 1 : 0")
+					(visualOffsetY = "isPointsDeficit ? 0px : 10px")
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style (textColor = "SC.Ui_styles.SERVICE_COLORS.RED"))
+
+					(bind text "tr('IDS_NOT_ENOUGH') + ' ' + (-pointsLeft)")
+				)
+
+				(controller $Animation
+					(bindcall play
+						duration = 0.07
+						delay = "isPointsDeficit ? 0.1 : 0.001"
+						from = "{ alpha: 0, visualOffsetY: 10px }"
+						to = "{ alpha: 1, visualOffsetY: 0px }"
+						easing = "Easing.line"
+						action = "kill"
+						reverse = "!isPointsDeficit"
+						(bind trigger "isPointsDeficit")
+					)
+				)
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.07
+					delay = "isPointsDeficit ? 0.001 : 0.1"
+					from = "{ ubScaleX: 0 }"
+					to = "{ ubScaleX: 1 }"
+					easing = "Easing.line"
+					action = "kill"
+					reverse = "!isPointsDeficit"
+					(bind trigger "isPointsDeficit")
+				)
+			)
+		)
+	)
+)
+
+(def element CrewAbilitiesManagementButtons (_crewId:number, _selectedShipClass:str)
+	(scope
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+		(var canCrewResetSkillsForFree:bool = "crew.component.canResetSkillsForFree")
+
+		(macro PULL_OWN_SHIP_SCOPE "crew.component.shipID" "'ownShipEntity'" "'ownShipInfo'")
+		(var ownShipComponent:gfx = "ownShipEntity.ownShip")
+
+		(var isLocked:bool =		"ownShipComponent.isLocked"			(event "ownShipComponent.evUpdateLock"))
+		(var isInFormation:bool =	"ownShipComponent.isInFormation"	(event "ownShipComponent.evUpdateLock"))
+
+		(var crewSkillPickerEntity:dhEntity =		"getSingleEntity(CC.crewSkillPicker)")
+		(var crewSkillPicker:dhComponent =			"crewSkillPickerEntity.crewSkillPicker")
+		(var maxSelectedSkillTier:number =			"crewSkillPicker.maxSelectedSkillTier"		(event "crewSkillPicker.evMaxSelectedSkillTierChanged"))
+		(var selectedSkillsLearnPrice:number =		"crewSkillPicker.selectedSkillsLearnPrice"	(event "crewSkillPicker.evSelectedSkillsLearnPriceChanged"))
+		(var isManageSkillsButtonsVisible:bool =	"maxSelectedSkillTier > 0 && selectedSkillsLearnPrice > 0")
+
+		(var skillTreeEntity:dhEntity =		"getPrimaryEntity(CC.skillTree, toString(_crewId + '_' + _selectedShipClass))")
+		(var skillTree:dhComponent =		"skillTreeEntity.skillTree")
+		(var maxLearnedSkillTier:number =	"skillTree.maxLearnedSkillTier"		(event "skillTree.evSkillsChanged"))
+		(var freeSkillPoints:number =		"skillTree.freeSkillPoints"			(event "skillTree.evFreeSkillPointsChanged"))
+		(var usedSkillPoints:number =		"skillTree.usedSkillPoints"			(event "skillTree.evFreeSkillPointsChanged"))
+
+
+		(struct crewLearnSkillNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_LEARN_SKILL"))
+		(struct crewLearnSkillRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_LEARN_SKILL_REPEAT"))
+
+		(var buttonTipId:number = "	crewLearnSkillNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CREW_LEARN_SKILL :
+									crewLearnSkillRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CREW_LEARN_SKILL_REPEAT
+																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isNewTipVisible:bool =	"buttonTipId != SC.Context_guiding_tip.TIP_TYPE.NONE && isManageSkillsButtonsVisible")
+
+
+		(var priceResetSkillsForGold:str = "canCrewResetSkillsForFree ? 'POINT_RESET_GOLD_0' : 'POINT_RESET_GOLD_' + usedSkillPoints")
+		(var priceResetSkillsForElXp:str = "canCrewResetSkillsForFree ? 'POINT_RESET_ELXP_0' : 'POINT_RESET_ELXP_' + usedSkillPoints")
+		(struct resetSkillsForGoldPrice =	PULL_PRICE(_entityId = "priceResetSkillsForGold"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct resetSkillsForElXpPrice =	PULL_PRICE(_entityId = "priceResetSkillsForElXp"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+
+		(var learnButtonDisableStatus:dict = "	isInFormation									? {	text: 'IDS_LEARN_SKILLS_DENY_REASON_IN_DIVISION',
+																									unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
+												isLocked										? {	text: 'IDS_LEARN_SKILLS_DENY_REASON_IN_BATTLE',
+																									unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
+												freeSkillPoints < selectedSkillsLearnPrice ||
+												freeSkillPoints == 0							? {	text: 'IDS_LEARN_SKILLS_DENY_REASON_NOT_ENOUGH_POINTS',
+																									unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE }
+																								: null")
+
+		(var isRespecButtonVisible:bool =		"maxLearnedSkillTier > 0 && !isManageSkillsButtonsVisible")
+		(var isDiscountTagVisible:bool =		"isRespecButtonVisible &&
+												 (resetSkillsForGoldPrice.info.finalPrice != resetSkillsForGoldPrice.info.basePrice ||
+												  resetSkillsForElXpPrice.info.finalPrice != resetSkillsForElXpPrice.info.basePrice)")
+
+		(var respecButtonDisableStatus:dict =	"isInFormation	? {	text: 'IDS_FREE_SKILLPOINTS_DENY_REASON_IN_DIVISION',
+																	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
+												 isLocked		? {	text: 'IDS_FREE_SKILLPOINTS_DENY_REASON_IN_BATTLE',
+																	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE }
+																: null")
+	)
+
+	(style
+		(width = 100%)
+		(align = "center")
+	)
+
+	(block
+		(visible = "isRespecButtonVisible")
+
+		(style
+			(bind hitTest "isRespecButtonVisible")
+			(alpha = "isRespecButtonVisible ? 1 : 0")
+			(visualOffsetY = "isRespecButtonVisible ? 0px : 10px")
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(bind enabled "respecButtonDisableStatus != null")
+			(args
+				_text =				"respecButtonDisableStatus.text"
+				_unifiedStatus =	"respecButtonDisableStatus.unifiedStatus"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element DefaultButton
+			_width =			200px
+			_enabled =			"respecButtonDisableStatus == null && isRespecButtonVisible"
+			_label =			'IDS_CREW_REDISTRIBUTE_PERKS'
+			_focusIndex =		5
+			_isTransactionBtn =	true
+			_methods =			"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_FREE_SKILL_POINTS_WINDOW, args: { crewId: _crewId, selectedShipClass: _selectedShipClass } }]"
+		)
+
+		(block
+			(bind visible "isDiscountTagVisible")
+
+			(style
+				(position = "absolute")
+				(top = 6px)
+				(right = 100%)
+				(marginLeft = "-XS")
+			)
+
+			(controller $Instance renderer = 'DiscountTag'
+				(bind enabled "isDiscountTagVisible")
+				(args
+					_size =			"SIZE.LARGE"
+					_priceInfo =	"resetSkillsForGoldPrice.info.finalPrice != resetSkillsForGoldPrice.info.basePrice	? resetSkillsForGoldPrice.info
+																														: resetSkillsForElXpPrice.info"
+				)
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.1
+				delay = 0.15
+				from = "{ alpha: 0, visualOffsetY: 10px, visible: false }"
+				to = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				easing = "Easing.quad_in_out"
+				action = "kill"
+				(bind enabled "isRespecButtonVisible")
+			)
+			(bindcall play
+				duration = 0.1
+				from = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				to = "{ alpha: 0, visualOffsetY: -10px, visible: false }"
+				easing = "Easing.quad_in_out"
+				action = "kill"
+				(bind enabled "!isRespecButtonVisible")
+			)
+		)
+	)
+
+	(hblock
+		(visible = "isManageSkillsButtonsVisible")
+
+		(style
+			(bind hitTest "isManageSkillsButtonsVisible")
+			(alpha = "isManageSkillsButtonsVisible ? 1 : 0")
+			(visualOffsetY = "isManageSkillsButtonsVisible ? 0px : 10px")
+		)
+
+		(block
+			(style (marginRight = "S"))
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(bind enabled "learnButtonDisableStatus != null")
+				(args
+					_text =				"learnButtonDisableStatus.text"
+					_unifiedStatus =	"learnButtonDisableStatus.unifiedStatus"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element DefaultButton
+				_width =		200px
+				_enabled =		"learnButtonDisableStatus == null && isManageSkillsButtonsVisible"
+				_label =		'IDS_BUTTON_RESEARCH_ABILITIES'
+				_focusIndex =	6
+				_methods =		"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_LEARN_SKILLS_WINDOW, args: { _crewId: _crewId, _selectedShipClass: _selectedShipClass } }]"
+			)
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "isNewTipVisible")
+				(args
+					_tipId =			"buttonTipId"
+					_tipPositioning =	"TIP_POSITION_BOTTOM"
+					_modalWindowName =	'ModalWindowCrewManagement'
+				)
+			)
+		)
+
+		(element DefaultButton
+			_width =		200px
+			_focusIndex =	7
+			_label =		'IDS_BUTTON_RESET_ABILITIES_SELECTION'
+			_methods =		"[{ type: 'inputMapping.onAction', name: CREW_ACTIONS.RESET_SELECTED_SKILLS, args: {} }]"
+		)
+
+		(controller $Animation
+			(bindcall play
+				watch = false
+				duration = 0.1
+				delay = "maxLearnedSkillTier > 0 ? 0.15 : 0"
+				from = "{ alpha: 0, visualOffsetY: 10px, visible: false }"
+				to = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				easing = "Easing.quad_in_out"
+				action = "kill"
+				(bind enabled "isManageSkillsButtonsVisible")
+			)
+			(bindcall play
+				duration = 0.1
+				from = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				to = "{ alpha: 0, visualOffsetY: -10px, visible: false }"
+				easing = "Easing.quad_in_out"
+				action = "kill"
+				(bind enabled "!isManageSkillsButtonsVisible")
+			)
+		)
+	)
+)
+
+(def element CrewAcademyBanner (_isMaxLevel:bool)
+	(bindcall externalCall "'inputMapping.onAction'" "['onCrewAcademyBannerShown', {}]" on='addedToStage')
+
+	(style
+		(width = 100%)
+		(height = 100px)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (align = "right|top"))
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = 0xFFFFFFFF)
+				(alpha = 0.1)
+			)
+		)
+
+		(block
+			(style
+				(width = 1046px)
+				(height = 100px)
+				(bind backgroundImage "_isMaxLevel	? 'url:../animations/spine/crew_management/elite_perks_available/elite_perks_available.skel' : ''")
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "NO_COLOR"))
+			(isMask = true)
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	
+	(block
+		(class $Fullsize)
+		(style
+			(align = "middle")
+			(bind paddingLeft "_isMaxLevel ? MS : 50px")
+			(paddingRight = "MS")
+		)
+
+		(block
+			(style (marginBottom = "SXS"))
+
+			(block
+				(bind visible "!_isMaxLevel")
+
+				(style
+					(position = "absolute")
+					(left = -36px)
+					(top = -9px)
+					(width = 32px)
+					(height = 32px)
+					(backgroundImage = 'url:../service_kit/icons/icon_lock_small.png')
+				)
+			)
+
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (alpha = "TA"))
+
+				(text = 'IDS_ELITE_CREW_BANNER_TITLE')
+			)
+		)
+
+		(tf
+			(class $TextDefault17NM)
+			(style
+				(marginRight = "M")
+				(alpha = "TA")
+			)
+
+			(bind text "_isMaxLevel	? 'IDS_ELITE_CREW_READY_ONBOARDING_BANNER_SUBTITLE'
+									: 'IDS_ELITE_CREW_NOT_READY_ONBOARDING_BANNER_SUBTITLE'")
+		)
+
+		(block
+			(bind visible "!_isMaxLevel")
+
+			(style
+				(position = "absolute")
+				(right = 0px)
+				(top = "L")
+			)
+
+			(controller $Instance renderer = 'DefaultButton'
+				(bind enabled "!_isMaxLevel")
+				(args
+					_name =		'buttonLearnAboutCrewAcademy'
+					_type =		"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_label =	'IDS_LEARN_MORE_LABEL'
+					_methods =	"[{ type: 'inputMapping.onRequest', name: 'showEliteCrewLearningExplanation', args: {} }]"
+				)
+			)
+		)
+	)
+	
+
+	(element HorizontalDividerTwoPx)
+)

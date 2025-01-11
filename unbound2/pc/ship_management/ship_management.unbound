@@ -1,0 +1,1348 @@
+
+(def css $ModulesLink ()
+	(width = 1px)
+	(height = 1px)
+	(hitTest = false)
+	(backgroundColor = 0xFFFFFFFF)
+)
+
+(def css $ShipFeatureItemPaddings ()
+	(paddingRight = "{ 1280:XS, 1920:MS }")
+	(paddingLeft = "{ 1280:XS, 1920:MS }")
+	(paddingTop = "{ 1280:XS, 1920:S }")
+	(paddingBottom = "{ 1280:XS, 1920:S }")
+)
+
+(def constant FRAME_SLOT_STATE_ALPHA {	SC.Ui_styles.BUTTON_STATE.DISABLED:	0.5,
+										SC.Ui_styles.BUTTON_STATE.SELECTED:	0.6,
+										SC.Ui_styles.BUTTON_STATE.DOWN:		0.6,
+										SC.Ui_styles.BUTTON_STATE.OVER:		1,
+										SC.Ui_styles.BUTTON_STATE.UP:		0.75
+})
+
+(def macro MODULES_ALPHA_STATE (_isAvailable:expression=false)
+	(bind alpha	"_isAvailable ? 0.7 : 0.3")
+)
+
+(def element ShipModulesLayout ()
+	(scope
+		
+		(var modernizationsCollection:dhCollection = "getCollection(CC.equipmentSlot).getChildByPath('bySlotType.' + SC.Ships.SHIP_SLOT_TYPES.MODERNIZATION)")
+		(var modernizationsItems:array = "modernizationsCollection.items ?: []" (event "modernizationsCollection.evAdded") (event "modernizationsCollection.evRemoved"))
+
+		(struct modernizationsFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.MODERNIZATIONS"))
+		(var isModernizationsVisible:bool = "modernizationsFeature.state != 'locked' && modernizationsItems.length > 0")
+		
+	)
+	(style (width = 100%))
+
+	(tf
+		(class $ManagementBlockHeader)
+		(bind text "isModernizationsVisible	? 'IDS_SHIP_MANAGEMENT_MODULES_AND_MODERNIZATIONS_BLOCK_HEADER'
+											: 'IDS_SHIP_MANAGEMENT_MODULES_BLOCK_HEADER'")
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(class $ManagementBlock)
+		(element ModulesTree)
+	)
+
+	(block
+		(style (width = 100%) (marginTop = -1px))
+		(element HorizontalDividerTwoPx)
+	)
+)
+
+(def element ModulesTree ()
+	(scope
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		(var isExplored:bool = "upgradableShipInfo.isExplored" (event "upgradableShipInfo.evUpdate"))
+		
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var previousShipId:number = "shipInfo.previousShipId" (event "shipInfo.evUpdate"))
+
+		(struct freeXpModuleInsuffTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF"))
+		(struct freeXpModuleInsuffRepeatTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF_REPEAT"))
+
+		(var currentTipId:number = "freeXpModuleInsuffTip.isActive			&& freeXpModuleInsuffTip.targetId == -1			? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF :
+									freeXpModuleInsuffRepeatTip.isActive	&& freeXpModuleInsuffRepeatTip.targetId == -1	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_INSUFF_REPEAT
+																															: SC.Context_guiding_tip.TIP_TYPE.NONE ")
+
+		(var isGuidingTipVisible:bool = "currentTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+	(style (align = "center"))
+
+	(block
+		(bind visible "previousShipId")
+
+		(controller $Instance renderer='ModulesShipShortElement'
+			(bind enabled "toBool(previousShipId)")
+			(args
+				_shipId = "previousShipId"
+				_isPrevShip = true
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%) (align = "center"))
+		(element ModulesCurrentShip)
+	)
+
+	(block
+		(bind visible "(shipInfo.tagsMask & (1 << SC.Ships.SHIP_TAG.HIDE_MODULES)) == 0")
+		(macro MODULES_ALPHA_STATE "isExplored")
+		(style (width = 100%) (align = "center"))
+
+		(block
+			(class $ModulesLink)
+			(style (height = 12px))
+		)
+
+		
+		(block	
+			(style
+				(width = 100%)
+				(bind paddingLeft "	shipInfo.hasControlledSquadrons &&
+									shipInfo.subtype != ShipTypes.AIRCARRIER	? { 1280:34px, 1920:58px }
+																				: { 1568:46px, 1920:58px }")
+
+				(bind paddingRight "shipInfo.hasControlledSquadrons &&
+									shipInfo.subtype != ShipTypes.AIRCARRIER	? { 1280:33px, 1920:57px }
+																				: { 1568:45px, 1920:57px }")
+			)
+			(block
+				(class $ModulesLink)
+				(style (width = 100%))
+			)
+		)
+	)
+
+	(hblock
+		(bind visible "(shipInfo.tagsMask & (1 << SC.Ships.SHIP_TAG.HIDE_MODULES)) == 0")
+
+		(controller $Repeat renderer='ModuleTypeGroup'
+			(bind count "SC.Ships.SHIP_MODULE_STR_TYPES.UI_RANGE.length")
+			(args
+				_moduleType = "SC.Ships.SHIP_MODULE_STR_TYPES.UI_RANGE[$index]"
+				_isLastModuleInTree = "$index == (SC.Ships.SHIP_MODULE_STR_TYPES.UI_RANGE.length - 1)"
+			)
+		)
+
+		
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "isGuidingTipVisible")
+			(args
+				_tipId = "currentTipId"
+				_tipPositioning = "TIP_POSITION_RIGHT"
+				_offsetX = "XS"
+				_noPointer = true
+				_noArrow = true
+				_hasFinishButton = true
+				_modalWindowName = 'Dock'
+			)
+		)
+	)
+)
+
+(def element ModuleTypeGroup (_moduleType:str, _isLastModuleInTree:bool)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+
+		(var modulesCollection:dhCollection = "getCollection(CC.module)")
+		(var modulesGroupCollection:dhCollection = "modulesCollection.getChildByPath('byModuleType.' + _moduleType)" (event "modulesCollection.evChildAdded") (event "modulesCollection.evChildRemoved"))
+		(var modulesGroupList:array = "modulesGroupCollection.items ?: []" (event "modulesGroupCollection.evAdded") (event "modulesGroupCollection.evRemoved"))
+		
+		(var isHeightProvider:bool = "shipInfo.maxModuleDepth == modulesGroupList.length - 1" (event "shipInfo.evUpdate"))
+
+		(var lastModuleEntity:dhEntity = "getPrimaryEntity(CC.module, _moduleType + '_' + toString(modulesGroupList.length - 1))")
+		(var nextShipId:number = "lastModuleEntity.module.nextShipId" (event "lastModuleEntity.module.evUpdated"))
+	)
+	(style (align = "center") (bind height "isHeightProvider ? auto : 100%"))
+
+	(block
+		(style (bind height "isHeightProvider ? auto : 100%"))
+
+		(controller $Repeat renderer='ShipModule'
+			(bind count "modulesGroupList.length")
+			(args
+				_moduleEntity = "modulesGroupList[$index]"
+				_isHeightProvider = "isHeightProvider"
+				_isLastModuleInTree = "$index == modulesGroupList.length - 1"
+			)
+		)
+	)
+
+	(block
+		(controller $Instance renderer='ModulesShipShortElement'
+			(bind enabled "toBool(nextShipId)")
+			(args
+				_shipId = "nextShipId"
+			)
+		)
+	)
+)
+
+(def element ModulesCurrentShip ()
+	(scope
+		(var accountResource:dhComponent = "getSingleEntity(CC.accountResource).accountResource")
+		(var accountCredits:number = "accountResource.credits ?: 0" (event "accountResource.evChangedCredit"))
+		(var accountGold:number = "accountResource.gold ?: 0" (event "accountResource.evChangedGold"))
+		(var accountFreeXP:number = "accountResource.freeXP ?: 0" (event "accountResource.evChangedFreeXP"))
+
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		(var isExplored:bool = "upgradableShipInfo.isExplored" (event "upgradableShipInfo.evUpdate"))
+		(var exp:number = "upgradableShipInfo.exp" (event "upgradableShipInfo.evUpdate"))
+		(var expDeficit:number = "upgradableShipInfo.expDeficit" (event "upgradableShipInfo.evUpdate"))
+		(var isDependencyResearched:bool = "upgradableShipInfo.dependencyResearched" (event "upgradableShipInfo.evUpdate"))
+
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var isEventLike:bool = "shipInfo.isEventLike" (event "shipInfo.evUpdate"))
+
+		(var shipGroup:str = "shipInfo.group")
+		(var isNotEventGroup:bool = "shipGroup != SC.Ships.SHIP_GROUPS.EVENT")
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShip:dhComponent = "ownShipEntity.ownShip")
+		(var isOwned:bool = "ownShipEntity != null")
+		(var isRented:bool = "toBool(ownShip.timeRent)" (event "ownShip.evUpdateDockState"))
+		(var canBuy:bool = "shipEntity.ship.canBuy" (event "shipEntity.ship.evUpdate"))
+		(var isPurchasable:bool = "(!isOwned || isRented) && canBuy")
+		(var ownShipExp:number = "ownShip.exp ?: 0" (event "ownShip.evUpdateConfig"))
+
+		(struct shipBuyPrice = PULL_PRICE(_entityId = "toString(viewedShipId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(var shipsCrossResearchCostXP:number = "shipEntity.shipCrossResearchInfo.shipsCrossResearchCostXP" (event "shipEntity.shipCrossResearchInfo.evChanged"))
+
+		
+		(var superShipFeatureEntity:dhEntity = "getSingleEntity(CC.superShipFeature)")
+		(var isUnlockedSuperShipFeature:bool = "superShipFeatureEntity.superShipFeature.isUnlocked" (event "superShipFeatureEntity.superShipFeature.evUpdate"))
+		(var isSuperShip:bool = "shipInfo.level >= SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var isResearchSuperShipInfoVisible:bool = "!isOwned && !isUnlockedSuperShipFeature && isSuperShip")
+		
+
+		
+		(var isDeficit:bool = "	(isOwned && !isRented) 		? false :
+								isExplored					? shipBuyPrice.info.currency == SC.Result_screen.FORMAT.GOLD	? shipBuyPrice.info.finalPrice - accountGold > 0
+																															: shipBuyPrice.info.finalPrice - accountCredits > 0 :
+								isDependencyResearched		? expDeficit > 0
+															: shipsCrossResearchCostXP > exp + accountFreeXP")
+
+
+		(var isEarlyAccess:bool = "shipGroup == SC.Ships.SHIP_GROUPS.EARLY_ACCESS")
+		(var isAvailableToResearchOrResearched:bool = "!isDeficit || isExplored || isRented || isEarlyAccess || isEventLike")
+		(var isModulesShipManagementContainerVisible:bool = "isPurchasable && !isResearchSuperShipInfoVisible && !isEarlyAccess")
+		
+
+		
+		(var modernizationsCollection:dhCollection = "getCollection(CC.equipmentSlot).getChildByPath('bySlotType.' + SC.Ships.SHIP_SLOT_TYPES.MODERNIZATION)")
+		(var modernizationsItems:array = "modernizationsCollection.items ?: []" (event "modernizationsCollection.evAdded") (event "modernizationsCollection.evRemoved"))
+
+		(struct modernizationsFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.MODERNIZATIONS"))
+		(var isModernizationsVisible:bool = "modernizationsFeature.state != 'locked' && modernizationsItems.length > 0")
+		
+
+		(var shipTypeColorTransform:dict = "shipInfo.subtype == ShipTypes.DESTROYER			? {redOffset: 43, greenOffset: 57, blueOffset: 46, alphaOffset: 0} :
+											shipInfo.subtype == ShipTypes.CRUISER			? {redOffset: 17, greenOffset: 25, blueOffset: 56, alphaOffset: 0} :
+											shipInfo.subtype == ShipTypes.BATTLESHIP		? {redOffset: 0, greenOffset: 0, blueOffset: 0, alphaOffset: 0} :
+											shipInfo.subtype == ShipTypes.AIRCARRIER		? {redOffset: 26, greenOffset: 26, blueOffset: 26, alphaOffset: 0} :
+											shipInfo.subtype == ShipTypes.SUBMARINE			? {redOffset: 15, greenOffset: 37, blueOffset: 15, alphaOffset: 0}
+																							: {}")
+
+		
+		(struct modNotAvailableTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_NOT_AVAILABLE"))
+		(struct modNotAvailableRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_NOT_AVAILABLE_REPEAT"))
+		(struct modBlockedDivisionTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_BLOCKED_DIV_READY"))
+		(struct modBlockedLockedTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_BLOCKED_BATTLE"))
+		(struct modBlockedMaintenanceTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_BLOCKED_MAINTENANCE"))
+
+		(var currentTipID:number = "modNotAvailableTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_NOT_AVAILABLE :
+									modNotAvailableRepeatTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_NOT_AVAILABLE_REPEAT :
+									modBlockedDivisionTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_BLOCKED_DIV_READY :
+									modBlockedLockedTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_BLOCKED_BATTLE :
+									modBlockedMaintenanceTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_BLOCKED_MAINTENANCE
+																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isModNotAvailableTip:bool = "modNotAvailableTip.isActive || modNotAvailableRepeatTip.isActive")
+		(var isGuidingTipVisible:bool = "modBlockedDivisionTip.isActive || modBlockedLockedTip.isActive || modBlockedMaintenanceTip.isActive || isModNotAvailableTip")
+		(var tipPositioning:str = "isModNotAvailableTip ? TIP_POSITION_RIGHT : TIP_POSITION_BOTTOM")
+
+		(macro STAGE_SIZE)
+
+		(var maxWidthWindowModernizations:number = "modernizationsItems.length > 6 ? 684px : 574px")
+
+		(var gapForModernization:dict = "stageWidth >= 1920 ? {hgap:MS,  vgap:16px} :
+										 stageWidth >= 1600 ? {hgap:M,   vgap:16px} :
+										 stageWidth >= 1440 ? {hgap:SXS, vgap:16px} :
+										 stageWidth >= 1280 ? {hgap:S, 	 vgap:SXS}
+										 					: {hgap:S,	 vgap:SXS}")
+	)
+	(style
+		(bind width "{ 1280:450px, 1920: maxWidthWindowModernizations }")
+		(align = "center")
+	)
+
+	(block
+		(style (width = 100%) (bind backgroundColor "isOwned ? 0x20FFFFFF : NO_COLOR"))
+
+		
+		(hblock
+			(style
+				(width = 100%)
+				(align = "center|bottom")
+				(paddingTop = "SXS")
+				(paddingBottom = "SXS")
+			)
+
+			(hblock
+				(bind visible "isOwned")
+				(style (position = "absolute") (right = "S"))
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_SHIP_EXPERIENCE'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(element PriceTag
+					_priceInfo = "{ finalPrice: ownShipExp, currency: SC.Common.CURRENCIES.XP, id: 'shipExp'}"
+				)
+			)
+
+			
+			(block
+				(style (bind width "!isOwned ? {1280:210px, 1920:228px} : 228px"))
+
+				(block
+					(style (width = 100%) (align = "center") (backgroundColor = "NO_COLOR"))
+
+					(controller $Tooltip
+						(renderer = 'ShipExtendedTooltip')
+						(args
+							_shipId = "viewedShipId"
+							_hasShipImage = true
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(block
+						(style
+							(width = 186px) (height = 48px)
+							(backgroundSize = "align")
+							(marginBottom = "S")
+							(bind backgroundImage "'url:../ship_bars/'+ shipInfo.shortName + '_h.png'")
+						)
+						(bind colorTransform "shipTypeColorTransform")
+					)
+
+					(block
+						(style (marginBottom = "S"))
+
+						(element ShipLineItemNM
+							_shipId = "viewedShipId"
+							_fontClass = '$TextDefaultBold17NM'
+						)
+					)
+				)
+
+				(block
+					(style (width = 100%) (align = "center") (marginBottom = "SXS"))
+
+					(controller $Instance renderer='ComplexityLevel'
+						(bind enabled "isNotEventGroup")
+						(args
+							_complexityLevel = "shipInfo.currentComplexityLevel"
+							_maxComplexityLevel = "shipInfo.maxComplexityLevel"
+							_complexityType = "COMPLEXITY_TYPE.SHIP"
+							_size = "SIZE.SMALL"
+						)
+					)
+				)
+
+				(hblock
+					(style (width = 100%) (hgap = "S") (align = "center"))
+
+					(block
+						(bind visible "isNotEventGroup")
+						(style (width = 50%))
+
+						(controller $Tooltip
+							(renderer = 'SimpleStatusTooltip')
+							(args
+								_text = 'IDS_MOUSE_INSTRUCTION_SHIP_FEATURES'
+								_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+							)
+							(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+						)
+
+						(element DefaultButton
+							_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+							_size = "SIZE.SMALL"
+							_width = 100%
+							_label = "toUpper(tr('IDS_SHIP_BRANCHES_FEATURE'))"
+							_methods = "[	{	type: 'inputMapping.onRequest',
+												name: 'showModalShipsBranchesFeatures',
+												args: { _branchId: shipInfo.branchId, _shipId: viewedShipId }}]"
+						)
+					)
+
+					(block
+						(style (width = 50%))
+
+						(controller $Tooltip
+							(renderer = 'SimpleStatusTooltip')
+							(args
+								_text = 'IDS_MOUSE_INSTRUCTION_GO_TO_PREVIEW'
+								_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+							)
+							(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+						)
+
+						(element DefaultButton
+							_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+							_size = "SIZE.SMALL"
+							_width = 100%
+							_label = "toUpper(tr('IDS_SHIP_MANAGEMENT_PREVIEW'))"
+							_methods = "[	{	type: 'inputMapping.onAction',
+												name: 'navigateTo',
+												args: { route: SC.Ui_windows.ROUTE.SHIP_PREVIEW }
+											},
+											{	type: 'inputMapping.onAction',
+												name: 'selectShip',
+												args: { shipId: viewedShipId }
+											}]"
+						)
+					)
+				)
+
+				(block
+					(style (width = 100%) (bind marginTop "isResearchSuperShipInfoVisible ? S : 0px") (align = "center") (hitTest = false))
+
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "isResearchSuperShipInfoVisible")
+						(args
+							_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+							_text = 'IDS_RESEARCH_SUPERSHIP_SHORT_INFO'
+							_maxWidth = 100%
+						)
+					)
+				)
+
+				(block
+					(style (width = 100%) (align = "center") (bind marginTop "isEarlyAccess ? SXS : 0px") (hitTest = false))
+
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "isEarlyAccess")
+						(args
+							_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.EARLY_ACCESS"
+							_text = 'IDS_EARLY_ACCESS_STATUS'
+							_maxWidth = 100%
+						)
+					)
+				)
+			)
+
+			(block
+				(bind visible "isModulesShipManagementContainerVisible")
+				(style (height = 67px) (paddingRight = "{1280: S, 1920: MS}") (paddingLeft = "{1280: S, 1920: MS}"))
+				(element VerticalDivider)
+			)
+
+			
+			(block
+				(controller $Instance renderer='ModulesShipManagementContainer'
+					(bind enabled "isModulesShipManagementContainerVisible")
+					(args
+						_shipId = "viewedShipId"
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "isModernizationsVisible")
+			(style (width = 100%) (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+			(bindcall externalCall "modernizationsFeature.state == 'new' ? 'inputMapping.onAction' : ''" "['featureSeen', { featureIndex: SC.Common.ACCOUNT_FEATURE.MODERNIZATIONS }]" init=false watch=false on='rollOver')
+
+			(block
+				(style (width = 100%))
+				(element HorizontalDividerTwoPx)
+			)
+
+			(block
+				(style (width = 100%) (align = "right") (paddingTop = "XXS") (paddingRight = "XXS"))
+				(controller $Instance renderer='InstallAllModernizations'
+					(bind enabled "isOwned")
+					(args
+                    	_countModernizations = "modernizationsItems.length"
+                    )
+				)
+			)
+
+			(hblock
+				(style
+					(width = 100%)
+					(align = "center")
+					(bind paddingTop "isOwned	? { 720:XXS, 1080:XS }
+												: { 720:SXS, 1080:M }")
+					(paddingBottom = "M")
+				)
+				(htile
+					(style
+						(width = 100%)
+						(paddingRight = "S")
+						(paddingLeft = "S")
+						(bind hgap "gapForModernization.hgap")
+						(bind vgap "gapForModernization.vgap")
+						(align = "center")
+					)
+					(controller $Repeat renderer='ModernizationItem'
+						(bind count "modernizationsItems.length")
+						(args
+							_equipmentSlotEntity = "modernizationsItems[$index]"
+						)
+					)
+				)
+
+				
+				(controller $Instance renderer='GuidingTipHub'
+					(bind enabled "isGuidingTipVisible")
+					(args
+						_tipId = "currentTipID"
+						_tipPositioning = "tipPositioning"
+						_offsetX = "isModNotAvailableTip ? S : 0"
+						_offsetY = "isModNotAvailableTip ? 0 : S"
+						_noPointer = "!isModNotAvailableTip"
+						_hasFinishButton = "isModNotAvailableTip"
+						_modalWindowName = 'Dock'
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(macro MODULES_ALPHA_STATE "isAvailableToResearchOrResearched")
+			(class $FullsizeAbsolute)
+			(style (backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png') (scale9grid = 2) (hitTest = false))
+		)
+	)
+)
+
+(def element ModulesShipManagementContainer (_shipId:number)
+	(scope
+		(struct shipBuyPrice = PULL_PRICE(_entityId = "toString(_shipId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		(var isExplored:bool = "upgradableShipInfo.isExplored" (event "upgradableShipInfo.evUpdate"))
+		(var isDependencyResearched:bool = "upgradableShipInfo.dependencyResearched" (event "upgradableShipInfo.evUpdate"))
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _shipId)")
+		(var isOwned:bool = "ownShipEntity != null")
+		(var isRented:bool = "toBool(ownShipEntity.ownShip.timeRent)" (event "ownShipEntity.ownShip.evUpdateDockState"))
+		(var canBuy:bool = "shipEntity.ship.canBuy" (event "shipEntity.ship.evUpdate"))
+		(var isPurchasable:bool = "(!isOwned || isRented) && canBuy")
+
+		(var isResearchableShip:bool = "(shipInfo.group != SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS || shipInfo.group != SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS_PREM) &&
+										shipInfo.group != SC.Ships.SHIP_GROUPS.EARLY_ACCESS")
+		
+		
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResource:dhComponent = "resourceEntity.accountResource")
+
+		(var accountGold:number = "accountResource.gold ?: 0" (event "resourceEntity.accountResource.evChangedGold"))
+		(var accountCredits:number = "accountResource.credits ?: 0" (event "resourceEntity.accountResource.evChangedCredit"))
+
+		(var moneyDeficit:number = "shipBuyPrice.info.currency == SC.Result_screen.FORMAT.GOLD	? shipBuyPrice.info.finalPrice - accountGold
+																								: shipBuyPrice.info.finalPrice - accountCredits")
+		(var isMoneyDeficit:bool = "moneyDeficit > 0")
+
+		(var moneyDeficitPriceInfo:dict = "shipBuyPrice.info.currency == SC.Result_screen.FORMAT.GOLD	? { finalPrice: moneyDeficit, currency: SC.Result_screen.FORMAT.GOLD }
+																										: { finalPrice: moneyDeficit, currency: SC.Result_screen.FORMAT.CREDITS }")
+		
+		
+		(var shipCrossResearchInfo:dhComponent = "shipEntity.shipCrossResearchInfo" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		(var dependenciesResearchPriceInfo:dict =	"shipCrossResearchInfo.dependenciesResearchPriceInfo"	(event "shipCrossResearchInfo.evChanged"))
+		(var researchPriceInfo:dict =				"shipCrossResearchInfo.researchPriceInfo"				(event "shipCrossResearchInfo.evChanged"))
+		(var researchDeficitPriceInfo:dict =		"shipCrossResearchInfo.researchDeficitPriceInfo"		(event "shipCrossResearchInfo.evChanged"))
+
+		(var isPrevShipResearched:bool =				"shipCrossResearchInfo.isPrevShipResearched"				(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchPriceVisible:bool =				"shipCrossResearchInfo.isResearchPriceVisible"				(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchDeficit:bool =					"shipCrossResearchInfo.isResearchDeficit"					(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchPreviousShipLockVisible:bool =	"shipCrossResearchInfo.isResearchPreviousShipLockVisible"	(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchAvailable:bool =					"shipCrossResearchInfo.isResearchAvailable"					(event "shipCrossResearchInfo.evChanged"))
+		(var isDependenciesResearchPriceVisible:bool =	"shipCrossResearchInfo.dependenciesResearchPriceVisible"	(event "shipCrossResearchInfo.evChanged"))
+
+		(var dependenciesResearchTitle:str = "isPrevShipResearched 	? 'IDS_RESEARCH_WITH_MODULES_COST_TTX'
+																	: 'IDS_RESEARCH_WITH_SHIPS_COST_TTX'")
+
+
+		
+		(var giftCounterComponent:dhComponent = "shipEntity.giftCounterComponent" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		(var hasGiftShip:bool = "giftCounterComponent != null")
+		(var isGiftShipAvailable:bool = "giftCounterComponent.canClaim" (event "giftCounterComponent.evChanged"))
+
+		(var currentBattleCount:number = "giftCounterComponent.currentBattleCount ?: 0")
+		(var totalBattleCount:number = "giftCounterComponent.totalBattleCount ?: 0")
+
+		
+		(struct freeXpShipSuffTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_SUFF"))
+		(struct freeXpShipSuffRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_SUFF_REPEAT"))
+		(struct freeXpShipInsuffTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF"))
+		(struct freeXpShipInsuffRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF_REPEAT"))
+		
+		(var currentTipId:number = "freeXpShipSuffTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_SUFF :
+									freeXpShipSuffRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_SUFF_REPEAT :
+									freeXpShipInsuffTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF :
+									freeXpShipInsuffRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF_REPEAT 
+																		: SC.Context_guiding_tip.TIP_TYPE.NONE ")
+		(var isInsufficientExpTip:bool = "isIn(currentTipId, [SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF, SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF_REPEAT])")
+		(var isGuidingTipVisible:bool = "currentTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		
+		(var isSuperShip:bool = "shipInfo.level >= SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var isSelfResearchPriceVisible:bool = "isResearchPriceVisible && !isSuperShip")
+		(var isBuyPriceVisible:bool = "!isResearchPreviousShipLockVisible && isPurchasable && isResearchableShip && !isResearchPriceVisible && isExplored")
+		(var isBuyAvailable:bool = "isBuyPriceVisible && isExplored && !isMoneyDeficit")
+		(var isMoneyDeficitVisible:bool = "isBuyPriceVisible && isMoneyDeficit && isDependencyResearched")
+		(var isGetGiftShipButtonVisible:bool = "hasGiftShip && !isBuyAvailable && !isResearchAvailable || isGiftShipAvailable")
+
+		(var isPurchaseResearchButtonVisible:bool = "	isPurchasable &&
+														!isGiftShipAvailable &&
+														(isBuyAvailable || isResearchAvailable) &&
+														(	shipInfo.group == SC.Ships.SHIP_GROUPS.UPGRADEABLE ||
+															shipInfo.group == SC.Ships.SHIP_GROUPS.UPGRADEABLE_ULT ||
+															shipInfo.group == SC.Ships.SHIP_GROUPS.UPGRADEABLE_EXCL ||
+															shipInfo.group == SC.Ships.SHIP_GROUPS.EVENT ||
+															shipInfo.group == SC.Ships.SHIP_GROUPS.START ||
+															shipInfo.group == SC.Ships.SHIP_GROUPS.PREMIUM ||
+															shipInfo.group == SC.Ships.SHIP_GROUPS.SUPER_SHIP)")
+
+		(var buttonData:dict = "isExplored			? { label: 'IDS_PURCHASE_UPPER_CASE',			action: 'purchaseShip' } :
+								!isMoneyDeficit		? { label: 'IDS_RESEARCH_PURCHASE_UPPER_CASE',	action: 'researchShip' }
+													: { label: 'IDS_RESEARCH_UPPER_CASE',			action: 'researchShip' }")
+	
+		(var isGiftShipsBattleCountInfoVisible:bool = "hasGiftShip && !isGiftShipAvailable")
+		(var isResearchPreviousShipModulesInfoVisible:bool = "isResearchPreviousShipLockVisible && !isSuperShip && !hasGiftShip")
+	)
+	(style
+		(width = "{1280:210px, 1920:228px}")
+		(bind marginBottom "!isPurchaseResearchButtonVisible ? S : 0px")
+	)
+
+	(hblock
+		(bind visible "isGiftShipsBattleCountInfoVisible")
+		(style (width = 100%))
+
+		(controller $Tooltip
+			(bind enabled "isGiftShipsBattleCountInfoVisible")
+			(renderer = 'GiftShipBattleInfoTooltip')
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style (width = 100%) (alpha = "TA"))
+			(text = 'IDS_NEWBIE_GIFTS_BATTLES_COUNTER_COLON')
+		)
+
+		(block
+			(controller $Instance renderer='DefaultDividedCounter'
+				(bind enabled "isGiftShipsBattleCountInfoVisible")
+				(args
+					_curValueTextClass = '$TextDefaultBoldNM'
+					_curValue = "currentBattleCount"
+					_maxValue = "totalBattleCount"
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "	isResearchPriceVisible &&
+						!isResearchPreviousShipLockVisible &&
+						!isGiftShipAvailable")
+
+		(style (width = 100%) (hitTest = false))
+
+		(block
+			(style (width = 100%) (bind marginTop "isSelfResearchPriceVisible ? S : 0px"))
+
+			(controller $Instance renderer='TooltipSystemRewardPriceTag'
+				(bind enabled "isSelfResearchPriceVisible && researchPriceInfo")
+				(args
+					_title = 'IDS_RESEARCH_COST_TTX'
+					_priceInfo = "researchPriceInfo"
+					_showDiscountTag = true
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%) (bind marginTop "isDependenciesResearchPriceVisible ? S : 0px"))
+
+			(controller $Instance renderer='TooltipSystemRewardPriceTag'
+				(bind enabled "isDependenciesResearchPriceVisible && dependenciesResearchPriceInfo")
+				(args
+					_title = "dependenciesResearchTitle"
+					_priceInfo = "dependenciesResearchPriceInfo"
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(bind marginTop "isResearchDeficit ? S : 0px")
+			)
+
+			(controller $Instance renderer='PriceTagWithDeficitAndLabelRow'
+				(bind enabled "isResearchDeficit && researchDeficitPriceInfo")
+				(args
+					_priceInfo = "researchDeficitPriceInfo"
+					_title = 'IDS_NOT_ENOUGH'
+				)
+			)
+
+			
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "isGuidingTipVisible && isInsufficientExpTip && isResearchDeficit")
+				(args
+					_tipId = "currentTipId"
+					_tipPositioning = "TIP_POSITION_RIGHT"
+					_hasFinishButton = true
+					_noPointer = true
+					_noArrow = true
+					_offsetX = 5
+					_modalWindowName = 'Dock'
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style (width = 100%) (bind marginTop "isBuyPriceVisible ? S : 0px") (hitTest = false))
+
+		(controller $Instance renderer='TooltipSystemRewardPriceTag'
+			(bind enabled "isBuyPriceVisible")
+			(args
+				_title = 'IDS_PURCHASE_COST'
+				_priceInfo = "shipBuyPrice.info"
+				_showDiscountTag = true
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%) (bind marginTop "isMoneyDeficitVisible ? S : 0px") (hitTest = false))
+
+		(controller $Instance renderer='PriceTagWithDeficitAndLabelRow'
+			(bind enabled "isMoneyDeficitVisible")
+			(args
+				_priceInfo = "moneyDeficitPriceInfo"
+				_title = 'IDS_NOT_ENOUGH'
+			)
+		)
+	)
+
+	
+	(block
+		(style (width = 100%) (bind marginTop "isResearchPreviousShipModulesInfoVisible ? S : 0px") (align = "center") (hitTest = false))
+
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "isResearchPreviousShipModulesInfoVisible")
+			(args
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_text = 'IDS_RESEARCH_PREVIOUS_SHIPS'
+				_width = 100%
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%) (bind marginTop "isPurchaseResearchButtonVisible ? SXS : 0px"))
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isPurchaseResearchButtonVisible")
+			(args
+				_width = 100%
+				_size = "SIZE.SMALL"
+				_label = "buttonData.label"
+				_focusIndex = 0
+				_isTransactionBtn = true
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: buttonData.action,
+									args: { shipId: _shipId }}]"
+			)
+		)
+
+		
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "isGuidingTipVisible && !isInsufficientExpTip && isPurchaseResearchButtonVisible")
+			(args
+				_tipId = "currentTipId"
+				_tipPositioning = "TIP_POSITION_RIGHT"
+				_offsetX = 5
+				_modalWindowName = 'Dock'
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%) (bind marginTop "isGetGiftShipButtonVisible ? SXS : 0px"))
+
+		(controller $Tooltip
+			(bind enabled "isGetGiftShipButtonVisible")
+			(renderer = 'GiftShipBattleInfoTooltip')
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isGetGiftShipButtonVisible")
+			(args
+				_width = 100%
+				_size = "SIZE.SMALL"
+				_label = "toUpper(tr('IDS_NEWBIE_GIFTS_GET_GIFT_SHIP'))"
+				_focusIndex = 0
+				_isTransactionBtn = true
+				_methods = "[	{	type: 'inputMapping.onRequest',
+									name: 'giftShipGettingConfirm',
+									args: { shipId: _shipId }}]"
+			)
+		)
+	)
+)
+
+(def element GiftShipBattleInfoTooltip ()
+	(scope
+		(var shipEntity:dhEntity = "getSingleEntity(CC.giftCounterComponent)")
+		(var currentBattleCount:number = "shipEntity.giftCounterComponent.currentBattleCount ?: 0")
+		(var totalBattleCount:number = "shipEntity.giftCounterComponent.totalBattleCount ?: 0")
+		(var battlesLeft:number = "totalBattleCount - currentBattleCount")
+		(var descriptionText:str = "tr(subst('IDS_SUBST_NEWBIE_GIFTS_CONDITION_TEXT_1_TOOLTIP', [], { battleCount: battlesLeft }, battlesLeft))")
+	)
+	(style (width = 270px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText
+					_headerText = 'IDS_NEWBIE_GIFTS_CONDITION_HEADER_TOOLTIP'
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = "descriptionText"
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_headerText = 'IDS_NEWBIE_GIFTS_CONDITION_TEXT_2_TOOLTIP'
+				)
+			)
+		)
+	)
+)
+
+(def element InstallAllModernizations (_countModernizations:number)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShip:dhComponent = "ownShipEntity.ownShip")
+
+		(var isInFormation:bool = "ownShip.isInFormation" (event "ownShip.evUpdateLock"))
+		(var isLocked:bool = "ownShip.isLocked" (event "ownShip.evUpdateLock"))
+		(var isNeedRepair:bool = "ownShip.isNeedRepair" (event "ownShip.evUpdateDockState"))
+
+		(var recommendedModernizationEntity:dhEntity = "getSingleEntity(CC.recommendedModernization)")
+		(var recommendedModernization:dhComponent = "recommendedModernizationEntity.recommendedModernization")
+
+		(var modsOnStorage:array = "recommendedModernization.modsOnStorage ?: []" (event "recommendedModernization.evUpdated"))
+		(var modsToBuy:array = "recommendedModernization.modsToBuy ?: []" (event "recommendedModernization.evUpdated"))
+		(var countOfInstalledModernization:number = "recommendedModernization.countOfInstalledModernization ?: 0" (event "recommendedModernization.evUpdated"))
+		(var isAnyEmptyModernizationSlot:bool = "modsOnStorage.length || modsToBuy.length")
+		(var isAASFKMAPsfm:bool = "countOfInstalledModernization < _countModernizations && !isAnyEmptyModernizationSlot")
+
+		(var mouseInstruction:dict = "	isInFormation					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																				text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_MODERNIZATION'} :
+										isLocked						? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_MODERNIZATION'} :
+										isNeedRepair					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_SERVICE_SHIP_TO_OPERATE_MODERNIZATION'} :
+										isAASFKMAPsfm					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_INSTALL_ALL_RECOMMENDED_BUT_NOT_ALL_MODERNIZATIONS_TOOLTIP'} :
+										isAnyEmptyModernizationSlot		? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																			text: 'IDS_INSTALL_ALL_RECOMMENDED_MODERNIZATIONS_TOOLTIP'}
+																		: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																			text: 'IDS_INSTALL_ALL_RECOMMENDED_MODERNIZATIONS_NO_EMPTY_SLOT_TOOLTIP'}")
+
+		(var isUnclickable:bool = "isInFormation || isLocked || isNeedRepair || !isAnyEmptyModernizationSlot")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "mouseInstruction.text"
+			_unifiedStatus = "mouseInstruction.unifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element DockButton
+		_enabled = "!isUnclickable"
+		_label = 'IDS_INSTALL_ALL_RECOMMENDED_MODERNIZATIONS'
+		_methods = "[	{	type: isUnclickable ? '' : 'inputMapping.onRequest',
+							name: 'installRecommendedModernizationsModal',
+							args: { shipId: viewedShipId }}]"
+
+	)
+)
+
+(def element ShipFeatureTooltip (_feature:number, _isOwn:bool=false, _featureName:str='', _imageUrl:str='', _rentUntil:number=0) 
+	(scope
+		(var featuresEntity:dhEntity = "getSingleEntity(CC.shipUniqueFeatures)")
+		(var expCollectingShip:number = "featuresEntity.shipUniqueFeatures.expCollectingShipID ?: 0" (event "featuresEntity.shipUniqueFeatures.evChanged"))
+		(var battleRestrictions:array = "featuresEntity.shipUniqueFeatures.availableBattles ?: []" (event "featuresEntity.shipUniqueFeatures.evChanged"))
+
+		(var headerText:str = "'IDS_SHIP_FEATURES_' + _featureName")
+		(var isRent:bool = "_feature == SC.Ships.SHIP_UNIQUE_FEATURES.RENT_SHIP")
+
+		(var showBattles:bool = "battleRestrictions.length && isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.SHOW_AVAILABLE_BATTLES)")
+		(var unifiedStatus:str = "_isOwn ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+		(var subheaderText:str = "	isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.SPECIAL_FEATURES)	? 'IDS_SHIP_FEATURES_SUBHEADER_SPECIAL' :
+									isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.DISADVANTAGE)		? 'IDS_SHIP_FEATURES_SUBHEADER_DISADVANTAGE'
+																									: 'IDS_SHIP_FEATURES_SUBHEADER_ADVANTAGE'")
+		(var showExpConversion:bool = "isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.SHOW_EXP_CONVERSION)")
+	)
+	(style (width = 300px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl =			"_imageUrl"
+			_imageWidth = 		60
+			_imageHeight = 		60
+			_unifiedStatus =	"unifiedStatus"
+			_headerText =		"headerText"
+			_iconAmount =		'1'
+			_subheaderText =	"subheaderText"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isOwn"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isOwn")
+				(args
+					_text = 'IDS_ACTIVE'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRent"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemTimeLeftStatusLine'
+				(bind enabled "isRent")
+				(args
+					_timeLeftTimeStamp = "_rentUntil"
+					_substTextIDS = 'IDS_RENT_STATUS_TIME_LEFT'
+					_zeroTimeTextIDS = 'IDS_SHIP_RENT_UNTIL_ZERO'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!showBattles"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "!showBattles")
+				(args
+					_descriptionText = "headerText + '_DESCRIPTION'"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "showBattles"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "showBattles")
+				(args
+					_descriptionText = 'IDS_SHIP_FEATURES_BATTLE_RESTRICTIONS'
+				)
+			)
+		)
+
+		(hblock
+			(bind visible "showBattles")
+			(style (width = 100%) (marginTop = "SXS"))
+			(controller $Repeat renderer='BattleTypeRestriction'
+				(bind count "battleRestrictions.length")
+				(args
+					_battleType = "battleRestrictions[$index]"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "showExpConversion"))
+		)
+
+		(block 
+			(bind visible "showExpConversion")
+			(style (width = 100%) (marginBottom = "XS"))
+			(tf
+				(class $TextDefaultNM)
+				(style (width = 100%) (alpha = "TA"))
+				(text = 'IDS_SHIP_FEATURES_EXP_COLLECTING')
+			)
+			(block
+				(style (width = 100%) (marginTop = "SXS"))
+				(element ShipLineItemNM
+					_shipId = "expCollectingShip"
+					_withFlag = true
+				)
+			)
+
+		)
+	)
+)
+
+(def element BattleTypeRestriction (_battleType:str)
+	(style
+		(marginRight = 6px)
+		(marginTop = 1px)
+		(width = 23px)
+		(height = 23px)
+		(bind backgroundImage "'url:../service_kit/battle_types/' + _battleType + '_tiny.png'")
+		(backgroundSize = "cover")
+	)
+)
+
+(def element QuestionMarkIconOnShipManagmentScreenTooltip () 
+	(style (width = 300px) (hitTest = false))
+	
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_TOOLTIP_SHIP_MODULES_HEADER'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_QUESTION_MARK_ICON_ON_SHIP_MANAGMENT_SCREEN_TOOLTIP_TEXT_1'
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_QUESTION_MARK_ICON_ON_SHIP_MANAGMENT_SCREEN_TOOLTIP_TEXT_2'
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_QUESTION_MARK_ICON_ON_SHIP_MANAGMENT_SCREEN_TOOLTIP_TEXT_3'
+				)
+			)
+		)
+	)
+)
+
+(def element ModulesShipShortElement (_shipId:number, _isPrevShip:bool=false)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _shipId)")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(struct shipExplorePrice =	PULL_PRICE(_entityId = "toString(_shipId)" _actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(struct shipBuyPrice =		PULL_PRICE(_entityId = "toString(_shipId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResource:dhComponent = "resourceEntity.accountResource")
+		(var accountCredits:number = "accountResource.credits ?: 0" (event "resourceEntity.accountResource.evChangedCredit"))
+
+		(var isExplored:bool = "upgradableShipInfo.isExplored" (event "upgradableShipInfo.evUpdate"))
+		(var expDeficit:number = "upgradableShipInfo.expDeficit" (event "upgradableShipInfo.evUpdate"))
+		(var isDependencyResearched:bool = "upgradableShipInfo.dependencyResearched" (event "upgradableShipInfo.evUpdate"))
+
+		(var isDeficit:bool = "isExplored	? shipBuyPrice.info.finalPrice - accountCredits > 0
+											: expDeficit > 0")
+	
+		(var isEmptyPriceInfo:bool = "	shipInfo.group == SC.Ships.SHIP_GROUPS.EARLY_ACCESS ||
+										shipInfo.group == SC.Ships.SHIP_GROUPS.SUPER_SHIP ||
+										shipInfo.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS ||
+										shipInfo.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS_PREM ||
+										!isDependencyResearched ||
+										isOwned")
+
+		(var priceInfo:dict = "	isEmptyPriceInfo	? null :
+								isExplored			? shipBuyPrice.info
+													: shipExplorePrice.info")
+	
+		(var isAvailable:bool = "isDependencyResearched || shipInfo.group == SC.Ships.SHIP_GROUPS.EARLY_ACCESS")
+
+		
+		(struct freeXpShipTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SHIP"))
+		(struct freeXpShipRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SHIP_REPEAT"))
+
+		(var isFreeXpShipTargetMatch:bool = "freeXpShipTip.targetId == _shipId")
+		(var isFreeXpShipRepeatTargetMatch:bool = "freeXpShipRepeatTip.targetId == _shipId")
+		
+		(var currentTipId:number = "freeXpShipTip.isActive && isFreeXpShipTargetMatch				? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SHIP :
+									freeXpShipRepeatTip.isActive && isFreeXpShipRepeatTargetMatch	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_SHIP_REPEAT
+																									: SC.Context_guiding_tip.TIP_TYPE.NONE ")
+
+		(var isGuidingTipVisible:bool = "currentTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(var commonAlpha:number = "isAvailable || isOwned ? 0.7 : 0.3")
+		(var curAlpha:number = "mouseDown	? commonAlpha - 0.1 :
+								rollOver	? commonAlpha + 0.3
+											: commonAlpha")
+	)
+	(style (align = "center"))
+
+	(block
+		(style (align = "center|middle") (width = 64px) (height = 36px) (alpha = "curAlpha"))
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="curAlpha" _alpha="curAlpha")
+
+		(controller $Tooltip
+			(bind enabled "!isGuidingTipVisible")
+			(renderer = 'ShipExtendedTooltip')
+			(args
+				_shipId = "_shipId"
+				_hasShipImage = true
+				_isCompare = true
+			)
+			(macro DEFAULT_TOOLTIP_HORIZONTAL_BEHAVIOUR)
+		)
+
+		(block
+			(class $FullsizeAbsolute)	
+			(style (bind backgroundColor "isOwned ? 0x35FFFFFF : NO_COLOR"))
+
+			(block
+				(class $Fullsize)
+				(style (backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png') (scale9grid = 2))
+			)
+
+		)
+
+		(block
+			(style (alpha = 1.2))
+
+			(element ShipLineItemNM
+				_shipId = "_shipId"
+				_showName = false
+			)
+		)
+
+		(macro MOUSE_HANDLER
+			_methods = "[ { type: 'inputMapping.onAction', name: 'selectShip', args: { shipId: _shipId } } ]"
+			_soundSet = "'button_ship'"
+		)
+
+		
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "isGuidingTipVisible")
+			(args
+				_tipId = "currentTipId"
+				_tipPositioning = "TIP_POSITION_RIGHT"
+				_offsetX = 5
+				_pointerOffset = -15
+				_modalWindowName = 'Dock'
+			)
+		)
+	)
+
+	(block
+		(bind visible "_isPrevShip || priceInfo")
+		(style (height = "{ 720:MS, 1080:L }") (align = "center"))
+
+		(block
+			(bind visible "priceInfo")
+			(style (paddingTop = 5px) (paddingBottom = 5px) (bind alpha "isDeficit ? 0.4 : 0.9"))
+			
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "priceInfo")
+				(args
+					_priceInfo = "priceInfo"
+					_showDiscountTag = true
+				)
+			)
+		)
+
+		(block
+			(bind visible "_isPrevShip")
+
+			(class $ModulesLink)
+			(style (height = 100%))
+			(macro MODULES_ALPHA_STATE "isDependencyResearched")
+		)
+	)
+)
+
+(def constant COMPLEXITY_TYPE " {	SHIP:	'SHIP',
+									BRANCH:	'BRANCH',
+									NATION:	'NATION' }")
+
+(def element ComplexityLevel (_complexityLevel:number, _maxComplexityLevel:number, _complexityType:str="COMPLEXITY_TYPE.SHIP", _size:number="SIZE.SMALL")
+	(style (flow = "horizontal") (backgroundColor = "NO_COLOR"))
+
+	(tf
+		(bind class "	_size == SIZE.MEDIUM	? '$TextDefault17NM'
+												: '$TextDefaultNM'")
+
+		(style (alpha = "TC") (marginRight = "XS"))
+		(text = 'IDS_COMPLEXITY_COLON')
+	)
+
+	(hblock
+		(style
+			(bind marginTop "_size == SIZE.MEDIUM ? 1px : 0px")
+			(marginBottom = -2px)
+		)
+
+		(controller $Repeat renderer='ComplexityLevelItem'
+			(bind count "_maxComplexityLevel")
+			(args
+				_isFilled = "$index + 1 <= _complexityLevel"
+			)
+		)
+	)
+	
+	(controller $Tooltip
+		(bind enabled "_complexityType != COMPLEXITY_TYPE.NATION")
+		(renderer = 'ComplexityLevelTooltip')
+		(args
+			_currentComplexityLevel = "_complexityLevel"
+			_type = "_complexityType"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ComplexityLevelItem (_isFilled:bool)
+	(style
+		(width = 13px) (height = 13px)
+		(bind backgroundImage "_isFilled	? 'swf:../ships_tree_features/svg/svg.swf:complexity'
+											: 'swf:../ships_tree_features/svg/svg.swf:complexity_empty'")
+	)
+)
+
+(def element ComplexityLevelTooltip (_currentComplexityLevel:number, _type:str="COMPLEXITY_TYPE.SHIP")
+	(style (width = "DEFAULT_TOOLTIP_WIDTH") (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText _headerText="'IDS_' + _type + '_COMPLEXITY_TOOLTIP_HEADER'")
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemDescriptionText _descriptionText="'IDS_' + _type + '_COMPLEXITY_TOOLTIP_DESCTIPTION_' + _currentComplexityLevel")
+	)
+)
+
+(def element ShipSpecialPointsLayout ()
+	(scope
+		(var featuresEntity:dhEntity = "getSingleEntity(CC.shipUniqueFeatures)")
+		(var shipUniqueFeatures:dhComponent = "featuresEntity.shipUniqueFeatures")
+		(var featuresList:array = "shipUniqueFeatures.featuresList ?: []" (event "shipUniqueFeatures.evChanged"))
+	)
+	(style (width = 100%))
+
+	(tf
+		(class $ManagementBlockHeader)
+		(text = 'IDS_SHIP_PECULIARITIES_HEADER')
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(class $ManagementBlock)
+		(style (width = 100%) (align = "center") (flow = "tile_horizontal"))
+
+		(controller $Repeat renderer='ShipFeatureIcon'
+			(bind count "featuresList.length")
+			(args
+				_feature = "featuresList[$index]"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%) (marginTop = -1px))
+		(element HorizontalDividerTwoPx)
+	)
+)
+
+(def element ShipFeatureIcon (_feature:number)
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipInfo:dhComponent = "ownShipEntity.ownShip")
+		(var isOwned:bool = "ownShipEntity != null")
+		
+		(var rentUntil:number = "ownShipInfo.timeRent ?: 0" (event "ownShipInfo.evUpdateDockState"))
+		(var featureName:str = "SC.Ships.SHIP_UNIQUE_FEATURES.VALUE_TO_NAME[_feature]")
+		(var disabledIconStateText:str = "isOwned ? '' : '_disabled'")
+		(var imageURL:str = "toLower('url:../ships_tree_features/main_features/class_prem_' + featureName + '_small' + disabledIconStateText + '.png')")
+	)
+	(class $ShipFeatureItemPaddings)
+
+	(block
+		(style (height = 60px) (width = 60px) (bind backgroundImage "imageURL"))
+
+		(controller $Tooltip
+			(renderer = 'ShipFeatureTooltip')
+			(args
+				_feature = "_feature"
+				_isOwn = "isOwned"
+				_featureName = "featureName"
+				_imageUrl = "imageURL"
+				_rentUntil = "rentUntil"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)

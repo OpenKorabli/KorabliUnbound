@@ -1,0 +1,441 @@
+(def constant BP_FREE_SMOKE	"{ redMultiplier:1,	greenMultiplier:1.72,	blueMultiplier:1.5,	alphaMultiplier:0.5 }")
+(def constant BP_PAID_SMOKE	"{redOffset: 255,	greenOffset: 105,		blueOffset: 0,		alphaMultiplier:0.4 }")
+
+(def element ModalWindowBattlePassPurchase () layout=true
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(struct bpRegularPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_REGULAR'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct bpEnhancedPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_ENHANCED'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct bpLevelPrice =		PULL_PRICE(_entityId = "'BATTLEPASS_LEVEL'"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var battlePassEntity:gfx = "$datahub.getSingleEntity(CC.battlePass)")
+		(var bpType:number = "battlePassEntity ? battlePassEntity.battlePass.type : 0" (event "battlePassEntity.battlePass.evChanged"))
+		(var isBattlePassFree:bool = "bpType == SC.Common.BATTLEPASS_TYPES.FREE")
+		(var isBattlePassPaidRegular:bool = "bpType == SC.Common.BATTLEPASS_TYPES.PAID_REGULAR")
+		(var isPreviousBattlePassPaidRegular:bool = "bpType-1 == SC.Common.BATTLEPASS_TYPES.PAID_REGULAR")
+
+		(var isBattlePassBonuses:bool = "isBattlePassPaidRegular || isPreviousBattlePassPaidRegular")
+		(var battlePassList:array = "[
+					{	mainList: [	{ text: 'IDS_BATTLEPASS_PURCHASE_FREE_TEXT_1'},
+									{ text: 'IDS_BATTLEPASS_PURCHASE_FREE_TEXT_2'}]},
+					{	mainList: [	{ text: 'IDS_BATTLEPASS_PURCHASE_PAID_REGULAR_TEXT_1'},
+									{ text: 'IDS_BATTLEPASS_PURCHASE_PAID_REGULAR_TEXT_2'}],
+						price: bpRegularPrice.info.basePrice },
+					{	mainList: isBattlePassBonuses ? [] : [{ text: 'IDS_BATTLEPASS_PURCHASE_PAID_ENHANCED_TEXT_1'}],
+						price: isBattlePassBonuses	? bpEnhancedPrice.info.basePrice - bpRegularPrice.info.basePrice
+													: bpEnhancedPrice.info.basePrice }]")
+
+		(var resourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:gfx = "resourceEntity ? resourceEntity.accountResource : null")
+		(var currentGoldBalance:number = "accountResourceComponent ? accountResourceComponent.gold : 0" (event "accountResourceComponent.evChangedGold"))
+		(var isGoldEnough:bool = "currentGoldBalance >= battlePassList[2].info")
+
+		
+		(var collectionLevels:gfx = "$datahub.getCollection(CC.battlePassLevel)")
+		(var levelsList:array = "collectionLevels ? collectionLevels.items : []" (event "collectionLevels.evAdded") (event "collectionLevels.evRemoved"))
+
+		(var battlePassCurrentLevelWatcher:gfx = "$datahub.getFirstWatcher(CC.battlePassCurrentLevel)")
+		(var battlePassCurrentLevelEntity:gfx = "battlePassCurrentLevelWatcher ? battlePassCurrentLevelWatcher.entity : null" (event "battlePassCurrentLevelWatcher.event"))
+		(var currentLevel:number = "battlePassCurrentLevelEntity.battlePassLevel.level")
+		(var levelsRemaining:number = "levelsList.length - currentLevel")
+		(var isBattlePassPaidEnhanced:bool = "bpType == SC.Common.BATTLEPASS_TYPES.PAID_ENHANCED")
+		(var finishTime:number = "battlePassEntity.battlePass.finishTime" (event "battlePassEntity.battlePass.evChanged"))
+
+		(var buyGoldRequestParams:dict = "{ url: SC.Ui_windows.GUI_URL.BATTLEPASS_SHOP_IN_GAME,
+											params: {	battlepass_type: bpType,
+														battlepass_expiration_date: finishTime,
+														remaining_level: levelsRemaining,
+														total_levels: levelsList.length,
+														level_price: bpLevelPrice.info.basePrice,
+														battlepass_price: bpRegularPrice.info.basePrice,
+														battlepass_big_price: bpEnhancedPrice.info.basePrice}}")
+		(var isLargeDimension:bool = "stageWidth > 1400 && stageHeight > 900")
+		(var btnType:str = "isGoldEnough ? SC.Ui_styles.BUTTON_TYPE.SECONDARY : SC.Ui_styles.BUTTON_TYPE.ACCENT")
+	)
+	(name = 'ModalWindowBattlePassPurchase')
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_BATTLEPASS_PURCHASE_TITLE'
+			_backButtonText = 'IDS_RETURN_FROM_MODAL_WINDOW_BUTTON'
+			_paddingRight = "LM"
+			_paddingLeft = "LM"
+			_methods = "[	{	type: 'inputMapping.onRequest',
+								name: 'closeBattlePassPurchaseModal',
+								args: {}}]"
+		)
+	)
+	(block
+		(style (position = "absolute") (right = "XXL") (top = "{720:0, 1080:34}"))
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(element DockResourcesWidget
+				_name = 'goldBalance'
+				_currency = "SC.Common.CURRENCIES.GOLD"
+				_label = 'IDS_GOLD'
+				_methods = "[	{	type: 'inputMapping.onRequest',
+									name: 'openMetashop',
+									args: buyGoldRequestParams}]"
+				_height = 47
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style (width = 100%) (height = 48px) (align = "center|middle"))
+		
+		(controller $Instance renderer = 'StatusLine'
+			(bind enabled "isBattlePassFree")
+			(args _text = 'IDS_BATTLEPASS_PURCHASE_SUBTITLE')
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+		(style (width = 100%))
+		(controller $Instance renderer = 'HorizontalDividerTwoPx' (bind enabled "isBattlePassFree"))
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style
+			(width = 100%)
+			(marginBottom = "{720:M, 1080:XL}") (align = "center")
+			(bind marginTop "isLargeDimension ? XLL : LM")
+		)
+		(controller $Repeat renderer='BattlePassTypeCard'
+			(bind count "battlePassList.length")
+			(args
+				_mainList = "battlePassList[$index].mainList"
+				_price = "battlePassList[$index].price"
+			)
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+		(style (width = 100%) (marginBottom = "{720:M, 1080:XL}") (align = "center"))
+		(tf
+			(class $TextDefaultNM)
+			(style (marginRight = "L") (alpha = "TC"))
+			(text = 'IDS_BATTLEPASS_PURCHASE_GOLD_TEXT')
+		)
+		(element DefaultButton
+			_width = 167px
+			_isTransactionBtn = true
+			_focusIndex = 1
+			_type = "btnType"
+			_label = 'IDS_GOLD'
+			_methods = "[{ type: 'inputMapping.onRequest', name: 'openMetashop', args: buyGoldRequestParams }]"
+		)
+	)
+)
+
+(def element BattlePassTypeCard (_price:number=0, _mainList:array = []) layout=true
+	(scope
+		(macro STAGE_SIZE)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var battlePassEntity:gfx = "$datahub.getSingleEntity(CC.battlePass)")
+		(var bpType:number = "battlePassEntity ? battlePassEntity.battlePass.type : 0" (event "battlePassEntity.battlePass.evChanged"))
+		(var isBattlePassFree:bool = "bpType == SC.Common.BATTLEPASS_TYPES.FREE")
+		(var isBattlePassPaidRegular:bool = "bpType == SC.Common.BATTLEPASS_TYPES.PAID_REGULAR")
+		(var isPreviousBattlePassPaidRegular:bool = "bpType-1 == SC.Common.BATTLEPASS_TYPES.PAID_REGULAR")
+		(var battlePassTypeName:str = "isBattlePassPaidRegular ? 'BONUSES' : SC.Common.BATTLEPASS_TYPES.VALUE_TO_NAME[$index]")
+		(var isCardPaidRegular:bool = "$index == SC.Common.BATTLEPASS_TYPES.PAID_REGULAR")
+		(var isCardPaidBig:bool = "$index == SC.Common.BATTLEPASS_TYPES.PAID_ENHANCED")
+		(var isBattlePassBonuses:bool = "isCardPaidBig && !isBattlePassFree")
+		(var isHorizontalLineVisible:bool = "isCardPaidBig && isBattlePassFree")
+		(var isCostBlockVisible:bool = "$index > bpType")
+		(var battlePassTitle:str = "isBattlePassBonuses ? 'BONUSES' : SC.Common.BATTLEPASS_TYPES.VALUE_TO_NAME[$index]")
+
+		(var resourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:gfx = "resourceEntity ? resourceEntity.accountResource : null")
+		(var currentGoldBalance:number = "accountResourceComponent ? accountResourceComponent.gold : 0" (event "accountResourceComponent.evChangedGold"))
+		(var isGoldEnough:bool = "currentGoldBalance >= _price")
+
+		(var isLargeDimension:bool = "stageWidth > 1400 && stageHeight > 900")
+		(var bpImageSize:number = "isLargeDimension ? 256 : 185")
+		(var bpImageMargin:number = "isLargeDimension ? -77 : -LM")
+		(var bpIconSmokeSize:number = "isLargeDimension ? 450 : 300")
+		(var bpIconSmokeMargin:number = "isLargeDimension ? -160 : -XLM")
+		(var bpTypeImage:str = "'url:../sse/battlepass/types/big/' + toLower(SC.Common.BATTLEPASS_TYPES.VALUE_TO_NAME[$index]) + '.png'")
+		(var colorTransformIndex:dict = "isBattlePassFree ? BP_FREE_SMOKE : BP_PAID_SMOKE")
+		(var btnSize:number = "stageHeight > 800 ? SIZE.LARGE : SIZE.MEDIUM")
+		(var bpTypeCardName:str = "$index == 1 ? 'premium_bp_cost' : 'bonuses_cost'")
+	)
+	(bind name "'BattlePassTypeCard' + $index")
+
+	(style	(width = 400px) (height = "{720:510, 1080:692}") (align = "center") (backgroundColor = 0x03FFFFFF) (alpha = 0)
+			(bind marginLeft "$index ? {1280:MS, 1920:LS} : 0"))
+	(controller $Animation
+		(bindcall play
+			delay		= "0.3 + 0.1*$index"
+			duration	= 0.15
+			from		= "{ alpha: 0, top: 10 }"
+			to			= "{ alpha: 1, top: 0 }"
+			on = 'addedToStage'
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png') (scale9grid = 2) (alpha = 0.1))
+	)
+	(block
+		(style	(hitTest = false) (alpha = 0) (position = "absolute") (bottom = 0) (width = 100%) (height = 510px)
+				(backgroundSize = "fill") (backgroundImage = 'url:../animations/spine/battlepass/bp_card_smoke/bp_card_smoke.skel'))
+		(bind colorTransform "colorTransformIndex")
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from = "{ alpha: 0 }"
+				to = "{ alpha: 1 }"
+				reverse = "!rollOver"
+				(bind trigger "rollOver")
+			)
+		)
+	)
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style	(hitTest = false) (alpha = 0) (backgroundSize = "fill") (backgroundImage = 'url:../animations/spine/battlepass/bp_icon_smoke/bp_icon_smoke.skel')
+				(bind width "bpIconSmokeSize") (bind height "bpIconSmokeSize") (bind marginTop "bpIconSmokeMargin"))
+		(bind colorTransform "colorTransformIndex")
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from = "{ alpha: 0 }"
+				to = "{ alpha: 1 }"
+				reverse = "!rollOver"
+				(bind trigger "rollOver")
+			)
+		)
+	)
+	(block
+		(style	(marginBottom = "MS") (backgroundSize = "cover") (bind width "bpImageSize") (bind height "bpImageSize")
+				(bind marginTop "bpImageMargin") (bind backgroundImage "bpTypeImage"))
+	)
+	(block
+		(class $Fullsize)
+		(style (align = "center"))
+		(block
+			(style (width = 100%) (marginBottom = "{720:SXS, 1080:MS}"))
+			(tf
+				(class $TextDefaultBold19NM)
+				(style (width = 100%) (textAlign = "center") (alpha = "TA"))
+				(bind text "toUpper(tr('IDS_BATTLEPASS_PURCHASE_TYPE_' +  battlePassTitle))")
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Repeat renderer='BattlePassCardDescription'
+				(bind count "_mainList.length")
+				(args
+					_text = "_mainList[$index].text"
+				)
+			)
+		)
+		(block
+			(style	(width = 100%) (paddingLeft = "LS") (paddingRight = "LS")
+					(bind marginTop "isHorizontalLineVisible ? MS : 0") (bind marginBottom "isHorizontalLineVisible ? MS : 0"))
+			(controller $Instance renderer = 'HorizontalDividerTwoPx' (bind enabled "isHorizontalLineVisible"))
+		)
+
+		(scrollArea
+			(class $Fullsize)
+			(style (backgroundColor = "NO_COLOR"))
+
+			(verticalSlider = 'BpBonusesScrollBar')
+			(hscrollPolicy = 'off')
+			(vscrollPolicy = 'auto')
+			(scrollPerItem = true)
+
+			(wheelScrollSpeed = 1.0)
+			(wheelScrollAcceleration = 1.9)
+
+			(activeControlsAlpha = 1)
+			(inactiveControlsAlpha = 1)
+			(bottomShadow = 'BpBonusesShadowBottom')
+			(content
+				(style (width = 100%) (paddingLeft = "LS") (paddingRight = "LS"))
+				(controller $Instance renderer='BattlePassBonusesList' (bind enabled "isCardPaidBig"))
+			)
+		)
+
+		(block
+			(style (bind marginTop "!isCostBlockVisible ? M : 0") (bind marginBottom "!isCostBlockVisible ? {720:24, 1080:71} : 0")) 
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "!isCostBlockVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_BATTLEPASS_PURCHASE_STATUS'
+				)
+			)
+		)
+		(block
+			(bind visible "isCostBlockVisible")
+			(style (marginTop = "M") (marginBottom = "{720:SXS, 1080:LM}") (align = "center"))
+			(hblock
+				(style (marginBottom = "M") (align = "middle"))
+				(tf
+					(class $TextDefaultNM)
+					(style (marginRight = "XS") (alpha = "TC"))
+					(text = 'IDS_COST')
+				)
+				(block
+					(controller $Instance renderer='PriceTag'
+						(bind enabled "isCostBlockVisible")
+						(args 
+							_priceInfo = "{finalPrice: _price, currency: SC.Common.CURRENCIES.GOLD}"
+							_name = "bpTypeCardName"
+						)
+					)
+				)
+			)
+			(block
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "isCostBlockVisible")
+					(args
+						_name = "$index == 1 ? 'buy_battlepass_update':'buy_battlepass_bonuses'"
+						_width = 200px
+						_size = "btnSize"
+						_enabled = "isGoldEnough"
+						_isTransactionBtn = true
+						_defaultFocused = "isCardPaidBig"
+						_focusIndex = 0
+						_label = 'IDS_BATTLEPASS_PURCHASE_BUTTON'
+						_methods = "[	{	type: 'inputMapping.onRequest',
+											name: 'showBattlePassPurchaseConfirm',
+											args: {battlePassTypeName: battlePassTypeName, battlePassType: $index}}]"
+					)
+				)
+			)
+		)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+)
+
+(def element BattlePassCardDescription (_text:str = '') layout=true
+	(style (width = 100%) (align = "center") (bind marginTop "$index ? SXS : 0"))
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TA"))
+		(bind text "_text")
+	)
+)
+
+(def element BattlePassBonusesList () layout=true
+	(scope
+		(var bpBonusesColl:gfx = "$datahub.getCollection(CC.battlePassBonus)")
+
+		(var bpBonusesCollPositive:gfx = "bpBonusesColl.getChildByPath('byCategory.' + SC.Common.BATTLEPASS_BONUSES_CATEGORIES.POSITIVE + '.sorted')")
+		(var attributesPositive:array = "bpBonusesCollPositive ? bpBonusesCollPositive.items : []" (event "bpBonusesCollPositive.evAdded") (event "bpBonusesCollPositive.evRemoved"))
+
+		(var bpBonusesConvertRateColl:gfx = "bpBonusesColl.getChildByPath('byCategory.' + SC.Common.BATTLEPASS_BONUSES_CATEGORIES.GOLD_CONVERT_RATE + '.sorted')")
+		(var convertRateList:array = "bpBonusesConvertRateColl ? bpBonusesConvertRateColl.items : []" (event "bpBonusesConvertRateColl.evAdded") (event "bpBonusesConvertRateColl.evRemoved"))
+		(var finalPrice:number = "convertRateList.length ? toNumber(convertRateList[0].battlePassBonus.description.measuredValue) : 0")
+
+		(var bpBonusesRewardsColl:gfx = "bpBonusesColl.getChildByPath('byCategory.' + SC.Common.BATTLEPASS_BONUSES_CATEGORIES.PAID_SSE_REWARDS + '.sorted')")
+		(var rewardsList:array = "bpBonusesRewardsColl ? bpBonusesRewardsColl.items : []" (event "bpBonusesRewardsColl.evAdded") (event "bpBonusesRewardsColl.evRemoved"))
+
+		(var bpBoundRewardsColl:gfx = "bpBonusesColl.getChildByPath('byCategory.' + SC.Common.BATTLEPASS_BONUSES_CATEGORIES.BOUND_REWARDS + '.sorted')")
+		(var boundRewardsList:array = "bpBoundRewardsColl ? bpBoundRewardsColl.items : []" (event "bpBoundRewardsColl.evAdded") (event "bpBoundRewardsColl.evRemoved"))
+		(var boundRewardsListMargin:number = "boundRewardsList.length || rewardsList.length ? M : 0")
+
+		(var priceInfoRight:dict = "{finalPrice: finalPrice, currency: SC.Common.CURRENCIES.CREDITS}")
+	)
+	(style (width = 100%) (marginLeft = "XXS"))
+	(block
+		(style (width = 100%) (paddingRight = "XS"))
+		(controller $Repeat renderer='ParamsModifierItem'
+			(bind count "attributesPositive.length")
+			(args
+				_category = "AttributeModifiersCategory.POSITIVE"
+				_dataItem = "attributesPositive[$index].battlePassBonus.description"
+			)
+		)
+	)
+	(block
+		(style (width = 100%) (bind marginBottom "boundRewardsList.length ? M : 0"))
+		(controller $Instance renderer='BpBonusesRewards'
+			(bind enabled "boundRewardsList.length")
+			(args
+				_reward = "boundRewardsList[0].rewardComponent"
+			)
+		)
+	)
+	(block
+		(style (width = 100%) (bind marginBottom "convertRateList.length ? M : 0"))
+		(controller $Instance renderer='ConvertRate'
+			(bind enabled "convertRateList.length")
+			(args
+				_priceInfoLeft = "{finalPrice: 1, currency: SC.Common.CURRENCIES.GOLD}"
+				_priceInfoRight = "priceInfoRight"
+			)
+		)
+	)
+	(block
+		(bind visible "rewardsList.length")
+		(style (width = 100%) (marginBottom = "M"))
+		(tf
+			(class $TextDefaultBoldNM)
+			(style (width = 100%) (alpha = "TC"))
+			(text = 'IDS_BATTLEPASS_PURCHASE_PAID_ENHANCED_BONUS_REWARDS')
+		)
+	)
+	(block
+		(style (width = 100%) (bind marginBottom "rewardsList.length ? XS : 0") )
+		(controller $Repeat renderer = 'BpBonusesRewards'
+			(bind enabled "rewardsList.length")
+			(bind count "rewardsList.length")
+			(args
+				_reward = "rewardsList[$index].rewardComponent"
+				_index = "$index"
+			)
+		)
+	)
+)
+
+(def element BpBonusesRewards (_reward:dict, _index:number=0) layout=true
+	(scope
+		(var currency:str = "	_reward.subtype == 'clanResource'	?	SC.Common.CURRENCIES.CLAN_RESOURCE
+																	:	_reward.subtype")
+		(var title:str = "tr(toUpper('IDS_REWARD_' + _reward.subtype + '_TITLE'))")
+		(var priceInfo:dict = "{ finalPrice: _reward.amount, currency: currency}")
+	)
+	(style (flow = "horizontal") (width = 100%) (bind marginTop "_index ? SXS : 0"))  
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TA"))
+		(bind text "title")
+	)
+	(block
+		(style (width = 100%) (align = "right"))
+		(element PriceTag _priceInfo = "priceInfo")
+	)
+)
+
+(def element BpBonusesScrollBar () layout=true
+	(style (marginRight = "MS"))
+	(scroll_bar
+		(value = 0)
+		(orientation = "vertical")
+		(thumb = 'SBVThumbLight')
+		(track = 'SBVTrackLight')
+	)
+)
+
+(def element BpBonusesShadowBottom() layout=true
+	(style (flow = "vertical") (paddingLeft = "LS"))
+	(controller $Repeat count=10 renderer='ScrollAreaShadowStep'
+		(args
+			_side = 'bottom'
+		)
+	)
+)

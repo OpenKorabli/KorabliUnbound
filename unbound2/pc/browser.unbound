@@ -1,0 +1,360 @@
+(def element BrowserWindowContainer (elementName:str)
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(var url:str = '') 
+
+		(var uiScale:number = "stageComponent.scale" (event "stageComponent.evStageSizeChanged"))
+
+		(var browserWindowWatcher:gfx = "$datahub.getFirstWatcher(CC.webBrowser)")
+		(var browserWindowEntity:gfx = "browserWindowWatcher.entity" (event "browserWindowWatcher.event"))
+		(var webBrowserComponent:gfx = "browserWindowEntity.webBrowser")
+
+		(var isTextureReady:bool = "webBrowserComponent.isTextureReady" (event "webBrowserComponent.evIsTextureReadyChanged"))
+		(var browserTextureName:str = "webBrowserComponent.browserTextureName")
+		(var isLoadFailed:bool = "webBrowserComponent.isLoadFailed" (event "webBrowserComponent.evIsLoadFailedChanged"))
+		(var browserHasControl:bool = "webBrowserComponent.browserHasControl" (event "webBrowserComponent.evBrowserHasControlChanged"))
+	)
+	(bindcall externalCall 'direct.action' "['browserUp', [$event.localX, $event.localY, $event.buttonIdx]]" init=false watch=false on='click')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'close_muted']" init=false watch=false (event "startHide"))
+
+	(style (bind width "stageWidth") (bind height "stageHeight"))
+
+	(controller $Instance
+		(bind renderer "elementName")
+		(args
+			_isTextureReady = "isTextureReady"
+			_browserTextureName = "browserTextureName"
+			_browserHasControl = "browserHasControl"
+			_isLoadFailed = "isLoadFailed"
+		)
+	)
+)
+
+(def element GuideBrowserWindow (_isTextureReady:bool, _browserTextureName:str, _browserHasControl:bool, _isLoadFailed:bool)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evShowCloseIcon)
+		(event evHideCloseIcon)
+		(event evBlurStartShow)
+		(event evBlurStartHide)
+
+		(var routeEntityisInClanBase:gfx = "$datahub.getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.CLANS)")
+		(var isInClanBase:bool = "routeEntityisInClanBase.route.isActive" (event "routeEntityisInClanBase.route.evIsActiveChanged"))
+		(macro GET_PREF 'isBlurOptionEnabled' "'graphics.GUI.blur'")
+		(macro GET_PREF 'isUIContrastOptionEnabled' "'graphics.GUI.contrast'")
+		(var referralCollection:gfx = "$datahub.getCollection(CC.referral)")
+		(var referralCollectionArray:array = "referralCollection.items" (event "referralCollection.evAdded") (event "referralCollection.evRemoved"))
+		(var isRefSysParticipant:bool = "referralCollectionArray.length > 0")
+		(var isBlurVisible:bool = "isBlurOptionEnabled && !isUIContrastOptionEnabled")
+		(var isContentReady:bool = "_isTextureReady && !_isLoadFailed")
+
+		(var isShowCloseIcon:bool = false)
+		(bind isShowCloseIcon "!_browserHasControl && !_isLoadFailed && !isInClanBase")
+	)
+	(class $Fullsize)
+	(style (bind paddingTop "isInClanBase ? 60px : 0px"))
+	(dispatch 'evShowCloseIcon' (bind enabled "isShowCloseIcon") (bind trigger "isShowCloseIcon"))
+	(dispatch 'evHideCloseIcon' (bind enabled "!isShowCloseIcon") (bind trigger "isShowCloseIcon"))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION_ALPHA 0)
+		(class $FullsizeAbsolute)
+		(style (bind paddingTop "isInClanBase ? -60px : 0px"))
+
+		(block
+			(class $FullsizeAbsolute)
+			(bind visible "!isBlurVisible")
+			(style (backgroundImage = 'url:../bg/nations_tree_v2.jpg') (backgroundSize = "cover"))
+			(controller $Animation
+				(bindcall play duration=1 delay=0.2 to={alpha: 0} action="kill" (bind enabled "isContentReady"))
+			)
+		)
+
+		(block
+			(bind visible "isBlurVisible")
+			(class $FullsizeAbsolute)
+
+			(dispatch evBlurStartShow dir="EventDirection.DOWN" (bind enabled "!isContentReady") (event "startShow"))
+			(dispatch evBlurStartShow dir="EventDirection.DOWN" (bind enabled "!isContentReady") (bind trigger "isContentReady"))
+			(dispatch evBlurStartHide dir="EventDirection.DOWN" (event "startHide"))
+			(dispatch evBlurStartHide delay=0.2 dir="EventDirection.DOWN" (bind enabled "isContentReady") (bind trigger "isContentReady"))
+			(element DeclareBlurLayer)
+
+			(mc mc_blurmap_medium
+				(class $FullsizeAbsolute)
+				(rendererString = blurMeBaby)
+
+				(controller $Animation
+					(bindcall play  duration=0.01
+									to = "{ blurIntensity: 0 }"
+									init=true
+					)
+
+					(bindcall play  duration=0.15
+									action="kill"
+									keyframes="[
+										{percent:0,		to:{ blurIntensity:0 }},
+										{percent:30,	to:{ blurIntensity:0.4 }},
+										{percent:50,	to:{ blurIntensity:0.8 }},
+										{percent:80,	to:{ blurIntensity:0.9 }},
+										{percent:100,	to:{ blurIntensity:1 }}
+									]"
+									watch=false
+									(event "evBlurStartShow")
+					)
+					(bindcall play  duration=0.1
+									action="kill"
+									to = "{ blurIntensity: 0 }"
+									watch=false
+									(event "evBlurStartHide")
+					)
+				)
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style (backgroundColor = 0x80000700) (alpha = 0))
+				(controller $Animation
+					(bindcall play duration=1 delay=0.2 to={alpha: 0} action="kill" (bind enabled "isContentReady"))
+					(bindcall play duration=1 delay=0.2 to={alpha: 1} action="kill" (bind enabled "!isContentReady"))
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(controller $Instance renderer='ModalWindowHeaderFullSize'
+			(bind enabled "_isLoadFailed && !isInClanBase")
+			(args
+				_hideBackButton = true
+				_hideCloseButton = false
+				_windowName = 'IDS_BROWSER_LOADING_TITLE'
+				_paddingTop = 0
+			)
+		)
+	)
+
+	(element BrowserWindowContent
+		_isTextureReady = "_isTextureReady"
+		_browserTextureName = "_browserTextureName"
+		_isLoadFailed = "_isLoadFailed"
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+
+		(block
+			(visible = "!_isTextureReady")
+			(class $EyeLevelAligned)
+			(style (alpha = "!_isTextureReady ? 1 : 0"))
+
+			(controller $Animation
+				(bindcall play id='indicatorBusyAnim' duration=0.15 from={ alpha: 0, visible: false } to={ alpha: 1, visible: true } reverse="_isTextureReady" action="kill" (bind trigger "_isTextureReady"))
+			)
+
+			(block
+				(style (bind marginTop "isInClanBase ? -60px : 0px"))
+				(mc indicator_busy_main)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(class $FullsizeAbsolute)
+		(style (align = "top|right"))
+
+		(block
+			(visible = "isShowCloseIcon")
+			(style (marginRight = "LM") (marginTop = 14px) (alpha = "isShowCloseIcon ? 1 : 0") (visualOffsetY = 5px))
+
+			(controller $Animation
+				(bindcall play id='closeIconAnim' duration=0.15 delay=0.1 to={ alpha: 1, visualOffsetY: 0px, visible: true } action="kill" (event "evShowCloseIcon"))
+				(bindcall play id='closeIconAnim' duration=0.15 delay=0.1 to={ alpha: 0, visualOffsetY: -10px, visible: false } action="kill" (event "evHideCloseIcon"))
+			)
+			(element ModalWindowCloseIcon)
+		)
+	)
+)
+
+(def element ShipyardBrowserWindow (_isTextureReady:bool, _browserTextureName:str, _isLoadFailed:bool, _browserHasControl:bool=false)
+	(scope
+		(event evShowCloseIcon)
+		(event evHideCloseIcon)
+		(event startShow)
+		(event startHide)
+
+		(var isShowCloseIcon:bool = "false")
+		(bind isShowCloseIcon "!_browserHasControl")
+	)
+	(dispatch 'evShowCloseIcon' init=false watch=false (bind enabled "isShowCloseIcon") (bind trigger "isShowCloseIcon"))
+	(dispatch 'evHideCloseIcon' init=false watch=false (bind enabled "!isShowCloseIcon") (bind trigger "isShowCloseIcon"))
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(class $Fullsize)
+
+	(element BrowserWindowContent
+		_isTextureReady = "_isTextureReady"
+		_browserTextureName = "_browserTextureName"
+		_isLoadFailed = "_isLoadFailed"
+	)
+
+	(block
+		(visible = false)
+		(style (position = "absolute") (width = 100%) (alpha = 0) (visualOffsetY = 5px) (bind hitTest "!_browserHasControl"))
+
+		(controller $Animation
+			(bindcall play duration=0.1 delay=0.1 to={ alpha: 1, visualOffsetY: 0px, visible: true } action="kill" (event "evShowCloseIcon") (event "startShow"))
+			(bindcall play duration=0.1 to={ alpha: 0, visualOffsetY: -5px, visible: false } action="kill" (event "evHideCloseIcon") (event "startHide"))
+		)
+
+		(block
+			(style (position = "absolute") (left = "SXS") (top = 18px))
+			(element BackButton
+				_text = 'IDS_BACK'
+				_inputBtnName = 'btn_cancel'
+			)
+		)
+
+		(block
+			(style (position = "absolute") (right = "MS") (top = 21px))
+			(element ModalWindowCloseIcon)
+		)
+	)
+)
+
+(def element BrowserWindowContent (_isTextureReady:bool, _browserTextureName:str, _isLoadFailed:bool)
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(var referralCollection:gfx = "$datahub.getCollection(CC.referral)")
+		(var isRefSysParticipant:bool = "referralCollection && referralCollection.items.length > 0" (event "referralCollection.evAdded") (event "referralCollection.evRemoved"))
+		(var widgetEntity:gfx = "$datahub.getSingleEntity(CC.webBrowserIMEInputWidget)")
+		(var widgetEnabled:bool = "widgetEntity.webBrowserIMEInputWidget.enabled" (event "widgetEntity.webBrowserIMEInputWidget.evIsEnabledChanged"))
+	)
+	(bind name "_isTextureReady ? 'BrowserIsLoaded' : 'BrowserIsNotLoaded'")
+
+	(bindcall externalCall "'inputMapping.onAction'" "['refreshWebRequests', {}]" init=false watch=false (event "startHide"))
+	(bindcall externalCall "isRefSysParticipant  ? 'inputMapping.onAction' : ''" "['ReferralProgramProxy.requestReferralPoints', {}]" init=false watch=false (event "startHide"))
+
+	(class $Fullsize)
+	(style (alpha = 0))
+	(controller $Animation
+		(bindcall play duration=0.15 to={alpha: 1} action="kill" (event "startShow"))
+		(bindcall play duration=0.15 to={alpha: 0} action="kill" (event "startHide"))
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(class $Fullsize)
+		(style (align = "center"))
+
+		(block
+			(class $Fullsize)
+			(bind visible "!_isLoadFailed")
+			(style
+				(backgroundSize = "fill")
+				(bind backgroundImage "'img://embedded:' + _browserTextureName")
+			)
+			(alpha = "_isTextureReady ? 1 : 0")
+
+			(controller $Animation
+				(bindcall play id='textureAnim' duration=0.15 to={alpha: 1, visible:true} action="kill" (bind enabled "_isTextureReady"))
+				(bindcall play id='textureAnim' duration=0.15 to={alpha: 0, visible:false} action="kill" (bind enabled "!_isTextureReady"))
+			)
+
+			(bindcall externalCall 'direct.action' "['browserMove', [$event.localX, $event.localY]]" init=false watch=false on='mouseMove')
+			(bindcall externalCall 'direct.action' "['browserWheel', [$event.localX, $event.localY, $event.delta]]" init=false watch=false on='mouseWheel')
+			(bindcall externalCall 'direct.action' "['browserDown', [$event.localX, $event.localY, $event.buttonIdx]]" init=false watch=false on='mouseDown')
+			(bindcall externalCall 'direct.action' "['rollOverUnderTextureChanged', [rollOver]]" init=false watch=false (bind trigger "rollOver"))
+			(bindcall externalCall 'direct.action' "['browserTextureSizeChanged', [$globalLayoutBounds[2], $globalLayoutBounds[3]]]" init=false watch=false (event "$evLayoutBoundsChanged"))
+		)
+
+		(controller $Instance renderer='BrowserIMEInput'
+			(bind enabled "widgetEnabled")
+		)
+
+		(block
+			(bind visible "_isLoadFailed")
+			(class $FullsizeAbsolute)
+			(style (top = 33%) (align = "center"))
+
+			(tf
+				(class $TextAccentBold)
+				(style
+					(hitTest = false)
+					(alpha = "_isLoadFailed ? 1 : 0")
+					(textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE")
+				)
+				(controller $Animation
+					(bindcall play
+						duration = 0.15
+						from = { alpha: 0, visualOffsetY: 10px }
+						to = { alpha: 1, visualOffsetY: 0px }
+						reverse = "!_isLoadFailed"
+						action = "kill"
+						(bind trigger "_isLoadFailed")
+					)
+				)
+
+				(bind text "toUpper(tr('IDS_SERVICE_IS_UNAVAILABLE_WEB'))")
+			)
+		)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+)
+
+(def element BrowserIMEInput ()
+	(scope
+		(event widgetExternalTextChangeEvent)
+
+		(var widgetEntity:gfx = "$datahub.getSingleEntity(CC.webBrowserIMEInputWidget)")
+
+		(var widgetPosition:dict = "widgetEntity.webBrowserIMEInputWidget.position" (event "widgetEntity.webBrowserIMEInputWidget.evBoundRectUpdate"))
+		(var widgetWidth:number = "max(10, widgetEntity.webBrowserIMEInputWidget.width)" (event "widgetEntity.webBrowserIMEInputWidget.evBoundRectUpdate"))
+		(var widgetHeight:number = "max(10, widgetEntity.webBrowserIMEInputWidget.height)" (event "widgetEntity.webBrowserIMEInputWidget.evBoundRectUpdate"))
+		(var widgetMaxTextLength:number = "widgetEntity.webBrowserIMEInputWidget.maxTextLength" (event "widgetEntity.webBrowserIMEInputWidget.evMaxTextLengthUpdate"))
+		(var isWidgetTextArea:bool = "widgetEntity.webBrowserIMEInputWidget.isTextArea" (event "widgetEntity.webBrowserIMEInputWidget.evTextAreaUpdate"))
+		(var externalText:str = "widgetEntity.webBrowserIMEInputWidget.externalText" (event "widgetEntity.webBrowserIMEInputWidget.evExternalTextUpdate"))
+
+		(var inputText:str = "externalText")
+	)
+	(style
+		(position="absolute")
+		(bind left "widgetPosition.x")
+		(bind top "widgetPosition.y")
+	)
+	(dispatch 'widgetExternalTextChangeEvent' args="{ text: externalText }" init=false watch=false (bind trigger "externalText"))
+
+	(mc text_area_default
+		(name = 'browserIMEWidget')
+
+		(bind multiline "isWidgetTextArea")
+		(bind maxChars "widgetMaxTextLength ? widgetMaxTextLength : 500")
+
+		(bind actAsButton true)
+		(bind forceSelectionOnFocus false)
+
+		(style
+			(bind width "widgetWidth")
+			(bind height "widgetHeight")
+
+			(position="absolute")
+			(forceResize=true)
+		)
+
+		(controller $Focus tabIndex=0 enabled=true defaultFocus=true clickFocus=true)
+
+		(sync inputText "'text'" on='change')
+		(bind text "$event ? $event.text : externalText" (event "widgetExternalTextChangeEvent"))
+
+		(bindcall externalCall 'inputMapping.onAction' "['webBrowserInputIMEWidget.sendResultText', {text: inputText}]" init=false watch=false (bind trigger "inputText"))
+	)
+)

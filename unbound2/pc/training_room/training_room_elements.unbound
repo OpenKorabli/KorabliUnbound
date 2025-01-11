@@ -1,0 +1,520 @@
+(def constant CORNERS 4)
+
+(def constant SPAWN_TOP_ANIMATION
+	{	'0': -15,
+		'1': -15,
+		'2': 15,
+		'3': 15,
+		'4': -15,
+		'5': 0,
+		'6': 15,
+		'7': 0
+})
+
+(def constant SPAWN_LEFT_ANIMATION
+	{	'0': -15,
+		'1': 15,
+		'2': 15,
+		'3': -15,
+		'4': 0,
+		'5': 15,
+		'6': 0,
+		'7': -15
+})
+
+
+(def constant C_BRAVO_TEAM  0xFFFF5A3D)
+(def constant C_ALPHA_TEAM  0xFF5D98FF)
+(def constant CT_ALPHA_TEAM "{redOffset: -162,  greenOffset: -103,  blueOffset: 0}")
+(def constant CT_BRAVO_TEAM "{redOffset: 0,  greenOffset: -165,  blueOffset: -194}")
+
+
+(def element MinimapBackgroundBlock (_minimapWaterPath:str='', _minimapPath:str='', _isShowSpawn:bool=false)
+	(name = 'img_minimap')
+
+	(scope
+		(event evSpawnSwapAnimated)
+
+		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
+		(var trainingRoomComponent:dhComponent = "trainingRoomEntity.trainingRoom")
+		(var isSpawnSwapped:bool = "trainingRoomComponent.isSpawnSwapped" (event "trainingRoomComponent.evUpdate"))
+		(var isIconSwappedVisible:bool = "_isShowSpawn && isSpawnSwapped")
+
+		(var allySpawnPosition:number = "trainingRoomComponent.allySpawnPosition" (event "trainingRoomComponent.evSpawnPositionChanged"))
+		(var enemySpawnPosition:number = "trainingRoomComponent.enemySpawnPosition" (event "trainingRoomComponent.evSpawnPositionChanged"))
+
+		(var isWaiting:bool = "false")
+		(bind isWaiting "true" init=false watch=false (event "evSpawnSwapAnimated"))
+		(bind isWaiting "false" init=false watch=false (event "trainingRoomComponent.evUpdate"))
+	)
+
+	(class $Fullsize)
+	(block
+		(class $Fullsize)
+		(style
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:' + _minimapWaterPath")
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "fill")
+			(bind backgroundImage "'url:' + _minimapPath")
+		)
+	)
+
+	(block
+		(bind visible "_isShowSpawn")
+		(class $FullsizeAbsolute)
+
+		(block
+			(isMask = true)
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "NO_COLOR"))
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (top = 50%) (left = 50%))
+
+			(element MapSpawn
+				_spawnPosition="allySpawnPosition"
+				_reverseSpawnPosition="enemySpawnPosition"
+				_colorTransform="CT_ALPHA_TEAM"
+				_isSpawnSwapped="isSpawnSwapped"
+			)
+
+			(element MapSpawn
+				_spawnPosition="enemySpawnPosition"
+				_reverseSpawnPosition="allySpawnPosition"
+				_colorTransform="CT_BRAVO_TEAM"
+				_isSpawnSwapped="isSpawnSwapped"
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+
+		(block
+			(visible = "isWaiting")
+			(class $Fullsize)
+			(style
+				(alpha = "isWaiting ? 1 : 0" )
+				(backgroundColor = 0x50000000)
+				(align = "middle|center")
+			)
+
+			(controller $Animation
+				(bindcall play id='indicatorBusyAnim' from={alpha: 0, visible: false} to={alpha: 1, visible: true}
+				duration=0.25
+				reverse="!isWaiting"
+				(bind trigger "isWaiting"))
+			)
+
+			(mc indicator_busy_main)
+		)
+	)
+
+	(block
+		(visible = "isIconSwappedVisible")
+		(style
+			(alpha = "isIconSwappedVisible ? 1 : 0" )
+			(position = "absolute")
+			(width = 24px)
+			(height = 24px)
+			(right = "SXS")
+			(top = "SXS")
+			(backgroundSize = "cover")
+			(backgroundImage = 'url:../service_kit/spawn/icon_swapped.png')
+		)
+		(controller $Animation
+			(bindcall play 	from={alpha: 0, visible: false}
+							to={alpha: 1, visible: true}
+							duration="isIconSwappedVisible ? 0.8 : 0.3"
+							reverse="!isIconSwappedVisible"
+							(bind trigger "isIconSwappedVisible")
+			)
+		)
+	)
+)
+
+(def element MapSpawn (_spawnPosition:number, _reverseSpawnPosition:number, _colorTransform:dict, _isSpawnSwapped:bool=false)
+	(scope
+		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
+		(var trainingRoomComponent:dhComponent = "trainingRoomEntity.trainingRoom")
+		(var initSpawnPosition:number = 		"_isSpawnSwapped ? _reverseSpawnPosition : _spawnPosition" watch=false (event "trainingRoomComponent.evSpawnPositionChanged"))
+		(var initReverseSpawnPosition:number = 	"_isSpawnSwapped ? _spawnPosition : _reverseSpawnPosition" watch=false (event "trainingRoomComponent.evSpawnPositionChanged"))
+		(var isAnimated:bool = "!_isSpawnSwapped" watch=false (event "trainingRoomComponent.evSpawnPositionChanged"))
+
+		(var spawnRotation:number = "(initSpawnPosition % CORNERS * 90) ?: 0")
+		(var reverseSpawnRotation:number = "(initReverseSpawnPosition % CORNERS * 90) ?: 0")
+
+		(var spawnPosition:number = "_isSpawnSwapped ? _spawnPosition : _reverseSpawnPosition")
+		(var spawnImg:str = "'url:../service_kit/spawn' + (spawnPosition < CORNERS ? '/diagonal' : '/straight') + '.png'")
+
+		(var topAnimation:number = 	"SPAWN_TOP_ANIMATION[initSpawnPosition] ?: 0")
+		(var leftAnimation:number = "SPAWN_LEFT_ANIMATION[initSpawnPosition] ?: 0")
+		(var reverseTopAnimation:number = 	"SPAWN_TOP_ANIMATION[initReverseSpawnPosition] ?: 0")
+		(var reverseLeftAnimation:number = 	"SPAWN_LEFT_ANIMATION[initReverseSpawnPosition] ?: 0")
+	)
+
+	(class $FullsizeAbsolute)
+	(style
+		(alpha = 1)
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(rotation = "spawnRotation")
+		(backgroundSize = "fill")
+		(bind backgroundImage "spawnImg")
+	)
+	(bind colorTransform "_colorTransform")
+
+	(controller $Animation
+		(bindcall play
+			keyframes =
+			"[
+				{ percent:0,	to:{alpha:1,	rotation: spawnRotation,		top: 0px,					left: 0px} },
+				{ percent:25,	to:{alpha:0,	rotation: spawnRotation,		top: 0px,					left: 0px} },
+				{ percent:50,	to:{alpha:0,	rotation: reverseSpawnRotation,	top: reverseTopAnimation,	left: reverseLeftAnimation} },
+				{ percent:75,	to:{alpha:0.5,	rotation: reverseSpawnRotation,	top: reverseTopAnimation,	left: reverseLeftAnimation} },
+				{ percent:100,	to:{alpha:1,	rotation: reverseSpawnRotation,	top: 0px,					left: 0px} }
+			]"
+			duration=0.5
+			init=false
+			(bind enabled "_isSpawnSwapped == isAnimated")
+		)
+		(bindcall play
+			keyframes =
+			"[
+				{ percent:0,	to:{alpha:1,	rotation: reverseSpawnRotation,	top: 0px,					left: 0px} },
+				{ percent:25,	to:{alpha:0,	rotation: reverseSpawnRotation,	top: 0px,					left: 0px} },
+				{ percent:50,	to:{alpha:0, 	rotation: spawnRotation,		top: topAnimation,			left: leftAnimation} },
+				{ percent:75,	to:{alpha:0.5,	rotation: spawnRotation,		top: topAnimation,			left: leftAnimation} },
+				{ percent:100,	to:{alpha:1,	rotation: spawnRotation,		top: 0px,					left: 0px} }
+			]"
+			duration=0.5
+			init=false
+			(bind enabled "!_isSpawnSwapped == isAnimated")
+		)
+	)
+)
+
+(def element TrainingRoomAppliedFilter (_trainingRoomEntityId:number, _align:number="left", _width:str='185px', _withShipTypeCounters:bool=false, _showShipRestrictions:bool=false, _maxFiltersCount:number=null)
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var shipListRestrictions:gfx = "trainingRoomEntity.shipListRestrictions" (event "trainingRoomEntity.evAdded") (event "trainingRoomEntity.evRemoved"))
+		(var divisionRestrictions:gfx = "trainingRoomEntity.divisionRestrictions" (event "trainingRoomEntity.evAdded") (event "trainingRoomEntity.evRemoved"))
+		
+		(var selectedFilters:array = "shipListRestrictions.selectedFilters ?: []" (event "shipListRestrictions.evUpdate"))
+		(var typesCount:dict = "divisionRestrictions.typesCount" (event "divisionRestrictions.evUpdate"))
+
+		(var defaultRestrictionsEntity:gfx = "$datahub.getPrimaryEntity(CC.battleTypeCommonRestrictions, SC.Common.BATTLE_TYPES.TRAINING_BATTLE)")
+		(var defaultTypesCount:dict = "defaultRestrictionsEntity.divisionRestrictions.typesCount" (event "defaultRestrictionsEntity.divisionRestrictions.evUpdate"))
+
+		(var isCarriersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.AIRCARRIER]	&& typesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1] != defaultTypesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1]")
+		(var isBattleShipsRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.BATTLESHIP]	&& typesCount[SC.Common.SHIP_TYPE.BATTLESHIP][1] != defaultTypesCount[SC.Common.SHIP_TYPE.BATTLESHIP][1]")
+		(var isCruisersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.CRUISER]	&& typesCount[SC.Common.SHIP_TYPE.CRUISER][1] != defaultTypesCount[SC.Common.SHIP_TYPE.CRUISER][1]")
+		(var isDestroyersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.DESTROYER]	&& typesCount[SC.Common.SHIP_TYPE.DESTROYER][1] != defaultTypesCount[SC.Common.SHIP_TYPE.DESTROYER][1]")
+		(var isSubmarinesRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.SUBMARINE]	&& typesCount[SC.Common.SHIP_TYPE.SUBMARINE][1] != defaultTypesCount[SC.Common.SHIP_TYPE.SUBMARINE][1]")
+		(var isAnyShipRestricted:bool = "(isCarriersRestricted || isBattleShipsRestricted || isCruisersRestricted || isDestroyersRestricted || isSubmarinesRestricted) && _showShipRestrictions")
+
+		(var nationFiltersCollection:gfx = "$datahub.getCollection(CC.shipFilterItem).getChildByPath('byFilterType.nation.selected')")
+		(var selectedItemsNations:array = "nationFiltersCollection.items ?: []" (event "nationFiltersCollection.evAdded") (event "nationFiltersCollection.evRemoved"))
+
+		(var selectedItemsLevels:str = "shipListRestrictions.levelString ?: ''" (event "shipListRestrictions.evUpdate"))
+	)
+	(style
+		(flow = "tile_horizontal")
+		(hitTest = false)
+
+		(bind width "_width")
+		(bind align "_align")
+		(bind paddingRight "_align == right ? M : 0px")
+		(align = "center")
+	)
+
+	(block
+		(style (height = 30px) (align = "middle") (marginLeft = "XXS") (marginRight = "XXS"))
+
+		(tf
+			(class $TextDefault17NM)
+			(style (alpha = "TA"))
+			(bind text "selectedItemsLevels")
+		)
+	)
+
+	(block
+		(bind visible "selectedItemsLevels.length > 0 && (isAnyShipRestricted || selectedItemsNations.length > 0)")
+		(style
+			(height = 26px)
+			(paddingLeft = 3px)
+			(paddingRight = 3px)
+			(marginTop = "XXS")
+			(marginBottom = 0px)
+		)
+		(element VerticalDivider)
+	)
+
+	(block
+		(bind visible "isAnyShipRestricted")
+		(style (height = 30px) (align = "middle"))
+
+		(controller $Instance renderer='ShipFilterRestrictions'
+			(bind enabled "isAnyShipRestricted")
+			(args
+				_filters = "typesCount"
+				_withShipTypeCounters = "_withShipTypeCounters"
+			)
+		)
+	)
+
+	(block
+		(bind visible "selectedItemsNations.length > 0 && isAnyShipRestricted")
+		(style (height = 26px) (paddingLeft = 3px) (paddingRight = 3px) (marginTop = "XXS"))
+		(element VerticalDivider)
+	)
+
+	(htile
+		(style (maxWidth = 100%) (marginTop = 1px) (hgap = "XS"))
+	
+		(controller $Repeat renderer='RepeatFilterItem'
+			(bind count "selectedItemsNations.length")
+			(args
+				_filterEntity = "selectedItemsNations[$index]"
+				_maxFiltersCount = "_maxFiltersCount"
+			)
+		)
+	)
+)
+
+(def element RepeatFilterItem (_filterEntity:gfx, _maxFiltersCount:number)
+	(scope
+		(var field:str = "_filterEntity.shipFilterItem.field ?: ''" (event "_filterEntity.shipFilterItem.evUpdate"))
+		(var isItemOverflow:bool = "_maxFiltersCount ? $index + 1 > _maxFiltersCount : false")
+
+		(var isEmptyStatusVisible:bool = "_maxFiltersCount != null && _maxFiltersCount == $index")
+	)
+	(style (height = 27px) (width = 27px))
+
+	(block
+		(bind visible "!isItemOverflow")
+
+		(element NationFlagsTiny
+			_shipCountry = "field"
+		)
+	)
+	(block
+		(bind visible "isEmptyStatusVisible")
+		(style (height = 27px))
+		(tf
+			(class $TextDefaultBold19NM)
+			(style (alpha = "TA"))
+			(text = '...')
+		)
+	)
+)
+
+(def element ShipRestrictionsInfotip ()
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+	)
+	(style (width = 675px))
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(name = 'ShipRestrictionsInfotip')
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+		
+		(block
+			(style (height = 34px) (width = 100%) (paddingLeft = "M") (paddingTop = "SXS"))
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_TRAINING_TEAM_RESTRICTIONS_INFOTIP')
+			)
+		)
+		(element HorizontalDividerTwoPx)
+		
+		(block
+			(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+			(hblock
+				(element FilterBlock
+					_title = 'IDS_LEVEL'
+					_filterType = "SC.Common.SHIP_FILTER_TYPE.SHIP_LEVEL"
+					_needDivider = false
+					_panelEntityId = "trainingRoomEntity.id"
+					_tooltipPrefix = 'IDS_ALLOW_'
+					_inCarousel = false
+				)
+				(element ShipTypesFilterBlock
+					_title = 'IDS_CLASS'
+					_filterType = "SC.Common.SHIP_FILTER_TYPE.SHIP_TYPE"
+					_needDivider = true
+					_panelEntityId = "trainingRoomEntity.id"
+					_tooltipPrefix = 'IDS_ALLOW_'
+					_inCarousel = false
+				)
+				(element FilterBlock
+					_title = 'IDS_NATION'
+					_filterType = "SC.Common.SHIP_FILTER_TYPE.SHIP_NATION"
+					_needDivider = true
+					_panelEntityId = "trainingRoomEntity.id"
+					_tooltipPrefix = 'IDS_ALLOW_'
+					_inCarousel = false
+				)
+			)
+		)
+	)
+)
+
+(def element ShipTypesFilterBlock (_title:str, _filterType:str, _panelEntityId:number, _ident:str, _tooltipPrefix:str, _inCarousel:bool=false, _needDivider:bool=false)
+	(scope
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var divisionRestrictions:gfx = "trainingRoomEntity && trainingRoomEntity.hasComponent(CC.divisionRestrictions) ? trainingRoomEntity.divisionRestrictions : null" (event "trainingRoomEntity.evAdded") (event "trainingRoomEntity.evRemoved"))
+		(var typesCount:dict = "divisionRestrictions ? divisionRestrictions.typesCount : null" (event "divisionRestrictions.evUpdate"))
+		
+		(var filtersCollection:gfx = "$datahub.getCollection(CC.shipFilterItem).getChildByPath('byFilterType.shipType')")
+		(var filters:array = "filtersCollection ? filtersCollection.items : []" (event "filtersCollection.evAdded") (event "filtersCollection.evRemoved"))
+
+		(macro GET_PREF_NUMBER 'roomMapId' "'ui.trainingRoom.mapId'")
+
+		(var mapEntity:gfx = "$datahub.getPrimaryEntity(CC.mapInfo, roomMapId)")
+		(var disabledShipClasses:array = "mapEntity ? mapEntity.mapInfo.disabledShipClasses : []" (event "mapEntity.mapInfo.evUpdate"))
+	)
+	(style (height = 100%) (width = 120px) (align = "center"))
+
+	(block
+		(style (paddingTop = "SXS") (paddingBottom = 14px))
+		
+		(tf
+			(class $TextDefaultBold17NM)
+			(style (alpha = "TC"))
+			(bind text "_title")
+		)
+	)
+
+	(block
+		(controller $Repeat renderer='ShipTypeDropdown'
+			(bind count "filters.length")
+			(args
+				_filterEntity = "filters[$index]"
+				_typesCount = "typesCount"
+				_ident = "_ident"
+				_tooltipPrefix = "_tooltipPrefix"
+				_disabledShipClasses = "disabledShipClasses"
+			)
+		)
+	)
+
+	(block
+		(bind visible "_needDivider")
+		(style (height = 100%) (position = "absolute"))
+		(element VerticalDivider)
+	)
+)
+
+(def element ShipTypeDropdown (_filterEntity:gfx, _typesCount:dict, _ident:str, _tooltipPrefix:str, _disabledShipClasses:array)
+	(scope
+		(event ItemChooser_shipTypeCountSelected)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var shipType:str = "_filterEntity.shipFilterItem.field ?: ''" (event "_filterEntity.shipFilterItem.evUpdate"))
+
+		(var isEnabled:bool = "!isIn(shipType, _disabledShipClasses)")
+
+		(var prefName:str = "'ui.trainingRoom.filters.shipType.' + shipType + '.maxShips'")
+		(macro GET_PREF_NUMBER 'prefValue' "prefName")
+		(var curItemIndex:number = "shipType == SC.Common.SHIP_TYPE.AIRCARRIER	? prefValue == -1	?	0
+																									:	prefValue
+																				: prefValue == -1 	?	1
+																									:	prefValue > 0	? prefValue + 1
+																														: 0")
+
+		(var countItems:array = "shipType == SC.Common.SHIP_TYPE.AIRCARRIER 	? ['0', '1', '2', '3']
+																				: ['—', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']")
+
+	)
+	(bindcall externalCall "'direct.action'" "['option.set', [	prefName,
+																shipType == SC.Common.SHIP_TYPE.AIRCARRIER	? $event.selectedIndex == 0		? -1
+																																			: $event.selectedIndex
+																											: $event.selectedIndex == 1 	? -1
+																																			: $event.selectedIndex > 0	? $event.selectedIndex - 1
+																																										: 0 ]]" init=false watch=false (event "ItemChooser_shipTypeCountSelected"))
+	
+	(style
+		(flow = "horizontal")
+		(marginBottom = 3px)
+		(backgroundColor = 0x01000000)
+		(bind alpha "isEnabled ? 1 : 0.7")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(block
+		(style (marginRight = "XS") (hitTest = false) (marginTop = -3px) (alpha = 0.8))
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from	 = { alpha: 0.8 }
+				to		 = { alpha: 1 }
+				easing = "Easing.quad_in"
+				reverse	 = "!(rollOver && !mouseDown)"
+				(bind trigger "rollOver && !mouseDown")
+			)
+		)
+
+		(element ShipIcon
+			_shipType = "shipType"
+		)
+	)
+
+	(block
+		(style (marginTop = -6px))
+
+		(element ItemChooser
+			_items = "countItems"
+			_choosedItemRenderer = 'DefaultItemChooserPickedItemRenderer'
+			_listItemRenderer = 'TextListItemRenderer'
+			_onItemSelectedEvent = 'shipTypeCountSelected'
+			_itemChooserTooltipText = "_tooltipPrefix + 'HINT_CHECKBOX_FILTER_CLASS_' + toUpper(shipType)"
+			_dropDownWidth = 80
+			_selectedFixedWidth = 54
+			_curIndex = "curItemIndex"
+			_disabled = "!isEnabled"
+			_name = 'ShipType'
+		)
+	)
+	
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "isEnabled	? toUpper('IDS_ALLOW_HINT_CHECKBOX_FILTER_CLASS_' + shipType)
+								: toUpper('IDS_HINT_FILTER_DISABLED_CLASS_' + shipType)"
+			_unifiedStatus = "isEnabled	? SC.Ui_styles.UNIFIED_STATUS.DEFAULT
+										: SC.Ui_styles.UNIFIED_STATUS.WARNING"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element DropdownLabel (_label:str)
+	(style (width = 100%) (alpha = "TC") (marginRight = "XS") (backgroundColor = "NO_COLOR"))
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_label + '_TOOLTIP'"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+	
+	(tf
+		(class $TextDefault17NM)
+		(bind text "_label")
+	)
+)

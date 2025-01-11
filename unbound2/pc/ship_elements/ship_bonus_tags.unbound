@@ -1,0 +1,234 @@
+(def element CarouselShipBonusTags (_shipEntityId:number)
+	(scope
+		(var shipEntity:gfx = "$datahub.getEntity(_shipEntityId)")
+		(var expMultiply:number = "shipEntity ? shipEntity.ownShip.expMultiply : 0"	(event "shipEntity.ownShip.evExpMultiplyChanged"))
+		(var bonusTagIds:array = "shipEntity ? shipEntity.ship.bonusTags : []"		(event "shipEntity.ship.evBonusTagsChanged"))
+		
+		(var bonusTagEntity:gfx = "bonusTagIds.length ? $datahub.getEntity(bonusTagIds[0]) : null")
+		(var bonusTagComponent:gfx = "bonusTagEntity ? bonusTagEntity.bonusTag : null")
+		(var bonusTagType:str = "bonusTagEntity ? bonusTagEntity.bonusTag.type : ''")
+
+		(var isEntityBonusTagVisible:bool = "bonusTagIds.length > 0")
+		(var isExpBonusTagVisible:bool = "expMultiply > 1 && !bonusTagIds.length")
+
+		(var imageUrl:str = "	isEntityBonusTagVisible	? 'swf:../service_kit/bonus_tags/svg/svg.swf:bonus_' + bonusTagType :
+								isExpBonusTagVisible	? 'swf:../service_kit/bonus_tags/svg/svg.swf:bonus_exp'
+														: ''")
+	)
+	(style
+		(width = 39px)
+		(height = 31px)
+		(backgroundImage = 'url:../service_kit/bonus_tags/bonus_panel.png')
+		
+		(paddingLeft = 13px)
+		(paddingRight = "XS")
+		(paddingTop = 6px)
+		(paddingBottom = "XS")
+	)
+
+	(block
+		(style
+			(width = 21px)
+			(height = 21px)
+			(bind backgroundImage "imageUrl")
+			(hitTest = false)
+		)
+	)
+
+	(controller $Tooltip
+		(renderer='BonusTagsTooltip')
+		(args
+			_shipEntityId = "_shipEntityId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP)
+	)
+)
+
+(def element ShipBonusTags (_shipEntityId:number, _isInShipResearch:bool)
+	(scope
+		(var shipEntity:dhEntity = "getEntity(_shipEntityId)")
+		(var expMultiply:number = "shipEntity.ownShip.expMultiply ?: 0"	(event "shipEntity.ownShip.evExpMultiplyChanged"))
+		(var bonusTagIds:array = "shipEntity.ship.bonusTags ?: []"		(event "shipEntity.ship.evBonusTagsChanged"))
+		
+		(var bonusTagEntity:dhEntity = "getEntity(bonusTagIds[0]) ")
+		(var bonusTagType:str = "bonusTagEntity.bonusTag.type ?: ''")
+		
+		(var hasImage:bool = "(!_isInShipResearch || bonusTagType == 'paragon') && bonusTagIds.length > 0")
+		(var imageUrl:str = "hasImage ? 'swf:../service_kit/bonus_tags/svg/svg.swf:bonus_' + bonusTagType : ''")
+	)
+	(style
+		(width = 21px)
+		(height = 21px)
+		(bind backgroundImage "imageUrl")
+		(bind hitTest "hasImage")
+	)
+
+	(controller $Tooltip
+		(renderer = 'BonusTagsTooltip')
+		(args
+			_shipEntityId = "_shipEntityId"
+			_isInShipResearch = "_isInShipResearch"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element BonusTagsTooltip (_shipEntityId:number=null, _isInShipResearch:bool=false, _isReceived:bool=false, _bonusTagId:number=null)
+	(scope
+		(var shipEntity:gfx = "_shipEntityId ? $datahub.getEntity(_shipEntityId) : null")
+		(var expMultiply:number = "shipEntity ? shipEntity.ownShip.expMultiply : 0" (event "shipEntity.ownShip.evExpMultiplyChanged"))
+		(var shipEntityBonusTags:array = "shipEntity ? shipEntity.ship.bonusTags : []" (event "shipEntity.ship.evBonusTagsChanged"))
+		
+		(var bonusTagIds:array =	"	_bonusTagId			? [_bonusTagId] :
+										_isInShipResearch 	? [shipEntityBonusTags[0]]
+															: shipEntityBonusTags")
+
+		(var isDoubleExpBlockVisible:bool = "!_isInShipResearch && expMultiply > 1")
+	)
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+			(controller $Repeat renderer='BonusTagTooltipItem'
+				(bind count "bonusTagIds.length")
+				(args
+					_itemsLength = "bonusTagIds.length"
+					_bonusTagEntityId = "bonusTagIds[$index]"
+					_isReceived = "_isReceived"
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isDoubleExpBlockVisible && bonusTagIds.length > 0"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='DoubleExperienceTooltipItem'
+				(bind enabled "isDoubleExpBlockVisible")
+				(args
+					_shipEntityId = "_shipEntityId"
+				)
+			)
+		)
+	)
+)
+
+(def element BonusTagTooltipItem (_itemsLength:number, _bonusTagEntityId:number, _isReceived:bool=false)
+	(scope
+		(var bonusTagEntity:gfx = "$datahub.getEntity(_bonusTagEntityId)")
+		(var bonusTagComponent:gfx = "bonusTagEntity ? bonusTagEntity.bonusTag : null")
+
+		(var bonusTagType:str = "bonusTagEntity.bonusTag.type ?: ''")
+		(var bonusTagRewards:array = "bonusTagEntity.bonusTag.rewards ?: []")
+		(var bonusTagsLeft:number = "bonusTagEntity.bonusTag.left ?: 0")
+		(var bonusTagBaseXpConditionAmount:number = "bonusTagEntity.bonusTag.threshold ?: 0")
+		(var isBottomDividerShown:bool = "_itemsLength > ($index + 1)")
+
+		
+		(var bonustagSeasonEntity:gfx =	"bonusTagType ? $datahub.getPrimaryEntity(CC.bonusTagSeason, bonusTagType) : null")
+		(var bonusTagsFinishTime:number = "bonustagSeasonEntity ? bonustagSeasonEntity.bonusTagSeason.finishTime : 0" (event "bonustagSeasonEntity.bonusTagSeason.evChanged"))
+		(var isExpirationDateVisible:bool = "!_isReceived && bonusTagsFinishTime")
+	)
+	(style (width = 100%))
+	
+	(element TooltipSystemHeaderWithIconAndText
+		_imageUrl =			"'url:../service_kit/bonus_tags/bonus_' + bonusTagType + '_big.png'"
+		_imageWidth =		80
+		_imageHeight =		80
+		_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+		_headerText =		"tr(toUpper('IDS_BONUSTAG_' + bonusTagType + '_HEADER'))"
+		_subheaderText =	'IDS_BONUSTAG_SUBHEADER'
+		_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.WITH_AMOUNT"
+		_iconAmount =		"bonusTagsLeft > 1 ? 'x' + bonusTagsLeft : '0'" 
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isExpirationDateVisible"))
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemDueDateStatusLine'
+			(bind enabled "isExpirationDateVisible")
+			(args
+				_dueDateTimeStamp =	"bonustagSeasonEntity.bonusTagSeason.finishTime"
+				_substTextIDS =		"'IDS_BONUS_TAG_EXPIRATION_DATE'"
+			)
+		)
+	)
+	
+	(element TooltipSystemHorizontalDivider)
+	(element TooltipSystemDescriptionText _descriptionText = "subst( 'IDS_SUBST_BONUSTAG_CONDITIONS_DESCRIPTION', [], { _baseExpCount:  toString(bonusTagBaseXpConditionAmount) })")
+
+	(element TooltipSystemHorizontalDivider)
+	(element TooltipSystemDescriptionText _descriptionText = "'IDS_TOOLTIP_BATTLE_BONUS_ONCE_DESCRIPTION'")
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "bonusTagRewards.length > 0"))
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemDHRewardsList'
+			(bind enabled "bonusTagRewards.length > 0")
+			(args
+ 				_rewards = "bonusTagRewards"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isBottomDividerShown"))
+	)
+)
+
+(def element DoubleExperienceTooltipItem (_shipEntityId:number)
+	(scope
+		(var shipOwnEntity:gfx = "$datahub.getEntity(_shipEntityId)")
+		(var expMultiply:number =		"shipOwnEntity.ownShip.expMultiply"		(event "shipOwnEntity.ownShip.evExpMultiplyChanged"))
+		(var crewExpMultiply:number =	"shipOwnEntity.ownShip.crewExpMultiply"	(event "shipOwnEntity.ownShip.evExpMultiplyChanged"))
+		(var freeExpMultiply:number =	"shipOwnEntity.ownShip.freeExpMultiply"	(event "shipOwnEntity.ownShip.evExpMultiplyChanged"))
+
+		(var remainingExpBonusWins:number = "shipOwnEntity.ownShip.remainingExpBonusWins"	(event "shipOwnEntity.ownShip.evUpdateConfig"))
+
+		(var attributesPositive:array = 	"[	{	attributeIDS: 'IDS_PARAMS_MODIFIER_SHIPEXPFACTOR',
+													measuredValue: '+' + ((expMultiply - 1) * 100),
+													measure: 'IDS_PERCENT',
+													category: 'positive',
+													isUseful: true },
+												{	attributeIDS: 'IDS_PARAMS_MODIFIER_CREWEXPFACTOR',
+													measuredValue: '+' + ((crewExpMultiply - 1) * 100),
+													measure: 'IDS_PERCENT',
+													category: 'positive',
+													isUseful: true },
+												{	attributeIDS: 'IDS_PARAMS_MODIFIER_FREEEXPFACTOR',
+													measuredValue: '+' + ((freeExpMultiply - 1) * 100),
+													measure: 'IDS_PERCENT',
+													category: 'positive',
+													isUseful: true } ]")
+	)
+	(style (width = 100%))
+
+	(element TooltipSystemHeaderWithIconAndText
+		_imageUrl =			'url:../service_kit/bonus_tags/bonus_exp_big.png'
+		_imageWidth =		80
+		_imageHeight =		80
+		_headerText =		'IDS_BONUSTAG_FIRST_WIN'
+		_subheaderText =	'IDS_BATTLE_BONUS'
+	)
+
+	(element TooltipSystemHorizontalDivider)
+	(element TooltipSystemDescriptionText
+		_descriptionText =		"remainingExpBonusWins > 1	? subst('IDS_TOOLTIP_BATTLE_BONUS_MULTIPLE_DESCRIPTION', [], {_battleAmount: remainingExpBonusWins}, remainingExpBonusWins) :
+								remainingExpBonusWins == 0	? 'IDS_TOOLTIP_BATTLE_BONUS_TAG_DESCRIPTION'
+															: 'IDS_TOOLTIP_BATTLE_BONUS_DAILY_DESCRIPTION'"
+	)
+
+	(element TooltipSystemHorizontalDivider)
+	(element TooltipSystemParamsModifiersList
+		_attributesPositive =	"attributesPositive"
+	)
+)

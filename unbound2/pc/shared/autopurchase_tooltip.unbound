@@ -1,0 +1,99 @@
+(def element AutoPurchaseTooltip (_type:number, _isAutopurchaseOn:bool=false) 
+	(scope
+		(macro PULL_SHIP_ID)
+		(macro PULL_OWN_SHIP_SCOPE "playerShipId" "'shipEntity'" "'shipInfo'")
+		(var ownShipComponent:gfx = "shipEntity ? shipEntity.ownShip : null")
+
+		(var isLocked:bool = "ownShipComponent ? ownShipComponent.isLocked : false" (event "ownShipComponent.evUpdateLock"))
+		(var isInFormation:bool = "ownShipComponent ? ownShipComponent.isInFormation : false" (event "ownShipComponent.evUpdateLock"))
+		(var isNeedRepair:bool = "ownShipComponent ? ownShipComponent.isNeedRepair : false" (event "ownShipComponent.evUpdateDockState"))
+
+		(var isCamouflage:bool = "_type == SC.Common.AUTOPURCHASABLE_ITEMS.CAMOUFLAGE")
+		(var isEcoboost:bool = "_type == SC.Common.AUTOPURCHASABLE_ITEMS.ECOBOOST")
+		(var isSignal:bool = "_type == SC.Common.AUTOPURCHASABLE_ITEMS.SIGNAL")
+
+		(var targetCamouflageWatcher:gfx = "$datahub.getFirstWatcher(CC.installedCamouflage)")
+		(var targetCamouflage:gfx = "targetCamouflageWatcher ? targetCamouflageWatcher.entity : null" (event "targetCamouflageWatcher.event"))
+		(var camouflageAmount:number = "targetCamouflage && targetCamouflage.hasComponent(CC.countComponent) ? targetCamouflage.countComponent.value : 0" (event "targetCamouflage.evAdded") (event "targetCamouflage.evRemoved"))
+		(var exteriorConfig:gfx = "targetCamouflage && targetCamouflage.hasComponent(CC.exteriorConfig) ? targetCamouflage.exteriorConfig : null" (event "targetCamouflage.evAdded") (event "targetCamouflage.evRemoved"))
+		(var hasExteriorConfig:bool = "exteriorConfig != null")
+
+		(var ecoBoosts:dhCollection = "getCollection(CC.ecoBoost)")
+		(var installedEcoBoosts:dhCollection = "ecoBoosts.getChildByPath('availableToUser.' + 'byType.' + SC.Common.ECOBOOST_TYPES.COMMON + '.installed')")
+		(var expiredEcoBoosts:dhCollection = "ecoBoosts.getChildByPath('availableToUser.' + 'byType.' + SC.Common.ECOBOOST_TYPES.COMMON + '.preinstalled')")
+		(var isAnyEcoBoostInstalled:bool = "installedEcoBoosts.length > 0 && expiredEcoBoosts.length != installedEcoBoosts.length")
+
+		(var signals:dhCollection = "getCollection(CC.signal)")
+		(var installedSignals:dhCollection = "signals.getChildByPath('installedSignals')")
+		(var expiredSignals:dhCollection = "installedSignals.getChildByPath('expired')")
+		(var isAnySignalInstalled:bool = "installedSignals.length > 0 && expiredSignals.length != installedSignals.length")
+
+		(var camoDisabledText:str = "	!hasExteriorConfig || !camouflageAmount												? 'IDS_AUTOPURCHASE_TOOLTIP_NO_INSTALLED_PURCHASABLE_CAMOUFLAGE' :
+										hasExteriorConfig && exteriorConfig.type != SC.Exteriors.EXTERIOR_TYPE.CAMOUFLAGE	? 'IDS_CAMOUFLAGE_AUTOPURCHASE_INSTALLED_CAMO_IS_NOT_EXPENDABLE' :
+										hasExteriorConfig && !exteriorConfig.canBuy 										? 'IDS_CAMOUFLAGE_AUTOPURCHASE_SWITCH_UNBUYABLE_CAMO'
+																															: ''")
+
+		(var mouseInstruction:dict = "	isCamouflage && camoDisabledText		?	null :
+										isInFormation							?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																						_text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_AUTOPURCHASE'} :
+										isLocked								?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																						_text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_AUTOPURCHASE'} :
+										isNeedRepair							?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																						_text: 'IDS_SERVICE_SHIP_TO_OPERATE_AUTOPURCHASE'} :
+										_isAutopurchaseOn						?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																						_text: 'IDS_AUTOPURCHASE_SWITCH_OFF' } :
+										isSignal && !isAnySignalInstalled		?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																						_text: 'IDS_AUTOPURCHASE_TOOLTIP_NO_INSTALLED_PURCHASABLE_SIGNAL' } :
+										isEcoboost && !isAnyEcoBoostInstalled	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																						_text: 'IDS_AUTOPURCHASE_TOOLTIP_NO_INSTALLED_PURCHASABLE_ECONOMIC_BOOSTS' }
+																				:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																						_text: 'IDS_AUTOPURCHASE_SWITCH_ON' }")
+
+		(var descriptionText:str = "isSignal && isAnySignalInstalled 		? 'IDS_AUTOPURCHASE_TOOLTIP_DESCRIPTION_EXPENDABLE_SIGNAL' :
+									isEcoboost && isAnyEcoBoostInstalled	? 'IDS_ECONOMIC_BOOSTS_EXPENDABLE_AUTOPURCHASE_TOOLTIP_DESCRIPTION' :
+									isCamouflage 							? camoDisabledText		? camoDisabledText
+																									: 'IDS_CAMOUFLAGE_EXPENDABLE_AUTOPURCHASE_TOOLTIP_DESCRIPTION'
+																			: ''")
+	)
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHeaderSubheaderText'
+				(bind enabled "descriptionText")
+				(args _headerText = 'IDS_AUTOPURCHASE')
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "descriptionText"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "descriptionText")
+				(args
+					_descriptionText = "descriptionText"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "descriptionText"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "mouseInstruction")
+				(args
+					_unifiedStatus = "mouseInstruction._unifiedStatus"
+					_text = "mouseInstruction._text"
+				)
+			)
+		)
+	)
+)

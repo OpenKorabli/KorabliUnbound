@@ -1,0 +1,170 @@
+(def element BattlePlayerTooltip (_playerEntity:gfx, _isInStats:bool=false, _isInPostBattle:bool=false, _isBot:bool=false, _isSelected:bool=false, _isContextMenuAvailable:bool=true, _checkForAbuse:bool=true)
+	(scope
+		(var playerDbId:number =	"_playerEntity ? _playerEntity.accountSimple.dbId : INVALID_PLAYER_AVATAR_ID")
+		(var isSelf:bool =			"_playerEntity.accountSimple.isSelfPlayer")
+		(var relation:number =		"_playerEntity.relation.value" (event "_playerEntity.relation.evChanged"))
+
+		(var isAbuser:bool =		"_checkForAbuse ? _playerEntity.avatar.isAbuser : false" (event "_playerEntity.avatar.evIsAbuserStatusChanged"))
+		(var ttkStatus:bool =		"_playerEntity.avatar.ttkStatus" (event "_playerEntity.avatar.evTTKStatusChanged"))
+
+		(var isEnemyPlayer:bool =	"relation == SC.Battle.PLAYER_RELATION.ENEMY")
+		(var isAllyPlayer:bool =	"relation == SC.Battle.PLAYER_RELATION.ALLY")
+
+		(var name:str = "_playerEntity.avatar.name")
+		(var pureName:str = "_playerEntity.avatar.pureName")
+
+		(macro PLAYER_VOICE_STATE "pureName")
+
+		(macro GET_PREF 'selfVoiceChatEnabled' "'sound.voice.chat.enabled'")
+		(var isInVoiceChat:bool = "playerVoiceStateEntity != null || (isSelf && selfVoiceChatEnabled)")
+		(var isAlive:bool =		"_playerEntity.health.isAlive" (event "_playerEntity.health.evIsAliveChanged"))
+		(var isLeaver:bool =	"_playerEntity.avatar.isLeaver" (event "_playerEntity.avatar.evIsLeaverChanged"))
+		(var playerId:number =	"_playerEntity.avatar.id")
+		(var mute:bool =		"_playerEntity.avatar.mute" (event "_playerEntity.avatar.evMuteChanged"))
+		(var isBot:bool =		"_playerEntity.avatar.isBot")
+
+		(var division:number =				"_playerEntity.divisionMember.division" (event "_playerEntity.divisionMember.evDivisionChanged"))
+		(var isInSameDivision:bool =		"_playerEntity.divisionMember.isInSameDivision" (event "_playerEntity.divisionMember.evDivisionChanged"))
+		(var isDivisionCommander:bool =		"_playerEntity.divisionMember.isDivisionCommander" (event "_playerEntity.divisionMember.evIsDivisionCommanderUpdated"))
+		(var isInSameDivisionOnStart:bool = "_playerEntity.divisionMember.isInSameDivisionOnStart")
+
+		(var inviteCooldown:number =		"_playerEntity.battleInvite.inviteCooldown" (event "_playerEntity.battleInvite.evInviteCooldownChanged"))
+		(var invitationsEnabled:bool =		"_playerEntity.battleInvite.invitationsEnabled" (event "_playerEntity.battleInvite.evInvitationsEnabledChanged"))
+		(var inviteCooldownEnabled:bool =	"_playerEntity.battleInvite.inviteCooldownEnabled" (event "_playerEntity.battleInvite.evInviteCooldownEnabledChanged"))
+
+		(var playerRoleStr:str =			"isDivisionCommander	? tr('IDS_DIVISION_COMMANDER_C')
+																	: tr('IDS_IN_DIVISION')")
+		
+		(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
+		(var battleType:str = "battleDataEntity.battleInfo.battleType")
+
+		(var playerInvitedToPrebattleInfo:gfx = "_playerEntity.playerInvitedToPrebattleInfo" (event "_playerEntity.evAdded") (event "_playerEntity.evRemoved"))
+		(var expirationTime:number = "playerInvitedToPrebattleInfo.expirationTime ?: 0")
+		(var isInvitedToDivision:bool = "playerInvitedToPrebattleInfo != null")
+
+		(var isVoiceChatStatusLineVisible:bool = "selfVoiceChatEnabled && !isEnemyPlayer && (isInSameDivision || battleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE)")
+
+		(macro FEATURES "9")
+		(var rawKeyTargetValue:gfx = "_playerEntity.keyTargetMarkerBattle")
+		(var isKeyTargetVisible:bool = "rawKeyTargetValue && feature_9 != 'locked'")
+		(var keyTargetText:str = "	isSelf			? 'IDS_KEY_TARGET_SELF' :
+									isAllyPlayer	? 'IDS_KEY_TARGET_ALLY'
+													: 'IDS_KEY_TARGET'")
+		(var isStatusLineVisible:bool =	"(_isInStats && !_isInPostBattle) || (!isSelf && _isContextMenuAvailable)")
+	)
+
+	(style (width = 320px) (hitTest = false))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element ContactInfoTooltipAccountHeader
+			_playerDbId =	"playerDbId"
+			_isBot =		"_isBot"
+			_isAbuser =		"isAbuser"
+			_ctkStatus =	"ttkStatus"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInSameDivision"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemBattleDivisionsStatusLine'
+				(bind enabled "isInSameDivision")
+				(args
+					_playerRoleStr =	"playerRoleStr"
+					_isCommander =		"isDivisionCommander"
+					_isEmptySlot =		false
+					_isReady =			true
+					_isInBattle =		false
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInvitedToDivision && !isSelf"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemCountDownStatusLine'
+				(bind enabled "isInvitedToDivision && !isSelf")
+				(args
+					_text = 'IDS_INVITED_IN_DIVISION'
+					_timeStamp = "expirationTime"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DIVISION_INVITE"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isVoiceChatStatusLineVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isVoiceChatStatusLineVisible")
+				(args
+					_unifiedStatus = "	!isInVoiceChat	? SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_OFF :
+										isMuted			? SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_MUTED
+														: SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_ON"
+					_text = "			isSelf			? selfVoiceChatEnabled	? 	'IDS_VOICE_CHAT_ENABLED'
+																				:	'IDS_VOICE_CHAT_DISABLED' :
+										!isInVoiceChat	? 'IDS_PLAYER_IS_NOT_AVAILABLE_IN_VOICE_CHAT' :
+										isMuted			? 'IDS_PLAYER_IS_MUTED_IN_VOICE_CHAT'
+														: 'IDS_PLAYER_IS_AVAILABLE_IN_VOICE_CHAT'"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isKeyTargetVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isKeyTargetVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.KEY_TARGET"
+					_text = "keyTargetText"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isStatusLineVisible"))
+		)
+
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(bind visible "isStatusLineVisible")
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "_isInStats && !_isInPostBattle")
+				(controller $Instance renderer='TooltipSystemStatusLine'
+					(bind enabled "_isInStats && !_isInPostBattle")
+					(args
+						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						_text = "_isSelected	? 'IDS_HINT_LEFT_CLICK_TO_HIDE_DETAILED_SHIP_INFO'
+												: 'IDS_HINT_LEFT_CLICK_TO_GET_DETAILED_SHIP_INFO'"
+					)
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(bind visible "!isSelf && _isContextMenuAvailable")
+				(controller $Instance renderer='TooltipSystemStatusLine'
+					(bind enabled "!isSelf")
+					(args
+						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT"
+						_text = "'IDS_HINT_RIGHT_CLICK_FOR_CONTEXT_MENU'"
+					)
+				)
+			)
+		)
+	)
+)

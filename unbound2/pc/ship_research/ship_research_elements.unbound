@@ -1,0 +1,704 @@
+(def constant ICON_FEATURE_ALPHA_STATE {
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.65,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 1.1,
+	SC.Ui_styles.BUTTON_STATE.UP		: "TA"
+})
+
+(def element BranchTypeLabel (_researchTreeData:dict, _gapCoords:array, _useClassGap:bool, _nation:str)
+	(scope
+		(var shipType:str = "_researchTreeData.shipType")
+		(var isPremiumType:bool = "shipType == SC.Ships.SHIP_GROUPS.PREMIUM")
+
+		(struct shipClassesGuidingTip = PULL_GUIDING_TIP(_type="SC.Context_guiding_tip.TIP_TYPE.SHIP_CLASSES_DESTROYER"))
+		(var isShipClassesGuidingTipVisible:bool = "shipClassesGuidingTip.isActive && shipType == SC.Common.SHIP_TYPE.DESTROYER")
+	)
+	(bindcall externalCall "isShipClassesGuidingTipVisible ? 'inputMapping.onAction' : ''" "[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SHIP_CLASSES_ONBOARDING } ]" init=false watch=false on='rollOver')
+	(bindcall externalCall "'inputMapping.onAction'" "[ 'evHighlightBranchByHeaderOver', { shipType: shipType, country: _nation }]" watch=false on='rollOver')
+	(bindcall externalCall "'inputMapping.onAction'" "[ 'evHighlightBranchByHeaderOut', { country: _nation }]" watch=false on='rollOut')
+	
+	(style
+		(position = "absolute")
+		(flow = "horizontal")
+		(height = 100%)
+		(backgroundColor = "NO_COLOR")
+		(marginLeft = "M")
+
+		(bind width "SHIP_TREE_BLOCK_WIDTH * 2 - L")
+		(bind left "(_useClassGap ? _gapCoords[_researchTreeData.x] : _researchTreeData.x) * SHIP_TREE_BLOCK_WIDTH")
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipBranchTypeTooltip')
+		(args
+			_shipType = "shipType"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(controller $Instance renderer='ShipTypeWithText'
+			(bind enabled "!isPremiumType")
+			(args
+				_shipType = "shipType"
+				_textClass = '$TextDefaultBoldNM'
+			)
+		)
+
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "isShipClassesGuidingTipVisible")
+			(args
+				_tipId = "SC.Context_guiding_tip.TIP_TYPE.SHIP_CLASSES_DESTROYER"
+				_tipPositioning = "TIP_POSITION_BOTTOM"
+				_offsetY = "SXS"
+				_modalWindowName = 'Dock'
+				_isHideOnBounds = true
+			)
+		)
+	)
+
+	(block
+		(bind visible "isPremiumType")
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style (textColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW"))
+			(text = 'IDS_PREMIUMS')
+		)
+	)
+)
+
+(def element ShipTypeWithText (_shipType:str, _textClass:str='$TextDefaultNM')
+	(style (flow = "horizontal") (align = "middle"))
+
+	(block
+		(style
+			(marginTop = "-S")
+			(marginBottom = -10px)
+			(marginLeft = -5px)
+			(marginRight = "XS")
+		)
+		(element ShipIcon
+			_shipType = "_shipType"
+		)
+	)
+
+	(tf
+		(bind class "_textClass")
+		(alpha = "TC")
+		(bind text "tr('IDS_' + _shipType + 'S')")
+	)
+)
+
+(def element ShipsBranchesFeaturesInfoIcon (_branchId:number, _country:str, _useClassGap:bool, _arrowDirection:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct researchGuidingTip = PULL_GUIDING_TIP(_type="SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_RESEARCH_ICON"))
+		(var isFeaturesResearchTipVisible:bool = "researchGuidingTip.isActive && _branchId == researchGuidingTip.targetId")
+
+		(var classGapOffset:number = "_useClassGap ? (SHIP_TREE_BLOCK_WIDTH / 2) : 0")
+
+		(var tooltipOffset:number = "	_arrowDirection == SC.Common.DIRECTION.UP		?	SHIP_TREE_BLOCK_WIDTH - M - (INFO_ICON_SIZE / 2) + S :
+										_arrowDirection == SC.Common.DIRECTION.LEFT		?	(SHIP_TREE_BLOCK_WIDTH * 2) + classGapOffset - (INFO_ICON_SIZE / 2) - M + S
+																						:	S")
+
+		(var tooltipReverseOffset:number = "_arrowDirection == SC.Common.DIRECTION.UP		?	tooltipOffset :
+											_arrowDirection == SC.Common.DIRECTION.RIGHT	?	(SHIP_TREE_BLOCK_WIDTH * 2) + classGapOffset - (INFO_ICON_SIZE / 2) - M + S
+																							:	S")
+		
+		(var alphaState:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+									rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+		(var btnAlpha:number = "ICON_FEATURE_ALPHA_STATE[alphaState]")
+	)
+	(style (width = "INFO_ICON_SIZE") (height = "INFO_ICON_SIZE"))
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(bindcall externalCall "'inputMapping.onRequest'" "[ 'showModalShipsBranchesFeatures', { _branchId: _branchId, _shipId: 0 }]" watch=false on='leftClick')
+
+	(bindcall externalCall "_branchId ? 'inputMapping.onAction' : ''" "[ 'evHighlightBranchButtonOver',	{ branchId: _branchId, country: _country }]" watch=false on='rollOver')
+	(bindcall externalCall "'inputMapping.onAction'" "[ 'evHighlightBranchButtonOut',	{ country: _country }]" watch=false on='rollOut')
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = "'url:../service_kit/buttons/backgrounds/' + SC.Ui_styles.BUTTON_TYPE.ICON_SECONDARY + '.png'")
+			(bind alpha "btnAlpha")
+		)
+
+		(block
+			(class $Fullsize)
+			(style (backgroundImage = "'url:../service_kit/buttons/icons/' + SC.Ui_styles.BUTTON_ICON.INFO + '.png'"))
+		)
+
+		(controller $Tooltip
+			(renderer = 'ShipsBranchesFeaturesTooltip')
+			(args
+				_branchId = "_branchId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+
+			(align = "right|innerTop")
+			(bind offsetMap "{ left: tooltipReverseOffset, top: -1px, right: tooltipOffset, bottom: 0px }")
+			(position = "borderNoTrack")
+		)
+	)
+
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isFeaturesResearchTipVisible")
+		(args
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_RESEARCH_ICON"
+			_tipPositioning = "TIP_POSITION_TOP"
+			_pointerOffset = "XS"
+			_offsetY = "S"
+			_modalWindowName = 'Dock'
+			_screenOffsetLeft = 80px
+			_isHideOnBounds = true
+		)
+	)
+)
+
+(def element ParagonsDropBranchButton (_shipId:number, _country:str)
+	(scope
+		(event evRollOver)
+		(event evRollOut)
+		(var rollOver:bool = "$event.isOver ?: false" watch=false (event "evRollOver") (event "evRollOut"))
+
+		(var paragonSeasonEntity:dhEntity = "getSingleEntity(CC.paragonSeason)")
+		(var dropsSharedMade:number = "paragonSeasonEntity.paragonSeason.dropsSharedMade" (event "paragonSeasonEntity.paragonSeason.evUpdateDropsMade"))
+		(var bonusTagsForFirstDrop:number = "paragonSeasonEntity.paragonSeason.bonusTagsForFirstDrop" (event "paragonSeasonEntity.paragonSeason.evUpdate"))
+	)
+	(dispatch evRollOver	on='rollOver'	args="{isOver: true}")
+	(dispatch evRollOut		on='rollOut'	args="{isOver: false}")
+
+	(bindcall externalCall "'inputMapping.onRequest'" "[ 'showPreviewParagonsDropBranch', { shipId: _shipId }]" watch=false (event "evRollOver"))
+	(bindcall externalCall "'inputMapping.onAction'" "[ 'evParagonDropBranchButtonOver', { shipId: _shipId, country: _country }]" watch=false (event "evRollOver"))
+	(bindcall externalCall "'inputMapping.onAction'" "[ 'evParagonDropBranchButtonOut', { country: _country }]" watch=false (event "evRollOut"))
+
+	(style
+		(width = 100%)
+		(height = 52px)
+		(align = "center")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(style (hitTest = false))
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from = "{ alpha: 1, visualOffsetY: 0px }"
+				to = "{ alpha: 0, visualOffsetY: 10px }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				reverse = "!rollOver"
+				(bind trigger "rollOver")
+			)
+		)
+
+		(block
+			(style
+				(width = 32px) (height = 32px)
+				(backgroundImage = 'url:../paragons/icon_reset_ships_active.png')
+			)
+		)
+
+		(block
+			(bind visible "bonusTagsForFirstDrop > 1 && dropsSharedMade == 0")
+			(style (position = "absolute") (right = -10px) (bottom = "XXS"))
+			
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (alpha = "TA"))
+				(bind text "'x' + bonusTagsForFirstDrop")
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%) (align = "center")
+			(alpha = 0) (visualOffsetY = 20px)
+		)
+		(visible = false)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from = "{ alpha: 0, visible: false, visualOffsetY: 20px }"
+				to = "{ alpha: 1, visible: true, visualOffsetY: 0px }"
+				easing = "Easing.quad_out"
+				action = "kill"
+				reverse = "!rollOver"
+				(bind trigger "rollOver")
+			)
+		)
+
+		(element DefaultButton
+			_width = 162px
+			_label = 'IDS_DROP_BRANCH_BUTTON'
+			_methods = "[{	type: 'inputMapping.onRequest',
+							name: 'showModalParagonsDropBranch',
+							args: { shipId: _shipId }}]"
+		)
+	)
+)
+
+(def element ParagonsResearchTreeFooter ()
+	(scope
+		(var userTaskEntity:dhEntity = "getSingleEntity(CC.userTask)")
+		(var currentUserTaskFlags:array = "userTaskEntity.userTask.flags ?: []" (event "userTaskEntity.userTask.evFlagChanged"))
+		(var isNotSeenParagonInShipTree:bool = "currentUserTaskFlags[BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_PARAGONS_IN_SHIP_TREE]] == 0")
+
+		(var paragonSeasonEntity:dhEntity = "getSingleEntity(CC.paragonSeason)")
+		(var paragonSeasonEndDate:number = "paragonSeasonEntity.paragonSeason.endDate" (event "paragonSeasonEntity.paragonSeason.evUpdate"))
+		(var paragonSeasonDropsSharedMade:number = "paragonSeasonEntity.paragonSeason.dropsSharedMade" (event "paragonSeasonEntity.paragonSeason.evUpdateDropsMade"))
+		(var bonusTagsForFirstDrop:number = "paragonSeasonEntity.paragonSeason.bonusTagsForFirstDrop" (event "paragonSeasonEntity.paragonSeason.evUpdate"))
+		
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE _scopeName="'paragonSeasonTimeToFinish'" _time="paragonSeasonEndDate" _format="'HIGHEST'" _isLocalTime="true")
+
+		(var isMultiplierAvailable:bool = "bonusTagsForFirstDrop > 1 && paragonSeasonDropsSharedMade == 0")
+	
+		(var paragraphItems:array = "[	{ text: isMultiplierAvailable	? subst('IDS_PARAGON_BONUS_FOOTER_MULTIPLIER_INFO', [], { multiplier: bonusTagsForFirstDrop })
+																		: 'IDS_PARAGON_BONUS_FOOTER_NO_MULTIPLIER_INFO' },
+										{ text: 'IDS_PARAGON_BONUS_FOOTER_SPECIAL_STORAGE_INFO'}]")
+	)
+	(style (width = 100%) (marginBottom = "XL"))
+
+	(hblock
+		(style (marginLeft = "M") (width = 700px))
+
+		(block
+			(style
+				(width = 80px)
+				(height = 80px)
+				(marginLeft = "M")
+				(marginRight = "L")
+				(backgroundSize = "cover")
+				(backgroundImage = 'url:../paragons/icon_paragon_rules.png')
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			
+			(tf
+				(class $TextDefaultBold23NM)
+				(style (alpha = "TA") (width = 100%) (marginBottom = "M"))
+				(text = 'IDS_PARAGON_FOOTER_TITLE')
+			)
+						
+			(block
+				(style (alpha = 0.8) (width = 100%) (marginBottom = "S") (vgap = "S"))
+
+				(controller $Repeat renderer='RepeatParagraphItemNM'
+					(bind count "paragraphItems.length")
+					(args
+						_paragraphText = "paragraphItems[$index].text"
+						_width = 100%
+						_size = "SC.Ui_styles.SIZE.LARGE"
+						_leading = -1
+					)
+				)
+			)
+			
+			(tf
+				(class $TextDefaultNM)
+				(style (alpha = 0.6) (width = 100%) (marginBottom = "MS"))
+				(bind text "subst('IDS_PARAGON_BONUS_SEASON_UPDATE', [], {timeUntilMultiplier: paragonSeasonTimeToFinish})")
+			)
+
+			(block
+				(block
+					(element DefaultButton
+						_width = 164px
+						_label = 'IDS_PRMP_DETAILS_BUTTON'
+						_methods = "[
+										{	type: 'inputMapping.onRequest',
+											name: 'showRules',
+											args: { _rulesType: 'paragons' }},
+										{	type: isNotSeenParagonInShipTree ? 'inputMapping.onAction' : '',
+											name: 'ServerUIDataUSS.setUserTaskExecuted',
+											args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_PARAGONS_IN_SHIP_TREE] }}
+									]"
+					)
+				)
+
+				
+				(block
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNotSeenParagonInShipTree")
+					(style (position = "absolute") (right = -20px) (top = -10px))
+					(element MarkerNew)
+				)
+			)
+		)
+	)
+)
+
+(def element NationTabButton (_labelTF:str, _currentNationName:str)
+	(scope
+		(struct shipFeaturesNationTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_RESEARCH_NATION"))
+		(struct paragonsGuidingTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.PARAGONS_INTRO"))
+
+		(var currentTipId:number = "shipFeaturesNationTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_RESEARCH_NATION :
+									paragonsGuidingTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.PARAGONS_INTRO
+																		: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		
+		(var isParagonTipVisible:bool = "_currentNationName != _labelTF && _labelTF == paragonsGuidingTip.targetId")
+	
+		(var isGuidingTipVisible:bool = "shipFeaturesNationTip.isActive	? (shipFeaturesNationTip.targetId == _labelTF) :
+										paragonsGuidingTip.isActive		? isParagonTipVisible
+																		: false")
+	)
+	(bind name "'button_tree_' + _labelTF")
+
+	(dispatch "'evNeedScrollToBottom'" dir="EventDirection.UP" on='leftClick' (bind enabled "isParagonTipVisible && paragonsGuidingTip.isActive"))
+
+	(element SideTabButtonShipResearch
+		_labelTF = "_labelTF"
+		_currentNationName = "_currentNationName"
+		_dispatchedEv = 'evNationTabButtonClicked'
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isGuidingTipVisible")
+		(args
+			_tipId = "currentTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_offset = "-XS"
+			_modalWindowName = 'Dock'
+		)
+	)
+)
+
+(def element CurrentXPMedium (_label:str, _exp:number, _fontSize:number)
+	(name = 'upgrade_tree_CurrentShipXP')
+
+	(hblock
+		(style (align = "middle") (marginBottom = "XXS"))
+
+		(block
+			(style (marginRight = 3px))
+			(tf
+				(class $TextDefaultBold17NM)
+				(class $FontColorExp)
+				(bind text "formatSeparator(_exp)")
+			)
+		)
+
+		(block
+			(style
+				(width = 24px)
+				(height = 24px)
+				(backgroundImage = 'url:../service_kit/currencies/icon_exp.png')
+			)
+		)
+	)
+	
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = 0.8))
+		(bind text "_label")
+	)
+)
+
+(def element ShipTreeMenu (_shipId:number, _disableShipActions:bool=false)
+	(scope
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo")
+		
+		(struct shipBuyPrice = PULL_PRICE(_entityId = "toString(_shipId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var windowManagerEntity:dhEntity = "getSingleEntity(CC.windowManager)")
+		(var windowManagerComponent:dhComponent = "windowManagerEntity.windowManager")
+		(var windowsQueue:array = "windowManagerComponent.windowQueue" (event "windowManagerComponent.evWindowQueueChanged"))
+
+		(var isCrewModalWindow:bool =		"isIn('ModalWindowCrewManagement', windowsQueue)")
+		(var isEconomicsModalWindow:bool =	"isIn('ModalWindowEconomicsManagement', windowsQueue)")
+
+		(var fullName:str = "shipEntity.ship.fullName" (event "shipEntity.ship.evUpdate"))
+		(var group:str = "shipEntity.ship.group" (event "shipEntity.ship.evUpdate"))
+		(var canBuy:bool = "shipEntity.ship.canBuy" (event "shipEntity.ship.evUpdate"))
+		(var isEventLike:bool = "shipEntity.ship.isEventLike" (event "shipEntity.ship.evUpdate"))
+		(var isNotEventGroup:bool = "group != SC.Ships.SHIP_GROUPS.EVENT")
+
+		(var shipOwnEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _shipId)" watch=false)
+		(var shipComponent:dhComponent = "shipOwnEntity.ship")
+		(var ownShipComponent:dhComponent = "shipOwnEntity.ownShip")
+		(var isOwned:bool =	"shipOwnEntity != null")
+
+		(var isPrimary:bool =		"ownShipComponent.isPrimary"		(event "ownShipComponent.evIsPrimaryChanged"))
+		(var isNeedRepair:bool =	"ownShipComponent.isNeedRepair"		(event "ownShipComponent.evUpdateDockState"))
+		(var isTimeRent:bool =		"toBool(ownShipComponent.timeRent)"	(event "ownShipComponent.evUpdateDockState"))
+		(var isLocked:bool =		"ownShipComponent.isLocked"			(event "ownShipComponent.evUpdateLock"))
+		(var isInFormation:bool =	"ownShipComponent.isInFormation"	(event "ownShipComponent.evUpdateLock"))
+		(var isSellable:bool =		"ownShipComponent.sellable"			(event "ownShipComponent.evUpdateConfig"))
+		(var crewId:number =		"ownShipComponent.crewId"			(event "ownShipComponent.evCrewChanged"))
+		(var isWithoutCrewPenalty:bool = "shipComponent.isWithoutCrewPenalty" (event "shipComponent.evUpdate"))
+
+		
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:dhComponent = "resourceEntity.accountResource")
+		(var accountGold:number = "accountResourceComponent.gold ?: 0" (event "accountResourceComponent.evChangedGold"))
+		(var accountCredits:number = "accountResourceComponent.credits ?: 0" (event "accountResourceComponent.evChangedCredit"))
+		
+		(var moneyDeficit:number =	"shipBuyPrice.info.currency == SC.Result_screen.FORMAT.GOLD	? shipBuyPrice.info.finalPrice - accountGold
+																								: shipBuyPrice.info.finalPrice - accountCredits")
+		(var isEnoughMoney:bool =	"moneyDeficit <= 0")
+		
+		
+		(var shipCrossResearchInfoComponent:dhComponent = "shipEntity.shipCrossResearchInfo")
+		(var isResearchAvailable:bool = "shipCrossResearchInfoComponent.isResearchAvailable" (event "shipCrossResearchInfoComponent.evChanged"))
+
+		
+		(var isSupership:bool =	"shipEntity && shipEntity.ship.level == SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var superShipFeatureEntity:dhEntity = "getSingleEntity(CC.superShipFeature)")
+		(var superShipFeatureComponent:dhComponent = "superShipFeatureEntity.superShipFeature")
+		(var isUnlockedSuperShipFeature:bool = "superShipFeatureComponent.isUnlocked" (event "superShipFeatureComponent.evUpdate"))
+
+		(var lastBoardedCrewId:number =	"shipEntity.ship.lastBoardedCrewId"	(event "shipEntity.ship.evLastBoardedCrewIdChanged") (event "shipEntity.ship.evUpdate"))
+		(var lastBoardedCrewEntity:dhEntity = "getPrimaryEntity(CC.crew, lastBoardedCrewId)")
+		(var lastBoardedCrew:dhComponent = "lastBoardedCrewEntity.crew")
+
+		(var hasLastBoardedCrew:bool =	"lastBoardedCrewEntity != null")
+		(var isReturnLastCrewButtonVisible:bool = "crewId == 0 && lastBoardedCrewId != 0 && hasLastBoardedCrew")
+
+		(var otherShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, lastBoardedCrew.shipID)")
+		(var otherShipComponent:dhComponent = "otherShipEntity.ownShip")
+
+		(var isOtherShipExist:bool = "otherShipEntity != null")
+		(var isOtherShipLocked:bool = "otherShipComponent.isLocked" (event "otherShipComponent.evUpdateLock"))
+
+		(var isLastBoardedCrewLocked:bool = "isOtherShipExist && isOtherShipLocked")
+		(var isLastBoardedCrewInBasket:bool = "hasLastBoardedCrew && lastBoardedCrew && lastBoardedCrew.dismissDelay > 0")
+		(var isReturnCrewDisabled:bool = "isLocked || isLastBoardedCrewLocked || isLastBoardedCrewInBasket")
+		
+		(var canAssignWithoutRetrain:bool = "lastBoardedCrew && lastBoardedCrew.specializationID == _shipId || isWithoutCrewPenalty")
+
+		(struct researchTreeFeatures = FEATURES(_state = 17))
+
+		(var cantBuyReason:str = "shipBuyPrice.info.currency == SC.Result_screen.FORMAT.GOLD ? 'IDS_NOT_ENOUGH_GOLD' : 'IDS_NOT_ENOUGH_CREDITS'")
+		(var cantResearchReason:str = "isSupership && !isUnlockedSuperShipFeature ? 'IDS_RESEARCH_SUPERSHIP_SHORT_INFO' : 'IDS_NOT_ENOUGH_EXP'")
+
+		(var managementRouteEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.MANAGEMENT)")
+		(var managementRouteActive:bool = "managementRouteEntity.route.isActive" (event "managementRouteEntity.route.evIsActiveChanged"))
+	)
+	(name = 'ShipContextMenu')
+	(class $ContextMenuDimensions)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	
+	(block
+		(style (width = 100%))
+
+		(block
+			(style (width = 100%))
+			(name = 'ShipContextMenu_Modules')
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "researchTreeFeatures.state != 'locked'")
+				(args
+					_title = 'IDS_MODULES'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_methods="[ {
+									type:	'inputMapping.onAction',
+									name:	managementRouteActive	? 'selectShip'
+																	: 'navigateTo',
+									args:	managementRouteActive	?	{	shipId: _shipId}
+																	:	{	route: SC.Ui_windows.ROUTE.MANAGEMENT,
+																			data: { shipId: _shipId}}
+								},
+								{
+									type:	'inputMapping.onRequest',
+									name:	isCrewModalWindow		? 'hideCrewManagement' :
+											isEconomicsModalWindow	? 'hideEconomicsManagement'
+																	: '',
+									args:	{}
+								}]"
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "isNotEventGroup")
+				(args
+					_title = 'IDS_SHIP_BRANCHES_FEATURE'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_methods="[ {
+									type:	'inputMapping.onRequest',
+									name:	'showModalShipsBranchesFeatures',
+									args:	{ _branchId: shipEntity.ship.branchId, _shipId: _shipId }
+								}]"
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(element ContextMenuItem
+				_title = 'IDS_SHIP_PREVIEW'
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_methods="[ {
+								type:	'inputMapping.onAction',
+								name:	'selectShip',
+								args:	{shipId: toNumber(_shipId)}
+							},
+							{
+								type:	'inputMapping.onAction',
+								name:	'navigateTo',
+								args:	{ route: SC.Ui_windows.ROUTE.SHIP_PREVIEW }
+							}]"
+			)
+		)
+		
+		(block
+			(style (width = 100%))
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(name = 'ShipContextMenu_Primary')
+			(style (width = 100%))
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "isOwned")
+				(args
+					_title = "isPrimary ? 'IDS_REMOVE_PRIMARY' : 'IDS_ASSIGN_PRIMARY'"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_enabled = "true"
+					_methods = "[{
+									type:	'inputMapping.onRequest',
+									name:	'primaryThisShip',
+									args:	{shipId: _shipId}
+								}]"
+				)
+			)
+		)
+
+		(block
+			(name = 'ShipContextMenu_Primary')
+			(style (width = 100%))
+			(bind alpha "isReturnCrewDisabled ? 0.5 : 1")
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "isReturnLastCrewButtonVisible")
+				(args
+					_title = 'IDS_CREW_HIRE_LAST_CREW'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_enabled = "!isReturnCrewDisabled"
+					_methods="[ {
+									type:	'inputMapping.onAction',
+									name:	'selectShip',
+									args:	{shipId: _shipId}
+								},
+								{
+									type:	!canAssignWithoutRetrain ? 'inputMapping.onRequest' : 'inputMapping.onAction',
+									name:	!canAssignWithoutRetrain ? CREW_ACTIONS.OPEN_CREW_RETRAIN_WINDOW : CREW_ACTIONS.ASSIGN_TO_SHIP,
+									args:	{crewId: lastBoardedCrewId, shipId: _shipId}
+								}]"
+				)
+			)
+
+			(controller $Tooltip
+				(bind enabled "isReturnLastCrewButtonVisible")
+				(renderer = 'CrewTooltip')
+				(args
+					_crewId = "lastBoardedCrewId"
+					_targetShipId = "_shipId"
+					_noContextMenuInstruction = "true"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(block
+			(name = 'ShipContextMenu_Sell')
+			(style (width = 100%))
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "	researchTreeFeatures.state != 'locked' &&
+								isOwned &&
+								isSellable &&
+								!isTimeRent &&
+								!(isLocked || isNeedRepair || isInFormation) &&
+								!_disableShipActions")
+				(args
+					_title = 'IDS_SELL'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_methods = "[{
+									type:	'inputMapping.onRequest',
+									name:	'sellShipWindow',
+									args:	{	shipId:	_shipId,
+												shipName:	fullName }
+								}]"
+				)
+			)
+		)
+
+		(block
+			(name = 'ShipContextMenu_Purchase')
+			(style (width = 100%) )
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "researchTreeFeatures.state != 'locked' &&
+								(!isOwned || isTimeRent) &&
+								upgradableShipInfo.isExplored &&
+								canBuy && !_disableShipActions")
+				(args
+					_title = 'IDS_DO_PURCHASE'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_enabled = "isEnoughMoney"
+					_methods = "[{
+									type:	'inputMapping.onAction',
+									name:	'purchaseShip',
+									args:	{	shipId:	_shipId }
+								}]"
+				)
+			)
+
+			(controller $Tooltip
+				(bind enabled "!isEnoughMoney")
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = "cantBuyReason"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(block
+			(name = 'ShipContextMenu_Research')
+			(style (width = 100%))
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "researchTreeFeatures.state != 'locked' &&
+								!upgradableShipInfo.isExplored &&
+								!isEventLike &&
+								group != SC.Ships.SHIP_GROUPS.EARLY_ACCESS &&
+								group != SC.Ships.SHIP_GROUPS.EVENT")
+				(args
+					_title = 'IDS_DO_RESEARCH'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_enabled = "isResearchAvailable"
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'researchShip',
+									args:	{ shipId: _shipId }
+								},
+								{
+									type:	'inputMapping.onAction',
+									name:	'selectShip',
+									args:	{ shipId: _shipId }
+								}]"
+				)
+			)
+			(controller $Tooltip
+				(bind enabled "!isResearchAvailable")
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = "cantResearchReason"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+)

@@ -1,0 +1,523 @@
+(def constant SHIP_FEATURES_TAB_GROUP "{	ALL: 1,
+											SHIP: 2 }")
+
+(def element ModalWindowShipsBranchesFeatures (_branchId:number, _shipId:number)
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(event evShipFeaturesSideTabButtonSelected)
+		(event evShipFeaturesShowSelectedContent)
+
+		(var techTreeBranch:dhComponent = "getPrimaryEntity(CC.techTreeBranch, _branchId).techTreeBranch")
+		(var shipIdList:array = "techTreeBranch.shipIdList ?: []")
+		(var isSingleShipFeature:bool = "shipIdList.length == 1")
+		(var hasShipBranch:bool = "shipIdList.length > 0")
+
+		(var initGroup:number = "_shipId ? SHIP_FEATURES_TAB_GROUP.SHIP : SHIP_FEATURES_TAB_GROUP.ALL" watch=false)
+		(var activeGroup:number = "$event._group ?: initGroup" watch=false (event "evShipFeaturesSideTabButtonSelected"))
+
+		(var initTabIndex:number = "max(0, indexOf(_shipId, shipIdList))")
+		(var activeTabIndex:number = "$event ? $event._selectedIndex : initTabIndex" watch=false (event "evShipFeaturesSideTabButtonSelected"))
+		(var activeShipId:number = "shipIdList.length ? shipIdList[activeTabIndex] : _shipId" watch=false (event "evShipFeaturesShowSelectedContent"))
+		
+		(var isActiveBranchContent:bool = "!isSingleShipFeature && activeGroup == SHIP_FEATURES_TAB_GROUP.ALL" watch=false (event "evShipFeaturesShowSelectedContent"))
+		(var isActiveShipContent:bool = "!hasShipBranch || isSingleShipFeature || activeGroup == SHIP_FEATURES_TAB_GROUP.SHIP" watch=false (event "evShipFeaturesShowSelectedContent"))
+
+		(event evContentReady) 
+		(var isContentReady:bool = "false")
+		(bind isContentReady "true" init=false watch=false (event "evContentReady"))
+	)
+	(dispatch evContentReady (bind enabled "isActiveBranchContent") (event "startShow"))
+	(dispatch evContentReady delay=0.33 (bind enabled "isActiveShipContent") (event "startShow"))
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Animation
+			(bindcall play duration=0.01 to="{ alpha: 1 }" action="kill" (event "startShow"))
+			(bindcall play delay=0.1 duration=0.3 to="{ alpha: 0 }" action="kill" (event "startHide"))
+		)
+		(element AnimatedBackground _selectedCategory='profile' _type = "SC.Ui_styles.ANIMATED_BG.DEFAULT")
+	)
+
+	(block
+		(class $Fullsize)
+
+		(controller $Instance renderer='ShipsBranchesFeaturesContent'
+			(bind enabled "isContentReady")
+			(args
+				_branchId = "_branchId"
+				_activeShipId = "activeShipId"
+				_isActiveBranchContent = "isActiveBranchContent"
+				_isActiveShipContent = "isActiveShipContent"
+				_shipIdList = "shipIdList"
+				_hasShipBranch = "hasShipBranch"
+				_isSingleShipFeature = "isSingleShipFeature"
+				_activeTabIndex = "activeTabIndex"
+			)
+		)
+	)
+)
+
+(def element ShipsBranchesFeaturesContent (	_branchId:number, _activeShipId:number, _activeTabIndex:number, _isActiveBranchContent:bool, _isActiveShipContent:bool,
+											_hasShipBranch:bool, _isSingleShipFeature:bool, _shipIdList:array)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evShipFeaturesSideTabButtonSelected)
+		(event evShipFeaturesShowSelectedContent)
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _activeShipId)")
+		(var isOwnShip:bool = "_isActiveShipContent && ownShipEntity != null")
+
+		(var shipInfo:dhComponent = "getPrimaryEntity(CC.ship, _activeShipId).ship")
+		(var isSupership:bool = "shipInfo.level == SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var shipSubType:str = "shipInfo.subtype")
+		(var shipClass:str = "tr('IDS_SHIP_TAG_' + toUpper(shipSubType) + (isSupership ? '_LEGENDARY' : ''))")
+		(var levelRome:str = "shipInfo.levelRome" (event "shipInfo.evUpdate"))
+
+		(var headerText:str = "_isActiveShipContent	? 'IDS_MODAL_WINDOW_SHIP_BRANCH_FEATURES_TITLE'
+													: 'IDS_MODAL_WINDOW_SHIPS_BRANCHES_FEATURES_TITLE'")
+
+		(var subHeaderHintText:str = "	_isActiveBranchContent	? 'IDS_SHIPS_BRANCHES_FEATURES_HINT' :
+										isSupership				? subst('IDS_SUBST_SHIP_TAG_HEADER_LEGENDARY', [], { _shipClass: shipClass })
+																: subst('IDS_SUBST_SHIP_TAG_HEADER', [], { _shipClass: shipClass, _shipLevel: levelRome })")
+
+		(var techTreeBranch:dhComponent = "getPrimaryEntity(CC.techTreeBranch, _branchId).techTreeBranch")
+		(var complexityLevel:number = "_isActiveBranchContent ? techTreeBranch.currentComplexityLevel : shipInfo.currentComplexityLevel")
+		(var maxComplexityLevel:number = "_isActiveBranchContent ? techTreeBranch.maxComplexityLevel : shipInfo.maxComplexityLevel")
+		(var complexityType:str = "_isActiveBranchContent ? COMPLEXITY_TYPE.BRANCH : COMPLEXITY_TYPE.SHIP")
+	)
+	(dispatch evShipFeaturesShowSelectedContent delay=0.1 dir="EventDirection.UP" (event "evShipFeaturesSideTabButtonSelected"))
+	(bindcall externalCall "_isActiveShipContent ? 'inputMapping.onAction' : ''" "['viewShip', { shipId: _activeShipId, state: SC.Common.SHIP_SELECTION_STATES.SHIP_FEATURES }]" init=true)
+	(bindcall externalCall "'inputMapping.onAction'" "['exitModalShipsBranchesFeatures', {}]" (event "startHide"))
+
+	(class $Fullsize)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+		(style (width = 100%))
+
+		(element ModalWindowHeaderFullSize
+			_windowName = "headerText"
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_methods = "[ { type:	'inputMapping.onRequest',
+							name:	'returnToDock',
+							args:	{}
+						}]"
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+		(style (top = "{720:85px, 1080:125px}") (position = "absolute") (width = "{1280:200px, 1920:240px}"))
+
+		(block
+			(style (width = 100%) (marginBottom = "L"))
+			
+			(controller $Instance renderer='SideTabButton'
+				(bind enabled "_hasShipBranch && !_isSingleShipFeature")
+				(args
+					_label = 'IDS_SHIPS_BRANCHES_TAB_ALL_SHIPS'
+					_isSelected = "_isActiveBranchContent"
+					_dispatchedEv = 'evShipFeaturesSideTabButtonSelected'
+					_dispatchParams = "{ _group: SHIP_FEATURES_TAB_GROUP.ALL }"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Repeat renderer='ShipFeaturesSideTabButton'
+				(bind count "_shipIdList.length")
+				(bind enabled "!_isSingleShipFeature")
+				(args
+					_shipId = "toNumber(_shipIdList[$index])"
+					_isSelected = "_isActiveShipContent && $index == _activeTabIndex"
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(width = 1064px) (height = 100%)
+			(paddingTop = "LM") (paddingBottom = "L")
+			(marginLeft = "{ 1280:208px, 1920:480px }")
+		)
+
+		(block
+			(class $Fullsize)
+			(style
+				(bind visualOffsetY "10px" init=false watch=false (event "evShipFeaturesSideTabButtonSelected"))
+				(bind alpha "0" init=false watch=false (event "evShipFeaturesSideTabButtonSelected"))
+			)
+			(controller $Animation
+				(bindcall play	id = 'showContentAnim'
+								delay = 0.05
+								duration = 0.15
+								to = "{ alpha: 1, visualOffsetY: 0px }"
+								easing = "Easing.quad_out"
+								action = "kill"
+								(event "evShipFeaturesShowSelectedContent")
+				)
+				(bindcall stop id='showContentAnim' init=false watch=false (event "evShipFeaturesSideTabButtonSelected"))
+			)
+
+			
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 0.5)
+				(style (width = 100%) (marginBottom = "M"))
+
+				(hblock
+					(style (width = 100%) (marginBottom = "SXS"))
+
+					(element ShipLineItemNM
+						_shipId = "toNumber(_activeShipId)"
+						_fontClass = '$TextDefaultBold23NM'
+						_withFlag = true
+					)
+
+					(tf
+						(bind visible "_isActiveBranchContent")
+						(style (marginTop = -1px) (marginLeft = "S") (marginRight = "S"))
+						(class $TextDefaultBold23NM)
+						(text = '—')
+					)
+
+					(block
+						(bind visible "_isActiveBranchContent")
+						(element ShipLineItemNM
+							_shipId = "toNumber(_shipIdList[_shipIdList.length - 1])"
+							_fontClass = '$TextDefaultBold23NM'
+						)
+					)
+				)
+
+				(block
+					(style (marginBottom = "SXS"))
+
+					(element ComplexityLevel
+						_complexityLevel = "complexityLevel"
+						_maxComplexityLevel = "maxComplexityLevel"
+						_complexityType = "complexityType"
+						_size = "SIZE.MEDIUM"
+					)
+
+					(element GuidingTipHub
+						_tipId = "SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_SHIPS_COMPLEXITY"
+						_tipPositioning = "TIP_POSITION_RIGHT"
+						_noPointer = true
+						_offsetX = "M"
+						_modalWindowName = 'ModalWindowShipsBranchesFeatures'
+						_hasNextButton = true
+					)
+				)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "isOwnShip")
+						(args
+							_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+							_text = 'IDS_SHIP_OWN_STATUS'
+							_textClass = '$TextDefault17NM'
+						)
+					)
+				)
+			)
+			(block
+				(class $Fullsize)
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+				(scrollArea
+					(class $Fullsize)
+					(style (backgroundColor = "NO_COLOR"))
+
+					(verticalSlider = 'ScrollBarVLight')
+
+					(hscrollPolicy = 'off')
+					(vscrollPolicy = 'auto')
+					
+					(wheelScrollSpeed = 1.0)
+					(wheelScrollAcceleration = 0.8)
+					(maxScrollingAnimatedDistance = 280)
+
+					(topShadow = 'ScrollAreaShadowTop')
+					(bottomShadow = 'ScrollAreaShadowBottom')
+
+					(activeControlsAlpha = 1)
+					(inactiveControlsAlpha = 0.5)
+					(animationDuration = 0.2)
+					(animationEasing = "Easing.cubic_out")
+					
+					(content
+						(style (width = 100%) (paddingRight = "{1280:S, 1920:MS}"))
+						(block (style (width = 100%) (height = "MS")))
+						
+						(block
+							(style (width = 100%))
+							
+							(tf
+								(style (width = 100%) (alpha = "TC") (leading = -3) (marginBottom = "SXS"))
+								(class $TextDefaultBold19NM)
+								(bind text "toUpper(tr(subHeaderHintText))")
+							)
+							(element HorizontalDividerTwoPx)
+						)
+
+						
+						(block
+							(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+							(style (width = 100%) (marginTop = "{720:M,1080:LS}"))
+							
+							(controller $Instance renderer='ShipsBranchFeaturesList'
+								(bind enabled "_isActiveBranchContent")
+								(args
+									_branchId = "_branchId"
+								)
+							)
+
+							(controller $Instance renderer='CurrentShipsBranchFeaturesList'
+								(bind enabled "_isActiveShipContent")
+								(args
+									_shipId = "_activeShipId"
+								)
+							)
+						)
+
+						(block
+							(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+							(bind visible "_isActiveShipContent")
+							(style (width = 100%) (marginTop = "SXS"))
+
+							(controller $Instance renderer='ModernizationsAndConsumablesPanel'
+								(bind enabled "_isActiveShipContent")
+								(args
+									_shipId = "_activeShipId"
+								)
+							)
+						)
+				
+						(block (style (width = 100%) (height = "SXS")))
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element ModernizationsAndConsumablesPanel (_shipId:number)
+	(scope
+		(var weaponCollection:dhCollection = "getCollection(CC.visualSlotData).getChildByPath('byAvatarId.0')")
+		(var weaponList:array = "weaponCollection.items ?: []" (event "weaponCollection.evAdded") (event "weaponCollection.evRemoved"))
+		
+		(var consumableCollection:dhCollection = "getCollection(CC.equipmentSlot).getChildByPath('bySlotType.' + SC.Ships.SHIP_SLOT_TYPES.ABILITY + '.sortingByCommandId')")
+		(var consumableList:array = "consumableCollection.items ?: []" (event "consumableCollection.evAdded") (event "consumableCollection.evRemoved"))
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _shipId)")
+		(var isOwnShip:bool = "ownShipEntity != null")
+
+		(var fireModeSlotEntity:dhEntity = "getSingleEntity(CC.fireModeSlot)")
+		(var isSwitchableFireMode:bool = "fireModeSlotEntity.fireModeSlot.isSwitchable" (event "fireModeSlotEntity.fireModeSlot.evUpdated"))
+
+		(var headerText:str = "isOwnShip ? 'IDS_SHIPS_BRANCHES_CURRENT_PARAMS' : 'IDS_SHIPS_BRANCHES_DEFAULT_PARAMS'")
+	)
+	(style (width = 100%))
+
+	(tf
+		(style (width = 100%) (alpha = "TC") (leading = -3) (marginBottom = "SXS"))
+		(class $TextDefaultBold19NM)
+		(bind text "toUpper(tr(headerText))")
+	)
+	(element HorizontalDividerTwoPx)
+
+	(hblock
+		(style (width = 100%) (align = "middle") (marginTop = "MS"))
+		
+		(hblock
+			(style (hgap = "SXS"))
+			(controller $Repeat renderer='BaseWeaponItem'
+				(bind count "weaponList.length")
+				(args
+					_weaponSlotEntity = "weaponList[$index]"
+				)
+			)
+		)
+
+		(block
+			(style (height = 100%) (paddingLeft = "SXS") (paddingRight = "SXS"))
+			(element VerticalDivider)
+		)
+
+		(hblock
+			(style (hgap = "SXS"))
+			(controller $Repeat renderer='BaseConsumableItem'
+				(bind count "consumableList.length")
+				(args
+					_equipmentSlotEntity = "consumableList[$index]"
+				)
+			)
+		)
+	)
+)
+
+(def element ShipsBranchFeaturesList (_branchId:number)
+	(scope
+		(var branchStatsTagsEntity:dhEntity = "getPrimaryEntity(CC.branchStatsTags, _branchId)" )
+		(var oddOtherFeatures:array = "branchStatsTagsEntity.branchStatsTags.oddOtherFeatures ?: []")
+		(var evenOtherFeatures:array = "branchStatsTagsEntity.branchStatsTags.evenOtherFeatures ?: []")
+	)
+	(style (flow = "horizontal") (width = 100%))
+
+	(block
+		(style (width = 50%) (marginRight = "{1280:0px, 1920:M}"))
+		(controller $Repeat renderer='ShipsBranchFeature'
+			(bind count "oddOtherFeatures.length")
+			(args
+				_featureData = "oddOtherFeatures[$index]"
+			)
+		)
+	)
+	(block
+		(style (width = 50%))
+		(controller $Repeat renderer='ShipsBranchFeature'
+			(bind count "evenOtherFeatures.length")
+			(args
+				_featureData = "evenOtherFeatures[$index]"
+			)
+		)
+	)
+)
+
+(def element CurrentShipsBranchFeaturesList (_shipId:number)
+	(scope
+		(var shipStatsTagsEntity:dhEntity = "getPrimaryEntity(CC.shipStatsTags, _shipId)")
+		(var oddDataArray:array = "shipStatsTagsEntity.shipStatsTags.oddDataArray ?: []")
+		(var evenDataArray:array = "shipStatsTagsEntity.shipStatsTags.evenDataArray ?: []")
+	)
+	(style (flow = "horizontal") (width = 100%))
+
+	(block
+		(style (width = 50%) (marginRight = "{1280:0px, 1920:M}"))
+		(controller $Repeat renderer='ShipsBranchFeature'
+			(bind count "oddDataArray.length")
+			(args
+				_featureData = "oddDataArray[$index]"
+			)
+		)
+	)
+	(block
+		(style (width = 50%))
+		(controller $Repeat renderer='ShipsBranchFeature'
+			(bind count "evenDataArray.length")
+			(args
+				_featureData = "evenDataArray[$index]"
+			)
+		)
+	)
+)
+
+(def element ShipsBranchFeature (_featureData:dict)
+	(scope
+		(var category:str = "_featureData.category ?: ''")
+		(var tags:array = "_featureData.tags ?: []")
+	)
+	(style (flow = "horizontal") (width = 100%) (marginBottom = "{ 720:L, 1080:LM }"))
+
+	(block
+		(style
+			(width = 60px)
+			(height = 60px)
+			(marginRight = "SXS")
+			(alpha = "TA")
+			(bind backgroundImage "'url:../ships_tree_features/new_categories/category_' + category + '.png'")
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(tf
+			(style (width = 100%) (marginBottom = "M") (alpha = "TA"))
+			(class $TextDefaultBold23NM)
+			(bind text "toUpper('IDS_OTHER_FEATURE_CATEGORY_' + category)")
+		)
+
+		(block
+			(style (width = 100%) (vgap = "SXS"))
+			(controller $Repeat renderer='ShipsBranchFeatureTag'
+				(bind count "tags.length")
+				(args
+					_tag = "tags[$index]"
+				)
+			)
+		)
+	)
+)
+
+(def element ShipsBranchFeatureTag (_tag:dict)
+	(style (width = 100%) (flow = "horizontal"))
+	
+	(block
+		(style (height = 100%) (marginRight = "XS"))
+		
+		(block
+			(style
+				(width = 19px)
+				(height = 19px)
+				(marginTop = "-XXS")
+				(bind backgroundImage "'swf:../ships_tree_features/svg/svg.swf:feat_' + toLower(SC.Ships.QUALITY.VALUE_TO_NAME[_tag.quality])")
+			)
+		)
+	)
+
+	(tf
+		(style (width = 100%) (alpha = "TA") (leading = -2))
+		(class $TextDefault19NM)
+		(bind text "toUpper('IDS_' + _tag.name)")
+	)
+)
+
+(def element ShipFeaturesSideTabButton (_shipId:number, _isSelected:bool=false)
+	(scope
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var shipComponent:dhComponent = "shipEntity.ship")
+		(var levelRome:str = "shipComponent.levelRome ?: ''" (event "shipComponent.evUpdate"))
+		(var levelIcon:str = "shipComponent.levelIcon ?: ''" (event "shipComponent.evCurrentSkinChanged"))
+
+		(var isShowLevelIcon:bool = "levelIcon.length > 0")
+		(var shipLevelName:str = "(isShowLevelIcon ? '' : levelRome) + ' ' + toUpper(tr(shipComponent.nameIDS))")
+
+		(struct shipFeaturesTabTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_SHIP_TAB"))
+		(var isGuidingTipVisible:bool = "shipFeaturesTabTip.isActive && shipFeaturesTabTip.targetId == _shipId")
+	)
+	(style (width = 100%))
+
+	(element SideTabButton
+		_label = "shipLevelName"
+		_isSelected = "_isSelected"
+		_dispatchedEv = 'evShipFeaturesSideTabButtonSelected'
+		_dispatchParams = "{ _selectedIndex: $index, _group: SHIP_FEATURES_TAB_GROUP.SHIP }"
+		_methods = "[ { type:	'inputMapping.onAction',
+						name:	'viewShip',
+						args:	{ shipId: _shipId, state: SC.Common.SHIP_SELECTION_STATES.SHIP_FEATURES}},
+
+					  { type:	'inputMapping.onAction',
+						name:	'deactivateTipChain',
+						args:	{tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SHIP_FEATURES}}
+					]"
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isGuidingTipVisible")
+		(args
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_SHIP_TAB"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'ModalWindowShipsBranchesFeatures'
+		)
+	)
+)
