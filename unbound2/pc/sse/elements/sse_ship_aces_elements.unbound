@@ -1,0 +1,824 @@
+
+(def constant CURRENCY_EARNINGS_STEPS_TOTAL 5)
+
+(def element SseShipAcesChild ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evSelectSprint)
+		(macro STAGE_SIZE)
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var shipAcesSeason:dhComponent = "shipAcesSeasonEntity.shipAcesSeason")
+
+		(var activeSprintId:number =	"shipAcesSeason.activeSprintId" (event "shipAcesSeason.evChanged"))
+		(var finishTime:number =		"shipAcesSeason.finishTime" (event "shipAcesSeason.evChanged"))
+
+		(macro SERVER_TIME_SCOPE)
+		(var isSeasonOver:bool = "finishTime - serverTime <= 0")
+		
+		(var currentSprintId:number = "activeSprintId" watch=false)
+		(bind currentSprintId "$event.currentSprintId" init=false watch=false (event "evSelectSprint"))
+
+		(var shipAcesStatsEntity:dhEntity = "getSingleEntity(CC.shipAcesFinalStats)")
+
+		(var shipAcesSprintsCollection:dhCollection = "getCollection(CC.shipAcesSprint)")
+		(var shipAcesSprintsLen:number = "shipAcesSprintsCollection.length ?: 0")
+		(var shipAcesSprintEntity:dhEntity = "shipAcesSprintsCollection[currentSprintId]")
+
+		(var columnsCount:number = "SC.Common.SHIP_TYPE.SHIP_ACES_ORDER.length")
+		(var childAlpha:number = "currentSprintId == activeSprintId ? 1 : 0.5")
+		(var isSmallScreen:bool = "stageWidth < 1400")
+
+		(var shipAcesSeasonType:number = "shipAcesSeason.shipAcesType")
+		(var shipAcesRenderer:str = "shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.FULL ? 'ShipAcesTable' : 'MiniShipAcesGrid'")
+	)
+	(bindcall externalCall "shipAcesSeasonEntity == null ? 'inputMapping.onAction' : ''" "['navigateTo', { route: 'sse_common' }]" watch=false (bind trigger "shipAcesSeasonEntity"))
+	(bindcall externalCall "shipAcesStatsEntity != null ? 'inputMapping.onRequest' : ''" "['openModalShipAcesResults', {}]" watch=false (bind trigger "shipAcesStatsEntity"))
+
+	(bindcall externalCall "shipAcesSeasonEntity.hasComponent(CC.newItem) ? 'inputMapping.onAction' : ''" "['makeSeen', { entityId: shipAcesSeasonEntity.id }]" watch=false on='addedToStage')
+	(bindcall externalCall "'inputMapping.onAction'" "['setPromoSkipped', { splashScreenName: SC.Ui_common.SPLASH_SCREEN_TYPE.SHIPACES }]" on='addedToStage')
+
+	(class $Fullsize)
+	(style (bind align "!isSmallScreen ? center : left"))
+
+	(hblock
+		(style (height = 100%) (alpha = "isSeasonOver ? 0.5 : 1"))
+
+		(controller $Animation
+			(bindcall play duration = 0.15	from = "{ alpha: 1}" to = "{ alpha: 0.5 }" action="kill" reverse="!isSeasonOver" (bind trigger "isSeasonOver") )
+		)
+
+		(block
+			(style
+				(marginRight = "{ 1280:M, 1920:MS }")
+				(height = 100%)
+				(bind width "columnsCount == CURRENCY_EARNINGS_STEPS_TOTAL ? { 1280:744px, 1920:1050px } : { 1280:744px, 1920:865px }")
+			)
+			
+			(hblock
+				(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 1)
+				(style (width = 100%) (marginBottom = "{ 720:S, 1080:L }") (align = "center"))
+
+				(controller $Repeat renderer='ShipAcesSprintItem'
+					(bind enabled "shipAcesSprintsLen > 1")
+					(bind count "shipAcesSprintsLen")
+					(args
+						_shipAcesSprintsCollection = "shipAcesSprintsCollection"
+						_selectedSprintId = "currentSprintId"
+					)
+				)
+			)
+			
+			(block
+				(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 2)
+				(class $Fullsize)
+
+				(controller $Instance
+					(bind renderer "shipAcesRenderer")
+					(args
+						_selectedSprintId = "currentSprintId"
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 3)
+			(style
+				(marginTop = "{ 720:0px, 1080:M }")
+				(bind width "!isSmallScreen ? 308px : 240px")
+			)
+
+			
+			(block
+				(style (width = 100%) (bind alpha "childAlpha"))
+				
+				(element ShipAcesRewardsPanel
+					_selectedSprintId = "currentSprintId"
+				)
+			)
+
+			
+			(block
+				(style (width = 100%) (bind alpha "childAlpha") (marginTop = "{ 720:M, 1080:L }"))
+				(element ShipAcesRules
+					_selectedSprintId = "currentSprintId"
+				)
+			)
+
+			
+			(block
+				(style (width = 100%) (bind alpha "childAlpha") (marginTop = "{ 720:M, 1080:L }"))
+				(element ShipAcesManagementPanel
+					_selectedSprintId = "currentSprintId"
+				)
+			)
+		)
+	)
+)
+
+(def element ShipAcesRules (_selectedSprintId:number)
+	(scope
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, _selectedSprintId)")
+		(var conditionCategory:str = "shipAcesSprintEntity.shipAcesSprint.conditionCategory ?: ''" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+	)
+	(style (width = 100%))
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../panel_background/selection_panel.png')
+			(scale9grid = 2)
+			(alpha = 0.1)
+		)
+	)
+	(block
+		(style (width = 100%) (padding = "MS"))
+		(hblock
+			(block
+				(style
+					(marginRight = "XS")
+					(marginTop = "-S")
+					(width = 24px)
+					(height = 24px)
+					(bind backgroundImage "'url:../sse/condition_categories/' + conditionCategory + '.png'")
+				)
+			)
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (alpha = "TA"))
+				(bind text "tr('IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + toUpper(conditionCategory) + '_SHORT')")
+			)
+		)
+		(tf
+			(class $TextDefaultNM)
+			(style (width = 100%) (marginTop = "SXS") (alpha = "TC"))
+			(bind text "tr('IDS_SHIP_ACES_RULES_' + toUpper(conditionCategory))")
+		)
+		(tf
+			(class $TextDefaultNM)
+			(style (width = 100%) (marginTop = "M") (alpha = "TC"))
+			(text = 'IDS_SHIP_ACES_RULE')
+		)
+	)
+)
+
+(def element ShipAcesManagementPanel (_selectedSprintId:number = 0)
+	(scope
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, _selectedSprintId)")
+		(var taskTotal:number = "shipAcesSprintEntity.shipAcesSprint.taskTotal ?: 0" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+		(var bestResult:number = "shipAcesSprintEntity.shipAcesSprint.bestResult ?: 0" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+	)
+	(style (width = 100%))
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../panel_background/selection_panel.png')
+			(scale9grid = 2)
+			(alpha = 0.1)
+		)
+	)
+	(block
+		(style (width = 100%) (padding = "MS"))
+		(hblock
+			(style (width = 100%) (marginBottom = "SXS"))
+			(tf
+				(class $TextDefaultNM)
+				(style (width = 100%) (alpha = "TA"))
+				(text = 'IDS_SHIP_ACES_METRICS_TASKS_TOTAL')
+			)
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(bind text "formatSeparator(taskTotal)")
+			)
+		)
+		(hblock
+			(style (width = 100%))
+			(tf
+				(class $TextDefaultNM)
+				(style (width = 100%) (alpha = "TA"))
+				(text = 'IDS_SHIP_ACES_METRICS_BEST_RESULT')
+			)
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(bind text "formatSeparator(bestResult)")
+			)
+		)
+	)
+)
+
+(def element ShipAcesReward (_selectedSprintId:number = 0, _rewardEntityId:number = 0)
+	(scope
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, _selectedSprintId)")
+		(var shipAcesSprint:dhComponent = "shipAcesSprintEntity.shipAcesSprint")
+		(var incomeSecondaryTotal:number = "shipAcesSprint.incomeSecondaryTotal ?: 0" (event "shipAcesSprint.evChanged"))
+		(var incomeTotal:number = "shipAcesSprint.incomeTotal ?: 0" (event "shipAcesSprint.evChanged"))
+		(var incomeMax:number = "shipAcesSprint.incomeMax ?: 1" (event "shipAcesSprint.evChanged"))
+		(var progress:number = "incomeTotal / incomeMax")
+
+		(var rewardEntity:dhEntity = "getEntity(_rewardEntityId)")
+		(var rewardComponent:dhComponent = "rewardEntity.rewardComponent")
+
+		(var rewardItem:dict = "{	id:			rewardComponent.id,
+									amount:		rewardComponent.amount,
+									name:		rewardComponent.name,
+									type:		rewardComponent.type,
+									subtype:	rewardComponent.subtype,
+									params:		rewardComponent.params,
+									isPRMP:		rewardComponent.isPRMP }")
+
+		(var rewardSubtype:str = "rewardItem.subtype ?: ''")
+		(var isLimitedReward:bool = "$index == 0")  
+		(var iconPath:str = "'url:../reward_icons/' + rewardSubtype + '.png'")
+
+		(var selectedRenderRewardResourceItemTooltip:str = "rewardItem.type == SC.Common.REWARD_TYPE.LOOTBOX		? 'RewardResourcesCommonTooltip' :
+															rewardSubtype in RENDER_REWARD_RESOURCE_ITEMS_TOOLTIP	? RENDER_REWARD_RESOURCE_ITEMS_TOOLTIP[rewardSubtype]
+																													: null")
+	)
+
+	(style
+		(width = 100%) (align = "middle")
+		(flow = "horizontal") (backgroundColor = "NO_COLOR")
+		(bind marginBottom "isLimitedReward ? M: 0")
+	)
+	(block
+		(style
+			(width = 80px) (height = 80px)
+			(marginRight = "SXS") (bind backgroundImage "iconPath")
+		)
+	)
+	(block
+		(style (width = 100%))
+		(tf
+			(bind visible "!isLimitedReward")
+			(class $TextDefaultBold19NM)
+			(style (width = 100%) (marginBottom = "S") (alpha = "TA"))
+			(bind text "formatSeparator(incomeSecondaryTotal)")
+		)
+		(element RewardTitle
+			_rewardEntityId = "_rewardEntityId"
+			_fontClass = '$TextDefaultNM'
+			_isAutoSized = false
+		)
+		(block
+			(bind visible "isLimitedReward")
+			(style (width = 100%) (marginTop = "SXS"))
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='DefaultProgressBar'
+					(bind enabled "isLimitedReward")
+					(args
+						_progress = "progress"
+					)
+				)
+			)
+			(block
+				(style (marginTop = "XS"))
+				(controller $Instance renderer='DefaultDividedCounter'
+					(bind enabled "isLimitedReward")
+					(args
+						_curValueTextClass = '$TextDefaultNM'
+						_curValue = "incomeTotal"
+						_maxValue = "incomeMax"
+					)
+				)
+			)
+		)
+	)
+	(controller $Tooltip
+		(bind renderer "selectedRenderRewardResourceItemTooltip")
+		(bind enabled "selectedRenderRewardResourceItemTooltip")
+		(args
+			_rewardItem = "rewardItem"
+			_currency = "rewardSubtype"
+			_amount = "rewardItem.amount"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ShipAcesRewardsPanel (_selectedSprintId:number = 0)
+	(scope
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, _selectedSprintId)")
+		(var incomeList:array = "shipAcesSprintEntity.shipAcesSprint.incomeList ?: []" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+	)
+
+	(style (width = 100%))
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../panel_background/selection_panel.png')
+			(scale9grid = 2)
+			(alpha = 0.1)
+		)
+	)
+	(block
+		(style (width = 100%) (padding = "MS"))
+		(controller $Repeat renderer='ShipAcesReward'
+			(bind count "incomeList.length")
+			(args
+				_selectedSprintId = "_selectedSprintId"
+				_rewardEntityId = "incomeList[$index]"
+			)
+		)
+	)
+)
+
+(def element ShipAcesTable (_selectedSprintId:number)
+	(scope
+		(event evRollOverOnTask)
+
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var activeSprintId:number = "shipAcesSeasonEntity.shipAcesSeason.activeSprintId" (event "shipAcesSeasonEntity.shipAcesSeason.evChanged"))
+		(var isActiveSprint:bool = "_selectedSprintId == activeSprintId")
+
+		(var selectedNation:str = '')
+		(bind selectedNation "$event.selectedNation" init=false watch=false (event "evRollOverOnTask"))
+
+		(var selectedShipType:str = '')
+		(bind selectedShipType "$event.selectedShipType" init=false watch=false (event "evRollOverOnTask"))
+
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(name = 'shipAcesTable')
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(class $Fullsize)
+	(style
+		(bind hitTest "isActiveSprint")
+		(bind alpha "!isActiveSprint ? 0.5 : 1")
+		(paddingRight = "{ 1280:0px, 1920:XL }")
+	)
+
+	(block
+		(style (width = 100%))
+		(element ShipAcesRow
+			_isMouseInTable = "rollOver"
+			_selectedShipType = "selectedShipType"
+			_isHeaderRow = true
+		)
+	)
+
+	(scrollArea
+		(class $Fullsize)
+		(style (backgroundColor = "NO_COLOR"))
+	
+		(verticalSlider = 'ScrollBarVLight')
+		(hscrollPolicy = 'off')
+		(vscrollPolicy = 'auto')
+
+		(wheelScrollSpeed = 1.0)
+		(wheelScrollAcceleration = 1.9)
+
+		(activeControlsAlpha = 1)
+		(inactiveControlsAlpha = 1)
+		(content
+			(style (width = 100%))
+		
+			(controller $Repeat renderer='ShipAcesRow'
+				(count = "SC.Common.NATION.SHIP_ACES_ORDER.length")
+				(args
+					_nation = "SC.Common.NATION.SHIP_ACES_ORDER[$index]"
+					_sprintId = "_selectedSprintId"
+					_isMouseInTable = "rollOver"
+					_selectedShipType = "selectedShipType"
+					_selectedNation = "selectedNation"
+				)
+			)	
+		)
+	)
+)
+
+(def element ShipAcesRow (_nation:str, _sprintId:number, _isMouseInTable:bool, _selectedShipType:str, _selectedNation:str, _isHeaderRow:bool=false, _index:number = 0)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(style (width = 100%) (flow = "horizontal") (height = 48px))
+
+	(block
+		(style (width = 64px) (height = 100%) (backgroundColor = "NO_COLOR") (align = "center|middle"))
+		(dispatch 'evRollOverOnTask' args="{ selectedShipType: null, selectedNation: _nation }" dir="EventDirection.UP" on='rollOver')
+
+		(macro TABLE_SELECT_BG "_isMouseInTable && (_selectedNation == _nation) && !_isHeaderRow")
+
+		(controller $Instance renderer='NationFlagsTiny'
+			(bind enabled "_nation")
+			(args
+				_shipCountry = "_nation"
+			)
+		)
+
+		(block
+			(bind visible "_index >= 0 && !_isHeaderRow")
+			(style (position = "absolute") (width = 100%))
+			(macro TABLE_DIVIDER _isHorizontal=true)
+		)
+	)
+	(hblock
+		(class $Fullsize)
+
+		(controller $Repeat count="SC.Common.SHIP_TYPE.SHIP_ACES_ORDER.length"
+			(bind renderer "_nation ? 'ShipAcesTask' : 'ShipAcesShipTypes'")
+			(args
+				_shipType = "SC.Common.SHIP_TYPE.SHIP_ACES_ORDER[$index]"
+				_nation = "_nation"
+				_sprintId = "_sprintId"
+				_shipAcesOrderlength = "SC.Common.SHIP_TYPE.SHIP_ACES_ORDER.length"
+				_selectedNation = "_selectedNation"
+				_selectedShipType = "_selectedShipType"
+				_isMouseInTable = "_isMouseInTable"
+			)
+		)
+	)
+)
+
+(def element ShipAcesTask (_shipType:str, _selectedShipType:str, _nation:str, _selectedNation:str, _sprintId:number, _shipAcesOrderlength:number, _isMouseInTable:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var shipAcesTaskEntity:dhEntity = "getPrimaryEntity(CC.shipAcesTask, _shipType + '_' + _nation + '_' + _sprintId)")
+		(var shipAcesTask:dhComponent = "shipAcesTaskEntity.shipAcesTask")
+		(var shipType:str =				"shipAcesTask.shipType"				(event "shipAcesTask.evChanged"))
+		(var nation:str =				"shipAcesTask.nation"				(event "shipAcesTask.evChanged"))
+		(var conditionCount:number =	"shipAcesTask.conditionCount ?: 0"	(event "shipAcesTask.evChanged"))
+		(var conditionText:str =		"shipAcesTask.conditionText"		(event "shipAcesTask.evChanged"))
+		(var rewards:array =			"shipAcesTask.rewards"				(event "shipAcesTask.evChanged"))
+		(var stepsNumber:number =		"shipAcesTask.stepsNumber ?: 0"		(event "shipAcesTask.evChanged"))
+		(var isEmpty:bool =				"shipAcesTask.isEmpty"				(event "shipAcesTask.evChanged"))
+
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var activeSprintId:number = "shipAcesSeasonEntity.shipAcesSeason.activeSprintId" (event "shipAcesSeasonEntity.shipAcesSeason.evChanged"))
+		(var isActiveSprint:bool = "_sprintId == activeSprintId")
+		(var isActiveTask:bool = "isActiveSprint && stepsNumber > 0")
+
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, _sprintId)")
+		(var conditionCategory:str = "shipAcesSprintEntity.shipAcesSprint.conditionCategory ?: ''" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isActiveTask ? 'default_button' : ''")
+
+	(dispatch 'evRollOverOnTask' args="{ selectedShipType: _shipType, selectedNation: _nation }" dir="EventDirection.UP" on='rollOver')
+	(bindcall externalCall "isActiveSprint && !isEmpty ? 'inputMapping.onAction' : ''" "['ShipAcesProxyUSS.getCellHistory', { shipType: _shipType, nation: _nation }]" watch=false on='leftClick')
+
+	(style
+		(height = 100%)
+		(bind width "round(100% / _shipAcesOrderlength)")
+		(backgroundColor = "NO_COLOR")
+	)
+	
+	(macro TABLE_SELECT_BG "_isMouseInTable && (_selectedShipType == _shipType)")
+	(macro TABLE_SELECT_BG "_isMouseInTable && (_selectedNation == _nation)")
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(align = "center|middle")
+			(scale9grid = 1)
+			(bind backgroundColor "isEmpty || stepsNumber == 0	? NO_COLOR : ''")
+			(bind backgroundImage "isEmpty || stepsNumber == 0	? ''
+																: 'url:../sse/ship_aces/task_stage_markers/task_stage_' + (stepsNumber >= 20 ? 20 : stepsNumber) + '.png' ")
+		)
+
+		(controller $Tooltip
+			(bind enabled "!isEmpty")
+			(renderer = 'ShortSseTaskConditionTooltip')
+			(args
+				_isTask = true
+				_headerText = "tr('IDS_' + nation + '_' + shipType)"
+				_descriptionText = "conditionText"
+				_conditionId = "shipAcesTaskEntity.id"
+				_stepsNumber = "stepsNumber"
+				_rewards = "rewards"
+				_hasMouseInstruction = "isActiveSprint"
+				_nation = "nation"
+				_shipType = "shipType"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(hblock
+			(bind visible "!isEmpty")
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(alpha = "TA")
+				(bind text "formatSeparator(conditionCount)")
+			)
+
+			(block
+				(style
+					(marginLeft = "XS")
+					(marginTop = "-XXS")
+					(width = 16px)
+					(height = 16px)
+					(bind backgroundImage "'url:../sse/condition_categories/' + conditionCategory + '.png'")
+					(backgroundSize = "cover")
+				)
+			)
+		)
+	)
+
+	(macro TABLE_DIVIDER _isHorizontal=true)
+	(macro TABLE_DIVIDER _isHorizontal=false)
+)
+
+(def element ShipAcesShipTypes (_shipType:str, _selectedShipType:str, _shipAcesOrderlength:number, _isMouseInTable:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(dispatch 'evRollOverOnTask' args="{ selectedShipType: _shipType, selectedNation: null }" dir="EventDirection.UP" on='rollOver')
+
+	(style
+		(flow = "horizontal")
+		(height = 100%)
+		(backgroundColor = "NO_COLOR")
+		(align = "center|middle")
+		(bind width "round(100% / _shipAcesOrderlength)")
+	)
+
+	(macro TABLE_SELECT_BG "_isMouseInTable && (_selectedShipType == _shipType)")
+
+	(element ShipTypeWithText
+		_shipType = "_shipType"
+		_textClass = '$TextDefaultNM'
+	)
+
+	(macro TABLE_DIVIDER _isHorizontal=false)
+)
+
+(def element ShipAcesSprintItem (_shipAcesSprintsCollection:dhCollection, _selectedSprintId:number)
+	(scope
+		(var shipAcesSprintEntity:dhEntity = "_shipAcesSprintsCollection[$index]")
+		(var shipAcesSprintsLen:number = "_shipAcesSprintsCollection.length")
+
+		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+		(var sprintId:number = "shipAcesSprintEntity.shipAcesSprint.sprintId" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+		
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var activeSprintId:number = "shipAcesSeasonEntity.shipAcesSeason.activeSprintId ?: 0" (event "shipAcesSeasonEntity.shipAcesSeason.evChanged"))
+
+		(var isActiveSprint:bool = "sprintId == activeSprintId")
+		(var isSelected:bool = "_selectedSprintId == sprintId")
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(dispatch "'evSelectSprint'" args="{ currentSprintId : sprintId }" dir="EventDirection.UP" on='leftClick')
+	(macro SOUND_HANDLER "'default_button'")
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(controller $Tooltip
+		(renderer = 'ShortSseTaskConditionTooltip')
+		(args
+			_sseConditionId = "shipAcesSprintEntity.id"
+			_isTask = false
+			_headerText = "subst('IDS_SUBST_SHIP_ACES_SPRINT_TOOLTIP_TITLE', [], { sprint: sprintId + 1 })"
+			_hasMouseInstruction = "!isSelected"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(hblock
+		(style (align = "center|middle"))
+
+		(block
+			(style
+				(width = 48px)
+				(height = 48px)
+				(align = "center|middle")
+				(bind marginLeft "sprintId == 0 ? 0 : M")
+			)
+			(macro MOUSE_OVER_DOWN_COLORTRANSFORM _isActive = "true" _isSelected = "isSelected")
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(bind backgroundImage "'url:../sse/ship_aces/sprints/icon_sprint_' + (isActiveSprint ? 'current' : 'default') + '.png'")
+					(bind alpha "	isSelected	? 1 :
+									rollOver	? 0.7
+												: 0.5")		
+				)
+			)
+
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (bind alpha "isSelected ? TA : TS") (marginBottom = 3px))
+				(bind text "sprintId + 1")
+			)
+		)
+		(block
+			(bind visible "!(sprintId == shipAcesSprintsLen - 1)")
+			(style (width = 56px) (height = 1px) (marginLeft = "M") (backgroundColor = 0x1affffff))
+		)
+	)
+)
+
+(def element ShortSseTaskConditionTooltip (	_isTask:bool,
+											_headerText:str,
+											_sseConditionId:number = null,
+											_descriptionText:str = '',
+											_hasMouseInstruction:bool = false,
+											_conditionId:number = null,
+											_rewards:array = [],
+											_stepsNumber:number = null,
+											_nation:str = '',
+											_shipType:str = '')
+	(scope
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var shipAcesSeasonComponent:dhComponent = "shipAcesSeasonEntity.shipAcesSeason")
+		(var activeSprintId:number = "shipAcesSeasonComponent.activeSprintId" (event "shipAcesSeasonComponent.evChanged"))
+
+		(var shipAcesSprintEntityDH:dhEntity = "getEntity(_sseConditionId)")
+		(var sprintId:number = "shipAcesSprintEntityDH.shipAcesSprint.sprintId" (event "shipAcesSprintEntityDH.shipAcesSprint.evChanged"))
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, sprintId)")
+
+		(var primaryReward:str = "shipAcesSeasonComponent.primaryReward" (event "shipAcesSeasonComponent.evChanged"))
+		(var secondaryReward:str = "shipAcesSeasonComponent.secondaryReward" (event "shipAcesSeasonComponent.evChanged"))
+
+		(var shipAcesSprintComponent:dhComponent= "shipAcesSprintEntity.shipAcesSprint")
+		(var incomeCurrencyTotal:number = "shipAcesSprintComponent.incomeTotal" (event "shipAcesSprintComponent.evChanged"))
+		(var incomeSecondaryTotal:number = "shipAcesSprintComponent.incomeSecondaryTotal" (event "shipAcesSprintComponent.evChanged"))
+		(var bestResult:number = "shipAcesSprintComponent.bestResult" (event "shipAcesSprintComponent.evChanged"))
+		(var taskTotal:number = "shipAcesSprintComponent.taskTotal" (event "shipAcesSprintComponent.evChanged"))
+		(var isPreviousSprint:bool = "sprintId < activeSprintId")
+		(var isSprintMissed:bool = "taskTotal == 0 && isPreviousSprint")
+		(var isResultVisible:bool = "!_isTask && !isSprintMissed")
+		(var hasResult:bool = "incomeCurrencyTotal > 0")
+
+		(macro SERVER_TIME_SCOPE)
+		(var startSprintTime:number = "shipAcesSprintComponent.startTime ?: 0" (event "shipAcesSprintComponent.evChanged"))
+		(macro COUNTDOWN_SCOPE "'formattedStartSprintTime'" "startSprintTime" "'HIGHEST,WITH_DAYS'")
+		(var nextSprintTime:number = "shipAcesSprintComponent.nextSprintTime ?: 0" (event "shipAcesSprintComponent.evChanged"))
+		(macro COUNTDOWN_SCOPE "'formattedFinishSprintTime'" "nextSprintTime" "'HIGHEST,WITH_DAYS'")
+
+		(var timeLeftNext:number = "nextSprintTime - serverTime")
+		(var daysUntilShipAcesSprintFinish:number = "floor(timeLeftNext / DAY_IN_SEC)")
+
+		(var isSprintActive:bool = "sprintId == activeSprintId")
+		(var isSprintLocked:bool = "sprintId > activeSprintId")
+
+		(var statusTextSprintTimeLeft:str = "isSprintActive	? subst('IDS_SUBST_SHIP_ACES_TIME_STATUS_FINISHING_SPRINT', [], { timeLeft: formattedFinishSprintTime })
+															: isSprintLocked ? subst('IDS_SUBST_SHIP_ACES_TIME_STATUS_START', [], { timeLeft: formattedStartSprintTime })
+	 														: 'IDS_SUBST_SHIP_ACES_TIME_STATUS_FINISHED_SPRINT'")
+		
+		(var unifiedStatusTimeLeft:str = "daysUntilShipAcesSprintFinish	? SC.Ui_styles.UNIFIED_STATUS.DATE : SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION")
+		(var unifiedStatusSprint:str = "isSprintActive	? unifiedStatusTimeLeft :
+	 									isSprintLocked	? SC.Ui_styles.UNIFIED_STATUS.DATE
+	 													: SC.Ui_styles.UNIFIED_STATUS.CHECK")
+
+		(var finishTime:number = "nextSprintTime - startSprintTime")
+		(var formattedFinishTime:str = "formatTime(finishTime, 'HIGHEST', '', false)")
+
+		(var shipAcesRewardsData:array = "[	{subtype: primaryReward,	amount: incomeCurrencyTotal},
+	 										{subtype: secondaryReward,	amount: incomeSecondaryTotal},
+	 										{subtype: 'task_total',		amount: taskTotal, isAdditionalLine: true},
+	 										{subtype: 'best_result',	amount: bestResult, isAdditionalLine: true}]")
+		
+		(var shipAcesRewardsDataSliced:array = "hasResult	? shipAcesRewardsData
+															: [shipAcesRewardsData[0]]")
+	)
+	(style (width = 340px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "_headerText"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "_isTask")
+				(args
+					_descriptionText = "_descriptionText"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isTask")
+				(args
+					_unifiedStatus = "unifiedStatusSprint"
+					_text = "statusTextSprintTimeLeft"
+				)
+			)
+		)
+			
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!_isTask && isSprintLocked"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isTask && isSprintLocked")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DATE"
+					_text =	"subst('IDS_SUBST_SHIP_ACES_TIME_STATUS_DURATION_SPRINT', [], {timeLeft: formattedFinishTime})"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_conditionId"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemSseConditions'
+				(bind enabled "_conditionId")
+				(args
+					_conditionId = "_conditionId"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isSprintMissed"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isSprintMissed")
+				(args
+					_text = 'IDS_SHIP_ACES_SPRINT_TOOLTIP_STATUS_SPRINT_MISSED'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isTask"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDHRewards'
+				(bind enabled "_isTask")
+				(args
+					_rewardsTitle = 'IDS_SSE_TASK_REWARD_COLON'
+					_rewards = "_rewards"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isResultVisible"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemSecondaryHeaderText'
+				(bind enabled "isResultVisible")
+				(args
+					_headerText = 'IDS_SHIP_ACES_SPRINT_TOOLTIP_TITLE_RESULTS'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isResultVisible"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemRewardsList'
+				(bind enabled "isResultVisible")
+				(args
+					_rewards = "shipAcesRewardsDataSliced"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_hasMouseInstruction"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_hasMouseInstruction")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text = "_isTask ? 'IDS_SHIP_ACES_DETAILED_INFO_MOUSE_INSTRUCTION' : 'IDS_HINT_LEFT_CLICK_FOR_FURTHER_INFO'"
+				)
+			)
+		)
+	)
+)

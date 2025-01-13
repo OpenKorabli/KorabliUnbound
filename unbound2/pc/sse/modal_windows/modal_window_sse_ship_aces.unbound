@@ -1,0 +1,527 @@
+(def constant REWARD_COLUMN_INDEX 3)
+(def constant TITLE_ROW_INDEX 0)
+(def constant RESULT_HISTORY_TABLE_WIDTH 840px)
+(def constant RESULT_HISTORY_TABLE_ICON_WIDTH 16px)
+(def constant RESULT_HISTORY_TABLE_ICON_HEIGHT 16px)
+
+(def macro TABLE_DIVIDER (_isHorizontal:bool = false)
+	(block
+		(style
+			(position = "absolute")
+			(backgroundColor = 0x1affffff)
+			(bind width "_isHorizontal ? 100% : 1px")
+			(bind height "_isHorizontal ? 1px : 100%")
+		)
+	)
+)
+
+(def macro TABLE_SELECT_BG (_condition:expression)
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = 0x26787878) (alpha = 0))
+		(controller $Animation
+			(bindcall play	duration = 0.05	to = "{ alpha: 1 }"	action="kill" (event "evRollOver") (bind enabled "_condition"))
+			(bindcall play	duration = 0.05	to = "{ alpha: 0 }"	action="kill" watch = false (event "evRollOut") (bind enabled "!_condition"))
+		)
+	)
+)
+
+(def element ModalWindowShipAcesDetailedInfo (shipType:str = '', nation:str = '')
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var shipAcesSeason:dhComponent = "shipAcesSeasonEntity.shipAcesSeason")
+		(var shipAcesSeasonType:number = "shipAcesSeason.shipAcesType")
+		(var windowName:str = "	shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.NATION		? 'IDS_' + nation :
+								shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.SHIP_TYPE	? 'IDS_' + shipType
+																							: 'IDS_' + nation + '_' + shipType")
+		(var activeSprintId:number = "shipAcesSeason.activeSprintId ?: 0" (event "shipAcesSeason.evChanged"))
+		(var primaryReward:str = "shipAcesSeason.primaryReward ?: ''" (event "shipAcesSeason.evChanged"))
+		(var secondaryReward:str = "shipAcesSeason.secondaryReward ?: ''" (event "shipAcesSeason.evChanged"))
+
+		(var isCurrency:bool = "isIn(primaryReward, SC.Common.CURRENCIES.ALL)")
+
+		(var primaryRewardTitle:str = "isCurrency	? 'IDS_CURRENCY_' + primaryReward
+													: 'IDS_REWARD_LOOTBOX_' + primaryReward + '_TITLE'")
+
+		(var shipAcesTaskEntity:dhEntity = "getPrimaryEntity(CC.shipAcesTask, shipType + '_' + nation + '_' + activeSprintId)")
+		(var shipAcesTask:dhComponent = "shipAcesTaskEntity.shipAcesTask")
+		(var incomeCurrencyTotal:number =	"shipAcesTask.incomeTotal			?: 0" (event "shipAcesTask.evChanged"))
+		(var incomeSecondaryTotal:number =	"shipAcesTask.incomeSecondaryTotal	?: 0" (event "shipAcesTask.evChanged"))
+		(var currentStage:number =			"shipAcesTask.prevConditionCount	?: 0" (event "shipAcesTask.evChanged"))
+		(var nextStage:number =				"shipAcesTask.conditionCount		?: 0" (event "shipAcesTask.evChanged"))
+
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, activeSprintId)")
+		(var conditionCategory:str = "shipAcesSprintEntity.shipAcesSprint.conditionCategory ?: ''" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+
+		(var bestResultsData:array = "[
+			{	value: incomeCurrencyTotal,
+				title: primaryRewardTitle,
+				iconPath: 'url:../service_kit/currencies/icon_' + primaryReward + '.png'
+			},
+			{	value: incomeSecondaryTotal,
+				title: 'IDS_CURRENCY_'+ secondaryReward,
+				iconPath: 'url:../service_kit/currencies/icon_' + secondaryReward + '.png'
+			},
+			{	value: currentStage,
+				title: 'IDS_SHIP_ACES_TASK_BEST_RESULT_CURRENT_STAGE',
+				iconPath: 'url:../sse/condition_categories/' + conditionCategory + '.png'
+			},
+			{	value: nextStage,
+				title: 'IDS_SHIP_ACES_TASK_BEST_RESULT_NEXT_STAGE',
+				iconPath: 'url:../sse/condition_categories/' + conditionCategory + '.png'
+			}]")
+		(var shipAcesBgCategory:str = "shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.SHIP_TYPE	? shipType
+																								: nation")
+	)
+	(name = 'ModalWindowShipAcesDetailedInfo')
+	(class $Fullsize)
+	(style (align = "center"))
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element AnimatedBackground
+			_selectedCategory =	"shipAcesBgCategory"
+			_type =				"SC.Ui_styles.ANIMATED_BG.DETAILED_SHIP_ACES"
+		)
+
+		(controller $Animation
+			(bindcall play  duration=0.2
+							from = "{ alpha: 0 }"
+							to = "{ alpha: 1 }"
+							(event "startShow")
+			)
+			(bindcall play  duration=0.2
+							delay=0.25
+							from = "{ alpha: 1 }"
+							to = "{ alpha: 0 }"
+							action="killAll"
+							(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%) (marginBottom = "{720:LS, 1080:XXL}"))
+		(element ModalWindowHeaderFullSize
+			_windowName = "windowName"
+			_backButtonText = 'IDS_SHIP_ACES_DETAILED_INFO_BACK_BUTTON'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_methods = "[	{	type: 'inputMapping.onRequest',
+								name: 'closeShipAcesDetailedInfo',
+								args: {}}]"
+		)
+	)
+
+	
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style
+			(width = 870px)
+			(marginBottom = "{720:LS, 1080:LM}")
+			(hgap = "LM")
+			(align = "center")
+		)
+
+		(controller $Repeat renderer='ShipAcesTaskBestResult'
+			(bind count "bestResultsData.length ?: 5")
+			(args
+				_value =	"bestResultsData[$index].value"
+				_title =	"bestResultsData[$index].title"
+				_iconPath =	"bestResultsData[$index].iconPath"
+			)
+		)
+	)
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+		(style (width = 870px) (marginBottom = "{720:LS, 1080:XL}"))
+		(element HorizontalDividerTwoPx)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style (marginBottom = "L"))
+		(tf
+			(class $TextDefaultBold21NM)
+			(style (alpha = "TC"))
+			(text = 'IDS_SHIP_ACES_TASK_STAGES_HISTORY')
+		)
+	)
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+		(style (height = 100%) (paddingBottom = "{720:MS, 1080:L}"))
+		(element ShipAcesResultTable
+			_shipType = "shipType"
+			_nation = "nation"
+		)
+	)
+)
+
+(def element ShipAcesTaskBestResult (_value:number = 0, _title:str = '', _iconPath:str = '')
+	(style (align = "center"))
+	(hblock
+		(tf
+			(class $TextDefaultBold36NM)
+			(style (marginBottom = "M") (alpha = "TA"))
+			(bind text "formatSeparator(_value)")
+		)
+
+		(block
+			(style
+				(marginTop = "XXS")
+				(marginLeft = "S")
+				(width = 24px)
+				(height = 24px)
+				(bind backgroundImage "_iconPath")
+				(backgroundSize = "cover")
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TC"))
+		(bind text "_title")
+	)
+)
+
+(def element ShipAcesResultTable (_shipType:str = '', _nation:str = '')
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var cellHistorySubCollection:dhCollection = "getCollection(CC.shipAcesCellHistory).getChildByPath('byCell.' + _shipType + '_' + _nation)")
+		(var shipAcesCellHistoryLen:number = "cellHistorySubCollection.length ?: 0")
+
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var shipAcesSeason:dhComponent = "shipAcesSeasonEntity.shipAcesSeason")
+		(var activeSprintId:number = "shipAcesSeason.activeSprintId ?: 0" (event "shipAcesSeason.evChanged"))
+
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, activeSprintId)")
+		(var conditionCategory:str = "shipAcesSprintEntity.shipAcesSprint.conditionCategory ?: ''" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+		(var primaryReward:str = "shipAcesSeason.primaryReward ?: ''" (event "shipAcesSeason.evChanged"))
+		(var secondaryReward:str = "shipAcesSeason.secondaryReward ?: ''" (event "shipAcesSeason.evChanged"))
+
+		(var tableHeader:array = "[
+			{	rowCellId: 'threshold_1',
+				text: 'IDS_SHIP_ACES_RESULTS_HEADER_CELL_THRESHOLD'
+			},
+			{	rowCellId: 'battle_progress_1',
+				text: 'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + conditionCategory + '_SHORT',
+				conditionCategory: conditionCategory
+			},
+			{	rowCellId: 'battle_ship_1',
+				text: 'IDS_SHIP_ACES_RESULTS_HEADER_CELL_BATTLE_SHIP'
+			},
+			{	rowCellId: 'battle_rewards_1',
+				text: 'IDS_REWARDS'
+			}]"
+		)
+
+		(var curValueY:number = "$event._curY" init=false watch=false (event "evRollOver") (event "evRollOut"))
+		(var curValueX:number = "$event._curX" init=false watch=false (event "evRollOver") (event "evRollOut"))
+	)
+	(style (height = 100%) (backgroundColor = "NO_COLOR"))
+
+	(hblock
+		(controller $Repeat renderer='ShipAcesResultCell'
+			(bind count "tableHeader.length")
+			(args
+				_headerData = "tableHeader[$index]"
+				_y = "$index"
+				_curY = "curValueY"
+				_curX = "curValueX"
+			)
+		)
+		(block
+			(style (position = "absolute") (bottom = 0) (hitTest = false))
+			(macro TABLE_DIVIDER _isHorizontal=true)
+		)
+	)
+
+	(scrollArea
+		(style
+			(width = "RESULT_HISTORY_TABLE_WIDTH")
+			(height = 100%)
+			(backgroundColor = "NO_COLOR")
+		)
+	
+		(verticalSlider = 'ScrollBarVLight')
+		(hscrollPolicy = 'off')
+		(vscrollPolicy = 'auto')
+
+		(wheelScrollSpeed = 1.0)
+		(wheelScrollAcceleration = 1.9)
+
+		(activeControlsAlpha = 1)
+		(inactiveControlsAlpha = 1)
+		(content
+			(style (width = "RESULT_HISTORY_TABLE_WIDTH") (height = 100%))
+
+			(controller $Repeat renderer='ShipAcesResultRow'
+				(bind count "shipAcesCellHistoryLen")
+				(args
+					_cellHistorySubCollection = "cellHistorySubCollection"
+					_curY = "curValueY"
+					_curX = "curValueX"
+					_primaryReward = "primaryReward"
+					_secondaryReward = "secondaryReward"
+				)
+			)
+		)
+	)
+)
+
+(def element ShipAcesResultRow (_cellHistorySubCollection:dhCollection, _curY:number = -1, _curX:number = -1, _primaryReward:str = '', _secondaryReward:str = '')
+	(scope
+		(var shipAcesCellHistoryEntity:dhEntity = "_cellHistorySubCollection[$index]")
+		(var shipAcesCellHistory:dhComponent = "shipAcesCellHistoryEntity.shipAcesCellHistory")
+		(var rewards:dict = "{primaryRewardAmount:shipAcesCellHistory.income ?: 0, secondaryRewardAmount:shipAcesCellHistory.incomeSecondary ?: 0}" (event "shipAcesCellHistory.evChanged"))
+		(var threshold:number = "shipAcesCellHistory.threshold ?: 0" (event "shipAcesCellHistory.evChanged"))
+		(var battleProgress:number = "shipAcesCellHistory.battleProgress ?: 0" (event "shipAcesCellHistory.evChanged"))
+		(var shipId:number = "shipAcesCellHistory.shipId ?: 0" (event "shipAcesCellHistory.evChanged"))
+		(var isBestResult:bool = "shipAcesCellHistory.isBestResult" (event "shipAcesCellHistory.evChanged"))
+
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var activeSprintId:number = "shipAcesSeasonEntity.shipAcesSeason.activeSprintId ?: 0" (event "shipAcesSeasonEntity.shipAcesSeason.evChanged"))
+
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, activeSprintId)")
+		(var conditionCategory:str = "shipAcesSprintEntity.shipAcesSprint.conditionCategory ?: ''" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(width = 100%)
+	)
+
+	(element ShipAcesResultCell
+		_value = "threshold"
+		_isBestResult = "isBestResult"
+		_conditionCategory = "conditionCategory"
+		_y = 0
+		_x = "shipAcesCellHistoryEntity.id"
+		_curY = "_curY"
+		_curX = "_curX"
+	)
+	(element ShipAcesResultCell
+		_value = "battleProgress"
+		_isBestResult = "isBestResult"
+		_conditionCategory = "conditionCategory"
+		_y = 1
+		_x = "shipAcesCellHistoryEntity.id"
+		_curY = "_curY"
+		_curX = "_curX"
+	)
+	(element ShipAcesResultCell
+		_shipId = "shipId"
+		_isBestResult = "isBestResult"
+		_y = 2
+		_x = "shipAcesCellHistoryEntity.id"
+		_curY = "_curY"
+		_curX = "_curX"
+	)
+	(element ShipAcesResultCell
+		_rewards = "rewards"
+		_isBestResult = "isBestResult"
+		_y = "REWARD_COLUMN_INDEX"
+		_x = "shipAcesCellHistoryEntity.id"
+		_curY = "_curY"
+		_curX = "_curX"
+		_primaryReward = "_primaryReward"
+		_secondaryReward = "_secondaryReward"
+	)
+
+	(macro TABLE_DIVIDER _isHorizontal=true)
+)
+
+(def element ShipAcesResultCell (	_headerData:dict = {}, _shipId:number = 0, _value:number = 0, _isBestResult:bool = false,
+									_y:number = 0, _curY:number = -1, _x:number = 0, _curX:number = -1, _rewards:dict = null,
+									_conditionCategory:str = '', _primaryReward:str = '', _secondaryReward:str = '')
+	(scope
+		(event evRollOver)
+		(event evRollOut)
+
+		(var isShipColumn:bool = "_shipId > 0")
+		(var renderer:str = "	_rewards		? 'TableRewardCell' :
+								_headerData		? 'ConditionCounter' :
+								isShipColumn	? 'ShipLineItemNM'
+												: 'TableCellValue'")
+		(var isRowHovered:bool = "_curX == _x")
+		(var isRewardColumn:bool = "_y == REWARD_COLUMN_INDEX")
+		(var isHovered:bool = "_y == _curY || isRowHovered")
+		(var textAlpha:number = "_x == TITLE_ROW_INDEX || _isBestResult || _curX == _x ? TA : 0.65")
+	)
+	(macro TABLE_SELECT_BG "isHovered")
+	(macro TABLE_SELECT_BG "isRowHovered")
+
+	(dispatch evRollOver on='rollOver' args="{_curY: _y, _curX: _x}" dir="EventDirection.UP")
+	(dispatch evRollOut on='rollOut' args="{_curY: -1, _curX: -1}" dir="EventDirection.UP")
+
+	(style
+		(width = 210px)
+		(height = 46px)
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(height = 100%)
+			(bind align "isShipColumn ? middle : center|middle")
+			(bind paddingLeft "isShipColumn ? LS : 0")
+		)
+
+		(controller $Instance
+			(bind renderer "renderer")
+			(args
+				_shipId = "_shipId"
+				_withFlag = false
+				_fontClass = '$TextDefaultBoldNM'
+				_value = "_value"
+				_isBestResult = "_isBestResult"
+				_text = "_headerData.text"
+				_conditionCategory = "_conditionCategory"
+				_primaryReward = "_primaryReward"
+				_secondaryReward = "_secondaryReward"
+				_rewards = "_rewards"
+				_alpha = "textAlpha"
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isRewardColumn")
+		(style
+			(position = "absolute")
+			(right = 0)
+			(height = 100%)
+			(hitTest = false)
+		)
+		(macro TABLE_DIVIDER _isHorizontal=false)
+	)
+)
+
+(def element TableCellValue (_value:number = 0, _isBestResult:bool = false, _conditionCategory:str = '', _alpha:number = "TA")
+	(style (flow = "horizontal"))
+	(tf
+		(bind class "	_isBestResult	? '$TextDefaultBoldNM'
+										: '$TextDefaultNM'")
+		(style (bind alpha "_alpha"))
+		(bind text "_value ? formatSeparator(_value) : 'IDS_DASH'")
+	)
+
+	(block
+		(bind visible "_conditionCategory && _value")
+		(style
+			(marginLeft = "XS")
+			(marginTop = -3px)
+			(width = "RESULT_HISTORY_TABLE_ICON_WIDTH")
+			(height = "RESULT_HISTORY_TABLE_ICON_HEIGHT")
+			(bind alpha "_alpha")
+			(bind backgroundImage "'url:../sse/condition_categories/' + _conditionCategory + '.png'")
+			(backgroundSize = "cover")
+		)
+	)
+)
+
+(def element TableRewardCell (_rewards:dict = {}, _isBestResult:bool = false, _primaryReward:str = '', _secondaryReward:str = '', _alpha:number = "TA")
+	(scope
+		(var hasPrimaryReward:bool = "_rewards.primaryRewardAmount > 0")
+		(var hasSecondaryReward:bool = "_rewards.secondaryRewardAmount > 0")
+	)
+
+	(style
+		(width = 100%)
+		(height = 100%)
+		(align = "center|middle")
+	)
+
+	(tf
+		(bind visible "!hasPrimaryReward && !hasSecondaryReward")
+		(style (bind alpha "_alpha"))
+		(bind class " _isBestResult ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+		(text = 'IDS_DASH')
+	)
+
+	(hblock
+		(bind visible "hasPrimaryReward || hasSecondaryReward")
+
+		(style
+			(width = 100%)
+			(paddingRight = "MS")
+			(bind alpha "_alpha")
+		)
+
+		(hblock
+			(style
+				(width = 55%)
+				(align = "right|middle")
+			)
+
+			(tf
+				(bind class "_isBestResult || !hasPrimaryReward ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+				(bind text "hasPrimaryReward ? formatSeparator(_rewards.primaryRewardAmount) : 'IDS_DASH'")
+			)
+
+			(block
+				(style
+					(marginLeft = "S")
+					(width = "RESULT_HISTORY_TABLE_ICON_WIDTH")
+					(height = "RESULT_HISTORY_TABLE_ICON_HEIGHT")
+					(bind alpha "hasPrimaryReward ? _alpha : 0")
+					(bind backgroundImage "'url:../service_kit/currencies/icon_' + _primaryReward + '.png'")
+					(backgroundSize = "cover")
+				)
+			)
+		)
+
+		(hblock
+			(style
+				(width = 45%)
+				(align = "right|middle")
+			)
+
+			(tf
+				(bind class "_isBestResult ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+				(bind text "hasSecondaryReward ? formatSeparator(_rewards.secondaryRewardAmount) : 'IDS_DASH'")
+			)
+
+			(block
+				(style
+					(marginLeft = "S")
+					(width = "RESULT_HISTORY_TABLE_ICON_WIDTH")
+					(height = "RESULT_HISTORY_TABLE_ICON_HEIGHT")
+					(bind alpha "hasSecondaryReward ? _alpha : 0")
+					(bind backgroundImage "'url:../service_kit/currencies/icon_' + _secondaryReward + '.png'")
+					(backgroundSize = "cover")
+				)
+			)
+		)
+	)
+)
+
+(def element ConditionCounter (_text:str = '', _conditionCategory:str = '', _alpha:number = "TA")
+	(style (flow = "horizontal"))
+	(tf
+		(class $TextDefaultBold17NM)
+		(style (alpha = "TA"))
+		(bind text "_text")
+	)
+
+	(block
+		(bind visible "_conditionCategory")
+		(style
+			(marginLeft = "XS")
+			(marginTop = "XS")
+			(width = "RESULT_HISTORY_TABLE_ICON_WIDTH")
+			(height = "RESULT_HISTORY_TABLE_ICON_HEIGHT")
+			(bind alpha "_alpha")
+			(bind backgroundImage "'url:../sse/condition_categories/' + _conditionCategory + '.png'")
+			(backgroundSize = "cover")
+		)
+	)
+)

@@ -1,0 +1,286 @@
+(def constant EXPLAIN_ECONOMY_PROGRESS_BAR_WIDTH 575px)
+(def constant EXPLAIN_ECONOMY_PROGRESS_BAR_HEIGHT 25px)
+(def constant FULL_PROGRESS_BAR 100)
+(def constant FLYING_STARS_COUNT 5)
+
+(def macro MODAL_WINDOW_ANIMATION_WITH_DELAY (_delay:number, _appearEvent:expression = "startShow")
+	(alpha = 0)
+	(style (visualOffsetY = 10px))
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.15
+			delay = "_delay"
+			to = "{ alpha: 1, visualOffsetY: 0px }"
+			easing = "Easing.quad_out"
+			watch = false
+			(event "_appearEvent")
+		)
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.15
+			to = "{ alpha: 0, visualOffsetY: -10px }"
+			easing = "Easing.quad_out"
+			(event "startHide")
+		)
+	)
+)
+
+(def element ModalWindowEconomyExplanation (shipId:number, nextShipId:number, exp:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evExpCounterAnimEnded)
+		(event evExpCounterAnimStarted)
+		(event evExpIconAnimationEnded)
+		(event evShowExpIconAnimation)
+		(event evNextShipAnimationStarted)
+
+		(var ownShipEntity:dhEntity =			"getPrimaryEntity(CC.ownShip, shipId)")
+		(var ownShipExp:number =				"ownShipEntity.ownShip.exp")
+		(var animatedExp:number =				0)
+		(var nextShipEntity:dhEntity =			"getPrimaryEntity(CC.ship, nextShipId)")
+		(var finalPrice:number =				"nextShipEntity.ship.costXP")
+		(var expDeficit:number =				"nextShipEntity.upgradableShipInfo.expDeficit")
+		(var isNextShipNewMarker:bool=			"nextShipEntity.newItem != null")
+		(var progressbarMotionDuration:number =	1.2)
+		(var expCounterMotionDuration:number =	"0.4 + ownShipExp * 0.001")
+		(var isFullExp:bool=					"expDeficit <= 0")
+		(var startProgress:number =				"FULL_PROGRESS_BAR * (ownShipExp - exp) / finalPrice")
+		(var progress:number =					"$event		? isFullExp	? FULL_PROGRESS_BAR
+																		: FULL_PROGRESS_BAR * ownShipExp / finalPrice
+															: startProgress" (event "evExpIconAnimationEnded"))
+		(var isExpIconAnimEnded:bool =			false)
+
+		(controller $Animation
+			(bindcall play
+				duration="expCounterMotionDuration"
+				delay=3.25
+				from="{animatedExp:0}"
+				to="{animatedExp:exp}"
+				watch=false
+				(event "startShow"))
+			(dispatch evExpCounterAnimStarted on=evAnimStarted)
+			(dispatch evExpCounterAnimEnded on=evAnimEnded)
+		)
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['experience_counter',		'start']"	(event "evExpCounterAnimStarted"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['experience_counter',		'finish']"	(event "evExpCounterAnimEnded"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['experience_progress_bar',	'start']"	(event "evExpIconAnimationEnded"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['experience_progress_bar',	'finish']"	(event "evNextShipAnimationStarted"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['experience_progress_bar',	'full']" 	(event "evNextShipAnimationStarted"))
+
+	(class $Fullsize)
+	(style (align = "center|middle"))
+
+	(block
+		(macro MODAL_WINDOW_ANIMATION_WITH_DELAY 2.5)
+
+		(style (align = "center"))
+
+		(tf
+			(class $TextDefaultBold40NM)
+			(style (alpha = "TA"))
+			(text = 'IDS_SHIP_EXP')
+		)
+	)
+
+	(block
+		(macro MODAL_WINDOW_ANIMATION_WITH_DELAY 2.75)
+
+		(style (align = "center"))
+
+		(tf
+			(class $TextDefault19NM)
+			(style
+				(marginTop = "MS")
+				(alpha = "TC")
+			)
+			(text = 'IDS_SHIP_EXP_DESCRIPTION')
+		)
+	)
+
+	(hblock
+		(macro MODAL_WINDOW_ANIMATION_WITH_DELAY 3)
+
+		(style (marginTop = "LM"))
+
+		(tf
+			(class $TextDefaultBold60NM)
+			(style
+				(textAlign = "right")
+				(alpha = "TA")
+			)
+			(bind text "formatFloatingPoint(animatedExp, 0, false)")
+		)
+
+		(block
+			(style (marginLeft = "XS") (align = "center|middle"))
+
+			(block
+				(style
+					(width = 38px)
+					(height = 38px)
+					(backgroundImage = "'url:../service_kit/currencies/icon_' + SC.Common.CURRENCIES.XP + '_large.png'")
+				)
+			)
+
+			(block
+				(controller $Repeat renderer='ExpIconAnimation'
+					count = "FLYING_STARS_COUNT"
+					(args
+						_isExpIconAnimEnded = "isExpIconAnimEnded"
+					)
+				)
+			)
+		)
+	)
+
+	(hblock
+		(macro MODAL_WINDOW_ANIMATION_WITH_DELAY 0.2 "evExpCounterAnimEnded")
+
+		(style
+			(align = "center|middle")
+			(hgap = "M")
+			(marginTop = "XLM")
+			(width = "EXPLAIN_ECONOMY_PROGRESS_BAR_WIDTH")
+		)
+
+		(element ShipTreeCard
+			_shipId =			"shipId"
+			_isNotShipTree =	true
+			_isRelative =		true
+		)
+
+		(element AnimatedProgressBar
+			_startProgress =				"startProgress"
+			_progress =						"progress"
+			_progressbarMotionDuration =	"progressbarMotionDuration"
+			_width =						"EXPLAIN_ECONOMY_PROGRESS_BAR_WIDTH"
+			_height =						"EXPLAIN_ECONOMY_PROGRESS_BAR_HEIGHT"
+		)
+
+		(block
+			(controller $Animation
+				(bindcall play
+					duration=0.6
+					delay="progressbarMotionDuration"
+					keyframes="[
+						{percent:0,		to:{visualScaleX: 1,	visualScaleY: 1,	visualOffsetY: 0px,		visualOffsetX: 0px}},
+						{percent:50,	to:{visualScaleX: 1.2,	visualScaleY: 1.2,	visualOffsetY: -10px,	visualOffsetX: -20px}},
+						{percent:100,	to:{visualScaleX: 1,	visualScaleY: 1,	visualOffsetY: 0px,		visualOffsetX: 0px}}
+					]"
+					easing="Easing.cubic_in"
+					watch=false
+					(bind trigger "isExpIconAnimEnded")
+					(bind enabled "isFullExp"))
+				(dispatch evNextShipAnimationStarted on=evAnimStarted)
+			)
+
+			(element ShipTreeCard
+				_shipId =			"nextShipId"
+				_isNotShipTree =	true
+				_isRelative =		true
+				_isNewMarker =		"isNextShipNewMarker"
+			)
+		)
+	)
+
+	(block
+		(style
+			(visualOffsetY = 10px)
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration=0.2
+				delay=0.5
+				to={alpha: 1, visualOffsetY: 0px}
+				easing="Easing.quad_out"
+				(event "evExpCounterAnimEnded")
+			)
+			(bindcall play
+				duration=0.2
+				to={alpha: 0, visualOffsetY: -10px}
+				easing="Easing.quad_out"
+				(event "startHide")
+			)
+			(dispatch evShowExpIconAnimation dir="EventDirection.DOWN" on=evAnimEnded)
+		)
+
+		(tf
+			(class $TextDefault17NM)
+			(style
+				(textAlign = "center")
+				(alpha = "TC")
+			)
+			(text = "isFullExp ? 'IDS_SHIP_EXP_FULL' : 'IDS_SHIP_EXP_DEFICIT'")
+		)
+	)
+
+	(block
+		(macro MODAL_WINDOW_ANIMATION_WITH_DELAY 2 "evExpCounterAnimEnded")
+
+		(style (marginTop = "XXL"))
+
+		(element DefaultButton
+			_width =			154px
+			_name =				'btn_cancel'
+			_label =			'IDS_CLOSE_UPPER_CASE'
+			_focusIndex =		0
+			_defaultFocused =	true
+		)
+	)
+)
+
+(def element ExpIconAnimation (_isExpIconAnimEnded:bool)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+
+	(scope
+		(event evExpIconAnimationEnded)
+		(event evShowExpIconAnimation)
+		(var delay:number = "$index/10")
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['flying_stars', 'start']" (event "evShowExpIconAnimation"))
+
+	(class $MiddleVHAbsolutely)
+
+	(style
+		(width = 24px)
+		(height = 24px)
+		(alpha = 0)
+		(backgroundImage = 'url:../service_kit/currencies/icon_exp.png')
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration=0.5
+			delay="delay"
+			keyframes="[
+				{percent:0,		to:{alpha:0, visualOffsetY: 0px}},
+				{percent:30,	to:{alpha:1}},
+				{percent:70,	to:{alpha:1}},
+				{percent:90,	to:{alpha:0}},
+				{percent:100,	to:{alpha:0, visualOffsetY: 150px}}
+			]"
+			easing="Easing.cubic_in_out"
+			watch=false
+			(event "evShowExpIconAnimation"))
+		(bindcall play
+			duration=0.45
+			delay="delay"
+			from={visualOffsetX: 0px}
+			to={visualOffsetX: -300px}
+			easing="Easing.back_in"
+			watch=false
+			(event "evShowExpIconAnimation"))
+		(dispatch "_isExpIconAnimEnded ? '' : 'evExpIconAnimationEnded'" dir="EventDirection.UP" on=evAnimEnded)
+		(bind isExpIconAnimEnded "true" init=false on=evAnimEnded)
+	)
+)

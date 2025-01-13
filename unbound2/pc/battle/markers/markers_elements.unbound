@@ -63,6 +63,8 @@
 (def constant DAMAGE_BAR_TWEEN_DURATION 0.75)
 (def constant DAMAGE_BAR_TWEEN_DELAY 0.5)
 
+(def constant SCENARIO_TAG_ITEM_SIZE 26)
+
 (def constant HEALTH_BAR_SIZE [
 	[46, 4],
 	[92, 14] 
@@ -73,7 +75,7 @@
 	[92, 4] 
 ])
 
-(def constant SCENARIO_TAG_ITEM_ANIM_DELAY 15)
+
 (def constant SCENARIO_TAG_ITEM_FADE_ANIM_DURATION 0.3)
 (def constant SCENARIO_TAG_ITEM_FADE_ALPHA 0.3)
 
@@ -225,36 +227,44 @@
 	)
 )
 
-
-(def element ScenarioTagItem (_markerEntity:gfx) layout=true
+(def element ScenarioTagRepeatContainer (_markerEntityId:number)
 	(scope
-		(event evShow)
-		(macro GET_MARKER_ENTITY_COMPONENT 'scenarioTag')
-		(macro GET_SCENARIO_OBJECT_VIEW "scenarioTagComponent" "_markerEntity")
-		(var appearance:number = "scenarioTagComponent.appearance")
+		(var scenarioTagCollection:dhCollection = "getCollectionByPath(CC.scenarioTag, 'byOwnerId.' + _markerEntityId)")
+		(var scenarioTagCollectionLen:number = "scenarioTagCollection.length")
+	)
+	(style
+		(flow = "horizontal")
+		(marginLeft = -50%)
+		(hgap = "XS")
+	)
 
-		(var currentAppearance:number = "appearance == ScenarioTagAppearance.ANIMATION ? ScenarioTagAppearance.TEXT : appearance" watch=false)
-		(controller $Animation
-			(bindcall play	duration=0.01
-							delay="SCENARIO_TAG_ITEM_ANIM_DELAY"
-							from="{currentAppearance: ScenarioTagAppearance.TEXT}"
-							to="{currentAppearance: ScenarioTagAppearance.ICON}"
-							action="killAll"
-							(bind enabled "appearance == ScenarioTagAppearance.ANIMATION")
-							(event "evShow")
-			)
+	(controller $Repeat renderer='ScenarioTagItem'
+		(bind count "scenarioTagCollectionLen")
+		(args
+			_scenarioTagCollection = "scenarioTagCollection"
+			_markerEntityId = "_markerEntityId"
 		)
+	)
+)
+
+(def element ScenarioTagItem (_scenarioTagCollection:dhCollection, _markerEntityId:number)
+	(scope
+		(event evPlay)
+
+		(var markerEntity:dhEntity = "getEntity(_markerEntityId)")
+		(var scenarioTagEntity:dhEntity = "_scenarioTagCollection[$index]" (event "_scenarioTagCollection.evUpdated"))
+		(var countDownComponent:dhComponent = "scenarioTagEntity.countDown")
+		(var type:number = "scenarioTagEntity.scenarioTag.type")
+		(var itemIcon:str = "'icon_scenario_tag_' + toLower(SC.Battle.SCENARIO_TAG_VALUE.VALUE_TO_NAME[type])")
+		(var scenarioTagCollectionLen:number = "_scenarioTagCollection.length")
 
 		
-		(macro GET_MARKER_ENTITY_COMPONENT 'quickCommand')
-
-		(event evPlay)
+		(var quickCommandComponent:dhComponent = "markerEntity.quickCommand")
 		(var commandDuration:number = "$event.commandDuration" init=false (event "evPlay"))
 		(dispatch evPlay args="{commandName: $event[1], commandDuration: $event[2]}" (event "quickCommandComponent.evPlay"))
 	)
 
 	(bind visible "type != SC.Battle.SCENARIO_TAG_VALUE.EMPTY")
-	(dispatch evShow on='addedToStage')
 
 	(controller $Animation
 		(bindcall play	duration="SCENARIO_TAG_ITEM_FADE_ANIM_DURATION"
@@ -272,100 +282,83 @@
 	)
 
 	(block
-		(element ScenarioTagItemText "_markerEntity"
-			(alpha = "currentAppearance == ScenarioTagAppearance.TEXT ? 1 : 0")
-			(controller $Animation
-				(bindcall play	duration=0.5
-								from="{alpha: 0, top: -15}"
-								to="{alpha: 1, top: 0}"
-								action="killAll"
-								reverse="currentAppearance != ScenarioTagAppearance.TEXT"
-								(bind trigger "currentAppearance")
-				)
-			)
-		)
-
-		(element ScenarioTagItemIcon "_markerEntity"
-			(alpha = "currentAppearance == ScenarioTagAppearance.ICON ? 1 : 0")
-			(controller $Animation
-				(bindcall play	duration=0.5
-								from="{alpha: 0, top: 15}"
-								to="{alpha: 1, top: 0}"
-								action="killAll"
-								reverse="currentAppearance != ScenarioTagAppearance.ICON"
-								(bind trigger "currentAppearance")
-				)
-			)
-		)
-	)
-)
-
-(def element ScenarioTagItemText (_markerEntity:gfx) layout=true
-	(scope
-		(macro GET_MARKER_ENTITY_COMPONENT 'scenarioTag')
-		(macro GET_SCENARIO_OBJECT_VIEW "scenarioTagComponent" "_markerEntity")
-		(var itemText:str = "'IDS_MARK_' + toUpper(SC.Battle.SCENARIO_TAG_VALUE.VALUE_TO_NAME[type])")
-
-		(var itemTextColor:number = "type == SC.Battle.SCENARIO_TAG_VALUE.ATTACK 	? SC.Ui_styles.SERVICE_COLORS.RED
-																					: SC.Ui_styles.SERVICE_COLORS.GREEN")
-	)
-
-	(style
-		(position = "absolute")
-		(width = 0)
-		(align = "center")
-	)
-
-	(tf
 		(style
-			(bind textColor "itemTextColor")
+			(width = 24px) (height = 24px)
+			(bind backgroundImage "'swf:../battle_hud/markers/scenario_tags_svg/scenario_tags_svg.swf:' + itemIcon")
 		)
-		(class $WorldMarkerTextItem)
-		(class $TextDefaultBold13NM)
-		(bind text "itemText")
-	)
-)
-
-(def element ScenarioTagItemIcon (_markerEntity:gfx) layout=true
-	(scope
-		(macro GET_MARKER_ENTITY_COMPONENT 'scenarioTag')
-		(macro GET_SCENARIO_OBJECT_VIEW "scenarioTagComponent" "_markerEntity")
-		(var taskEntityId:number = "scenarioTagComponent.taskEntityId")
-
-		(var taskEntity:gfx = "$datahub.getEntity(taskEntityId)")
-		(var taskProgressType:number = "taskEntity ? taskEntity.task.progressType : 0")
-
-		(macro BATTLE_TIMER_SCOPE)
-
-		(var timeout:gfx = "isIn(taskProgressType, [TaskProgressType.TIMER, TaskProgressType.REVERSED_TIMER]) ? taskEntity.timeout : null")
-		(var timeoutTime:number = "timeout ? timeout.time : 0" (event "timeout.evTimeChanged"))
-		(var timeoutTotal:number = "timeout ? timeout.total : 0" (event "timeout.evTimeChanged"))
-		(var timeoutRunning:bool = "timeout ? timeout.running : false" (event "timeout.evRunningChanged"))
-		(var secondsLeft:number = "timeout && timeoutRunning ? max(timeoutTime - currentTime, 0) : 0")
-
-		(var timerText:str = "taskProgressType == TaskProgressType.TIMER 	? countdownFormat(secondsLeft - timeoutTotal, 0, true)
-																			: secondsLeft	? countdownFormat(secondsLeft, 0, true)
-																							: ''")
-		(var itemIcon:str = "'icon_scenario_tag_' + toLower(SC.Battle.SCENARIO_TAG_VALUE.VALUE_TO_NAME[type])")
-	)
-
-	(style
-		(position = "absolute")
-		(left = -12)
 	)
 
 	(block
-		(style
-			(width = 24) (height = 24)
-			(bind backgroundImage "'swf:../battle_hud/markers/scenario_tags/scenario_tags.swf:' + itemIcon" (bind enabled "itemIcon != ''"))
+		(style (position = "absolute"))
+		(controller $Instance renderer='ScenarioTagTimer'
+			(bind enabled "countDownComponent != null")
+			(args
+				_scenarioTagCollectionLen="scenarioTagCollectionLen"
+				_scenarioTagEntity="scenarioTagEntity"
+				_markerEntity="markerEntity"
+			)
 		)
 	)
+)
 
-	
+(def element ScenarioTagTimer (_scenarioTagCollectionLen:number, _scenarioTagEntity:dhEntity, _markerEntity:dhEntity)
+	(scope
+		(var barIcon:str = "'swf:../battle_hud/markers/scenario_tags_svg/scenario_tags_svg.swf:bar_' + (_markerEntity.relation.value == SC.Battle.PLAYER_RELATION.ALLY ? 'ally' : 'enemy')")
+
+		(var timerComponent:dhComponent = "getSingleEntity(CC.timer).timer")
+		(var currentTime:number = "timerComponent.currentTime" (event "timerComponent.evFrequent"))
+
+		(var isRemoving:bool = "_scenarioTagEntity.timeToLive.isRemoving" (event "_scenarioTagEntity.timeToLive.evRemove"))
+		(var countDownComponent:dhComponent = "_scenarioTagEntity.countDown")
+		(var duration:number = "countDownComponent.duration ?: 0" (event "countDownComponent.evDurationChanged"))
+		(var endTime:number = "countDownComponent.endTime ?: 0" (event "countDownComponent.evEndTimeChanged"))
+		(var secondsLeft:number ="endTime && currentTime && !isRemoving ? max(endTime - currentTime, 0) : 0")
+		(var currentProgress:number = "duration && secondsLeft <= duration ? secondsLeft / duration * FULL_ANGLE_IN_DEGREES : FULL_ANGLE_IN_DEGREES")
+		(var timerText:str = "secondsLeft ? countdownFormat(secondsLeft, 0, true) : ''")
+		(var timeLeftOffset:number = "_scenarioTagCollectionLen ? (SCENARIO_TAG_ITEM_SIZE + XS) * _scenarioTagCollectionLen : 0")
+
+		(macro GET_PREF_BOOL 'altVisionMode' "'battle.altVision.mode'")
+		(var cameraEntity:dhEntity = "getSingleEntity(CC.camera)")
+		(var isAltVision:bool = "cameraEntity.camera.altVision || altVisionMode >= AltVisionMode.ADAPTIVE" (event "cameraEntity.camera.evAltVisionChanged"))
+	)
+
 	(block
 		(style
 			(position = "absolute")
-			(left = 24) (top = 4)
+			(width = "SCENARIO_TAG_ITEM_SIZE")
+			(height = "SCENARIO_TAG_ITEM_SIZE")
+			(top = -1px) (left = -1px)
+			(backgroundImage = 'swf:../battle_hud/markers/scenario_tags_svg/scenario_tags_svg.swf:track')
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(width = "SCENARIO_TAG_ITEM_SIZE")
+			(height = "SCENARIO_TAG_ITEM_SIZE")
+			(top = -1px) (left = -1px)
+			(bind backgroundImage "barIcon")
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style (pivotX = -50%) (pivotY = -50%))
+			(isMask = true)
+			(controller $Sector
+				(radius = "15")
+				(offset = "-90")
+				(bind arc "currentProgress")
+			)
+		)
+	)
+
+	(block
+		(bind visible "isAltVision && timerText")
+		(style
+			(position = "absolute")
+			(alpha = "TA")
+			(top = "S")
+			(bind left "timeLeftOffset")
 		)
 		(tf
 			(class $WorldMarkerTextItem)
@@ -375,6 +368,44 @@
 	)
 )
 
+(def element KeyTargetItem (_markerEntityId:number)
+	(scope
+		(event evPlay)
+
+		(var markerEntity:dhEntity = "getEntity(_markerEntityId)")
+		(var type:number = "markerEntity.keyTargetMarkerBattle.type")
+		(var itemIcon:str = "'icon_scenario_tag_' + toLower(SC.Battle.SCENARIO_TAG_VALUE.VALUE_TO_NAME[type])")
+
+		
+		(var quickCommandComponent:dhComponent = "markerEntity.quickCommand")
+		(var commandDuration:number = "$event.commandDuration" init=false (event "evPlay"))
+		(dispatch evPlay args="{commandName: $event[1], commandDuration: $event[2]}" (event "quickCommandComponent.evPlay"))
+	)
+
+	(bind visible "type != SC.Battle.SCENARIO_TAG_VALUE.EMPTY")
+
+	(controller $Animation
+		(bindcall play	duration="SCENARIO_TAG_ITEM_FADE_ANIM_DURATION"
+						from="{alpha: 1}"
+						to="{alpha: SCENARIO_TAG_ITEM_FADE_ALPHA}"
+						action="killAll"
+						(event "evPlay")
+		)
+		(bindcall play	duration="SCENARIO_TAG_ITEM_FADE_ANIM_DURATION"
+						delay="commandDuration"
+						from="{alpha: SCENARIO_TAG_ITEM_FADE_ALPHA}"
+						to="{alpha: 1}"
+						(event "evPlay")
+		)
+	)
+
+	(block
+		(style
+			(width = 24px) (height = 24px)
+			(bind backgroundImage "'swf:../battle_hud/markers/scenario_tags_svg/scenario_tags_svg.swf:' + itemIcon")
+		)
+	)
+)
 
 (def element PriorityItem (_markerEntity:gfx) layout=true
 	(scope
@@ -749,38 +780,6 @@
 				(class $WorldMarkerTextItem)
 				(bind text "textValue")
 			)
-		)
-	)
-)
-
-(def element TimeoutIndicatorItem (_entityId:number) layout=true
-	(scope
-		(var timeoutEntity:gfx = "$datahub.getEntity(_entityId)")
-		(var timeoutComponent:gfx = "timeoutEntity ? timeoutEntity.timeout : null" (event "timeoutEntity.evAdded"))
-		(var timeoutTime:number = "timeoutComponent ? timeoutComponent.time : 0" (event "timeoutComponent.evTimeChanged"))
-		(var totalTime:number = "timeoutComponent ? timeoutComponent.total : 0")
-		(var timeoutIsRunning:bool = "timeoutComponent ? timeoutComponent.running : false" (event "timeoutComponent.evRunningChanged"))
-
-		(macro BATTLE_TIMER_SCOPE)
-		(var timeLeft:number = "timeoutIsRunning ? floor(timeoutTime - currentTime) : 0")
-		(var isActive:bool = "timeoutIsRunning && timeLeft > 0 && totalTime > 0")
-	)
-
-	(style
-		(width = 100%)
-		(align = "center")
-	)
-
-	(block
-		(bind visible "isActive")
-
-		(tf
-			(class $TextDefaultBoldNM)
-			(class $TextColorHUDNeutral)
-			(style
-				(textAlign = "center")
-			)
-			(bind text "countdownFormat(timeLeft, 0, true)")
 		)
 	)
 )

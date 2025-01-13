@@ -1,0 +1,847 @@
+(def constant SHIP_UNMOUNT_MODERNIZATIONS 2)
+(def constant SHIP_SELL_MODERNIZATIONS 8)
+(def constant SHIP_SELL_WITH_ALL_MODULES 1)
+(def constant SHIP_SELL_WITH_BASE_MODULES 0)
+(def constant SHIP_SELL_WINDOW_WIDTH 422px)
+
+(def element ModalWindowSellShip (modernizationsList:array, crewId:number, shipId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evUpdateTooltipState)
+		(event evUnmountTypeChanged)
+		(event evCrewActionFlagChanged)
+		(event ItemChooser_modernizationActionChanged)
+		(event ItemChooser_crewActionChanged)
+		(event ItemChooser_shipSellActionChanged)
+
+		
+		(macro USER_PREF_DATA)
+		(var sellShipDataEntity:dhEntity =			"getSingleEntity(CC.sellShipData)")
+		(var sellShipDataComponent:dhComponent =	"sellShipDataEntity.sellShipData" (event "sellShipDataEntity.sellShipData.evUpdated"))
+		(var resourceEntity:dhEntity =				"getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:dhComponent =	"resourceEntity.accountResource")
+		(var ownShipEntity:dhEntity =				"getPrimaryEntity(CC.ownShip, shipId)")
+		(var shipInfo:dhComponent =					"ownShipEntity.ship")
+
+
+		(var accountCredits:number ="accountResourceComponent.credits	?: 0" (event "accountResourceComponent.evChangedCredit"))
+		(var accountGold:number =	"accountResourceComponent.gold		?: 0" (event "accountResourceComponent.evChangedGold"))
+		(var shipSellCurrency:str =	"sellShipDataComponent.shipCostGL > 0 ? SC.Common.CURRENCIES.GOLD : SC.Common.CURRENCIES.CREDITS")
+		(var shipPriceCR:number =	"shipSellCurrency == SC.Common.CURRENCIES.CREDITS ? sellShipDataComponent.shipCostCR : 0")
+		(var shipPriceGL:number =	"shipSellCurrency == SC.Common.CURRENCIES.GOLD ? sellShipDataComponent.shipCostGL : 0")
+
+		
+		(struct webStorageFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.WEB_STORAGE"))
+		(var isSellWithBaseModules:bool =		"webStorageFeature.state == 'locked' || sellShipDataComponent.topUnitsCost == 0")
+		(var sellFlag:number =					"isSellWithBaseModules				? SHIP_SELL_WITH_BASE_MODULES :
+												userPrefs.shipSellAllModulesFlag	?: SHIP_SELL_WITH_BASE_MODULES")
+		(var modulesPriceCR:number =			"sellFlag == SHIP_SELL_WITH_ALL_MODULES ? sellShipDataComponent.topUnitsCost : 0")
+		(var shipWithModulesPriceCR:number =	"shipPriceCR + modulesPriceCR")
+
+		
+		(struct unmountPrice = PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "'MODS_COST_Demontage'" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(var modernizationsCount:number =	"modernizationsList.length")
+		(var unmountFinalPrice:number =		"unmountPrice.info.finalPrice * modernizationsCount")
+		(var unmountBasePrice:number =		"unmountPrice.info.basePrice * modernizationsCount")
+		(var unmountFlag:number = 			"$event									? $event.unmountFlag :
+											accountGold - unmountFinalPrice >= 0	? SHIP_UNMOUNT_MODERNIZATIONS
+																					: SHIP_SELL_MODERNIZATIONS" (event "evUnmountTypeChanged"))
+		(var modernizationsPriceCR:number = "unmountFlag == SHIP_SELL_MODERNIZATIONS ? sellShipDataComponent.sellCostMod : 0")
+		(var isUnmountModernizations:bool = "unmountFlag == SHIP_UNMOUNT_MODERNIZATIONS")
+
+		
+		(struct crewFeature = 			FEATURES(_state="SC.Common.ACCOUNT_FEATURE.CREW"))
+		(struct crew =					PULL_CREW(_crewId = "crewId"))
+		(struct baseFiringCrew =		PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.BASE"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct firingCrewForCredits =	PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.CREDIT"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct firingCrewForGold =		PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.GOLD"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var isInBattle:bool =				"crew.component.isInBattle" (event "crew.component.evIsInBattleChanged"))
+		(var dockEntity:dhEntity =			"getSingleEntity(CC.dockDataMarker)")
+		(var crewsSingleton:dhComponent =	"dockEntity.crewData" (event "dockEntity.crewData.evUpdate"))
+		(var canDisassignCrew:bool =		"crewsSingleton.freeBarracksSlots > 0")
+
+		(var isSetCrewActionFlagToBaseFiringType:bool = "((crewFeature.state == 'locked' || !canDisassignCrew) && crew.component.canDismiss) || !toBool(crewId) || crew.component.timeRent")
+
+		(var crewActionFlag:number = "		$event								? $event.crewActionFlag :
+											isSetCrewActionFlagToBaseFiringType	? SC.Common.CREW_FIRING_TYPE.BASE
+																				: SC.Common.CREW_FIRING_TYPE.TO_OPS" (event "evCrewActionFlagChanged"))
+
+		(var isCrewFireTypeGold:bool =		"crewActionFlag == SC.Common.CREW_FIRING_TYPE.GOLD")
+		(var isCrewFireTypeCredit:bool =	"crewActionFlag == SC.Common.CREW_FIRING_TYPE.MONEY")
+		(var isCrewFireTypeBase:bool =		"crewActionFlag == SC.Common.CREW_FIRING_TYPE.BASE")
+		(var isCrewFireTypeToOps:bool =		"crewActionFlag == SC.Common.CREW_FIRING_TYPE.TO_OPS")
+
+		(var crewFiringPriceInfo:dict = "	isCrewFireTypeGold		? firingCrewForGold.info :
+											isCrewFireTypeCredit	? firingCrewForCredits.info :
+											isCrewFireTypeBase		? baseFiringCrew.info
+																	: null")
+
+		(var crewFiringProfit:number = "	isCrewFireTypeGold		? firingCrewForGold.refundComponent.profit :
+											isCrewFireTypeCredit	? firingCrewForCredits.refundComponent.profit :
+											isCrewFireTypeBase		? baseFiringCrew.refundComponent.profit
+																	: 0"	(event "firingCrewForCredits.refundComponent.evProfitChanged")
+																			(event "firingCrewForGold.refundComponent.evProfitChanged"))
+
+		(var crewPriceCR:number =	"toBool(crewId) && (isCrewFireTypeBase || isCrewFireTypeCredit) ? crewFiringPriceInfo.finalPrice : 0")
+		(var crewPriceGL:number =	"isCrewFireTypeGold ? crewFiringPriceInfo.finalPrice : 0")
+		(var crewPriceELXP:number =	"crewActionFlag != SC.Common.CREW_FIRING_TYPE.TO_OPS ? crewFiringProfit : 0")
+
+		(var sellDeficitCR:number =	"accountCredits - crewPriceCR")
+		(var penaltyGL:number =		"isUnmountModernizations ? crewPriceGL + unmountFinalPrice : crewPriceGL")
+		(var sellDeficitGL:number =	"accountGold - penaltyGL")
+
+		(var isCrewShown:bool =					"crewFeature.state != 'locked' && toBool(crewId)")
+		(var isCrewCreditDeficit:bool =			"isCrewFireTypeCredit && (sellDeficitCR < 0)")
+		(var isCrewGoldDeficit:bool =			"isCrewFireTypeGold && (sellDeficitGL < 0)")
+		(var isDemobilizeNotWorthGold:bool =	"isCrewFireTypeGold && (crewFiringPriceInfo.finalPrice <= 0 || crewFiringProfit <= 0)")
+		(var isDemobilizeNotWorthCredit:bool =	"isCrewFireTypeCredit && (crewFiringPriceInfo.finalPrice <= 0 || crewFiringProfit <= 0)")
+		(var isShowCrewFiringPriceTag:bool =	"isCrewFireTypeCredit || isCrewFireTypeGold")
+		(var isCrewItemChooserDisabled:bool =	"!canDisassignCrew && !crew.component.canDismiss")
+
+		(var bottomDataCrewStateInfo:dict = "isCrewFireTypeToOps && !canDisassignCrew											? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																																	_text:			'IDS_BARRACK_IS_FULL'} :
+											isDemobilizeNotWorthGold || isDemobilizeNotWorthCredit								? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																																	_text:			'IDS_CREW_NOT_ENOUGH_EXP_TO_DEMOBILIZE'} :
+											isCrewCreditDeficit																	? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																																	_text:			'IDS_NOT_ENOUGH_CREDITS'} :
+											isCrewGoldDeficit																	? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																																	_text:			'IDS_NOT_ENOUGH_GOLD'} :
+											crewActionFlag != SC.Common.CREW_FIRING_TYPE.TO_OPS && !crew.component.canDismiss	? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																																	_text:			'IDS_UNIQUE_CREW_CAN_NOT_BE_DEMOBOLIZED'}
+																																: null")
+
+		
+		(var totalPriceCR:number = "shipPriceCR + modulesPriceCR + modernizationsPriceCR - crewPriceCR")
+		(var totalPriceGL:number = "shipPriceGL - penaltyGL")
+
+		(var questionText:str = "totalPriceCR <= 0 && totalPriceGL <= 0 && (crewPriceELXP <= 0 || !crewPriceELXP) ? 'IDS_SELL_SHIP' : 'IDS_QUESTION_SELL_SHIP_FOR'")
+
+		(var currenciesPanelPrices:array = "isCrewShown	? [	{currency: SC.Common.CURRENCIES.GOLD,		finalPrice: totalPriceGL},
+															{currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: totalPriceCR},
+															{currency: SC.Common.CURRENCIES.ELITE_XP,	finalPrice: crewPriceELXP}]
+														: [	{currency: SC.Common.CURRENCIES.GOLD,		finalPrice: totalPriceGL},
+															{currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: totalPriceCR}]")
+
+		(var isModsGoldDeficit:bool =		"isUnmountModernizations && sellDeficitGL < 0")
+		(var bottomDataModsStateInfo:dict =	"isModsGoldDeficit ? {_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE, _text: 'IDS_NOT_ENOUGH_GOLD'} : null")
+		(var blockStatus:dict =				" bottomDataCrewStateInfo ?: bottomDataModsStateInfo")
+
+		(var isOkBtnEnabled:bool = "sellDeficitCR >= 0 && sellDeficitGL >= 0 && ((crewActionFlag != SC.Common.CREW_FIRING_TYPE.TO_OPS && crew.component.canDismiss)
+									|| (isCrewFireTypeToOps && canDisassignCrew) || !toBool(crewId))")
+
+		(var isShowDemobilizationWarning:bool =	"isOkBtnEnabled && isCrewShown && (crewActionFlag != SC.Common.CREW_FIRING_TYPE.TO_OPS) && !bottomDataCrewStateInfo")
+		(var isShowPurchasePriceLine:bool =		"isOkBtnEnabled && (totalPriceCR < 0) || totalPriceGL < 0 || crewPriceELXP < 0")
+		(var isShowEarnPriceLine:bool =			"isOkBtnEnabled && (totalPriceCR >= 0) || totalPriceGL >= 0 || crewPriceELXP >= 0")
+		(var isShowBlockingWarn:bool =			"!isOkBtnEnabled && blockStatus")
+
+		(var sellShipListItemRendererData:dict =			"{	_topUnitsCost:		sellShipDataComponent.topUnitsCost,
+																_shipPriceCR:		shipPriceCR,
+																_shipPriceGL:		shipPriceGL}")
+
+		(var modernizationListItemRendererData:dict = "{	_penaltyGL:			penaltyGL,
+															_accountGold:		accountGold,
+															_sellCost:			sellShipDataComponent.sellCostMod,
+															_unmountFinalPrice:	unmountFinalPrice,
+															_unmountPriceInfo:	{	finalPrice:	-unmountFinalPrice,
+																					currency:	unmountPrice.info.currency,
+																					basePrice:	-unmountBasePrice,
+																					till:		unmountPrice.info.till}}")
+
+		(var crewListItemRendererData:dict =			"{	_penaltyCR:					crewPriceCR,
+															_penaltyGL:					penaltyGL,
+															_crewInfo:					crew.component,
+															_crewsSingleton:			crewsSingleton,
+															_accountResourceComponent:	accountResourceComponent}")
+
+		(var shipSellItems:array = "isSellWithBaseModules ? ['IDS_SHIP_SELL_WITH_STOCK_MODULES'] : ['IDS_SHIP_SELL_WITH_STOCK_MODULES', 'IDS_SHIP_SELL_WITH_ALL_MODULES']")
+		(var isSellShipTooltipEnabled:bool = "$event ? $event._tooltipState : shipSellItems.length > 1" watch=false (event "evUpdateTooltipState"))
+	)
+
+	(dispatch evUnmountTypeChanged args="{unmountFlag: $event.selectedIndex == 0 ? SHIP_UNMOUNT_MODERNIZATIONS : SHIP_SELL_MODERNIZATIONS}" (event "ItemChooser_modernizationActionChanged"))
+	(dispatch evCrewActionFlagChanged args="{crewActionFlag: $event.selectedIndex}" (event "ItemChooser_crewActionChanged"))
+	(dispatch evCrewActionFlagChanged args="{crewActionFlag: canDisassignCrew	? SC.Common.CREW_FIRING_TYPE.TO_OPS
+																				: SC.Common.CREW_FIRING_TYPE.BASE}" (bind enabled "isCrewCreditDeficit") (event "accountResourceComponent.evChangedCredit"))
+	(dispatch evCrewActionFlagChanged args="{crewActionFlag: canDisassignCrew	? SC.Common.CREW_FIRING_TYPE.TO_OPS
+																				: SC.Common.CREW_FIRING_TYPE.BASE}" (bind enabled "isCrewGoldDeficit") (event "accountResourceComponent.evChangedGold"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['recalculateCrewFiringCost', {crewId: crewId}]" watch=false (event "crew.component.evExpChanged"))
+	(bindcall externalCall 'inputMapping.onAction' "['setUserPref', {value: $event.selectedIndex, name: 'shipSellAllModulesFlag'}]" watch=false (event "ItemChooser_shipSellActionChanged"))
+
+	(style (align = "center|middle"))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (marginBottom = "M"))
+
+		(element ModalWindowShortHeader
+			_header =		'IDS_SHIP_SELL_UPPER_CASE'
+			_hideDivider =	true
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.2)
+
+		(element CurrenciesPanel
+			_priceInfo =	"currenciesPanelPrices"
+			_width =		"SHIP_SELL_WINDOW_WIDTH"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.3)
+
+		(style
+			(width = "SHIP_SELL_WINDOW_WIDTH")
+			(marginBottom = "SXS")
+		)
+
+		(element ModalWindowShipPreview _shipId="shipId")
+	)
+
+	
+	(block
+		(bind visible "shipInfo.level > 1")
+
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.6)
+
+		(style (width = "SHIP_SELL_WINDOW_WIDTH"))
+
+		(element HorizontalDividerTwoPx)
+
+		(hblock
+			(style
+				(align = "middle")
+				(width = 100%)
+				(marginTop = "XS")
+				(marginBottom = "XS")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginLeft = "XS")
+				)
+
+				(controller $Tooltip
+					(bind enabled "isSellShipTooltipEnabled")
+					(renderer = 'DescriptionStatusLineTooltip')
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						_statusText =		'IDS_HINT_CLICK_TO_CHOOSE_ACTION'
+						_descriptionText =	'IDS_SHIP_SELL_HINT'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(element ItemChooser
+					_items =				"shipSellItems"
+					_curIndex =				"sellFlag"
+					_name =					'dropmenu_modules'
+					_listItemRenderer =		'ShipSellTextListItemRenderer'
+					_onItemSelectedEvent =	'shipSellActionChanged'
+					_listItemRendererData =	"sellShipListItemRendererData"
+					_dropDownWidth =		360px
+					_width =				100%
+				)
+			)
+
+			(hblock
+				(name = 'ShipSell_Price')
+
+				(style (marginRight = "S"))
+
+				(controller $Instance renderer='PriceTag'
+					(bind enabled "shipPriceGL > 0")
+					(args
+						_priceInfo = "{finalPrice: shipPriceGL, currency: SC.Common.CURRENCIES.GOLD}"
+					)
+				)
+
+				(tf
+					(bind visible "shipWithModulesPriceCR > 0 && shipPriceGL > 0")
+					(class $TextDefaultNM)
+					(style
+						(marginRight = "S")
+						(marginLeft = "XS")
+						(alpha = "TA")
+					)
+					(text = 'IDS_AND')
+				)
+
+				(controller $Instance renderer='PriceTag'
+					(bind enabled "shipWithModulesPriceCR > 0")
+					(args
+						_priceInfo = "{finalPrice: shipWithModulesPriceCR, currency: SC.Common.CURRENCIES.CREDITS}"
+					)
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "modernizationsCount > 0")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+		(style (width = "SHIP_SELL_WINDOW_WIDTH"))
+
+		(element HorizontalDividerTwoPx)
+
+		(hblock
+			(style
+				(align = "middle")
+				(width = 100%)
+				(marginTop = "XS")
+				(marginBottom = "XS")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginLeft = "XS")
+				)
+
+				(element ItemChooser
+					_items =				"['IDS_UNMOUNT_MODERNIZATIONS', 'IDS_SELL_MODERNIZATIONS']"
+					_curIndex =				"isUnmountModernizations ? 0 : 1"
+					_name =					'dropmenu_modernizations'
+					_listItemRenderer =		'ModernizationTextListItemRenderer'
+					_listItemRendererData =	"modernizationListItemRendererData"
+					_onItemSelectedEvent =	'modernizationActionChanged'
+					_dropDownWidth =		260px
+					_width =				100%
+				)
+			)
+
+			(block
+				(style (marginRight = "S"))
+
+				(controller $Instance renderer='PriceTag'
+					(bind enabled "isUnmountModernizations")
+					(args
+						_priceInfo =		"{	finalPrice:	-unmountFinalPrice,
+												currency:	unmountPrice.info.currency,
+												basePrice:	-unmountBasePrice,
+												till:		unmountPrice.info.till}"
+						_showDiscountTag =	true
+					)
+				)
+
+				(controller $Instance renderer='PriceTag'
+					(bind enabled "unmountFlag == SHIP_SELL_MODERNIZATIONS")
+					(args
+						_priceInfo = "{finalPrice: sellShipDataComponent.sellCostMod, currency: SC.Common.CURRENCIES.CREDITS}"
+					)
+				)
+			)
+		)
+
+		(block
+			(style (width = "SHIP_SELL_WINDOW_WIDTH"))
+
+			(element HorizontalDividerTwoPx)
+
+			(block
+				(class $PxHorizontalCorrection)
+
+				(style
+					(width = 100%)
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+					(paddingTop = "S")
+					(paddingBottom = "S")
+				)
+
+				(block
+					(style
+						(flow = "tile_horizontal")
+						(align = "center|middle")
+						(width = 100%)
+						(marginLeft = "XS")
+						(marginRight = "XS")
+					)
+
+					(controller $Repeat renderer='InstalledModernizationItem'
+						(bind count "modernizationsCount ?: 0")
+						(args
+							_installedModernizationItem = "modernizationsList[$index]"
+						)
+					)
+				)
+			)
+		)
+	)
+
+
+	
+	(block
+		(bind visible "isCrewShown")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+		(style (width = "SHIP_SELL_WINDOW_WIDTH"))
+
+		(element HorizontalDividerTwoPx)
+
+		(hblock
+			(style
+				(align = "middle")
+				(width = 100%)
+				(marginTop = "XS")
+				(marginBottom = "XS")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginLeft = "XS")
+				)
+
+				(element ItemChooser
+					_items =				"crew.component.timeRent	?	[	'IDS_CREW_SEND_TO_BARRACKS', 'IDS_CREW_DEMOBILIZE_FREE']
+																		:	[	'IDS_CREW_SEND_TO_BARRACKS',
+																				'IDS_CREW_DEMOBILIZE_FREE',
+																				'IDS_CREW_DEMOBILIZE_CONVERT_CREDITS',
+																				'IDS_CREW_DEMOBILIZE_CONVERT_DOUBLOONS']"
+					_curIndex =				"crewActionFlag"
+					_name =					'dropmenu_commander'
+					_listItemRenderer =		'CrewTextListItemRenderer'
+					_listItemRendererData =	"crewListItemRendererData"
+					_onItemSelectedEvent =	'crewActionChanged'
+					_dropDownWidth =		350px
+					_disabled =				"isCrewItemChooserDisabled"
+					_width =				100%
+				)
+			)
+
+			(block
+				(visible = "isShowCrewFiringPriceTag")
+
+				(style
+					(marginRight = "S")
+
+					(alpha = "isShowCrewFiringPriceTag ? 1 : 0")
+					(top = "isShowCrewFiringPriceTag ? 0 : 10")
+				)
+
+				(controller $Animation
+					(bind enabled "isShowCrewFiringPriceTag")
+					(bindcall play
+						duration=0.20
+						from={alpha: 0, visualOffsetY: 10px, visible: false}
+						to={alpha: 1, visualOffsetY: 0px, visible: true}
+						action="kill"
+						reverse="!isShowCrewFiringPriceTag"
+						(bind trigger "isShowCrewFiringPriceTag")
+					)
+				)
+				(controller $Instance renderer='PriceTag'
+					(bind enabled "crewFiringPriceInfo.finalPrice > 0")
+					(args
+						_priceInfo =		"{	finalPrice:	-crewFiringPriceInfo.finalPrice,
+												currency:	crewFiringPriceInfo.currency,
+												basePrice:	-crewFiringPriceInfo.basePrice,
+												till:		crewFiringPriceInfo.till}"
+						_showDiscountTag =	 true
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.7)
+		(style
+			(width = "SHIP_SELL_WINDOW_WIDTH")
+			(align = "center")
+		)
+
+		(element HorizontalDividerTwoPx)
+
+		(block
+			(visible = "isShowBlockingWarn")
+
+			(style (bind marginTop "isShowBlockingWarn ? SXS : 0"))
+
+			(controller $Animation
+				(bind enabled "isShowBlockingWarn")
+				(bindcall play
+					duration=0.15
+					from={alpha: 0, visualOffsetY: -10px, visible: false}
+					to={alpha: 1, visualOffsetY: 0px, visible: true}
+					action="kill"
+					reverse="!isShowBlockingWarn"
+					(bind trigger "isShowBlockingWarn")
+				)
+			)
+
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "isShowBlockingWarn")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text =				"blockStatus._text"
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.3)
+		(visible = "isShowEarnPriceLine")
+		(style (marginTop = "isShowEarnPriceLine ? M : 0"))
+
+		(controller $Animation
+			(bind enabled "isShowEarnPriceLine")
+			(bindcall play
+				duration=0.15
+				from={marginTop: 0, alpha: 0, visualOffsetY: -10px, visible: false}
+				to={marginTop: "M", alpha: 1, visualOffsetY: 0px, visible: true}
+				action="kill"
+				reverse="!isShowEarnPriceLine"
+				(bind trigger "isShowEarnPriceLine")
+			)
+		)
+
+		(element PriceTagWithQuestion
+			_questionText =			"questionText"
+			_priceInfo =			"totalPriceCR > 0 ? {finalPrice: totalPriceCR, currency: SC.Common.CURRENCIES.CREDITS} : null"
+			_optionalPriceInfo =	"crewPriceELXP > 0 ? {finalPrice: crewPriceELXP, currency: SC.Common.CURRENCIES.ELITE_XP} : null"
+		)
+	)
+
+	(block
+		(visible = "isShowPurchasePriceLine")
+
+		(style (marginTop = "SXS"))
+
+		(controller $Animation
+			(bindcall play
+				duration=0.1
+				from={alpha: 0, ubScaleY: 0, visible: false}
+				to={alpha: 1, ubScaleY: 1, visible: true}
+				action="kill"
+				reverse="!isShowPurchasePriceLine"
+				(bind trigger "isShowPurchasePriceLine")
+			)
+		)
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.3)
+
+			(tf
+				(class $TextDefault17NM)
+				(style
+					(marginRight = "SXS")
+					(alpha = "TA")
+				)
+				(text = 'IDS_SELL_SHIP_WILL_SPEND')
+			)
+
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "totalPriceGL < 0")
+				(args
+					_priceInfo =	"{finalPrice: abs(totalPriceGL), currency: SC.Common.CURRENCIES.GOLD}"
+					_size =			"SIZE.MEDIUM"
+				)
+			)
+
+			(tf
+				(bind visible "totalPriceGL < 0 && totalPriceCR < 0")
+				(class $TextDefault17NM)
+				(style
+					(marginRight = "SXS")
+					(marginLeft = "XS")
+					(alpha = "TA")
+				)
+				(bind text "crewPriceELXP < 0 ? 'IDS_KEY_COMMA' : 'IDS_AND'")
+			)
+
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "totalPriceCR < 0")
+				(args
+					_priceInfo =	"{finalPrice: abs(totalPriceCR), currency: SC.Common.CURRENCIES.CREDITS}"
+					_size =			"SIZE.MEDIUM"
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.6)
+
+		(style (align = "center"))
+
+		(block
+			(visible = "isShowDemobilizationWarning")
+
+			(style (marginTop = "M"))
+
+			(controller $Animation
+				(bindcall play
+					duration=0.1
+					from={alpha: 0, ubScaleY: 0, visualOffsetY: -10px, visible: false}
+					to={alpha: 1, ubScaleY: 1, visualOffsetY: 0px, visible: true}
+					action="kill"
+					reverse="!isShowDemobilizationWarning"
+					(bind trigger "isShowDemobilizationWarning")
+				)
+			)
+
+			(element StatusLine
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_text =				'IDS_INSTRUCTION_FIRE_CREW'
+			)
+		)
+
+		(block
+			(visible = "isInBattle")
+
+			(style (marginTop = "M"))
+
+			(controller $Animation
+				(bindcall play
+					duration=0.1
+					from={alpha: 0, ubScaleY: 0, visualOffsetY: -10px, visible: false}
+					to={alpha: 1, ubScaleY: 1, visualOffsetY: 0px, visible: true}
+					action="kill"
+					reverse="!isInBattle"
+					(bind trigger "isInBattle")
+				)
+			)
+
+			(element StatusLine
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_text =				'IDS_INSTRUCTION_FIRE_CREW_IN_BATTLE'
+			)
+		)
+	)
+
+	(block
+		(bind visible "sellShipDataComponent.shouldShowDiscountWarning")
+
+		(style (marginTop = "M"))
+
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "sellShipDataComponent.shouldShowDiscountWarning")
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_text =				'IDS_SELLING_WITH_DISCOUNT_WARNING'
+				_textClass =		'$TextDefault17NM'
+			)
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.6)
+		(style (marginTop = "MS"))
+
+		(block
+			(visible = "isOkBtnEnabled")
+
+			(style (width = 154px))
+
+			(controller $Animation
+				(bind enabled "isOkBtnEnabled")
+				(bindcall play
+					duration=0.15
+					from={alpha: 0, width: 0px, visible: false}
+					to={alpha: 1, width: 154px, visible: true}
+					action="kill"
+					reverse="!isOkBtnEnabled"
+					(bind trigger "isOkBtnEnabled")
+				)
+			)
+
+			(controller $Instance renderer='DefaultButton'
+				(args
+					_width =			129px
+					_name =				'btn_ok'
+					_enabled =			"isOkBtnEnabled"
+					_isTransactionBtn = true
+					_label =			'IDS_YES'
+					_focusIndex =		1
+					_defaultFocused =	true
+					_methods = 			"[	{	type:	'inputMapping.onRequest',
+												name:	'sellShip',
+												args:	{	shipId:			shipId,
+															sellFlag:		sellFlag,
+															crewFlag:		crewActionFlag,
+															unmountFlag:	unmountFlag}}]"
+				)
+			)
+		)
+
+		(element DefaultButton
+			_width =		129px
+			_name =			'btn_cancel'
+			_enabled =		true
+			_label =		"isOkBtnEnabled ? 'IDS_NO' : 'IDS_CANCEL_UPPER_CASE'"
+			_focusIndex =	2
+		)
+	)
+)
+
+(def element ShipSellTextListItemRenderer (_curItemIndex:number, _item:str, _listItemRendererData:dict, _isInactive:bool=false)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var shipWithModulesPriceInfoCR:dict = "$index == 0 ?	{	finalPrice:	_listItemRendererData._shipPriceCR,
+																	currency:	SC.Common.CURRENCIES.CREDITS}
+															:	{	finalPrice:	_listItemRendererData._shipPriceCR + _listItemRendererData._topUnitsCost,
+																	currency:	SC.Common.CURRENCIES.CREDITS}")
+		(var isSelected:bool = "_curItemIndex == $index")
+		(var state:number = "	_isInactive	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER _soundSet = "'dropdown'")
+
+	(dispatch "'evMenuClosed'" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive") (event "startHide"))
+	(dispatch "'evItemChooserInner'" args="{ _curItemIndex: $index }" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive"))
+
+	(dispatch "'evUpdateTooltipState'" args="{ _tooltipState: true }" dir="EventDirection.UP" on=removedFromStage)
+	(dispatch "'evUpdateTooltipState'" args="{ _tooltipState: false }" dir="EventDirection.UP" on=addedToStage)
+
+	(style
+		(width = 100%)
+		(height = "INFOTIP_DEFAULT_TEXT_LIST_ITEM_RENDERER_ITEM_HEIGHT")
+	)
+
+	(element TextListItemRendererWithPrice
+		_item =					"_item"
+		_backgroundState =		"state"
+		_priceInfo =			"shipWithModulesPriceInfoCR"
+		_isSelected =			"isSelected"
+		_additionalPriceInfo =	"{finalPrice: _listItemRendererData.shipPriceGL, currency: SC.Common.CURRENCIES.GOLD}"
+		_isInactive =			"_isInactive"
+	)
+)
+
+(def element InstalledModernizationItem (_installedModernizationItem:dict)
+	(scope
+		(var modernizationEntity:dhEntity = "getPrimaryEntity(CC.modernization, _installedModernizationItem.modId)")
+		(var name:str = "modernizationEntity.modernization.name")
+		(var isRecommended:bool = "modernizationEntity.modernization.isRecommended" (event "modernizationEntity.modernization.evIsRecommendedChanged"))
+	)
+
+	(style (margin = "XS"))
+
+	(controller $Tooltip
+		(renderer = 'ModernizationTooltip')
+		(args
+			_modernizationEntityId =	"modernizationEntity.id"
+			_noMouseInstruction =		true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element ModernizationItemView
+		_name =				"name"
+		_isRecommended =	"isRecommended"
+	)
+)
+
+(def element CrewTextListItemRenderer (_curItemIndex:number, _item:str, _listItemRendererData:dict, _isInactive:bool=false)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(struct baseFiringCrew =		PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.BASE"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct firingCrewForCredits =	PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.CREDIT"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct firingCrewForGold =		PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.GOLD"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var accountCredits:number = 	"_listItemRendererData._accountResourceComponent.credits ?: 0" (event "_listItemRendererData._accountResourceComponent.evChangedCredit"))
+		(var accountGold:number =		"_listItemRendererData._accountResourceComponent.gold ?: 0" (event "_listItemRendererData._accountResourceComponent.evChangedGold"))
+		(var canDisassignCrew:bool =	"_listItemRendererData._crewsSingleton.freeBarracksSlots > 0")
+		(var canDismissCrew:bool =		"_listItemRendererData._crewInfo.canDismiss")
+		(var penaltyCR:number =			"_listItemRendererData._penaltyCR")
+		(var penaltyGL:number =			"_listItemRendererData._penaltyGL")
+
+		(var priceInfo:dict = "	$index == SC.Common.CREW_FIRING_TYPE.GOLD	? firingCrewForGold.info :
+								$index == SC.Common.CREW_FIRING_TYPE.MONEY	? firingCrewForCredits.info :
+								$index == SC.Common.CREW_FIRING_TYPE.BASE	? baseFiringCrew.info
+																			: null")
+
+		(var crewFiringProfit:number = "	$index == SC.Common.CREW_FIRING_TYPE.GOLD	? firingCrewForGold.refundComponent.profit :
+											$index == SC.Common.CREW_FIRING_TYPE.MONEY	? firingCrewForCredits.refundComponent.profit :
+											$index == SC.Common.CREW_FIRING_TYPE.BASE	? baseFiringCrew.refundComponent.profit
+																						: 0"	(event "firingCrewForCredits.refundComponent.evProfitChanged")
+																								(event "firingCrewForGold.refundComponent.evProfitChanged"))
+
+		(var priceData:dict = "$index == SC.Common.CREW_FIRING_TYPE.MONEY || $index == SC.Common.CREW_FIRING_TYPE.GOLD	? {	finalPrice:	priceInfo.finalPrice,
+																															currency:	priceInfo.currency,
+																															basePrice:	priceInfo.basePrice,
+																															till:		priceInfo.till}
+																														: null")
+
+		(var isSelected:bool =		"_curItemIndex == $index")
+		(var isCreditDeficit:bool =	"$index == SC.Common.CREW_FIRING_TYPE.MONEY && !isSelected && (accountCredits - penaltyCR - priceInfo.finalPrice) < 0")
+		(var isGoldDeficit:bool =	"$index == SC.Common.CREW_FIRING_TYPE.GOLD && !isSelected && (accountGold - penaltyGL - priceInfo.finalPrice) < 0")
+
+		(var isDemobilizeNotWorthGold:bool =	"$index == SC.Common.CREW_FIRING_TYPE.MONEY && !isSelected && (priceInfo.finalPrice <= 0 || crewFiringProfit <= 0)")
+		(var isDemobilizeNotWorthCredit:bool =	"$index == SC.Common.CREW_FIRING_TYPE.GOLD && !isSelected && (priceInfo.finalPrice <= 0 || crewFiringProfit <= 0)")
+
+		(var tooltipStateInfo:dict = "
+			$index == SC.Common.CREW_FIRING_TYPE.TO_OPS && !canDisassignCrew	? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																					_text:			'IDS_BARRACK_IS_FULL'} :
+			$index != SC.Common.CREW_FIRING_TYPE.TO_OPS && !canDismissCrew		? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																					_text:			'IDS_CREW_CAN_NOT_BE_DEMOBOLIZED'} :
+			isDemobilizeNotWorthCredit											? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																					_text:			'IDS_CREW_NOT_ENOUGH_EXP_TO_DEMOBILIZE'} :
+			isDemobilizeNotWorthGold											? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																					_text:			'IDS_CREW_NOT_ENOUGH_EXP_TO_DEMOBILIZE'} :
+			isCreditDeficit														? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																					_text:			'IDS_NOT_ENOUGH_CREDITS'} :
+			isGoldDeficit														? {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																					_text:			'IDS_NOT_ENOUGH_GOLD'}
+																				: {	_unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
+																					_text:			_item + '_TOOLTIP'}")
+
+		(var isEnabled:bool = "	($index != 0 && canDismissCrew && !isCreditDeficit && !isGoldDeficit && !isDemobilizeNotWorthCredit && !isDemobilizeNotWorthGold)
+								|| ($index == 0 && canDisassignCrew)")
+
+		(var state:number = "	_isInactive || !isEnabled		? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								isSelected						? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown						? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver						? SC.Ui_styles.BUTTON_STATE.OVER
+																: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER _soundSet = "'dropdown'")
+
+	(dispatch "'evMenuClosed'" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive && isEnabled") (event "startHide"))
+	(dispatch "'evItemChooserInner'" args="{ _curItemIndex: $index }" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive && isEnabled"))
+
+	(style
+		(width = 100%)
+		(height = "INFOTIP_DEFAULT_TEXT_LIST_ITEM_RENDERER_ITEM_HEIGHT")
+	)
+
+	(controller $Tooltip
+		(renderer='SimpleStatusTooltip')
+		(args
+			_text =				"tooltipStateInfo._text"
+			_unifiedStatus =	"tooltipStateInfo._unifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element TextListItemRendererWithPrice
+		_item =				"_item"
+		_backgroundState =	"state"
+		_priceInfo =		"priceData"
+		_isEnabled =		"isEnabled"
+		_isSelected =		"isSelected"
+		_isInactive =		"_isInactive"
+	)
+)

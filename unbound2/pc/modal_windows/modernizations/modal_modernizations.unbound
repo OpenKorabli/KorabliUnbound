@@ -1,0 +1,158 @@
+(def constant MODERNIZATION_UNINSTALL_OPTION "{ UNMOUNT: 0, SELL: 1 }")
+
+(def element ModalWindowModernizations (itemToMount:number=null,
+										itemToUnmount:number=null,
+										unmountFlag:number=null,
+										shipId:number=null,
+										slotId:number=null,
+										mountFlag:number=null)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(var itemToMountEntity:dhEntity = "getPrimaryEntity(CC.modernization, itemToMount)")
+		(var itemToUnmountEntity:dhEntity = "getPrimaryEntity(CC.modernization, itemToUnmount)")
+		(var windowRenderer:str = "	itemToMount && itemToUnmount	? 'ModalModernizationsReplace' :
+									itemToUnmount					? 'ModalModernizationsSellUninstall'
+																	: 'ModalModernizationsPurchaseInstall'")
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "[unmountFlag ? 'setUserPref' : '', { name: 'switchUnmountSellModernization', value: unmountFlag}]" watch=false on='addedToStage')
+
+	(block
+		(class $EyeLevelAligned)
+		(style (width = 400px))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style (width = 100%))
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_CONFIRMATION'
+				_hasDivider = false
+			)
+		)
+
+		(block
+			(style (align = "center") (width = 100%))
+
+			(controller $Instance
+				(bind renderer "windowRenderer")
+				(args
+					_itemToMountId = "itemToMount"
+					_itemToUnmountId = "itemToUnmount"
+					_itemToMountEntity = "itemToMountEntity"
+					_itemToUnmountEntity = "itemToUnmountEntity"
+					_mountFlag = "mountFlag"
+					_unmountFlag = "unmountFlag"
+					_shipId = "shipId"
+					_slotId = "slotId"
+				)
+			)
+		)
+	)
+)
+
+(def element UnmountSellModernizationChooserDropdown (_sellCost:number=0, _unmountFlag:number=null, _unmountPrice:dict=null)
+	(scope
+		(event ItemChooser_unmountTypeChanged)
+
+		(var unmountOrSell:number = "_unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET	? MODERNIZATION_UNINSTALL_OPTION.UNMOUNT
+																									: MODERNIZATION_UNINSTALL_OPTION.SELL")
+		(bind unmountOrSell "$event.selectedIndex" init=false (event "ItemChooser_unmountTypeChanged"))
+
+		(var modernizationListItemRendererData:dict = "{	_unmountFinalPrice:	_unmountPrice.finalPrice,
+															_unmountPriceInfo:	_unmountPrice,
+															_sellCost:			_sellCost}")
+	)
+
+	(style (flow = "horizontal") (width = 100%) (paddingRight = "SXS"))
+
+	(block
+		(name = 'UnmountSellModernization')
+		(style (marginBottom = "XXS"))
+
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				_text = 'IDS_HINT_CLICK_TO_CHOOSE_ACTION'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element ItemChooser
+			_items = "['IDS_UNMOUNT', 'IDS_SELL']"
+			_listItemRenderer = 'ModernizationTextListItemRenderer'
+			_listItemRendererData =	"modernizationListItemRendererData"
+			_choosedItemRenderer = 'DefaultItemChooserPickedItemRenderer'
+			_onItemSelectedEvent = 'unmountTypeChanged'
+			_curIndex = "unmountOrSell"
+			_maxDropDownHeight = 150px
+			_dropDownWidth = 220px
+		)
+	)
+
+	(block
+		(bind visible "_unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET")
+		(style (position = "absolute") (right = 0px) (top = 11px))
+
+		(element PriceTag
+			_priceInfo = "_unmountPrice"
+			_showDiscountTag = true
+		)
+	)
+)
+
+(def element ModernizationTextListItemRenderer (_curItemIndex:number, _item:str, _listItemRendererData:dict, _isInactive:bool=false)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var isUnmountOption:bool = "$index == MODERNIZATION_UNINSTALL_OPTION.UNMOUNT")
+		(var priceData:dict = "isUnmountOption	? {priceInfo: _listItemRendererData._unmountPriceInfo, _showDiscountTag: true}
+											: {priceInfo: {finalPrice: _listItemRendererData._sellCost, currency: SC.Common.CURRENCIES.CREDITS}}")
+
+		(var isSelected:bool = "_curItemIndex == $index")
+		(var isGoldDeficit:bool = "isUnmountOption && !isSelected && (_listItemRendererData._accountGold - _listItemRendererData._penaltyGL - _listItemRendererData._unmountFinalPrice < 0)")
+
+		(var isEnabled:bool = "!isUnmountOption || (isUnmountOption && !isGoldDeficit)")
+		(var state:number = "	_isInactive || !isEnabled	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								isSelected					? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown					? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver					? SC.Ui_styles.BUTTON_STATE.OVER
+															: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER _soundSet = "'dropdown'")
+
+	(bind name "isUnmountOption ? 'modernizationRemove' : 'modernizationDestroy'")
+
+	(dispatch "'evMenuClosed'" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive && isEnabled") (event "startHide"))
+	(dispatch "'evItemChooserInner'" args="{ _curItemIndex: $index }" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive && isEnabled"))
+
+	(style
+		(width = 100%)
+		(height = "INFOTIP_DEFAULT_TEXT_LIST_ITEM_RENDERER_ITEM_HEIGHT")
+	)
+
+	(controller $Tooltip
+		(bind enabled "isGoldDeficit")
+		(renderer='SimpleStatusTooltip')
+		(args
+			_text =				'IDS_NOT_ENOUGH_GOLD'
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element TextListItemRendererWithPrice
+		_item =				"_item"
+		_backgroundState =	"state"
+		_priceInfo =		"priceData.priceInfo"
+		_isEnabled =		"isEnabled"
+		_isSelected =		"isSelected"
+		_isInactive =		"_isInactive"
+	)
+)

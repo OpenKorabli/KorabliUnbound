@@ -170,16 +170,21 @@
 	(scope
 		(event startShow)
 		(event startHide)
+		(event sysStartShow)
+		(event sysStartHide)
 
-		(var showState:number = "SC.Ui_windows.WINDOW_STATE.INIT")
 		(var stageComponent:gfx = "$datahub.getSingleEntity(CC.stage).stage")
 		(var stageWidth:number = "stageComponent.width" (event "stageComponent.evStageSizeChanged"))
 		(var stageHeight:number = "stageComponent.height" (event "stageComponent.evStageSizeChanged"))
 	)
 	(style (bind width "stageWidth") (bind height "stageHeight") (position = "absolute"))
 
-	(dispatch startShow dir="EventDirection.DOWN" (bind trigger "showState") (bind enabled "showState != SC.Ui_windows.WINDOW_STATE.SHOW"))
-	(dispatch startHide dir="EventDirection.DOWN" (bind trigger "showState") (bind enabled "showState == SC.Ui_windows.WINDOW_STATE.SHOW"))
+	
+	(dispatch startShow dir="EventDirection.DOWN" (event "sysStartShow"))
+	(dispatch startHide dir="EventDirection.DOWN" (event "sysStartHide"))
+
+	(dispatch evBlurStartShow dir="EventDirection.DOWN" (event "startShow"))
+	(dispatch evBlurStartHide dir="EventDirection.DOWN" (event "startHide"))
 )
 
 (def macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS ()
@@ -282,6 +287,7 @@
 		(bindcall play
 			delay = "0.1 + _positionY * 0.075"
 			duration = 0.15
+			from = "{ alpha: 0, visualOffsetY: 10px }"
 			to = "{ alpha: 1, visualOffsetY: 0px }"
 			easing = "Easing.quad_out"
 			action = "killAll"
@@ -301,6 +307,39 @@
 			(event "$scope[hideEvent]")
 		)
 		(dispatch "animationFinishedEvent ? animationFinishedEvent : 'startShow'" init=false on=evAnimEnded (bind enabled "animationFinishedEvent != null"))
+	)
+)
+
+(def macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION (_positionY:number, hideEvent:expression='startHide', animationFinishedEvent:expression=null)
+	(style
+		(bind alpha "0" on='addedToStage' on='removedFromStage')
+		(bind visualOffsetY "10px" on='addedToStage' on='removedFromStage')
+	)
+
+	(controller $Animation
+		(bindcall play
+			delay = "0.1 + _positionY * 0.075"
+			duration = 0.15
+			from = "{ alpha: 0, visualOffsetY: 10px }"
+			to = "{ alpha: 1, visualOffsetY: 0px }"
+			easing = "Easing.quad_out"
+			action = "killAll"
+			watch = false
+			on = 'addedToStage'
+			(event "startShow")
+		)
+	)
+	(controller $Animation
+		(bindcall play
+			delay = "_positionY * 0.055"
+			duration = 0.15
+			to = "{ alpha: 0, visualOffsetY: -10px }"
+			easing = "Easing.quad_in"
+			action = "killAll"
+			watch = false
+			(event "$scope[hideEvent]")
+		)
+		(dispatch "animationFinishedEvent ? animationFinishedEvent : 'startShow'" on=evAnimEnded (bind enabled "animationFinishedEvent != null"))
 	)
 )
 
@@ -337,7 +376,10 @@
 )
 
 (def macro BANNER_APPEAR_ANIMATION ()
-	(style (alpha = 0))
+	(style
+		(alpha = 0)
+		(bind alpha "0" on='removedFromStage')
+	)
 
 	(controller $Animation
 		(bindcall play	delay = 0.15
@@ -345,6 +387,7 @@
 						from = "{alpha: 0, visualOffsetY: 10px}"
 						to = "{alpha: 1, visualOffsetY: 0px}"
 						on = 'addedToStage'
+						easing = "Easing.quad_out"
 		)
 	)
 )
@@ -441,7 +484,6 @@
 (def constant UNIFIED_STATUS_TEXT_COLOR_MAP "{	SC.Ui_styles.UNIFIED_STATUS.ATTENTION:				SC.Ui_styles.SERVICE_COLORS.ORANGE,
 												SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION:			SC.Ui_styles.SERVICE_COLORS.ORANGE,
 												SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION:		SC.Ui_styles.SERVICE_COLORS.ORANGE,
-												SC.Ui_styles.UNIFIED_STATUS.RETRAINING:				SC.Ui_styles.SERVICE_COLORS.ORANGE,
 												SC.Ui_styles.UNIFIED_STATUS.WITHOUT_COMMANDER:		SC.Ui_styles.SERVICE_COLORS.ORANGE,
 												SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_OFF:			SC.Ui_styles.SERVICE_COLORS.ORANGE,
 												SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_MUTED:		SC.Ui_styles.SERVICE_COLORS.ORANGE,
@@ -463,6 +505,7 @@
 												SC.Ui_styles.UNIFIED_STATUS.WARNING:				SC.Ui_styles.SERVICE_COLORS.RED,
 												SC.Ui_styles.UNIFIED_STATUS.ABUSE_CONFIRMED:		SC.Ui_styles.SERVICE_COLORS.RED,
 												SC.Ui_styles.UNIFIED_STATUS.ABUSE_SUSPECT:			SC.Ui_styles.SERVICE_COLORS.PINK,
+												SC.Ui_styles.UNIFIED_STATUS.RETRAINING:				SC.Ui_styles.SERVICE_COLORS.WHITE,
 												SC.Ui_styles.UNIFIED_STATUS.VOICE_CHAT_ON:			SC.Ui_styles.SERVICE_COLORS.WHITE,
 												SC.Ui_styles.UNIFIED_STATUS.DEFAULT:				SC.Ui_styles.SERVICE_COLORS.WHITE,
 												SC.Ui_styles.UNIFIED_STATUS.DATE:					SC.Ui_styles.SERVICE_COLORS.WHITE,
@@ -575,7 +618,7 @@
 	(dispatch evMouseOvered args={isMouseOvered: true} on='mouseOver')
 	(dispatch evMouseOvered args={isMouseOvered: false} on='mouseOut')
 
-	(dispatch evMouseDowned args={isMouseDowned: true} on='mouseDown')
+	(dispatch evMouseDowned args={isMouseDowned: true} on='leftMouseDown')
 	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseUp')
 	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseOut')
 
@@ -589,7 +632,7 @@
 	(dispatch evMouseOvered args={isMouseOvered: true} on='mouseOver')
 	(dispatch evMouseOvered args={isMouseOvered: false} on='mouseOut')
 
-	(dispatch evMouseDowned args={isMouseDowned: true} on='mouseDown')
+	(dispatch evMouseDowned args={isMouseDowned: true} on='leftMouseDown')
 	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseUp')
 	(dispatch evMouseDowned args={isMouseDowned: false} on='mouseOut')
 
@@ -918,7 +961,7 @@
 		)
 	)
 )
-(def macro PORT_BANNER_BG (_bgColor:expression = "SC.Ui_styles.SERVICE_COLORS.BANNER_BACKGROUND")
+(def macro PORT_BANNER_BG (_portBannerAlpha:expression, _bgColor:expression = "SC.Ui_styles.SERVICE_COLORS.BANNER_BACKGROUND")
 	(scope
 		(event startShow)
 		(event startHide)
@@ -953,7 +996,26 @@
 
 	(block
 		(class $FullsizeAbsolute)
-		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL") (alpha = "portBannerAlpha.alpha"))
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="portBannerAlpha.state" _alpha="portBannerAlpha.alpha")
+
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL") (alpha = "_portBannerAlpha.alpha"))
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="_portBannerAlpha.state" _alpha="_portBannerAlpha.alpha")
+	)
+)
+
+(def macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM (_triggerExpression:expression)
+	(alpha = "_triggerExpression ? 0.5 : 1")
+	(controller $Animation
+		(bindcall play	duration="0.15"
+						to="{alpha: 0.5}"
+						action="kill"
+						easing="Easing.line"
+						(bind enabled "_triggerExpression")
+		)
+		(bindcall play	duration="0.15"
+						to="{alpha: 1}"
+						action="kill"
+						easing="Easing.line"
+						(bind enabled "!_triggerExpression")
+		)
 	)
 )

@@ -24,8 +24,6 @@
 	TOOLTIP_DEFAULT:			0.9
 }")
 
-(def constant FRAME_SLOT_STATE_ALPHA_NO_ITEM_AVAILABLE_INSIDE 0.25)
-
 (def constant USELESS_ICON_FOR_SKILL_ALPHA "{
 	SC.Ui_styles.BUTTON_STATE.UP:		0.75,
 	SC.Ui_styles.BUTTON_STATE.OVER:		1,
@@ -380,6 +378,9 @@
 
 		(var isInfotipVisible:bool = false)
 
+		(var resourceEntity:dhEntity =		"getSingleEntity(CC.accountResource)")
+		(var operationsAccountLocked:bool =	"resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
+
 		(struct skill =				PULL_SKILL(_entityId = "_entityId"))
 		(struct crewSkill =			PULL_CREW_SKILL_STATE(	_crewId = "_crewId"
 															_skillId = "skill.entity.id"))
@@ -406,7 +407,7 @@
 
 		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
 		(var isMaxLevelEliteCrew:bool =	"isCrewElite && isMaxLevel")
-		(var isClickable:bool =			"isMaxLevelEliteCrew && (epicSkillsCollectionItems.length > 0)")
+		(var isClickable:bool =			"!operationsAccountLocked && isMaxLevelEliteCrew && (epicSkillsCollectionItems.length > 0)")
 
 		(var slotState:number = "	!isClickable		? SC.Ui_styles.BUTTON_STATE.DISABLED :
 									isInfotipVisible	? SC.Ui_styles.BUTTON_STATE.SELECTED :
@@ -414,15 +415,20 @@
 									rollOver			? SC.Ui_styles.BUTTON_STATE.OVER
 														: SC.Ui_styles.BUTTON_STATE.UP")
 
-		(var slotFrameAlpha:number =	"!isAnyEpicSkillAvailableForActionInSlot && !(isInfotipVisible || mouseDown || rollOver)	? FRAME_SLOT_STATE_ALPHA_NO_ITEM_AVAILABLE_INSIDE
-																																	: FRAME_SLOT_STATE_ALPHA[slotState]")
+		(var slotFrameAlpha:number =	"FRAME_SLOT_STATE_ALPHA[slotState]")
 		(var skillIconAlpha:number =	"crewSkill.isLearned	?							CREW_SKILL_ICON_ALPHA.LEARNED :
 										 isClickable			?	isInfotipVisible	?	CREW_SKILL_ICON_ALPHA.SELECTED :
 																	mouseDown			?	CREW_SKILL_ICON_ALPHA.DOWN :
 																	rollOver			?	CREW_SKILL_ICON_ALPHA.OVER
 																						:	CREW_SKILL_ICON_ALPHA.UP
 																:	CREW_SKILL_ICON_ALPHA.LOCKED")
+
+		(var contextClickAction:str =	"isClickable && isEpic ? CREW_ACTIONS.OPEN_DENY_SKILL_WINDOW : ''")
+		(var contextActionObj:dict =	"{ _crewId: _crewId, _crewSkillEntityId: _entityId, _selectedShipClass: _selectedShipClass }")
 	)
+
+	(bindcall externalCall "contextClickAction ? 'inputMapping.onRequest' : ''"		"[ contextClickAction, contextActionObj ]"	watch=false on='rightClick')
+	(bindcall externalCall "contextClickAction ? 'sound.playSetSoundDirect' : ''"	"[ 'button_flat', SoundEvent.CLICK ]"		watch=false on='rightClick')
 
 	(style
 		(bind marginLeft	"SKILL_TREE_ICON_MARGINS.HORIZONTAL")
@@ -442,6 +448,8 @@
 			_selectedShipClass =			"_selectedShipClass"
 			_crewInfoMouseInstruction =		"isClickable ? 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_EPIC_SKILL_SLOT_INFOTIP_OPEN' : ''"
 			_isEpicSkillAvailableForSlot =	"isClickable && isAnyEpicSkillAvailableForActionInSlot && !isEpic"
+			_isNoMentorOnAccountForSlot =	"!isAnyEpicSkillAvailableForActionInSlot"
+			_isFromSlot =					"isClickable"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -482,7 +490,7 @@
 			(width = "CREW_SKILL_SLOT_SIZE")
 			(height = "CREW_SKILL_SLOT_SIZE")
 			(backgroundSize = "fill")
-			(backgroundImage = 'url:../service_kit/frames/64px_not_empty_field.png')
+			(bind backgroundImage "isAnyEpicSkillAvailableForActionInSlot ? 'url:../service_kit/frames/64px_not_empty_field.png' : 'url:../service_kit/frames/64px_orange.png'")
 			(alpha = "slotFrameAlpha")
 		)
 
@@ -581,9 +589,8 @@
 
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
-		(var accountResourceComponent:dhComponent = "resourceEntity.accountResource")
-		(var operationsAccountLocked:bool = "accountResourceComponent.operationsLocked" (event "accountResourceComponent.evOperationsLockChanged"))
+		(var resourceEntity:dhEntity =		"getSingleEntity(CC.accountResource)")
+		(var operationsAccountLocked:bool =	"resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
 
 		(struct skill =				PULL_SKILL(_entityId = "_crewSkillEntityId"))
 		(struct crewSkill =			PULL_CREW_SKILL_STATE(	_crewId = "_crewId"

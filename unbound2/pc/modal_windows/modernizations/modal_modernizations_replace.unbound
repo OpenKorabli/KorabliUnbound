@@ -1,0 +1,323 @@
+(def element ModalModernizationsReplace (_itemToMountEntity:dhEntity,
+										_itemToUnmountEntity:dhEntity,
+										_mountFlag:number,
+										_unmountFlag:number,
+										_shipId:number,
+										_slotId:number)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event ItemChooser_unmountTypeChanged)
+		(event evDelayedUpdate)
+		(macro MODAL_WINDOW_SYSTEM_PURCHASE_EVENTS_SCOPE)
+		(macro USER_PREF_DATA)
+
+		(var modernizationMountComponent:dhComponent = "_itemToMountEntity.modernization")
+
+		(var modMountId:number = "modernizationMountComponent.modId ?: 0")
+		(var itemToMountName:str = "modernizationMountComponent.name ?: ''")
+		(var itemToMountType:str = "modernizationMountComponent.type ?: ''")
+		(var itemToMountNumInStorage:number = "modernizationMountComponent.numInStorage ?: 0" (event "modernizationMountComponent.evNumInStorageChanged"))
+		(var isItemToMountRecommended:bool = "modernizationMountComponent.isRecommended" (event "modernizationMountComponent.evIsRecommendedChanged"))
+		(var isEmptyStorage:bool = "itemToMountNumInStorage == 0")
+
+		(var modernizationUnmountComponent:dhComponent = "_itemToUnmountEntity.modernization")
+
+		(var modUnmountId:number = "modernizationUnmountComponent.modId ?: 0")
+		(var itemToUnmountName:str = "modernizationUnmountComponent.name ?: ''")
+		(var itemToUnmountType:str = "modernizationUnmountComponent.type ?: ''")
+		(var isItemToUnmountRecommended:bool = "modernizationUnmountComponent.isRecommended" (event "modernizationUnmountComponent.evIsRecommendedChanged"))
+
+		(struct buyPrice = PULL_PRICE(_entityId = "toString(modMountId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct modSellInfo = PULL_PRICE(_entityId = "toString(modUnmountId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct unmountPrice =	PULL_PRICE(_entityId = "'MODS_COST_Demontage'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct sellCoef =	PULL_PRICE(_entityId = "'SELL_COEF'"	_actionId = "SC.Common.PRICE_ACTION.INFO"))
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountGold:number	= "resourceEntity.accountResource.gold ?: 0" (event "resourceEntity.accountResource.evChangedGold"))
+		(var accountCredits:number	= "resourceEntity.accountResource.credits ?: 0" (event "resourceEntity.accountResource.evChangedCredit"))
+
+		(var unmountFlag:number =	"userPrefs.switchUnmountSellModernization	? userPrefs.switchUnmountSellModernization
+																				: _unmountFlag")
+		(var sellCost:number = "modSellInfo.info.finalPrice * sellCoef.info.finalPrice")
+		(var curSellCost:number = "unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL ? sellCost : 0")
+		(var totalGoldPrice:number = "(buyPrice.info.currency == SC.Common.CURRENCIES.GOLD && isEmptyStorage ? buyPrice.info.finalPrice : 0)
+										+ ((unmountPrice.info.currency == SC.Common.CURRENCIES.GOLD) && (unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET) ? unmountPrice.info.finalPrice : 0)")
+		(var totalCreditsPrice:number = "(buyPrice.info.currency == SC.Common.CURRENCIES.CREDITS && isEmptyStorage ? buyPrice.info.finalPrice : 0)
+											+ ((unmountPrice.info.currency == SC.Common.CURRENCIES.CREDITS) && (unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET) ? unmountPrice.info.finalPrice : 0)")
+
+		(var goldDeficit:number = "totalGoldPrice - accountGold")
+		(var creditsDeficit:number = "totalCreditsPrice - accountCredits")
+		(var isDeficit:bool = "(goldDeficit > 0) || (creditsDeficit > 0)")
+
+		(var priceInfo:dict = "totalCreditsPrice > 0	? {	finalPrice: totalCreditsPrice,
+															currency: SC.Common.CURRENCIES.CREDITS }
+														: 	null")
+		(var optionalPriceInfo:dict = "totalGoldPrice > 0	? {	finalPrice: totalGoldPrice,
+																currency: SC.Common.CURRENCIES.GOLD }
+															:	null")
+
+		(var currenciesPanelPrices:array = "[	{currency: SC.Common.CURRENCIES.GOLD,		finalPrice: optionalPriceInfo ? -optionalPriceInfo.finalPrice : 0},
+												{currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: -totalCreditsPrice + curSellCost}]")
+		(var btnEnabled:bool = "goldDeficit <= 0 && creditsDeficit <= 0")
+		(var isInstalledModSellCostVisible:bool = "unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL && (creditsDeficit <= 0)")
+
+		(var windowHitTest:bool = true)
+		(bind windowHitTest "false" init=false (event "startHide"))
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'switchUnmountSellModernization', value: $event.selectedIndex ? SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL : SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET}]" watch=false (event "ItemChooser_unmountTypeChanged"))
+	(bindcall externalCall 'inputMapping.onRequest' "['close', {}]" (event "startHide"))
+
+	(style (align = "center") (bind hitTest "windowHitTest"))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(element CurrenciesPanel
+			_priceInfo = "currenciesPanelPrices"
+			_width = 400px
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style
+			(align = "left")
+			(width = 100%)
+			(marginBottom = "M")
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+		)
+
+		(controller $Tooltip
+			(renderer = 'ModernizationTooltip')
+			(args
+				_modernizationEntityId = "_itemToMountEntity.id"
+				_noMouseInstruction = true
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+			_headerIconType =	'ModalWindowSystemModernizationIcon'
+			_imageWidth =		60px
+			_imageHeight =		60px
+			_maxWidth =			376px
+			_headerText =		"'IDS_TITLE_' + itemToMountName"
+			_subheaderText =	"'IDS_MODERNIZATION_' + itemToMountType"
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_data =				"{	name:			itemToMountName,
+									isRecommended:	isItemToMountRecommended }"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style (width = 100%) (marginBottom = "SXS"))
+
+		(element HorizontalDividerTwoPx)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+			(marginBottom = "MS")
+			(width = 100%)
+		)
+
+		(tf
+			(class $TextDefault17NM)
+			(style (width = 100%) (alpha = "TA"))
+			(bind text "isEmptyStorage	? 'IDS_MODERNIZATION_COST'
+										: 'IDS_IN_WAREHOUSE'")
+		)
+
+		(block
+			(style (bind marginBottom "isEmptyStorage ? -S : 0"))
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "isEmptyStorage")
+				(args
+					_priceInfo = "priceInfo"
+					_showDiscountTag = true
+				)
+			)
+		)
+
+		(tf
+			(bind visible "!isEmptyStorage")
+			(class $TextDefault17NM)
+			(style (width = 100%) (alpha = "TA"))
+			(text = "itemToMountNumInStorage")
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style (align = "center") (width = 100%))
+
+		(element HorizontalDividerTwoPx)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundImage = 'url:../service_kit/panel_backgrounds/inner_panel.png') (scale9grid = 3))
+		)
+
+		(block
+			(style
+				(align = "left")
+				(width = 100%)
+				(paddingTop = "SXS")
+				(paddingLeft = "SXS")
+				(paddingRight = "SXS")
+			)
+
+			(controller $Tooltip
+				(renderer = 'ModernizationTooltip')
+				(args
+					_modernizationEntityId = "_itemToUnmountEntity.id"
+					_noMouseInstruction = true
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+				_headerIconType =	'ModalWindowSystemModernizationIcon'
+				_imageWidth =		60px
+				_imageHeight =		60px
+				_maxWidth =			376px
+				_headerText =		"'IDS_TITLE_' + itemToUnmountName"
+				_subheaderText =	"'IDS_MODERNIZATION_' + itemToUnmountType"
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_data =				"{	name:			itemToUnmountName,
+										isRecommended:	isItemToUnmountRecommended }"
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "SXS")
+				(marginBottom = "XS")
+				(marginLeft = "XS")
+			)
+
+			(element UnmountSellModernizationChooserDropdown
+				_sellCost = "sellCost"
+				_unmountFlag = "unmountFlag"
+				_unmountPrice = "{	finalPrice:	-unmountPrice.info.finalPrice,
+									currency:	unmountPrice.info.currency}"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style (width = 100%))
+
+		(element HorizontalDividerTwoPx)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style
+			(bind marginTop "isDeficit ? 0 : MS")
+			(bind marginBottom "isDeficit ? 0 : S")
+		)
+
+		(controller $Instance renderer='PriceTagWithQuestion'
+			(bind enabled "!isDeficit")
+			(args
+				_questionText = "totalGoldPrice == 0 && totalCreditsPrice == 0	? 'IDS_QUESTION_REPLACE'
+																				: 'IDS_QUESTION_REPLACE_FOR'"
+				_priceInfo = "priceInfo"
+				_optionalPriceInfo = "optionalPriceInfo"
+			)
+		)
+	)
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(hblock
+			(style
+				(marginTop = "isInstalledModSellCostVisible ? XS : 0")
+				(visualScaleY = "isInstalledModSellCostVisible ? 1 : 0")
+				(alpha = "isInstalledModSellCostVisible ? 1 : 0")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from	 = "{ alpha: 0, visualScaleY: 0, marginTop: 0, visible: false }"
+					to		 = "{ alpha: 1, visualScaleY: 1, marginTop: XS, visible: true }"
+					easing	 = "Easing.quad_out"
+					action	 = "kill"
+					reverse	= "!isInstalledModSellCostVisible"
+					(bind trigger "isInstalledModSellCostVisible")
+				)
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(style (alpha = "TC"))
+				(text = 'IDS_INSTALLED_MODERNIZATION_COST')
+			)
+
+			(block
+				(style (marginLeft = 5px) (marginRight = "XS") (marginBottom = "-S"))
+
+				(element PriceTag
+					_priceInfo = "{ finalPrice: sellCost, currency: SC.Common.CURRENCIES.CREDITS }"
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "isDeficit")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style (marginTop = "M"))
+
+		(tf
+			(class $TextDefault25NM)
+			(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+			(text = 'IDS_NOT_ENOUGH_FUNDS')
+		)
+	)
+
+	(block
+		(bind visible "isDeficit")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+		(style (marginTop = "SXS") (marginBottom = "SXS"))
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from	 = "{ alpha: 0, ubScaleY: 0 }"
+				to		 = "{ alpha: 1, ubScaleY: 1 }"
+				easing	 = "Easing.quad_out"
+				action	 = "kill"
+				reverse	= "!isDeficit"
+				(bind trigger "isDeficit")
+			)
+		)
+
+		(element PriceDeficit
+			_priceInfo = "{currency: SC.Common.CURRENCIES.CREDITS}"
+			_deficit = "creditsDeficit > 0 ? creditsDeficit : 0"
+			_secondPriceInfo = "{currency: SC.Common.CURRENCIES.GOLD}"
+			_secondDeficit = "goldDeficit > 0 ? goldDeficit : 0"
+			_size = "SIZE.MEDIUM"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style (align = "center") (width = 100%) (marginTop = "M"))
+
+		(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+			_hideEventName =	'startHide'
+			_isDeficit =		"!btnEnabled"
+			_okMethods =		"[{ type: 'inputMapping.onAction', name: 'setModernizations', args: { shipId: _shipId, slotId: _slotId, modAdd: modMountId, mountFlag: _mountFlag, unmountFlag: unmountFlag } }]"
+		)
+	)
+)

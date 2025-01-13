@@ -16,7 +16,7 @@
 	(var substituteMap:gfx = "message.logMessage.substitutes ? message.logMessage.substitutes : {}")
 )
 
-(def element UpperLog(_isChallengesEnabled:bool)
+(def element UpperLog(_isChallengesEnabled:bool, _isTrialsEnabled:bool)
 	(scope
 		(var messagesCollection:gfx = "$datahub.getCollection(CC.upperLogMessage)")
 
@@ -71,7 +71,7 @@
 			(align = "center")
 		)
 		(controller $Instance renderer='PrebattleText'
-			(bind enabled "countdownBattleTime >= 0 && isBeginningOfBattle && !_isChallengesEnabled")
+			(bind enabled "countdownBattleTime >= 0 && isBeginningOfBattle && !_isChallengesEnabled && !_isTrialsEnabled")
 			(args
 				_labelGameModeDescription="labelGameModeDescription"
 				_battleTime="countdownBattleTime"
@@ -87,6 +87,20 @@
 		)
 		(controller $Instance renderer='BattleChallengesRoundCountdown'
 			(bind enabled "_isChallengesEnabled")
+			(args
+				_battleState="battleState"
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(align = "center")
+		)
+		(controller $Instance renderer='TrialRoundCountdown'
+			(bind enabled "_isTrialsEnabled")
 			(args
 				_battleState="battleState"
 			)
@@ -280,7 +294,6 @@
 	(dispatch evSwitchVisibility	delay = 0.5 (event "evStartHide"))
 	
 	(controller $Spine
-		(bind speed "1")
 		(bind skin "_skin")
 		(play sequence = "{ name:'animationIn', repeatCount:1, delay: 0 }")
 		(bindcall play sequence= "{name:'animationOut', repeatCount:1, mix:0.3}" append=true (event "evStartHide"))
@@ -336,7 +349,7 @@
 		(var disciplineName:str = "SC.Battle.DISCIPLINE_TYPES.NAMES[disciplineConstName]")
 
 		(var isDisciplineTaskVisible:bool = "$event ? $event._isVisible : false" watch=false (event "evShowDisciplineTask") (event "evHideDisciplineTask"))
-		(var isRoundEndingVisible:bool = "$event ? $event._isVisible : false" init=false (event "evShowRoundEnding") (event "evHideRoundEnding"))
+		(var isRoundEndingVisible:bool = "$event ? $event._isVisible : false" (event "evShowRoundEnding") (event "evHideRoundEnding"))
 
 		(var avatar:gfx = "$datahub.getSingleEntity(CC.playerAvatar)")
 		(var challengeParticipant:gfx= "avatar.challengeParticipant" (event "avatar.evAdded"))
@@ -537,7 +550,6 @@
 			)
 
 			(controller $Spine
-				(bind speed "1")
 				(bindcall play sequence="{name: 'animation', mix:0.2}" (event "evShowRoundEndingSpineDelay") (event "evHideRoundEndingResult"))
 			)
 
@@ -648,6 +660,398 @@
 	(dispatch evPlaySound init=false delay="PREBATTLE_TIMER_DELAY" (bind enabled "currentTimeCeil >= 0 && currentTimeCeil < 11 && isActivationPhase") (bind trigger "currentTimeCeilStr"))
 
 	(bindcall externalCall 'sound.playSetSoundDirect' "['prebattleTimer', 'regular']" init=false watch=false (event "evPlaySound"))
+
+	(hblock
+		(class $MiddleAlignedAbsolutely)
+		(style (top = 132px))
+		(block
+			(style
+				(width = 42px)
+				(height = 76px)
+				(marginRight = "XS")
+			)
+			(controller $FxInstance renderer='PrebattleTextTimerDigit' lifetime="11"
+				(bindcall create (event "evShowFirstDigit"))
+				(args
+					_skin = "$event._firstDigit"
+					_digit = "firstDigit"
+				)
+			)
+		)
+		
+		(block
+			(style
+				(width = 42px)
+				(height = 76px)
+			)
+			(controller $FxInstance renderer='PrebattleTextTimerDigit' lifetime="2"
+				(bindcall create (event "evShowSecondDigit"))
+				(args
+					_skin = "$event._secondDigit"
+					_digit = "secondDigit"
+				)
+			)
+		)
+	)
+)
+
+(def element TrialRoundCountdown (_battleState:number)
+	(scope
+		(event evShowDisciplineTask)
+		(event evHideDisciplineTask)
+		(event evShowRoundEnding)
+		(event evShowRoundEndingResult)
+		(event evShowRoundEndingSpineDelay)
+		(event evHideRoundEnding)
+		(event evHideRoundEndingResult)
+		(event evShowFirstDigit)
+		(event evShowSecondDigit)
+		(event evTimerHittedZero)
+		(event evPlaySound)
+
+		(macro BATTLE_TIMER_SCOPE)
+		(var challengeComponent:dhComponent = "getSingleComponent(CC.trial)")
+
+		(var challengeNumber:number = 	"challengeComponent.trialRound ?: 0" (event "challengeComponent.evTrialInfoChanged"))
+		(var challengeType:number = 	"challengeComponent.trialType")
+		(var timeToNextPhase:number = 	"challengeComponent.timeToNextPhase ?: 0" (event "challengeComponent.evPhaseInfoChanged"))
+		(var phase:number = 			"challengeComponent.phase" (event "challengeComponent.evPhaseInfoChanged"))
+		(var targetScores:number = "challengeComponent.targetScore" (event "challengeComponent.evTrialInfoChanged"))
+		
+		(var isCreatedPhase:bool = "phase == SC.Battle.ROUND_STAGE.CREATED")
+		(var isActivationPhase:bool = "phase == SC.Battle.ROUND_STAGE.ACTIVATION")
+		(var isDeactivationPhase:bool = "phase == SC.Battle.ROUND_STAGE.DEACTIVATION")
+		(var isCountdownBattleState:bool = "_battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN ")
+
+		(var battleInfoEntity:gfx = "$datahub.getSingleEntity(CC.battleInfo)")
+		(var battleTime:number = "battleInfoEntity.battleTimer.battleTime" (event "battleInfoEntity.battleTimer.evBattleTimeChanged"))
+
+		(var timeLeft:number = "isCountdownBattleState ? battleTime : floor(timeToNextPhase - currentTime)")
+		(var currentTimeCeil:number = "ceil(max((timeLeft-1), 0))")
+		(var currentTimeCeilStr:str = "toString(currentTimeCeil)")
+
+		(var firstDigit:str = "isActivationPhase || isCreatedPhase	? currentTimeCeil < 10	? DIGIT_ZERO
+																							: currentTimeCeilStr[0]
+																	: DIGIT_MINUS_ONE" init=false)
+		(var secondDigit:str = "isActivationPhase || isCreatedPhase	? currentTimeCeil < 10	? currentTimeCeilStr[0]
+																							: currentTimeCeilStr[1]
+																	: DIGIT_MINUS_ONE" init=false)
+
+		(var isTimerHittedZero:bool = "currentTimeCeil == 0")
+		(bind firstDigit "DIGIT_MINUS_ONE" watch=false (event "evTimerHittedZero"))
+		(bind secondDigit "DIGIT_MINUS_ONE" watch=false (event "evTimerHittedZero"))
+
+		(var disciplineConstName:str = "SC.Battle.DISCIPLINE_TYPES.VALUE_TO_NAME[challengeType]")
+		(var disciplineName:str = "SC.Battle.DISCIPLINE_TYPES.NAMES[disciplineConstName]")
+
+		(var isDisciplineTaskVisible:bool = "$event ? $event._isVisible : false" watch=false (event "evShowDisciplineTask") (event "evHideDisciplineTask"))
+		(var isRoundEndingVisible:bool = "$event ? $event._isVisible : false" (event "evShowRoundEnding") (event "evHideRoundEnding"))
+
+
+		(var isRoundResultEnabled:bool = "challengeComponent.scores >= challengeComponent.targetScore" (event "challengeComponent.evScoresChanged") (event "challengeComponent.evTrialInfoChanged"))
+		(var isRoundResultShown:bool = "$event ? $event._isVisible : false" init=false watch=false (event "evShowRoundEndingResult")  (event "evHideRoundEndingResult"))
+
+		(var roundResultColorText:number = "RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.VICTORY]")
+
+		
+		(var textOnActivationDuration:number = "0.15")
+		(var iconOnActivationDuration:number = "0.15")
+		(var textOnActivationDelay:number = "iconOnActivationDuration + 0.1")
+		(var iconOnActivationDelay:number = "textOnActivationDuration + 0.1")
+
+		(var motionBlurValue:number = "0")
+		(var motionBlurValueRoundEnding:number = "0")
+		(controller $Animation 
+			(bindcall play
+				duration="textOnActivationDuration - 0.05"
+				delay="!isActivationPhase && !isCreatedPhase ? 0 : textOnActivationDelay"
+				from="{motionBlurValue: 15}"
+				to="{motionBlurValue: 0}"
+				reverse="!isActivationPhase && !isCreatedPhase"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+
+			(bindcall play
+				duration="0.13"
+				delay="0"
+				from="{motionBlurValueRoundEnding: 15}"
+				to="{motionBlurValueRoundEnding: 0}"
+				watch=false
+				(event "evShowRoundEnding")
+			)
+
+			(bindcall play
+				duration="0.10"
+				delay="0"
+				from="{motionBlurValueRoundEnding: 0}"
+				to="{motionBlurValueRoundEnding: 15}"
+				watch=false
+				(event "evHideRoundEnding")
+			)
+		)
+	)
+
+	(style (width = 720px))
+
+	
+	(dispatch evShowRoundEnding args="{_isVisible: true}" (bind enabled "isDeactivationPhase") (bind trigger "isDeactivationPhase"))
+	(dispatch evShowRoundEndingSpineDelay delay="0.25" (event "evShowRoundEnding"))
+	(dispatch evHideRoundEnding args="{_isVisible: false}" (bind enabled "!isDeactivationPhase && isRoundEndingVisible") (bind trigger "isDeactivationPhase"))
+
+	(dispatch evShowRoundEndingResult delay="0.15" args="{_isVisible: true}" (bind enabled "isRoundResultEnabled && isDeactivationPhase") (bind trigger "isDeactivationPhase"))
+	(dispatch evHideRoundEndingResult args="{_isVisible: false}" (bind enabled "isRoundResultShown") (event "evHideRoundEnding"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['pve_complete_task', 'regular']" init=false watch=false (event "evShowRoundEnding"))
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(top = 27px)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(alpha = 0)
+			)
+			(controller $Animation 
+				(bindcall play
+					duration="0.15"
+					delay="0"
+					from="{alpha: 0, left: 300}"
+					to="{alpha: 1, left: 0}"
+					watch=false
+					(event "evShowRoundEnding")
+				)
+				(bindcall play
+					duration="0.15"
+					delay="0"
+					from="{alpha: 1, left: 0}"
+					to="{alpha: 0, left: -300}"
+					watch=false
+					(event "evHideRoundEnding")
+				)
+			)
+			(block
+				(style
+					(width = 100%) (height = 50%)
+					(backgroundColor = "0xFF000000")
+					(position = "absolute")
+				)
+				(isMask = true)
+			)
+			(tf
+				(class $TextDefaultBold58NM)
+				(style
+					(width = 100%)
+					(textAlign = "center")
+					(marginTextTop = "0")
+					(filters 
+						(blur
+							(bind blurX "motionBlurValueRoundEnding")
+							(blurY = 0.0)
+							(quality = 1)
+						)
+					)
+				)
+				(bind text "toUpper(subst('IDS_TRIAL_ROUND_NUMBER_ENDED', [], { _round: challengeNumber }))")
+			)
+		)
+		(block
+			(style
+				(width = 100%)
+				(alpha = 0)
+				(position = "absolute")
+			)
+			(controller $Animation 
+				(bindcall play
+					duration="0.15"
+					delay="0"
+					from="{alpha: 0, left: -300}"
+					to="{alpha: 1, left: 0}"
+					watch=false
+					(event "evShowRoundEnding")
+				)
+				(bindcall play
+					duration="0.15"
+					delay="0"
+					from="{alpha: 1, left: 0}"
+					to="{alpha: 0, left: 300}"
+					watch=false
+					(event "evHideRoundEnding")
+				)
+			)
+			(block
+				(style
+					(width = 100%) (height = 50%)
+					(backgroundColor = "0xFF000000")
+					(position = "absolute")
+					(bottom = 0)
+				)
+				(isMask = true)
+			)
+			(tf
+				(class $TextDefaultBold58NM)
+				(style
+					(width = 100%)
+					(textAlign = "center")
+					(marginTextTop = "0")
+					(filters 
+						(blur
+							(bind blurX "motionBlurValueRoundEnding")
+							(blurY = 0.0)
+							(quality = 1)
+						)
+					)
+				)
+				(bind text "toUpper(subst('IDS_TRIAL_ROUND_NUMBER_ENDED', [], { _round: challengeNumber }))")
+			)
+		)
+		(block
+			(class $MiddleAlignedAbsolutely)
+			(style
+				(alpha = 0)
+				(bind backgroundImage "'url:../animations/spine/discipline_win/win.skel'")
+				(width = 880px)
+				(height = 200px)
+				(top = -1px)
+				(backgroundSize = "fill")
+				(align = "center|middle")
+			)
+
+			(controller $Animation 
+				(bindcall play
+					duration="0.15"
+					delay="0"
+					from="{alpha: 0}"
+					to="{alpha: 1}"
+					watch=false
+					(event "evShowRoundEndingResult")
+				)
+				(bindcall play
+					duration="0.15"
+					delay="0"
+					from="{alpha: 1}"
+					to="{alpha: 0}"
+					watch=false
+					(event "evHideRoundEndingResult")
+				)
+			)
+
+			(controller $Spine
+				(bindcall play sequence="{name: 'animation', mix:0.2}" (event "evShowRoundEndingSpineDelay") (event "evHideRoundEndingResult"))
+			)
+
+			(tf
+				(class $TextDefault25NMWithoutShadow)
+				(style
+					(bind textColor "roundResultColorText")
+				)
+				(text = 'IDS_TRIAL_TASK_PASSED')
+			)
+		)
+	)
+
+	
+	(dispatch evTimerHittedZero delay="1" (bind trigger "isTimerHittedZero"))
+	(dispatch evShowDisciplineTask args="{_isVisible: true}" delay="0.05" on='addedToStage' (bind enabled "isActivationPhase || isCreatedPhase") (bind trigger "isActivationPhase || isCreatedPhase"))
+	(dispatch evHideDisciplineTask args="{_isVisible: false}" (bind enabled "!isActivationPhase && !isCreatedPhase && isDisciplineTaskVisible") (event "evTimerHittedZero"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['halloween2020_rule_message', 'regular']" init=false watch=false (event "evShowDisciplineTask"))
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(width = 96px)
+			(height = 96px)
+			(alpha = 0)
+			(pivotY = 50%)
+			(pivotX = 50%)
+			(bind backgroundImage "'url:../events/battle_challenges/discipline_icons/discipline_' + disciplineName + '.png'")
+		)
+		(controller $Animation 
+			(bindcall play
+				duration="iconOnActivationDuration"
+				delay="!isActivationPhase && !isCreatedPhase ? iconOnActivationDelay : 0"
+				from="{alpha: 0, scaleX: 0.5, scaleY: 0.5}"
+				to="{alpha: 1, scaleX: 1, scaleY: 1}"
+				reverse="!isActivationPhase && !isCreatedPhase"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefaultBold27NM)
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(textAlign = "center")
+			(top = 58px)
+			(alpha = 0)
+			(filters 
+				(blur
+					(bind blurX "motionBlurValue")
+					(blurY = 0.0)
+					(quality = 1)
+				)
+			)
+		)
+		(controller $Animation 
+			(bindcall play
+				duration="textOnActivationDuration"
+				delay="!isActivationPhase && !isCreatedPhase ? 0 : textOnActivationDelay"
+				from="{alpha: 0, marginLeft: -280}"
+				to="{alpha: 1, marginLeft: 0}"
+				reverse="!isActivationPhase && !isCreatedPhase"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+		)
+		(bind text "disciplineName ? 'IDS_TRIAL_' + toUpper(disciplineName) : ''")
+	)
+
+	(tf
+		(class $TextDefaultBold19NM)
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(textAlign = "center")
+			(top = 93px)
+			(alpha = 0)
+			(filters 
+				(blur
+					(bind blurX "motionBlurValue")
+					(blurY = 0.0)
+					(quality = 1)
+				)
+			)
+		)
+		(controller $Animation 
+			(bindcall play
+				duration="textOnActivationDuration"
+				delay="!isActivationPhase && !isCreatedPhase ? 0 : textOnActivationDelay"
+				from="{alpha: 0, marginLeft: 280}"
+				to="{alpha: 1, marginLeft: 0}"
+				reverse="!isActivationPhase && !isCreatedPhase"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+		)
+		(bind text "subst('IDS_TRIAL_' + toUpper(disciplineName) + '_FULL_DESCRIPTION', [], { _targetScores: targetScores }, targetScores)")
+	)
+
+	(dispatch evShowFirstDigit init=true args="{_firstDigit: firstDigit}" on=addedToStage delay="PREBATTLE_TIMER_DELAY" (bind enabled "firstDigit != DIGIT_MINUS_ONE") (bind trigger "firstDigit"))
+	(dispatch evShowSecondDigit init=true args="{_secondDigit: secondDigit}" on=addedToStage delay="PREBATTLE_TIMER_DELAY" (bind enabled "secondDigit != DIGIT_MINUS_ONE") (bind trigger "secondDigit"))
+	(dispatch evPlaySound init=false delay="PREBATTLE_TIMER_DELAY" (bind enabled "currentTimeCeil >= 0 && currentTimeCeil < 11 && (isActivationPhase || isCreatedPhase)") (bind trigger "currentTimeCeilStr"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['prebattleTimer', 'regular']" (event "evPlaySound"))
 
 	(hblock
 		(class $MiddleAlignedAbsolutely)

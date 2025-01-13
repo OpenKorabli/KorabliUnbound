@@ -1,624 +1,281 @@
-(def constant ITEM_CHOOSER_CREW_COUNTRY_RENDERER_ALPHA {	SC.Ui_styles.BUTTON_STATE.DISABLED:	0.35,
-															SC.Ui_styles.BUTTON_STATE.SELECTED:	1,
-															SC.Ui_styles.BUTTON_STATE.DOWN:		0.7,
-															SC.Ui_styles.BUTTON_STATE.OVER:		1,
-															SC.Ui_styles.BUTTON_STATE.UP:		0.8
-})
-
-(def css $AssignColumn ()
-	(width = { 1280: 346, 1920: 520 })
-	(height = 100%)
-)
-
-(def css $CrewListPaddings ()
-	(width = 100%)
-	(paddingLeft = "{ 1280: S, 1920: M }")
-	(paddingRight = "{ 1280: S, 1920: M }")
-)
-
-(def css $CrewListHeader ()
-	(extends $CrewListPaddings)
-	(marginBottom = "SXS")
-)
-
-(def css $CrewListBackground ()
-	(extends $Fullsize)
-	(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
-)
-
-(def css $AssignNewCrewBottomBlock ()
-	(extends $CrewListPaddings)
-	(align = "right")
-	(height = "L")
-	(marginTop = "{ 720: XS, 1080: M }")
-)
-
+(def constant CREW_MANAGEMENT_RESERVE_ATTENTION_THRESHOLD_AMOUNT 3)
 
 (def element CrewAssignInset ()
 	(scope
-		(event ItemChooser_FreeCrewTypeSortSelected)
-		(event ItemChooser_FreeCrewSubTypeSortSelected)
-
-		(event evLoadingFreeCrewSortTypeCollection)
-		(event evLoadingFreeCrewSortSubTypeCollection)
-		(event evCloseLoadingWindow)
-
+		(event ItemChooser_sortingOptionSelected)
 		(event evSetScrollToFirstItem)
-		(event evResetCollection)
-		(event evSetFreeCrewSortType)
-		(event evSetFreeCrewSortSubType)
+		(event evEnableCrewList)
+		(event evShowCrewList)
 
-		(struct userPrefs = USER_PREF_DATA())
 		(macro PULL_SHIP_ID)
 
-		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "viewedShipId"))
+		(macro PULL_ACTIVE_CHILD_ROUTE
+			_nodeId =			"SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT"
+			_fieldActiveChild =	"'currentCrewManagementSubroute'"
+		)
 
-		(var freeCrewSortType:number =		"userPrefs.prefs.freeCrewSortType != null				? userPrefs.prefs.freeCrewSortType				: SC.Ui_common.CREW_FILTERING_NATION_TYPE.CURRENT")
-		(var freeCrewSortSubType:number =	"userPrefs.prefs.freeCrewSortSubType != null			? userPrefs.prefs.freeCrewSortSubType			: SC.Ui_common.CREW_SORTING_ALL_NATION_TYPE.NATION")
-		(var isReversed:bool =				"userPrefs.prefs.freeCrewSortSubTypeReversed != null	? userPrefs.prefs.freeCrewSortSubTypeReversed	: false")
-
-		(var isNationOfCurrentShip:bool =		"freeCrewSortType == SC.Ui_common.CREW_FILTERING_NATION_TYPE.CURRENT")
-		(var crewCollectionSubKey:str =			"freeCrewSortType == SC.Ui_common.CREW_FILTERING_NATION_TYPE.ALL_NATION ? 'freeCrewAll.sorted' : 'freeCrew.sorted'")
-		(var isCrewSubTypeChooserEnabled:bool =	"freeCrewSortType == SC.Ui_common.CREW_FILTERING_NATION_TYPE.ALL_NATION")
-
+		
 		(var crewCollection:dhCollection =				"getCollection(CC.crew)")
-		(var crewInBarracksCollection:dhCollection =	"crewCollection.getChildByPath(crewCollectionSubKey)"			(event "crewCollection.evChildAdded") (event "crewCollection.evChildRemoved"))
-		(var crewInBarracksItems:array =				"crewInBarracksCollection.items ?: []"							(event "crewInBarracksCollection.evAdded") (event "crewInBarracksCollection.evRemoved"))
 
-		(var crewOnShipsCollectionsSubKey:str =			"'busyCrew.sorted'")
-		(var crewOnShipsCollection:dhCollection =		"crewCollection.getChildByPath(crewOnShipsCollectionsSubKey)"	(event "crewCollection.evChildAdded") (event "crewCollection.evChildRemoved"))
-		(var crewOnShipsItems:array =					"crewOnShipsCollection.items ?: []"								(event "crewOnShipsCollection.evAdded") (event "crewOnShipsCollection.evRemoved"))
+		(var crewInBarracksCollectionKey:str =			"'potentiallyVisible.byBusyness.free'")
+		(var crewInBarracksCollection:dhCollection =	"crewCollection.getChildByPath(crewInBarracksCollectionKey)")
+		(var crewInBarracksItemsLength:number =			"crewInBarracksCollection.length ?: 0")
+
+		(var crewOnShipsCollectionKey:str =				"'potentiallyVisible.byBusyness.busy'")
+		(var crewOnShipsCollection:dhCollection =		"crewCollection.getChildByPath(crewOnShipsCollectionKey)")
+		(var crewOnShipsItemsLength:number =			"crewOnShipsCollection.length ?: 0")
+
+		(var filteredAndSortedCrewInBarracksCollectionKey:str =			"'potentiallyVisible.byBusyness.free.filtered.sorted'")
+		(var filteredAndSortedCrewInBarracksCollection:dhCollection =	"crewCollection.getChildByPath(filteredAndSortedCrewInBarracksCollectionKey)")
+		(var filteredAndSortedCrewInBarracksItemsLength:number =		"filteredAndSortedCrewInBarracksCollection.length ?: 0")
+
+		(var filteredAndSortedCrewOnShipsCollectionKey:str =			"'potentiallyVisible.byBusyness.busy.filtered.sorted'")
+		(var filteredAndSortedCrewOnShipsCollection:dhCollection =		"crewCollection.getChildByPath(filteredAndSortedCrewOnShipsCollectionKey)")
+		(var filteredAndSortedCrewOnShipsItemsLength:number =			"filteredAndSortedCrewOnShipsCollection.length ?: 0")
+
+		(var activeFiltersCollection:dhCollection =		"getCollection(CC.crewFilter).getChildByPath('selected')")
+		(var activeFiltersCollectionLength:number =		"activeFiltersCollection.length ?: 0")
+		
 
 		
-		(var isLoading:bool = false)
-		(bind isLoading "true"	init=false watch=false	(event "evLoadingFreeCrewSortTypeCollection"))
-		(bind isLoading "true"	init=false watch=false	(event "evLoadingFreeCrewSortSubTypeCollection"))
-		(bind isLoading "false"	init=false watch=false	(event "evCloseLoadingWindow"))
+		(var crewSorting:dhComponent = "getSingleComponent(CC.crewSorting)")
+
+		(var sortingOptions:array = "crewSorting.sortingOptions")
+		(var selectedSortingOptionIndex:number = "crewSorting.selectedSortingOptionIndex" (event "crewSorting.evChanged"))
+		(var isSortingReversed:bool = "crewSorting.isSortingReversed" (event "crewSorting.evChanged"))
 		
 
-		(var selectedFilteringNationType:number = "SC.Ui_common.CREW_FILTERING_NATION_TYPE.CURRENT")
-		(bind selectedFilteringNationType "$event.selectedIndex"	init=false watch=false	(event "ItemChooser_FreeCrewTypeSortSelected"))
+		(var isFiltersInfotipVisible:bool = false)
 
-		(var freeCrewSortSubTypeToBeSet:number = "freeCrewSortSubType")
-		(bind freeCrewSortSubTypeToBeSet "$event.selectedIndex" init=false watch=false (event "ItemChooser_FreeCrewSubTypeSortSelected"))
+		
+		(var crewsSingleton:dhComponent = "dockEntity.crewData" (event "dockEntity.crewData.evUpdate"))
+		(var freeBarracksSlots:number = "crewsSingleton.freeBarracksSlots ?: 0"	(event "crewsSingleton.evUpdate"))
+		
 
-		(var shipCountry:str = "shipInfo.shipComponent.country")
-		(var freeCrewSortTypeItems:array = "[shipCountry, 'IDS_ALL_NATIONS_LOWER']")
+		(var isCrewAssignmentReserveRouteActive:bool = "currentCrewManagementSubroute == SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT_RESERVE")
+		(var isCrewAssignmentShipsRouteActive:bool = "currentCrewManagementSubroute == SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT_SHIPS")
+
+		(var appliedSubCollectionKey:str =		"isCrewAssignmentReserveRouteActive ? filteredAndSortedCrewInBarracksCollectionKey : filteredAndSortedCrewOnShipsCollectionKey")
+		(var resultingCollection:dhCollection =	"getCollection(CC.crew).getChildByPath(appliedSubCollectionKey)" watch=false (event "evEnableCrewList"))
+
+		
+		(var isCrewListEnabled:bool = false)
+		(bind isCrewListEnabled "true"		init=false		(event "evEnableCrewList"))
+		(bind isCrewListEnabled "false"		init=false		(bind trigger "currentCrewManagementSubroute"))
+
+		(var isCrewListVisible:bool = false)
+		(bind isCrewListVisible "true"		init=false		(event "evShowCrewList"))
+		(bind isCrewListVisible "false"		init=false		(bind trigger "currentCrewManagementSubroute"))
+		
 	)
 
-	
-	(dispatch evLoadingFreeCrewSortTypeCollection		dir="EventDirection.NONE"	(event "ItemChooser_FreeCrewTypeSortSelected") (bind enabled "freeCrewSortType != selectedFilteringNationType"))
-	(dispatch evLoadingFreeCrewSortSubTypeCollection	dir="EventDirection.NONE"	(event "ItemChooser_FreeCrewSubTypeSortSelected"))
+	(dispatch evEnableCrewList	dir="EventDirection.NONE"	delay="0.15"	on='addedToStage'	(bind trigger "currentCrewManagementSubroute"))
+	(dispatch evShowCrewList	dir="EventDirection.NONE"	delay="0.6"							(event "evEnableCrewList"))
 
-	(dispatch evSetFreeCrewSortType		dir="EventDirection.NONE"	delay=0.3	(event "evLoadingFreeCrewSortTypeCollection"))
-	(dispatch evSetFreeCrewSortSubType	dir="EventDirection.NONE"	delay=0.3	(event "evLoadingFreeCrewSortSubTypeCollection"))
-
-	(dispatch evCloseLoadingWindow		dir="EventDirection.NONE"	delay=0.1	(event "evSetFreeCrewSortType") (event "evSetFreeCrewSortSubType"))
-	
-
-	(dispatch evResetCollection			dir="EventDirection.NONE"	(bind trigger "freeCrewSortType"))
-	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "freeCrewSortSubType"))
-	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "isReversed"))
-
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortType', value: selectedFilteringNationType }]"							(event "evSetFreeCrewSortType"))
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortSubType', value: SC.Ui_common.CREW_SORTING_ALL_NATION_TYPE.NATION }]"	(event "evResetCollection"))
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortSubTypeReversed', value: false }]"										(event "evResetCollection"))
-
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortSubType', value: freeCrewSortSubTypeToBeSet }]"																	(event "evSetFreeCrewSortSubType"))
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'freeCrewSortSubTypeReversed', value: freeCrewSortSubType == freeCrewSortSubTypeToBeSet ? !isReversed : false }]"	watch=false	(event "evSetFreeCrewSortSubType"))
+	(bindcall externalCall "'direct.action'"	"[CREW_SORTING_ACTIONS.SET_INDEX,	[$event.selectedIndex]]"	(event "ItemChooser_sortingOptionSelected"))
+	(bindcall externalCall "'direct.action'"	"[CREW_SORTING_ACTIONS.SET_REVERSE,	[$event.direction]]"		(event "ItemChooser_sortingOptionSelected"))
 
 	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'openScreen']" init=false watch=false on='addedToStage')
 
+	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "selectedSortingOptionIndex"))
+	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "isSortingReversed"))
+	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "activeFiltersCollectionLength"))
+
+
 	(style
-		(flow = "horizontal")
+		(width = "{ 1280: 698px, 1920: 1073px }")
 		(height = 100%)
+		(maxHeight = 759px)
 	)
 
-	(block
-		(class $AssignColumn)
+	(hblock
+		(style (width = 100%) (height = 32px))
 
 		(hblock
-			(class $CrewListHeader)
+			(class $Fullsize)
+			(style (align = "bottom") (bind hitTest "isCrewListVisible"))
 
-			(hblock
-				(style (height = 12px))
-
-				(tf
-					(class $TextDefaultBold17NM)
-					(style
-						(hitTest = false)
-						(alpha = "TA")
-					)
-
-					(text = 'IDS_BARRACKS_LIST_TITLE_COLON')
+			(block
+				(element TabButton
+					_label =				"tr('IDS_CREW_IN_RESERVE_LIST_TITLE') + ' (' + filteredAndSortedCrewInBarracksItemsLength + ')'"
+					_isSelected =			"isCrewAssignmentReserveRouteActive"
+					_isDisabled =			"crewInBarracksItemsLength == 0"
+					_methods =				"[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT_RESERVE } }]"
+					_isAttentionMarker =	"freeBarracksSlots <= CREW_MANAGEMENT_RESERVE_ATTENTION_THRESHOLD_AMOUNT"
 				)
 
-				(block
-					(style
-						(marginLeft = "S")
-						(marginRight = "SXS")
-						(marginTop = -10px)
+				(controller $Tooltip
+					(bind enabled "freeBarracksSlots <= CREW_MANAGEMENT_RESERVE_ATTENTION_THRESHOLD_AMOUNT")
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+						_text =				"freeBarracksSlots > 0	? subst('IDS_TAB_HINT_CREW_RESERVE_FEW_SPACE_LEFT', [], { count: freeBarracksSlots }, freeBarracksSlots)
+																	: 'IDS_TAB_HINT_CREW_RESERVE_NO_SPACE_LEFT'"
 					)
-
-					(element ItemChooser
-						_items =						"freeCrewSortTypeItems"
-						_listItemRenderer =				'CrewCountryItemRenderer'
-						_choosedItemRenderer =			'CrewCountryChosenItemRenderer'
-						_choosedItemRendererParams =	"{ isNationOfCurrentShip: isNationOfCurrentShip }"
-						_curIndex =						"freeCrewSortType"
-						_onItemSelectedEvent =			'FreeCrewTypeSortSelected'
-						_dropDownWidth =				260
-						_itemHeight =					40
-					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 				)
 			)
 
-			(block
-				(style
-					(bind hitTest "isCrewSubTypeChooserEnabled && !isLoading")
-					(marginRight = "M")
-					(height = "SXS")
-					(width = 100%)
-					(alpha = 0)
-				)
-
-				(block
-					(style
-						(position = "absolute")
-						(right = 0px)
-						(marginLeft = "XS")
-						(marginTop = -10px)
-					)
-
-					(element ItemChooser
-						_items =				['IDS_SORT_BY_DEFAULT', 'IDS_SORT_BY_LEVEL']
-						_listItemRenderer =		'TextListItemRenderer'
-						_choosedItemRenderer =	'DefaultItemChooserPickedItemRenderer'
-						_curIndex =				"freeCrewSortSubType"
-						_curDirection =			"isReversed"
-						_onItemSelectedEvent =	'FreeCrewSubTypeSortSelected'
-					)
-				)
-
-				(controller $Animation
-					(bindcall play
-						duration = 0.15
-						delay = 0.15
-						from = "{ alpha: 0, visible: false }"
-						to = "{ alpha: 1, visible: true }"
-						easing = "Easing.quad_out"
-						action = "kill"
-						reverse = "!isCrewSubTypeChooserEnabled"
-						(bind trigger "isCrewSubTypeChooserEnabled")
-					)
-				)
+			(element TabButton
+				_label =				"tr('IDS_CREW_ON_SHIPS_LIST_TITLE') + ' (' + filteredAndSortedCrewOnShipsItemsLength + ')'"
+				_isSelected =			"isCrewAssignmentShipsRouteActive"
+				_isDisabled =			"crewOnShipsItemsLength == 0"
+				_methods =				"[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT_SHIPS } }]"
 			)
 		)
 
 		(hblock
-			(class $Fullsize)
+			(style
+				(align = "right|middle")
+				(width = 200px)
+				(height = 100%)
+			)
+
+			(block
+				(style (marginTop = "-XS") (marginRight = "XXS"))
+
+				(element ImageButton
+					_width =			24px
+					_height =			24px
+					_backgroundImage =	"isSortingReversed ? 'url:../service_kit/buttons/icons/sort_up.png' : 'url:../service_kit/buttons/icons/sort_down.png'"
+					_methods =			"[{ type: 'direct.action', name: CREW_SORTING_ACTIONS.SET_REVERSE, args: [!isSortingReversed] }]"
+				)
+
+				(controller $Tooltip
+					(renderer='SimpleStatusTooltip')
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						_text =				'IDS_HINT_CREW_FILTERING_SORT_SET_REVERSE'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(block
+				(style (marginTop = "-XS") (marginRight = "XS"))
+
+				(element ItemChooser
+					_items =							"sortingOptions"
+					_curIndex =							"selectedSortingOptionIndex"
+					_curDirection =						"isSortingReversed"
+					_onItemSelectedEvent =				'sortingOptionSelected'
+					_itemChooserTooltipUnifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_itemChooserTooltipText =			'IDS_HINT_CREW_FILTERING_SORT'
+					_dropDownWidth =					160px
+					_name =								'CrewOrdering'
+				)
+			)
 
 			(block
 				(style
-					(position = "absolute")
-					(left = -3px)
 					(height = 100%)
+					(marginRight = "S")
+					(paddingTop = "XS")
+					(paddingBottom = "XS")
 				)
 
 				(element VerticalDivider)
 			)
 
 			(block
-				(class $CrewListBackground)
+				(name = 'CrewFiltersButton')
 
-				(block
-					(class $Fullsize)
-					(style
-						(bind alpha "isLoading ? 0 : 1" init=false watch=false (bind enabled "isLoading") (bind trigger "isLoading"))
-					)
-
-					(block
-						(class $FullsizeAbsolute)
-
-						(controller $Instance renderer='CrewList'
-							(bind enabled "crewInBarracksItems.length > 0")
-							(args
-								_shipId =		"viewedShipId"
-								_path =			"crewCollectionSubKey"
-								_isReversed =	"isReversed"
-							)
-						)
-					)
-
-					(block
-						(class $FullsizeAbsolute)
-
-						(controller $Instance renderer='NoCrewInListPlug'
-							(bind enabled "crewInBarracksItems.length == 0")
-							(args
-								_text = 'IDS_NO_CREW_IN_BARRACKS_LIST'
-							)
-						)
-					)
-
-					(controller $Animation
-						(bindcall play
-							duration = 0.15
-							delay = 0.15
-							from = "{ alpha: 0 }"
-							to = "{ alpha: 1 }"
-							easing = "Easing.line"
-							action = "kill"
-							(bind enabled "!isLoading")
-						)
-					)
+				(element ImageButton
+					_width =			26px
+					_height =			24px
+					_mouseDown =		"isFiltersInfotipVisible"
+					_backgroundImage =	'url:../service_kit/buttons/context/filter.png'
 				)
 
-				
-				(block
-					(class $FullsizeAbsolute)
-					(style
-						(align = "center|middle")
-						(alpha = 0)
-						(visualOffsetY = 10px)
+				(controller $Tooltip
+					(renderer='SimpleStatusTooltip')
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						_text =				'IDS_TOOLTIP_CREW_FILTERS'
 					)
-
-					(tf
-						(class $TextDefaultBold17NM)
-						(style
-							(hitTest = false)
-							(alpha = "TA")
-						)
-
-						(text = "toUpper(tr('IDS_WAITING_SCREEN_LOADING_DATA'))")
-					)
-
-					(controller $Animation
-						(bindcall play
-							duration = 0.15
-							watch = false
-							delay = "isLoading ? 0.05 : 0"
-							from = "{ alpha: 0, visualOffsetY: 10px }"
-							to = "{ alpha: 1, visualOffsetY: 0px }"
-							easing = "Easing.line"
-							action = "kill"
-							reverse = "!isLoading"
-							(bind trigger "isLoading")
-						)
-					)
-				)
-				
-			)
-
-			(element VerticalDivider)
-		)
-
-		(block
-			(class $AssignNewCrewBottomBlock)
-
-			(element BarracksForCrew)
-		)
-	)
-
-	(block
-		(class $AssignColumn)
-
-		(block
-			(class $CrewListHeader)
-
-			(tf
-				(class $TextDefaultBold17NM)
-				(style
-					(hitTest = false)
-					(alpha = "TA")
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
 				)
 
-				(text = 'IDS_CREW_ON_SHIPS_LIST_TITLE')
-			)
-		)
+				(controller $Tooltip
+					(renderer='CrewFiltersInfotip')
+					(cache = true)
+					(macro DEFAULT_INFOTIP_BEHAVIOUR "1")
+					(align = "right|innerTop")
+					(offset = { x: 6, y: 0 })
 
-		(hblock
-			(class $Fullsize)
-
-			(block
-				(class $CrewListBackground)
-
-				(block
-					(class $FullsizeAbsolute)
-
-					(controller $Instance renderer='CrewList'
-						(bind enabled "crewOnShipsItems.length > 0")
-						(args
-							_shipId =	"viewedShipId"
-							_path =		"crewOnShipsCollectionsSubKey"
-						)
-					)
+					(bind isFiltersInfotipVisible "true" init=false watch=false on='evStartShow')
+					(bind isFiltersInfotipVisible "false" init=false watch=false on='evHide')
 				)
-
-				(block
-					(class $FullsizeAbsolute)
-
-					(controller $Instance renderer='NoCrewInListPlug'
-						(bind enabled "crewOnShipsItems.length == 0")
-						(args
-							_text = 'IDS_NO_CREW_IN_SHIPS_LIST'
-						)
-					)
-				)
-			)
-
-			(block
-				(style
-					(position = "absolute")
-					(right = -3px)
-					(height = 100%)
-				)
-
-				(element VerticalDivider)
 			)
 		)
 
 		(block
-			(class $AssignNewCrewBottomBlock)
-
-			(element RecruitCrew
-				_selectedShipId = "viewedShipId"
-			)
-		)
-	)
-)
-
-(def element BarracksForCrew ()
-	(scope
-		(macro PULL_CREW_DATA "'crewsSingleton'")
-		(struct barracksCapacityPrice =		PULL_PRICE(_entityId = "'BARRAC_CAP_Increase'" _actionId = "SC.Common.PRICE_ACTION.BUY"))
-
-		(var resourceEntity:dhEntity =				"getSingleEntity(CC.accountResource)")
-		(var accountResourceComponent:dhComponent =	"resourceEntity.accountResource")
-		(var accountGold:number =					"accountResourceComponent.gold ?: 0" (event "accountResourceComponent.evChangedGold"))
-
-		(var isIncreaseBarracksBtnEnabled:bool = "barracksCapacityPrice.info.finalPrice <= accountGold")
-
-		(var barracksCapacity:number =	"crewsSingleton.barracksCapacity ?: 0"	(event "crewsSingleton.evUpdate"))
-		(var crewsInBarracks:number =	"crewsSingleton.crewsInBarracks ?: 0"	(event "crewsSingleton.evUpdate"))
-		(var currentValueFreePlacesInBarracks:number =	"barracksCapacity - crewsInBarracks")
-	)
-
-	(style (flow = "horizontal"))
-
-	(hblock
-		(style (backgroundColor = "NO_COLOR"))
-
-		(controller $Tooltip
-			(renderer = 'BarracksForCrewTooltip')
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
-
-		(tf
-			(class $TextDefault17NM)
 			(style
-				(marginRight = "S")
-				(marginTop = 9px)
-				(alpha = "TA")
+				(position = "absolute")
+				(width = 100%)
+				(bottom = 0px)
 			)
 
-			(text = 'IDS_FREE_PLACES_COLON')
-		)
-
-		(tf
-			(class $TextDefaultBold17NM)
-			(style
-				(marginRight = "SXS")
-				(marginTop = 9px)
-				(alpha = "TA")
-			)
-
-			(bind text "currentValueFreePlacesInBarracks")
+			(element HorizontalDividerTwoPx)
 		)
 	)
 
 	(block
-		(controller $Tooltip
-			(renderer = 'SimpleStatusTooltip')
-			(bind enabled "!isIncreaseBarracksBtnEnabled")
-			(args
-				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
-				_text =				'IDS_NOT_ENOUGH_GOLD'
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
-
-		(element DefaultButton
-			_label =				'IDS_INCREASE_BARRACKS_CAPACITY'
-			_width =				140px
-			_enabled =				"isIncreaseBarracksBtnEnabled"
-			_methods = 				"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.INCREASE_BARRACKS_CAPACITY, args: {} }]"
-			_isTransactionBtn =		true
-			_focusIndex =			6
-			_defaultFocused =		false
-		)
-	)
-)
-
-(def element RecruitCrew (_selectedShipId:number)
-	(scope
-		(macro PULL_CREW_DATA "'crewsSingleton'")
-		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "_selectedShipId"))
-
-		(var canDisassignCrew:bool =	"crewsSingleton.canDisassignCrew"		(event "crewsSingleton.evUpdate"))
-
-		(var crewId:number =		"shipInfo.ownShipComponent.crewId"			(event "shipInfo.ownShipComponent.evCrewChanged"))
-		(var isLocked:bool =		"shipInfo.ownShipComponent.isLocked"		(event "shipInfo.ownShipComponent.evUpdateLock"))
-		(var isInFormation:bool =	"shipInfo.ownShipComponent.isInFormation"	(event "shipInfo.ownShipComponent.evUpdateLock"))
-
-		(var isDemoWithoutStats:bool =		"shipInfo.shipComponent.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS || shipInfo.shipComponent.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS_PREM")
-		(var hasSpaceToAssignCrew:bool =	"canDisassignCrew || crewId == 0")
-
-		(var lockReasonStatus:dict = "	isDemoWithoutStats		? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
-																	text: 'IDS_RECRUIT_CREW_DENY_REASON_CURRENT_SHIP_IS_DEMO_WITHOUT_STATS' } :
-										isInFormation			? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
-																	text: 'IDS_ASSIGN_CREW_DENY_REASON_CURRENT_SHIP_IN_FORMATION' } :
-										isLocked 				? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
-																	text: 'IDS_ASSIGN_CREW_DENY_REASON_CURRENT_SHIP_IN_BATTLE' } :
-										!hasSpaceToAssignCrew	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
-																	text: 'IDS_ASSIGN_NEW_CREW_DISABLE_REASON_FULL_BARRACKS' }
-																: null")
-
-
-		(struct crewHireNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_NEW"))
-		(struct crewHireRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_NEW_REPEAT"))
-
-		(var newTipId:number = "crewHireNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_NEW :
-								crewHireRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_NEW_REPEAT
-																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
-
-		(var isNewTipVisible:bool =	"newTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
-	)
-
-	(style (flow = "horizontal"))
-
-	(tf
-		(class $TextDefault17NM)
-		(style
-			(marginRight = "SXS")
-			(marginTop = 9px)
-			(alpha = "TA")
-		)
-
-		(text = 'IDS_NEW_CREW_LIST_TITLE')
-	)
-
-	(block
-		(controller $Tooltip
-			(renderer = 'SimpleStatusTooltip')
-			(bind enabled "lockReasonStatus != null")
-			(args
-				_unifiedStatus =	"lockReasonStatus.unifiedStatus"
-				_text =				"lockReasonStatus.text"
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
-
-		(element DefaultButton
-			_width =				140px
-			_label =				'IDS_HIRE_NEW_CREW'
-			_enabled =				"!lockReasonStatus"
-			_methods = 				"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_HIRE_WINDOW, args: {} }]"
-			_isTransactionBtn =		true
-			_focusIndex =			6
-			_defaultFocused =		false
-		)
-
-		(controller $Instance renderer='GuidingTipHub'
-			(bind enabled "isNewTipVisible")
-			(args
-				_tipId =			"newTipId"
-				_tipPositioning =	"TIP_POSITION_TOP"
-				_modalWindowName =	'ModalWindowCrewManagement'
-			)
-		)
-	)
-)
-
-(def element CrewCountryItemRenderer (_curItemIndex:number=0, _item:str='', _listItemRendererData:gfx={}, _isInactive:bool=false)
-	(scope
-		(event evAddedToStage)
-		(event evMenuClosed)
-
-		(macro MOUSE_HANDLER_SCOPE)
-		(var isSelected:bool = "_curItemIndex == $index")
-
-		(var state:number = "	_isInactive		? SC.Ui_styles.BUTTON_STATE.DISABLED :
-								isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
-								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
-								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
-												: SC.Ui_styles.BUTTON_STATE.UP")
-
-		(var imageUrl:str = "_item != 'IDS_ALL_NATIONS_LOWER'	? 'swf:../nation_flags/tiny/svg/svg.swf:flag_' + _item
-																: 'swf:../nation_flags/tiny/svg/svg.swf:flag_allnations'")
-	)
-
-	(dispatch evMenuClosed dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive"))
-	(dispatch evAddedToStage dir="EventDirection.NONE" on=addedToStage)
-	(dispatch "'evItemChooserInner'" args="{ _curItemIndex: $index }" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isInactive"))
-
-	(bind name "_item")
-	(style
-		(width = 100%)
-		(height = 40px)
-	)
-
-	(element MenuItemBackground
-		_state = "state"
-	)
-
-	(hblock
 		(class $Fullsize)
-		(style
-			(align = "middle")
-			(paddingLeft = "M")
-			(paddingRight = "M")
-			(alpha = "ITEM_CHOOSER_CREW_COUNTRY_RENDERER_ALPHA[state]")
-		)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
 
 		(block
-			(style
-				(marginRight = "S")
-				(width = 27px)
-				(height = 27px)
-				(bind backgroundImage "imageUrl")
-			)
-		)
+			(bind visible "false")
 
-		(tf
-			(bind name "'menu_item_' + _item")
+			(class $FullsizeAbsolute)
+			(style (alpha = 0) (visualOffsetY = 10px))
 
-			(class $TextDefaultBold17NM)
-			(style
-				(maxWidth = 100%)
-				(alpha = "TA")
-				(elideMode = true)
+			(controller $Instance renderer='CrewList'
+				(bind enabled "isCrewListEnabled")
+				(args
+					_shipId =		"viewedShipId"
+					_collection =	"resultingCollection"
+				)
 			)
 
-			(bind text "_item == 'IDS_ALL_NATIONS_LOWER' ? 'IDS_ALL_NATIONS' : tr('IDS_' + toUpper(_item))")
-		)
-
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
-			_trigger =	"state"
-			_alpha =	"ITEM_CHOOSER_CREW_COUNTRY_RENDERER_ALPHA[state]"
-		)
-	)
-
-	(macro MOUSE_HANDLER
-		_enabled = "!_isInactive"
-		_soundSet = "'button_default'"
-	)
-)
-
-(def element CrewCountryChosenItemRenderer (_state:number, _item:str='', _choosedItemRendererParams:gfx={}, _labelMaxWidth:number=0)
-	(style
-		(height = 32px)
-		(hitTest = false)
-		(paddingLeft = 9px)
-		(paddingRight = 5px)
-		(paddingTop = 10px)
-		(paddingBottom = 10px)
-	)
-
-	(tf
-		(class $TextDefaultBold17NM)
-		(style
-			(alpha = "ITEM_CHOOSER_LABEL_ALPHA[SC.Ui_styles.BUTTON_STATE.UP]")
-			(maxWidth = "_labelMaxWidth")
-			(elideMode = true)
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from = "{ alpha: 0, visualOffsetY: 10px, visible: false }"
+					to = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+					easing = "Easing.line"
+					action = "kill"
+					reverse = "!isCrewListVisible"
+					(bind trigger "isCrewListVisible")
+				)
+			)
 		)
 
 		
-		(bind text "!_choosedItemRendererParams.isNationOfCurrentShip ? tr(_item) : tr('IDS_' + toUpper(_item))")
+		(block
+			(class $MiddleVHAbsolutely)
+			(style (hitTest = false) (alpha = 1) (visualOffsetY = 0px))
 
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
-			_trigger =	"_state"
-			_alpha =	"ITEM_CHOOSER_LABEL_ALPHA[_state]"
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (alpha = "TA"))
+				(text = "toUpper(tr('IDS_DATA_LOADING'))")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from = "{ alpha: 0, visualOffsetY: 10px }"
+					to = "{ alpha: 1, visualOffsetY: 0px }"
+					easing = "Easing.line"
+					action = "kill"
+					reverse = "isCrewListVisible"
+					(bind trigger "isCrewListVisible")
+				)
+			)
 		)
+		
 	)
+
+	(element HorizontalDividerTwoPx)
 )

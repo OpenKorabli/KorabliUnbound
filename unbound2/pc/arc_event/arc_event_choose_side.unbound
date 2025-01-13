@@ -318,3 +318,70 @@
 		)
 	)
 )
+
+(def element ArcEventStatus (_isModalWindow:bool = false)	
+	(scope
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var arcEventComponent:dhComponent = "arcEventEntity.arcEvent")
+		(var playerArcEventInfoComponent:dhComponent = "arcEventEntity.playerArcEventInfo")
+
+		(var arcEventstate:number = 	"arcEventComponent.state" 				(event "arcEventComponent.evEventStateChanged"))
+		(var eventFinishTime:number = 	"arcEventComponent.finishTime" 			(event "arcEventComponent.evChanged"))
+		(var nextPrimeAt:number = 		"arcEventComponent.nextPrimeAt" 		(event "arcEventComponent.evEventStateChanged"))
+		(var finishPrimeAt:number = 	"arcEventComponent.finishPrimeAt" 		(event "arcEventComponent.evEventStateChanged"))
+		(var playerSideId:number = 		"playerArcEventInfoComponent.sideId" 	(event "playerArcEventInfoComponent.evSideChanged"))
+
+		
+		(var playerProgressEntity:dhEntity = "getPrimaryEntity(CC.progressWithRewards, 'personal' + playerSideId)")
+		(var progressWithRewardsComponent:dhComponent = "playerProgressEntity.progressWithRewards")
+
+		(var personalRewardIndex:number = 	"(progressWithRewardsComponent.activeIndex 	?: 0) - 1" 	(event "progressWithRewardsComponent.evChanged"))
+		(var personalProgress:number = 		"progressWithRewardsComponent.pointsCurrent ?: 0" 		(event "progressWithRewardsComponent.evChanged"))
+		(var personalProgressArray:array = 	"progressWithRewardsComponent.pointsArray 	?: []" 		(event "progressWithRewardsComponent.evChanged"))
+
+		(var isPersonalRewardIndex:bool = "personalRewardIndex >= 0")
+		(var personalProgressArrayMaxIndex:number = "personalProgressArray.length - 1")
+		(var pointsTillNextRewardTotal:number = "isPersonalRewardIndex ? personalProgressArray[personalRewardIndex + 1] : personalProgressArray[0]")
+		(var pointsTillNextRewardRemaining:number = "pointsTillNextRewardTotal - personalProgress")
+		(var hasReceivedAllRewards:bool = "personalRewardIndex == personalProgressArrayMaxIndex")
+
+		(struct serverTime = SERVER_TIME())
+		(var isEventEnded:bool = "serverTime.value >= eventFinishTime")
+
+		(struct primeCountDownStart = 	COUNTDOWN(_time = "nextPrimeAt ?: 0" 	_serverTime = "serverTime.value" _format = "'HH:mm:ss'"))
+		(struct primeCountDownFinish = 	COUNTDOWN(_time = "finishPrimeAt ?:0"	_serverTime = "serverTime.value" _format = "'HIGHEST,WITH_DAYS'"))
+		
+		(var isPrimeTimeActive:bool = 	"(arcEventstate & SC.Sse.RVR_EVENT_STATE.PRIME_ACTIVE) 		!= 0")
+		(var isEventFinished:bool = 	"(arcEventstate & SC.Sse.RVR_EVENT_STATE.EVENT_FINISHED) 	!= 0")
+		(var isPlayerChoseSide:bool = 	"(arcEventstate & SC.Sse.RVR_EVENT_STATE.SIDE_CHOSEN) 		!= 0")
+
+		(var statusText:str = "	isEventFinished 							? 'IDS_ARC_EVENT_COMMON_STATUS_CALCULATING_EVENT_RESULTS' :
+								!isPlayerChoseSide 							? 'IDS_ARC_EVENT_COMMON_STATUS_CHOOSE_SIDE' :
+								isPrimeTimeActive && _isModalWindow 		? subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_ENDS_IN_FULL', [], 
+																					{ _timeEnd: primeCountDownFinish.value }) :
+								isPrimeTimeActive && hasReceivedAllRewards	? 'IDS_ARC_EVENT_PORT_STATUS_ALL_REWARDS_RECEIVED' :
+								isPrimeTimeActive							? subst('IDS_ARC_EVENT_PORT_STATUS_POINTS_TILL_NEXT_REWARD', [],
+																					{ _pointsNext: pointsTillNextRewardRemaining }, pointsTillNextRewardRemaining) :
+								!nextPrimeAt								? 'IDS_ARC_EVENT_COMMON_STATUS_ALL_PRIMETIMES_ENDED' :
+								_isModalWindow								? subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_FULL', [],
+																					{ _timeStart: primeCountDownStart.value })
+																			: subst('IDS_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_SHORT', [],
+																					{ _timeStart: primeCountDownStart.value })")
+	)
+	(style (bind width "_isModalWindow ? auto : 100%"))
+
+	(controller $Instance renderer='StatusLine'
+		(bind enabled "_isModalWindow")
+		(args
+			_unifiedStatus = "isPrimeTimeActive && nextPrimeAt ? SC.Ui_styles.UNIFIED_STATUS.DATE : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_text = "statusText"
+		) 
+	)
+
+	(tf
+		(bind visible "!_isModalWindow")
+		(class $TextDefaultNM)
+		(style (width = 172px) (alpha = 0.7))
+		(bind text "statusText")
+	)
+)

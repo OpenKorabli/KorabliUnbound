@@ -79,20 +79,25 @@
 		(event evInnerDropdownShown)
 		(event evInnerDropdownHidden)
 
+		(event evTryToChangeIndex)
+		(event evChangeIndex)
+		(event evChangeDirection)
+		(event evFinishItemChooserSetup)
+
+
 		(var isSelected:bool = false)
 		(bind isSelected "false" init=false watch=false (event "evClickedOutside") (event "evMenuItemClicked") (event "evHideInfotip"))
 		(bind isSelected "!isSelected" init=false watch=false (event "evClickedElem"))
 
-		
-		(var _curItemIndex:number = "_curIndex")
-		(bind _curItemIndex "$event._curItemIndex" init=false (event "evItemChooserInner"))
 
-		
-		
-		(var _lastItemIndex:number = "_curIndex")
-		(bind _lastItemIndex "_curItemIndex" init=false)
-		(var _direction:bool = "_curDirection")
-		(bind _direction "_curItemIndex == _lastItemIndex ? !_direction : false" init=false watch=false (event "evItemChooserInner"))
+		(var indexToBeSet:number = -1)
+		(bind indexToBeSet "$event._curItemIndex"	init=false		(event "evItemChooserInner"))
+		(bind indexToBeSet "-1"						init=false		(event "evFinishItemChooserSetup"))
+		(var _curItemIndex:number = "_curIndex")
+		(bind _curItemIndex "$event.value" init=false watch=false	(event "evChangeIndex"))
+		(var direction:bool = "_curDirection")
+		(bind direction "$event.value" init=false watch=false		(event "evChangeDirection"))
+
 
 		(var isEnabled:bool = "!_disabled")
 		(var isItemNavigateVisible:bool = "_items.length > 1 && isEnabled")
@@ -116,14 +121,23 @@
 		(var borderAlpha:number =		"ITEM_CHOOSER_BORDER_ALPHA[state]")
 		(var backplateAlpha:number =	"ITEM_CHOOSER_BACKPLATE_ALPHA[state]")
 	)
+
 	(bind name "_name")
 
-	
-	(dispatch "'ItemChooser_' + _onItemSelectedEvent" args="{ selectedIndex: _curItemIndex, direction: _direction }" dir="EventDirection.UP" (event "evItemChooserInner"))
+	(dispatch evTryToChangeIndex	args="{ prevIndex: _curItemIndex }"	dir="EventDirection.NONE"	delay=0.01 (bind enabled "indexToBeSet != -1")	(bind trigger "indexToBeSet"))
+	(dispatch "indexToBeSet == $event.prevIndex ? '' : 'evChangeIndex'"			args="{ value: indexToBeSet }"		dir="EventDirection.NONE"		(event "evTryToChangeIndex"))
+	(dispatch "indexToBeSet == $event.prevIndex ? 'evChangeDirection' : ''"		args="{ value: !direction }"		dir="EventDirection.NONE"		(event "evTryToChangeIndex"))
+	(dispatch evFinishItemChooserSetup	dir="EventDirection.NONE"	(event "evChangeIndex") (event "evChangeDirection"))
+
+	(dispatch "'ItemChooser_' + _onItemSelectedEvent"		args="{ selectedIndex: _curItemIndex, direction: false }"		dir="EventDirection.UP"	(event "evChangeIndex"))
+	(dispatch "'ItemChooser_' + _onItemSelectedEvent"		args="{ selectedIndex: _curItemIndex, direction: direction }"	dir="EventDirection.UP"	(event "evChangeDirection"))
+
+
 	(dispatch evClickedElem dir="EventDirection.NONE" on='click')
 
 	(dispatch evClickedOutside dir="EventDirection.NONE" (event "evCloseDropdownByOuterEvent"))
 	(dispatch evMenuClosed dir="EventDirection.NONE" (event "evCloseDropdownByOuterEvent"))
+
 
 	(controller $Tooltip
 		(renderer = "dropdownElemName")
@@ -429,5 +443,73 @@
 		_state = "_state"
 		_item = "_item"
 		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+(def element TextListItemRendererWithPrice (_item:str,
+											_backgroundState:number,
+											_priceInfo:dict,
+											_isSelected:bool,
+											_isEnabled:bool = true,
+											_additionalPriceInfo:dict = null,
+											_isInactive:bool=false)
+	(scope
+		(var showPrice:bool = "_priceInfo != null && _priceInfo.finalPrice != 0")
+		(var showAdditionalPrice:bool =	"_additionalPriceInfo.finalPrice != null && _additionalPriceInfo.finalPrice != 0")
+	)
+
+	(class $Fullsize)
+	(style (align = "center|middle"))
+
+	(element MenuItemBackground _state = "_backgroundState")
+
+	(hblock
+		(style
+			(paddingRight = "S")
+			(width = 100%)
+			(bind alpha "_isEnabled ? 1 : 0.5")
+		)
+
+		(tf
+			(bind name "_item")
+			(bind class "_isSelected ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+			(style
+				(marginLeft = "S")
+				(width = 100%)
+				(alpha = "TA")
+			)
+
+			(bind text "_item")
+		)
+
+		(block
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "showPrice")
+				(args
+					_priceInfo = "_priceInfo"
+				)
+			)
+		)
+
+		(tf
+			(bind visible "showPrice && showAdditionalPrice")
+			(class $TextDefaultNM)
+			(style
+				(marginRight = "S")
+				(marginLeft = "XS")
+				(alpha = "TA")
+			)
+
+			(text = 'IDS_AND')
+		)
+
+		(block
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "showAdditionalPrice")
+				(args
+					_priceInfo = "_additionalPriceInfo"
+				)
+			)
+		)
 	)
 )

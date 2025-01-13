@@ -5,7 +5,15 @@
 	MEDIUM:	69px
 })
 
-(def constant MOTIVATOR_BANNER_MIN_HEIGHT 98px)
+(def constant MOTIVATOR_BANNER_MIN_HEIGHT {
+	RESOLUTION_SMALL: 84px,
+	RESOLUTION_LARGE: 98px,
+})
+
+(def constant MOTIVATOR_REWARD_SIZE {
+	SMALL: 48px,
+	LARGE: 68px,
+})
 
 (def constant MOTIVATOR_SYMBOLS_MAX 23)
 
@@ -21,6 +29,12 @@
 	(align = "center")
 )
 
+(def css $MarkerRewardPosition ()
+	(position = "absolute")
+	(top = -10px)
+	(right = 0px)
+)
+
 (def constant ALPHA_BANNER_STATE {	SC.Ui_styles.BUTTON_STATE.OVER:	1,
 									SC.Ui_styles.BUTTON_STATE.DOWN:	0,
 									SC.Ui_styles.BUTTON_STATE.UP:	0
@@ -32,24 +46,31 @@
 	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT _methods = "_methods")
 )
 
+(def macro MOTIVATOR_STAGE_SIZES ()
+	(macro STAGE_SIZE)
+	(var isMediumResolution:bool = "stageWidth < 1920 && stageHeight < 1080")
+	(var isSmallResolution:bool = "stageWidth <= 1366 && stageHeight <= 768")
+)
+
 (def element SseBannerMain ()
 	(scope
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 		(macro MOUSE_HANDLER_SCOPE)
 		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
 
-		(var sseOpenEndedCounter:dhComponent = "getSingleEntity(CC.sseOpenEndedCounter).sseOpenEndedCounter")
-		(var activeOpenEndedTasksCount:number = "sseOpenEndedCounter.activeAmount ?: 0" (event "sseOpenEndedCounter.evChanged"))
+		(var sseOpenEndedCounterEntity:dhEntity = "getSingleEntity(CC.sseOpenEndedCounter)")
+		(var sseOpenEndedCounterComponent:dhComponent = "sseOpenEndedCounterEntity.sseOpenEndedCounter")
+		(var activeOpenEndedTasksCount:number = "sseOpenEndedCounterComponent.activeAmount ?: 0" (event "sseOpenEndedCounterComponent.evChanged"))
 
 		(var itemsFirstLineCollection:dhCollection = "getCollection(CC.sseCore).child('bannerSSEItems')")
-		(var commonTasksCount:number = "itemsFirstLineCollection.items.length ?: 0"	(event "itemsFirstLineCollection.evAdded")
-																					(event "itemsFirstLineCollection.evRemoved"))
+		(var commonTasksCount:number = "itemsFirstLineCollection.length ?: 0")
 		
 		(var sseCountTasks:number = "commonTasksCount + activeOpenEndedTasksCount")
 		(var isTasksExist:bool = "sseCountTasks > 0")
 
-		(var sseWindowState:dhComponent = "getSingleEntity(CC.sseWindowState).sseWindowState")
-		(var isReward:bool = "sseWindowState.unclaimedRewardCount > 0 ? true : false" (event "sseWindowState.evChanged"))
+		(var sseWindowStateEnity:dhEntity = "getSingleEntity(CC.sseWindowState)")
+		(var sseWindowStateComponent:dhComponent = "sseWindowStateEnity.sseWindowState")
+		(var hasReward:bool = "sseWindowStateComponent.unclaimedRewardCount > 0" (event "sseWindowStateComponent.evChanged"))
 
 		(struct featureActionUse = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
 		(var isFeatureLocked:bool = "featureActionUse.state == 'locked'")
@@ -59,12 +80,10 @@
 		(var newbieQuestCollection:dhCollection = "getCollection(CC.newbieQuest)")
 
 		(var newbieQuestAllCollection:dhCollection = "newbieQuestCollection.child('byTier')")
-		(var isNewbieQuestAvailable:bool = "newbieQuestAllCollection.items.length > 0 " (event "newbieQuestAllCollection.evAdded")
-																						(event "newbieQuestAllCollection.evRemoved"))
+		(var isNewbieQuestAvailable:bool = "newbieQuestAllCollection.length > 0 ")
 
 		(var newbieQuestActiveCollection:dhCollection = "newbieQuestCollection.getChildByPath('notDone.byTier')")
-		(var newbieQuestActiveCount:number = "newbieQuestActiveCollection.items.length ?: 0"	(event "newbieQuestActiveCollection.evAdded")
-																								(event "newbieQuestActiveCollection.evRemoved"))
+		(var newbieQuestActiveCount:number = "newbieQuestActiveCollection.length ?: 0")
 		(var isNewbieQuestCountVisible:bool = "isFeatureLocked && newbieQuestActiveCount > 0")
 
 		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
@@ -72,25 +91,30 @@
 
 		(var sseOpenEndedEntity:dhEntity = "getSingleEntity(CC.sseOpenEnded)")
 
-		(var newContent:dhComponent = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SSETAGS).newContent")
-		(var isNewContent:bool = "newContent.count > 0" (event "newContent.evCountChanged"))
+		(var newContentEnity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SSETAGS)")
+		(var newContentComponent:dhComponent = "newContentEnity.newContent")
+		(var isNewContent:bool = "newContentComponent.count > 0" (event "newContentComponent.evCountChanged"))
 
-		(var isNewShipAcesSeason:bool = "shipAcesSeasonEntity.hasComponent(CC.newItem)" (event "shipAcesSeasonEntity.evAdded") (event "shipAcesSeasonEntity.evRemoved"))
-		(var isNewSseOpenEnded:bool = 	"sseOpenEndedEntity.hasComponent(CC.newItem)" (event "sseOpenEndedEntity.evAdded") (event "sseOpenEndedEntity.evRemoved"))
+		(var isNewShipAcesSeason:bool = "shipAcesSeasonEntity.hasComponent(CC.newItem)")
+		(var isNewSseOpenEnded:bool = 	"sseOpenEndedEntity.hasComponent(CC.newItem)")
 
 		(var isNewMarkerVisible:bool = "isTasksExist && isNewContent || isNewShipAcesSeason || isNewSseOpenEnded")
 
 		
-		(struct sseIntroNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO"))
-		(struct sseIntroRepeatNewTip = 	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO_REPEAT"))
-		(struct shipAcesNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES"))
-		(struct nqIntroNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_INTRO"))
+		(struct sseIntroNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO"))
+		(struct sseIntroRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO_REPEAT"))
+		(struct shipAcesNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES"))
+		(struct shipAcesNationNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES_NATION"))
+		(struct shipAcesTypeShipNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES_SHIP_TYPE"))
+		(struct nqIntroNewTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_INTRO"))
 
-		(var sseTipId:number = "sseIntroNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO :
-								sseIntroRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO_REPEAT :
-								shipAcesNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES :
-								nqIntroNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_INTRO 
-																: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var sseTipId:number = "sseIntroNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO :
+								sseIntroRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO_REPEAT :
+								shipAcesNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES :
+								shipAcesNationNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES_NATION :
+								shipAcesTypeShipNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_ACES_SHIP_TYPE :
+								nqIntroNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_INTRO
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
 		(var isSseTipVisible:bool = "sseTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
@@ -98,9 +122,7 @@
 
 	(style (width = "BANNER_SIZE_WIDTH") (height = "BANNER_SIZE_HEIGHT.SMALL"))
 
-	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{
 			type: 'inputMapping.onAction',
@@ -119,29 +141,29 @@
 		(class $PortBanner)
 		(block
 			(style (width = 100%))
-			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM 
-				_duration = "0.15"
-				_fromAlpha = 1
-				_toAlpha = 0.5
-				_triggerExpression="!(isTasksExist || isNewbieQuestAvailable || isReward || isShipAcesAvailable)"
-			)
+			(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM _triggerExpression = "!(isTasksExist || isNewbieQuestAvailable || hasReward || isShipAcesAvailable)")
+
 			(element BannerItemTitle
 				_title = "title"
 				_isNewMarker = "isNewMarkerVisible"
-				_isStateOwn = "isReward"
+				_isStateOwn = "hasReward"
 			)
 		)
 
 		(block
 			(class $PortBannerStatus)
 			(controller $Instance renderer = 'BannerCountTask'
-				(bind enabled "!isReward")
+				(bind enabled "!hasReward")
 				(args
-					_count = " sseCountTasks + newbieQuestActiveCount "
+					_count = "sseCountTasks + newbieQuestActiveCount "
 				)
 			)
+		)
+
+		(block
+			(class $MarkerRewardPosition)
 			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "isReward")
+				(bind enabled "hasReward")
 				(args
 					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
 					_isAnimate = true
@@ -167,9 +189,10 @@
 		(event startShow)
 		(event startHide)
 
+		(macro MOTIVATOR_STAGE_SIZES)
+
 		(var sseMotivatorCollection:dhCollection = "getCollection(CC.sseCore).getChildByPath('byMotivationPriority.sorted')")
-		(var isSseMotivatorActive:bool = "sseMotivatorCollection.items.length > 0"	(event "sseMotivatorCollection.evAdded")
-																					(event "sseMotivatorCollection.evRemoved"))
+		(var isSseMotivatorActive:bool = "sseMotivatorCollection.length > 0")
 	)
 	(name = 'sse_banner')
 	(element SseBannerMain)
@@ -177,7 +200,7 @@
 	(block
 		(style (width = 100%))
 		(controller $Instance renderer='SseMotivatorSubBanner'
-			(bind enabled "isSseMotivatorActive")
+			(bind enabled "isSseMotivatorActive && !isSmallResolution")
 		)
 	)
 )
@@ -186,25 +209,14 @@
 	(scope
 		(var sseMotivatorCollection:dhCollection = "getCollection(CC.sseCore)")
 
-		(var sseMotivatorSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.sorted')"	(event "sseMotivatorCollection.evChildAdded")
-																																(event "sseMotivatorCollection.evChildRemoved")
-																																(event "sseMotivatorCollection.evChildUpdated"))
-		(var sseMotivatorTasks:array = "sseMotivatorSubCollection.items ?: []" (event "sseMotivatorSubCollection.evUpdated") (event "sseMotivatorSubCollection.evAdded"))
+		(var sseMotivatorSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.sorted')")
+		(var sseMotivatorComingSoonSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.comingSoon.sorted')")
+		(var sseMotivatorActiveSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.active')")
 
-		(var sseMotivatorComingSoonSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.comingSoon.sorted')"	(event "sseMotivatorCollection.evChildAdded")
-																																					(event "sseMotivatorCollection.evChildRemoved")
-																																					(event "sseMotivatorCollection.evChildUpdated"))
-		(var sseMotivatorComingSoonTasks:array = "sseMotivatorComingSoonSubCollection.items ?: []" (event "sseMotivatorComingSoonSubCollection.evUpdated") (event "sseMotivatorComingSoonSubCollection.evAdded"))
-
-		(var sseMotivatorActiveSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.active')"	(event "sseMotivatorCollection.evChildAdded")
-																																	(event "sseMotivatorCollection.evChildRemoved")
-																																	(event "sseMotivatorCollection.evChildUpdated"))
-		(var sseMotivatorActiveTasks:array = "sseMotivatorActiveSubCollection.items ?: []" (event "sseMotivatorActiveSubCollection.evUpdated") (event "sseMotivatorActiveSubCollection.evAdded"))
-
-		(var isMotivatorStatusDone:bool = "sseMotivatorActiveTasks.length == 0")
-		(var tasksCounter:number = "isMotivatorStatusDone	? min(SC.Sse.SSE_MOTIVATION_BANNER.COMING_SOON_TASKS_ON_BANNER_MAX, sseMotivatorComingSoonTasks.length)
-															: min(SC.Sse.SSE_MOTIVATION_BANNER.ACTIVE_TASKS_ON_BANNER_MAX, sseMotivatorTasks.length)")
-		(var sseTasks:array = "isMotivatorStatusDone ? sseMotivatorComingSoonTasks : sseMotivatorTasks")
+		(var isMotivatorStatusDone:bool = "sseMotivatorActiveSubCollection.length == 0")
+		(var tasksCounter:number = "isMotivatorStatusDone	? min(SC.Sse.SSE_MOTIVATION_BANNER.COMING_SOON_TASKS_ON_BANNER_MAX, sseMotivatorComingSoonSubCollection.length)
+															: min(SC.Sse.SSE_MOTIVATION_BANNER.ACTIVE_TASKS_ON_BANNER_MAX, sseMotivatorSubCollection.length)")
+		(var sseTasks:dhCollection = "isMotivatorStatusDone ? sseMotivatorComingSoonSubCollection : sseMotivatorSubCollection")
 
 		(struct sseMotivatorIntroNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_INTRO"))
 	)
@@ -231,10 +243,11 @@
 
 (def element SseMotivatorSubBannerItem (_sseId:number = 0, _isSingleCard:bool = false)
 	(scope
+		(event evSubBannerItemClicked)
+
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 		(macro MOUSE_HANDLER_SCOPE)
-
-		(event evSubBannerItemClicked)
+		(macro MOTIVATOR_STAGE_SIZES)
 
 		(var sseEntity:dhEntity = "getEntity(_sseId)")
 		(var sseTaskId:str = "sseEntity.sseCore.id" (event "sseEntity.sseCore.evChanged"))
@@ -251,15 +264,18 @@
 			_isRollOver = "isTaskCompletedBlock ? false : rollOver"
 		))
 		(var elementName:str = "isTaskCompletedBlock ? 'SseMotivatorTaskCompleted' : 'SseMotivatorTaskActive'")
+		(var motivatorBannerHeight:number = "isMediumResolution	? MOTIVATOR_BANNER_MIN_HEIGHT.RESOLUTION_SMALL
+																: MOTIVATOR_BANNER_MIN_HEIGHT.RESOLUTION_LARGE")
 	)
 	(name = 'sse_motivator_banner')
 	(dispatch evSubBannerItemClicked dir="EventDirection.DOWN" on='leftClick')
 	(bindcall externalCall "'inputMapping.onAction'" "[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_INTRO } ]" watch=false (event "evSubBannerItemClicked"))
 
-	(style (width = "BANNER_SIZE_WIDTH") (minHeight = "MOTIVATOR_BANNER_MIN_HEIGHT") (align = "middle"))
+	(style (align = "middle") (width = "BANNER_SIZE_WIDTH") (bind minHeight "motivatorBannerHeight"))
 
 	(macro PORT_BANNER_BG
 		_bgColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"
+		_portBannerAlpha = "portBannerAlpha"
 	)
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[	{ type: 'inputMapping.onAction', name: isTaskCompletedBlock ? '' : 'navigateTo', args: { route: 'sse_' + sseCategoryId }},
@@ -273,10 +289,16 @@
 	)
 	(block
 		(bind visible "isTaskCompletedBlock")
-		(style (position = "absolute") (width = 280px) (height = 98px) (backgroundImage = 'url:../sse/motivator/task_completed.png'))
+		(style (position = "absolute") (width = 280px) (height = 84px) (backgroundImage = 'url:../sse/motivator/task_completed.png'))
 	)
 	(block
-		(style (width = 100%) (padding = [20px, 12px, 12px]))
+		(style
+			(width = 100%)
+			(paddingRight = "SXS")
+			(paddingBottom = 10px)
+			(paddingLeft = "M")
+			(bind paddingTop "isTaskCompletedBlock ? S : XS")
+		)
 		(controller $Instance
 			(bind renderer "elementName")
 			(args
@@ -308,15 +330,17 @@
 		(event evSubBannerItemClicked)
 		(event evDeactivateTip)
 
+		(macro MOTIVATOR_STAGE_SIZES)
+
 		(var sseEntity:dhEntity = "getEntity(_sseId)")
 		(var progressCurrent:number = "sseEntity.progress.value" (event "sseEntity.progress.evChanged"))
 		(var progressMax:number = "sseEntity.progress.max" (event "sseEntity.progress.evChanged"))
 		(var sseTaskId:str = "sseEntity.sseCore.id" (event "sseEntity.sseCore.evChanged"))
 
-		(var isChain:bool = "sseEntity && sseEntity.hasComponent(CC.sseChain)" (event "sseEntity.evAdded") (event "sseEntity.evRemoved"))
+		(var isChain:bool = "sseEntity && sseEntity.hasComponent(CC.sseChain)")
 		(var currentTaskId:str = "isChain ? sseEntity.sseChain.currentTaskId : ''" (event "sseEntity.sseChain.evChanged"))
 		(var sseCoreEntity:dhEntity = "getPrimaryEntity(CC.sseCore, currentTaskId)")
-		(var sseTaskComponent:dhComponent = "isChain ? sseCoreEntity.sseTask : sseEntity.sseTask" (event "sseEntity.evAdded") (event "sseEntity.evRemoved"))
+		(var sseTaskComponent:dhComponent = "isChain ? sseCoreEntity.sseTask : sseEntity.sseTask")
 		(var sseTaskEntityId:number = "isChain ? sseCoreEntity.id : _sseId")
 		(var sseChainName:str = "sseEntity.sseChain.name ?: ''" (event "sseEntity.sseChain.evChanged"))
 		(var sseChainDisplayName:str = "sseChainName == '' || sseChainName.length > MOTIVATOR_SYMBOLS_MAX	? tr('IDS_SSE_MOTIVATOR_TASK_COMMON_TITLE_COLON')
@@ -342,6 +366,10 @@
 
 		(struct sseMotivatorTaskChangedNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_TASK_CHANGED"))
 
+		(var rewardSize:number = "isMediumResolution ? MOTIVATOR_REWARD_SIZE.SMALL : MOTIVATOR_REWARD_SIZE.LARGE")
+		(var rewardScale:number = "rewardSize/90")  
+		(var textClass:str = "isMediumResolution ? '$TextDefault13NM' : '$TextDefaultNM'")
+
 		
 		(var sseTaskChainId:str = "sseCoreEntity.sseCore.id" (event "sseCoreEntity.sseCore.evChanged"))
 		(var sseIdUI:str = "isChain ? sseTaskChainId : sseTaskId")
@@ -354,9 +382,14 @@
 	(style (width = 100%) (backgroundColor = "NO_COLOR"))
 
 	(block
-		(style (width = 100%) (marginBottom = "S") (minHeight = 68px) (paddingRight = 68px))  
+		(style
+			(width = 100%)
+			(marginBottom = "XXS")
+			(bind minHeight "rewardSize")
+			(bind paddingRight "rewardSize")
+		)
 		(hblock
-			(style (width = 100%) (marginBottom = "S") (marginTop = 6px))  
+			(style (width = 100%) (marginBottom = "S") (marginTop = "S"))  
 			(tf
 				(class $TextDefaultBold13NM)
 				(style (alpha = "TA") (marginRight = "S") (bind width "isChain ? 'auto' : 100%"))
@@ -375,7 +408,7 @@
 			)
 		)
 		(tf
-			(class $TextDefaultNM)
+			(bind class "textClass")
 			(style (width = 100%) (alpha = "TA"))
 			(bind text "countablesIds[0].ids")
 		)
@@ -384,7 +417,7 @@
 	(block
 		(style (position = "absolute") (right = 0))
 		(block
-			(style (bind scaleX "0.75") (bind scaleY "0.75"))
+			(style (bind scaleX "rewardScale") (bind scaleY "rewardScale"))
 			(element RewardItem
 				_reward = "reward"
 				_withTooltip = false
@@ -418,8 +451,6 @@
 																									(event "sseMotivatorCollection.evChildAdded")
 																									(event "sseMotivatorCollection.evChildRemoved")
 																									(event "sseMotivatorCollection.evChildUpdated"))
-		(var sseMotivatorComingSoonTasks:array = "sseMotivatorComingSoonCollection.items ?: []"	(event "sseMotivatorComingSoonCollection.evUpdated")
-																								(event "sseMotivatorComingSoonCollection.evAdded"))
 
 		(var sseEntity:dhEntity = "getEntity(_sseId)")
 		(var statuses:array = "sseEntity.sseCore.statuses ?: []" (event "sseEntity.sseCore.evStatusesChanged"))
@@ -432,12 +463,18 @@
 		(var sseName:str = "_isSingleCard	? 'IDS_SSE_MOTIVATOR_TASKS_COMPLETED' :
 							weekly > 0		? 'IDS_SSE_MOTIVATOR_BP_WEEKLY_TASKS_COMPLETED'
 											: 'IDS_SSE_MOTIVATOR_BP_DAILY_TASKS_COMPLETED'")
-		(var sseStatusId:number = "	_isSingleCard	? sseMotivatorComingSoonTasks[0].id :
+		(var sseStatusId:number = "	_isSingleCard	? sseMotivatorComingSoonCollection[0].id :
 									isChain			? isTaskLockedByTime ? _sseId : sseCoreEntity.id
 													: _sseId")
 
-		(struct sseMotivatorTaskCompletedNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_COMPLETED"))
+		(struct sseMotivatorDailyTaskCompletedNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_DAILY_TASK_COMPLETED"))
+		(struct sseMotivatorWeeklyTaskCompletedNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_WEEKLY_TASK_COMPLETED"))
+
+		(var guidingTipId:number = "sseMotivatorDailyTaskCompletedNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_DAILY_TASK_COMPLETED :
+									sseMotivatorWeeklyTaskCompletedNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_WEEKLY_TASK_COMPLETED
+																					: SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
+
 	(style (width = 100%))
 	(tf
 		(class $TextDefaultBold17NM)
@@ -450,9 +487,9 @@
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "sseMotivatorTaskCompletedNewTip.isActive")
+		(bind enabled "guidingTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 		(args
-			_tipId = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_COMPLETED"
+			_tipId = "guidingTipId"
 			_tipPositioning = "TIP_POSITION_RIGHT"
 			_modalWindowName = 'Dock'
 			_offsetX = "SXS"
@@ -469,24 +506,22 @@
 		(var campaignTaskPlayerCollection:dhCollection = "getCollection(CC.campaignTaskPlayer)")
 
 		(var taskPlayerActiveCollection:dhCollection = "campaignTaskPlayerCollection.child('active')")
-		(var taskPlayerCount:number = "taskPlayerActiveCollection.items.length ?: 0"	(event "taskPlayerActiveCollection.evAdded")
-																						(event "taskPlayerActiveCollection.evRemoved"))
+		(var taskPlayerCount:number = "taskPlayerActiveCollection.length ?: 0")
 		
 		(var accountResourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
-		(var accountResource:dhComponent = "accountResourceEntity.accountResource")
-		(var isPremiumAccount:bool = "accountResource.activePremiumType != SC.Common.PREMIUM_TYPE.NONE" (event "accountResource.evActivePremiumTypeChanged"))
+		(var accountResourceComponent:dhComponent = "accountResourceEntity.accountResource")
+		(var isPremiumAccount:bool = "accountResourceComponent.activePremiumType != SC.Common.PREMIUM_TYPE.NONE" (event "accountResourceComponent.evActivePremiumTypeChanged"))
 
 		(var constantsCampaignSlotsEntity:dhEntity = "getSingleEntity(CC.constantsCampaignSlots)")
-		(var constantsCampaignSlots:dhComponent = "constantsCampaignSlotsEntity.constantsCampaignSlots")
-		(var commonCount:number = "constantsCampaignSlots.common")
-		(var premiumCount:number = "constantsCampaignSlots.premium")
+		(var constantsCampaignSlotsComponent:dhComponent = "constantsCampaignSlotsEntity.constantsCampaignSlots")
+		(var commonCount:number = "constantsCampaignSlotsComponent.common")
+		(var premiumCount:number = "constantsCampaignSlotsComponent.premium")
 		(var slotsCount:number = "commonCount + premiumCount")
 		(var isSlotsCount:bool = "isPremiumAccount || taskPlayerCount == slotsCount")
 		(var totalAvailableTaskCount:number = "isSlotsCount ? slotsCount : commonCount")
 
 		(var activeTaskStateDoneCollection:dhCollection = "campaignTaskPlayerCollection.getChildByPath('active.taskStateDone')")
-		(var isReward:bool = "activeTaskStateDoneCollection.items.length > 0"	(event "activeTaskStateDoneCollection.evAdded")
-																				(event "activeTaskStateDoneCollection.evRemoved"))
+		(var hasReward:bool = "activeTaskStateDoneCollection.length > 0")
 
 		(struct featureCampaign = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.CAMPAIGNS"))
 		(var isNewMarkerVisible:bool = "featureCampaign.state == 'new'")
@@ -504,15 +539,18 @@
 	(name = 'campaigns_banner')
 
 	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
-
 	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{	
 			type: 'inputMapping.onAction',
 			name: 'navigateTo',
 			args: { route: SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_CAMPAIGN }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: 'featureSeen',
+			args: { featureIndex: SC.Common.ACCOUNT_FEATURE.CAMPAIGNS }
 		}]"
 	)
 
@@ -528,15 +566,14 @@
 		(element BannerItemTitle
 			_title = 'IDS_DOCK_BANNER_CAMPAIGNS'
 			_isNewMarker = "isNewMarkerVisible"
-			_isStateOwn = "isReward"
+			_isStateOwn = "hasReward"
 			_newMarkerType = "SC.Common.CONTENT_CATEGORY.CAMPAIGNS"
 		)
 
 		(block
 			(class $PortBannerStatus)
-			
 			(controller $Instance renderer = 'DefaultDividedCounter'
-				(bind enabled "!isReward")
+				(bind enabled "!hasReward")
 				(args
 					_curValue = "taskPlayerCount"
 					_maxValue = "totalAvailableTaskCount"
@@ -544,9 +581,12 @@
 					_curValueTextClass = '$TextDefaultBold17NM'
 				)
 			)
-			
+		)
+
+		(block
+			(class $MarkerRewardPosition)
 			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "isReward")
+				(bind enabled "hasReward")
 				(args
 					_iconReward = 'url:../service_kit/port_banner/icon_banner_star.png'
 					_isAnimate = true
@@ -574,9 +614,10 @@
 		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
 
 		(var metashopBannerStateEntity:dhEntity = "getSingleEntity(CC.metashopBannerState)")
-		(var metashopBannerState:dhComponent = "metashopBannerStateEntity.metashopBannerState")
-		(var isReward:bool = "metashopBannerState.isActive" (event "metashopBannerState.evUpdate"))
-		(var isNewMarkerVisible:bool = "metashopBannerState.isNew" (event "metashopBannerState.evUpdate"))
+		(var metashopBannerStateComponent:dhComponent = "metashopBannerStateEntity.metashopBannerState")
+
+		(var hasReward:bool = 			"metashopBannerStateComponent.isActive" (event "metashopBannerStateComponent.evUpdate"))
+		(var isNewMarkerVisible:bool = 	"metashopBannerStateComponent.isNew" 	(event "metashopBannerStateComponent.evUpdate"))
 
 		
 		(struct metashopIntroNewTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.METASHOP_INTRO"))
@@ -593,20 +634,18 @@
 										metashopSpecialNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.METASHOP
 																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
-		(var isMetashopTipActive:bool = "metashopTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var isMetashopTipVisible:bool = "metashopTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
 	(name = 'meta_shop_banner')
 
 	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
 
-	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[
 						{
 							type: 'inputMapping.onAction',
-							name: isMetashopTipActive ? 'deactivateTipChain' : '',
+							name: isMetashopTipVisible ? 'deactivateTipChain' : '',
 							args: { tip_chain_id: metashopChainId }
 						},
 						{
@@ -639,21 +678,21 @@
 		(element BannerItemTitle
 			_title = 'IDS_DOCK_BANNER_METASHOP'
 			_isNewMarker = "isNewMarkerVisible"
-			_isStateOwn = "isReward"
+			_isStateOwn = "hasReward"
 		)
 
 		(block
-			(class $PortBannerStatus)
+			(class $MarkerRewardPosition)
 			(element MarkerReward
-				_iconReward = "isReward ? 'url:../service_kit/port_banner/icon_banner_arsenal_active.png'
-										: 'url:../service_kit/port_banner/icon_banner_arsenal.png'"
-				_isAnimate = "isReward"
+				_iconReward = "hasReward 	? 'url:../service_kit/port_banner/icon_banner_arsenal_active.png'
+											: 'url:../service_kit/port_banner/icon_banner_arsenal.png'"
+				_isAnimate = "hasReward"
 			)
 		)
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "isMetashopTipActive")
+		(bind enabled "isMetashopTipVisible")
 		(args
 			_tipId = "metashopTipId"
 			_tipPositioning = "TIP_POSITION_RIGHT"
@@ -670,28 +709,21 @@
 		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
 
 		(var unclaimedRewardsCollection:dhCollection = "getCollection(CC.battlePassReward).child('unclaimedRewards')")
-		(var isReward:bool = "unclaimedRewardsCollection.items.length > 0"	(event "unclaimedRewardsCollection.evAdded")
-																			(event "unclaimedRewardsCollection.evRemoved"))
-
-		(var battlePass:dhComponent = "getSingleEntity(CC.battlePass).battlePass")
-		(var battlePassId:number = "battlePass.id" (event "battlePass.evChanged"))
+		(var hasReward:bool = "unclaimedRewardsCollection.length > 0")
 
 		(var battlePassCurrentLevelEntity:dhEntity = "getSingleEntity(CC.battlePassCurrentLevel)")
 
 		(var battlePassLevel:dhComponent = "battlePassCurrentLevelEntity.battlePassLevel")
 
-		(var curLevel:number = "battlePassLevel.level" (event "battlePassLevel.evChanged"))
-		(var curPoints:number = "battlePassLevel.points" (event "battlePassLevel.evChanged"))
-		(var maxPoints:number = "battlePassLevel.pointsPerLevel" (event "battlePassLevel.evChanged"))
+		(var curLevel:number = 	"battlePassLevel.level" (event "battlePassLevel.evChanged"))
 
 		(var mainProgressionCollection:dhCollection = "getCollection(CC.battlePassLevel).getChildByPath('mainProgression')")
-		(var mainProgressionArray:array = "mainProgressionCollection.items ?: []" (event "mainProgressionCollection.evAdded") (event "mainProgressionCollection.evRemoved"))
+		(var mainProgressionLength:number = "mainProgressionCollection.length ?: 0")
 
-
-		(var battlePassPostProgressionLevel:dhComponent = "battlePassCurrentLevelEntity.battlePassPostProgressionLevel")
-		(var countCompleted:number = "battlePassPostProgressionLevel.countCompleted" (event "battlePassPostProgressionLevel.evChanged"))
+		(var battlePassPostProgressionLevelComponent:dhComponent = "battlePassCurrentLevelEntity.battlePassPostProgressionLevel")
+		(var countCompleted:number = "battlePassPostProgressionLevelComponent.countCompleted" (event "battlePassPostProgressionLevelComponent.evChanged"))
 		(var level:number = "countCompleted ? curLevel + countCompleted : curLevel")
-		(var isPostProgression:bool = "battlePassPostProgressionLevel != null")
+		(var isPostProgression:bool = "battlePassPostProgressionLevelComponent != null")
 
 		(var currentRewardEntity:dhEntity = "getPrimaryEntity(CC.battlePassReward, curLevel + '_' + SC.Common.BATTLEPASS_REWARD_TYPES.PAID + '_' +'0')")
 
@@ -705,16 +737,14 @@
 										battlePassEventStartTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_EVENT_START
 																				: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
-		(var isBattlePassTipActive:bool = "battlePassTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var isBattlePassTipVisible:bool = "battlePassTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
 
 	(name = 'battlepass_banner')
 
 	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
 
-	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{	
 			type: 'inputMapping.onAction',
@@ -739,41 +769,46 @@
 
 		(element BannerItemTitle
 			_title = 'IDS_DOCK_BANNER_BATTLEPASS'
-			_isStateOwn = "isReward"
+			_isStateOwn = "hasReward"
 		)
 
 		(block
-			(class $PortBannerStatus)
-
-			(controller $Instance renderer = 'DefaultDividedCounter'
-				(bind enabled "!isReward && !isPostProgression")
-				(args
-					_curValue = "curLevel-1"
-					_maxValue = "mainProgressionArray.length"
-					_doNotAlphaOnZeroCurValue = true
-					_curValueTextClass = '$TextDefaultBold17NM'
-				)
-			)
-
-			(controller $Instance renderer = 'BannerCountTask'
-				(bind enabled "!isReward && isPostProgression")
-				(args
-					_count = "level-1"
-				)
-			)
+			(class $MarkerRewardPosition)
 
 			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "isReward")
+				(bind enabled "hasReward")
 				(args
 					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
 					_isAnimate = true
 				)
 			)
 		)
+
+		(block
+			(class $PortBannerStatus)
+
+			(controller $Instance renderer = 'DefaultDividedCounter'
+				(bind enabled "!hasReward && !isPostProgression")
+				(args
+					_curValue = "curLevel-1"
+					_maxValue = "mainProgressionLength"
+					_doNotAlphaOnZeroCurValue = true
+					_curValueTextClass = '$TextDefaultBold17NM'
+				)
+			)
+
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "!hasReward && isPostProgression")
+				(args
+					_count = "level-1"
+				)
+			)
+
+		)	
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "isBattlePassTipActive")
+		(bind enabled "isBattlePassTipVisible")
 		(args
 			_tipId = "battlePassTipId"
 			_tipPositioning = "TIP_POSITION_RIGHT"
@@ -790,12 +825,12 @@
 		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
 
 		(var ingamePortalEntity:dhEntity = "getSingleEntity(CC.ingamePortal)")
-		(var ingamePortal:dhComponent = "ingamePortalEntity.ingamePortal")
-		(var isReward:bool = "ingamePortal.isGiftAwaiting" (event "ingamePortal.evUpdate"))
-		(var unreadRecomendedNewsCount:number = "ingamePortal.unreadNewsCount" (event "ingamePortal.evUpdate"))
+		(var ingamePortalComponent:dhComponent = "ingamePortalEntity.ingamePortal")
+		(var hasReward:bool = "ingamePortalComponent.isGiftAwaiting" (event "ingamePortalComponent.evUpdate"))
+		(var unreadRecomendedNewsCount:number = "ingamePortalComponent.unreadNewsCount" (event "ingamePortalComponent.evUpdate"))
 		(var isUnreadRecomendedNews:bool = "unreadRecomendedNewsCount > 0")
 
-		(var url:str = "isReward	? 	SC.Ui_windows.GUI_URL.NEWS_VERSION_IN_GAME
+		(var url:str = "hasReward	? 	SC.Ui_windows.GUI_URL.NEWS_VERSION_IN_GAME
 									:	isUnreadRecomendedNews	? SC.Ui_windows.GUI_URL.NEWS_IN_GAME
 																: SC.Ui_windows.GUI_URL.NEWS_ALL_IN_GAME")
 	)
@@ -803,9 +838,7 @@
 
 	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
 
-	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{	
 			type: 'inputMapping.onAction',
@@ -830,21 +863,23 @@
 
 		(element BannerItemTitle
 			_title = 'IDS_NEWS'
-			_isStateOwn = "isReward"
+			_isStateOwn = "hasReward"
 		)
 
 		(block
 			(class $PortBannerStatus)
-
 			(controller $Instance renderer = 'BannerCountTask'
-				(bind enabled "isUnreadRecomendedNews && !isReward")
+				(bind enabled "isUnreadRecomendedNews && !hasReward")
 				(args
 					_count = "unreadRecomendedNewsCount"
 				)
 			)
+		)
 
+		(block
+			(class $MarkerRewardPosition)
 			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "isReward")
+				(bind enabled "hasReward")
 				(args
 					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
 					_isAnimate = true
@@ -872,24 +907,23 @@
 		(var isDailyLootboxesAvailable:bool = "dailyLootboxesEntity.splitRunTest.data.isDailyLootboxesAvailable" (event "dailyLootboxesEntity.splitRunTest.evDataChanged"))
 
 		(var dockDataEntity:dhEntity = "getSingleEntity(CC.dockData)")
-		(var dockData:dhComponent = "dockDataEntity.dockData")
-		(var isArmorVisible:bool = "dockData.isArmorVisible" (event "dockData.evIsArmorVisibleChanged"))
+		(var dockDataComponent:dhComponent = "dockDataEntity.dockData")
+		(var isArmorVisible:bool = "dockDataComponent.isArmorVisible" (event "dockDataComponent.evIsArmorVisibleChanged"))
 
 		(struct featureLootboxes = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.LOOTBOXES"))
 
 		(var lootboxEntity:dhEntity = 		"getSingleEntity(CC.lootboxConfigComponent)")
-		(var lootboxStorage:dhComponent = 	"lootboxEntity.lootboxStorageComponent")
-		(var lootboxConfig:dhComponent = 	"lootboxEntity.lootboxConfigComponent")
+		(var lootboxStorageComponent:dhComponent = 	"lootboxEntity.lootboxStorageComponent")
+		(var lootboxConfigComponent:dhComponent = 	"lootboxEntity.lootboxConfigComponent")
 
-		(var lootboxInStorage:number = 	"lootboxStorage.inStorage"	(event "lootboxStorage.evUpdate"))
-		(var lootboxExp:number = 		"lootboxStorage.lootExp" 	(event "lootboxStorage.evUpdate"))
-		(var lootboxPrices:array = 		"lootboxConfig.prices" 		(event "lootboxConfig.evUpdate"))
+		(var lootboxInStorage:number = 	"lootboxStorageComponent.inStorage"	(event "lootboxStorageComponent.evUpdate"))
+		(var lootboxExp:number = 		"lootboxStorageComponent.lootExp" 	(event "lootboxStorageComponent.evUpdate"))
+		(var lootboxPrices:array = 		"lootboxConfigComponent.prices" 	(event "lootboxConfigComponent.evUpdate"))
 
 		(var isMaxDailyExp:bool = "lootboxExp >= lootboxPrices[2]")
 
-		(var isDailyLootboxesBlockVisible:bool = "!isMaxDailyExp && isDailyLootboxesAvailable")
-
-		(var isReward:bool = "lootboxEntity.hasComponent(CC.newItem)" (event "lootboxEntity.evAdded") (event "lootboxEntity.evRemoved"))
+		(var hasReward:bool = "lootboxEntity.hasComponent(CC.newItem)")
+		(var isDailyLootboxesBlockVisible:bool = "!isMaxDailyExp && isDailyLootboxesAvailable")	
 		(var isNewMarkerVisible:bool = "featureLootboxes.state == 'new'")
 
 		
@@ -932,9 +966,7 @@
 		(bind height "isDailyLootboxesBlockVisible ? BANNER_SIZE_HEIGHT.MEDIUM : BANNER_SIZE_HEIGHT.SMALL")
 	)
 
-	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{
 			type: 'inputMapping.onAction',
@@ -945,6 +977,11 @@
 			type: 'inputMapping.onAction',
 			name: isArmorVisible ? 'hideArmour' : '',
 			args: { }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: 'featureSeen',
+			args: { featureIndex: SC.Common.ACCOUNT_FEATURE.LOOTBOXES }
 		}]"
 	)
 
@@ -959,22 +996,24 @@
 
 		(element BannerItemTitle
 			_title = 'IDS_LOOTBOXES'
-			_isStateOwn = "isReward"
+			_isStateOwn = "hasReward"
 			_isNewMarker = "isNewMarkerVisible"
 		)
 
 		(block
 			(class $PortBannerStatus)
-
 			(controller $Instance renderer = 'BannerCountTask'
-				(bind enabled "!isReward && lootboxInStorage > 0")
+				(bind enabled "!hasReward && lootboxInStorage > 0")
 				(args
 					_count = "lootboxInStorage"
 				)
 			)
+		)
 
+		(block
+			(class $MarkerRewardPosition)
 			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "isReward")
+				(bind enabled "hasReward")
 				(args
 					_iconReward = 'url:../service_kit/port_banner/icon_banner_container.png'
 					_isAnimate = true
@@ -982,14 +1021,27 @@
 			)
 		)
 		(block
-			(style (width = 100%))
-			(controller $Instance renderer = 'BannerProgressBar'
-				(bind enabled "isDailyLootboxesBlockVisible")
-				(args
-					_progress = "dailyLootProgress"
-					_text = 'IDS_EXP_LEFT'
-					_currencyIcon = 'url:../service_kit/currencies/icon_exp_small.png'
-					_costAmount = "expToNextLootbox"
+			(bind visible "isDailyLootboxesBlockVisible")
+			(style (width = 100%) (vgap = "S"))
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer = 'BannerProgressBarDescription'
+					(bind enabled "isDailyLootboxesBlockVisible")
+					(args
+						_text = 'IDS_EXP_LEFT'
+						_currencyIcon = 'url:../service_kit/currencies/icon_exp_small.png'
+						_costAmount = "expToNextLootbox"
+					)
+				)
+			)
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer = 'BannerProgressBar'
+					(bind enabled "isDailyLootboxesBlockVisible")
+					(args
+						_progress = "dailyLootProgress"
+					)
 				)
 			)
 		)
@@ -1014,23 +1066,23 @@
 		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
 
 		(var strategicActionsEntity:dhEntity = "getSingleEntity(CC.strategicActionsEvent)")
-		(var strategicActionsEvent:dhComponent = "strategicActionsEntity.strategicActionsEvent")
+		(var strategicActionsEventComponent:dhComponent = "strategicActionsEntity.strategicActionsEvent")
 
-		(var isTerritoryAvailable:bool = "strategicActionsEvent.selectedTerritory == 0" (event "strategicActionsEvent.evChanged"))
+		(var isTerritoryAvailable:bool = "strategicActionsEventComponent.selectedTerritory == 0" (event "strategicActionsEventComponent.evChanged"))
 
-		(var state:number = "strategicActionsEvent.state" (event "strategicActionsEvent.evStateChanged"))
+		(var state:number = "strategicActionsEventComponent.state" (event "strategicActionsEventComponent.evStateChanged"))
 
-		(var isAnyRewardClaim:bool = "strategicActionsEvent.isAnyRewardClaim" (event "strategicActionsEvent.evChanged"))
+		(var isAnyRewardClaim:bool = "strategicActionsEventComponent.isAnyRewardClaim" (event "strategicActionsEventComponent.evChanged"))
 
-		(var isActive:bool = "state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.ACTIVE")
-		(var isCompleted:bool = "state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.COMPLETED")
-		(var isFinishedWithResults:bool = "state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.FINISHED_WITH_RESULTS")
+		(var isActive:bool = 				"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.ACTIVE")
+		(var isCompleted:bool = 			"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.COMPLETED")
+		(var isFinishedWithResults:bool = 	"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.FINISHED_WITH_RESULTS")
 
 		(var bannerDescription:str = "isActive && isTerritoryAvailable && !isAnyRewardClaim	? 'IDS_STRATEGIC_ACTIONS_BANNER_TEXT_TERRITORY' : ''")
 
-		(var isReward:bool = "isAnyRewardClaim && !isFinishedWithResults")
+		(var hasReward:bool = "isAnyRewardClaim && !isFinishedWithResults")
 
-		(var isNew:bool = "strategicActionsEntity.hasComponent(CC.newItem)"	(event "strategicActionsEntity.evAdded") (event "strategicActionsEntity.evRemoved"))
+		(var isNew:bool = "strategicActionsEntity.hasComponent(CC.newItem)")
 		(var isNewMarkerVisible:bool = "isNew && !isAnyRewardClaim && !isFinishedWithResults")
 
 		
@@ -1048,7 +1100,7 @@
 										strategicTerritoryCompletedTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_COMPLETED
 																					: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
-		(var isStrategicTipActive:bool = "strategicTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var isStrategicTipVisible:bool = "strategicTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
 	(name = 'strategic_actions')
 
@@ -1058,9 +1110,7 @@
 
 	)
 
-	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{	
 			type: 'inputMapping.onRequest',
@@ -1079,7 +1129,7 @@
 		},
 		{	
 			type: 'inputMapping.onAction',
-			name: isStrategicTipActive ? 'deactivateTipChain' : '',
+			name: isStrategicTipVisible ? 'deactivateTipChain' : '',
 			args: { tip_chain_id: strategicChainId }
 		}]"
 	)
@@ -1095,16 +1145,11 @@
 
 		(block
 			(style (width = 100%) (gap = "SXS"))
-			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM 
-				_duration = "0.15"
-				_fromAlpha = 1
-				_toAlpha = 0.5
-				_triggerExpression="isCompleted && !isAnyRewardClaim || isFinishedWithResults"
-			)
+			(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM _triggerExpression = "isCompleted && !isAnyRewardClaim || isFinishedWithResults")
 
 			(element BannerItemTitle
 				_title = 'IDS_STRATEGIC_ACTIONS_COMMON_EVENT_TITLE'
-				_isStateOwn = "isReward"
+				_isStateOwn = "hasReward"
 				_isNewMarker = "isNewMarkerVisible"
 				_isMultiline = true
 			)
@@ -1117,10 +1162,9 @@
 		)
 
 		(block
-			(class $PortBannerStatus)
-
+			(class $MarkerRewardPosition)
 			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "isReward")
+				(bind enabled "hasReward")
 				(args
 					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
 					_isAnimate = true
@@ -1130,7 +1174,7 @@
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "isStrategicTipActive")
+		(bind enabled "isStrategicTipVisible")
 		(args
 			_tipId = "strategicTipId"
 			_tipPositioning = "TIP_POSITION_RIGHT"
@@ -1147,13 +1191,14 @@
 		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
 
 		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
-		(var isReward:bool = "repairDockDataEntity.hasComponent(CC.newItem)" (event "repairDockDataEntity.evAdded") (event "repairDockDataEntity.evRemoved"))
+		(var hasReward:bool = "repairDockDataEntity.hasComponent(CC.newItem)")
 		
-		(var newShipContent:dhComponent = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SHIP_COMPONENTS).newContent")
-		(var isNewMarkerVisible:bool = "newShipContent.count > 0" (event "newShipContent.evCountChanged"))
+		(var newContentEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SHIP_COMPONENTS)")
+		(var newShipContentComponent:dhComponent = "newContentEntity.newContent")
+		(var isNewMarkerVisible:bool = "newShipContentComponent.count > 0" (event "newShipContentComponent.evCountChanged"))
 
 		(var shipComponentCollection:dhCollection = "getCollection(CC.shipComponent).child('sorted')")
-		(var shipsCount:number = "shipComponentCollection.items.length" (event "shipComponentCollection.evAdded") (event "shipComponentCollection.evRemoved"))
+		(var shipsCount:number = "shipComponentCollection.length")
 		(var isInactive:bool = "shipsCount == 0")
 
 		
@@ -1166,16 +1211,14 @@
 										shipShardsShipCraftingIntroTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FIRST_REPAIR_INTRO
 																						: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
-		(var isRepairDockTipActive:bool = "repairDockTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var isRepairDockTipVisible:bool = "repairDockTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
 
 	(name = 'repair_dock_banner')
 
 	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
 
-	
-	
-	(macro PORT_BANNER_BG)
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{	
 			type: 'inputMapping.onAction',
@@ -1195,31 +1238,29 @@
 
 		(block
 			(style (width = 100%))
-			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM 
-				_duration = "0.15"
-				_fromAlpha = 1
-				_toAlpha = 0.5
-				_triggerExpression="isInactive"
-			)
+			(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM _triggerExpression = "isInactive")
+
 			(element BannerItemTitle
 				_title = 'IDS_DOCK_BANNER_REPAIR_DOCK'
 				_isNewMarker = "isNewMarkerVisible"
-				_isStateOwn = "isReward"
+				_isStateOwn = "hasReward"
 			)
 		)
 
 		(block
 			(class $PortBannerStatus)
-
 			(controller $Instance renderer = 'BannerCountTask'
-				(bind enabled "!isReward && !isInactive")
+				(bind enabled "!hasReward && !isInactive")
 				(args
 					_count = "shipsCount"
 				)
 			)
+		)
 
+		(block
+			(class $MarkerRewardPosition)
 			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "isReward")
+				(bind enabled "hasReward")
 				(args
 					_iconReward = 'url:../service_kit/port_banner/icon_banner_ship.png'
 					_isAnimate = true
@@ -1229,12 +1270,852 @@
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "isRepairDockTipActive")
+		(bind enabled "isRepairDockTipVisible")
 		(args
 			_tipId = "repairDockTipId"
 			_tipPositioning = "TIP_POSITION_RIGHT"
 			_modalWindowName = 'Dock'
 			_offsetX = "-XXS"
+		)
+	)
+)
+(def constant ARC_EVENT_SIDE_NEUTRAL -1)
+(def constant ARC_EVENT_STATE_FINISHED 4)
+
+(def element ArcEventBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+		
+		(struct serverTime = SERVER_TIME())
+		
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var arcEventComponent:dhComponent = "arcEventEntity.arcEvent")
+		(var playerArcEventInfoComponent:dhComponent = "arcEventEntity.playerArcEventInfo")
+		
+		(var arcEventstate:number = 		"arcEventComponent.state" 				(event "arcEventComponent.evEventStateChanged"))
+		(var primeTimeFinishTime:number = 	"arcEventComponent.finishPrimeAt" 		(event "arcEventComponent.evEventStateChanged"))
+		(var playerSideId:number = 			"playerArcEventInfoComponent.sideId" 	(event "playerArcEventInfoComponent.evSideChanged"))
+
+		(var isEventFinished:bool = "arcEventstate == ARC_EVENT_STATE_FINISHED")
+		(var isSideNeutral:bool = "playerSideId == ARC_EVENT_SIDE_NEUTRAL")
+		(var isPrimeTimeActive:bool = "primeTimeFinishTime - serverTime.value > 0")
+
+		(var playerProgressEntity:dhEntity = "getPrimaryEntity(CC.progressWithRewards, 'personal' + playerSideId)")
+		(var progressWithRewardsComponent:dhComponent = "playerProgressEntity.progressWithRewards")
+
+		(var activeIndex:number =			"progressWithRewardsComponent.activeIndex	?: 0"	(event "progressWithRewardsComponent.evChanged"))
+		(var personalProgress:number =		"progressWithRewardsComponent.pointsCurrent	?: 0"	(event "progressWithRewardsComponent.evChanged"))
+		(var personalProgressArray:array =	"progressWithRewardsComponent.pointsArray	?: []"	(event "progressWithRewardsComponent.evChanged"))
+
+		
+		(var personalRewardIndex:number =	"activeIndex - 1")
+		(var personalProgressArrayMaxIndex:number = "personalProgressArray.length - 1")
+		(var isPersonalRewardIndex:bool = "personalRewardIndex >= 0")
+
+		(var pointsTillNextRewardTotal:number = "isPersonalRewardIndex ? personalProgressArray[personalRewardIndex + 1] : personalProgressArray[0]")
+		(var lastReceivedRewardPoints:number = 	"isPersonalRewardIndex ? personalProgressArray[personalRewardIndex] : 0")
+		(var hasReceivedAllRewards:bool = 		"isPersonalRewardIndex && personalRewardIndex == personalProgressArrayMaxIndex")
+
+		(var personalProgressBarValue:number = "hasReceivedAllRewards ? 1 : personalProgress/pointsTillNextRewardTotal")
+		(var isProgressBarVisible:bool = "!isEventFinished && !isSideNeutral && !hasReceivedAllRewards && isPrimeTimeActive")
+
+		
+		(struct rvrAvailableTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.RVR_AVAILABLE"))
+		(struct rvrNewStageTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.RVR_NEW_STAGE"))
+		
+		(var arcEventTipId:number = "	rvrAvailableTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.RVR_AVAILABLE : 
+										rvrNewStageTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.RVR_NEW_STAGE
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isArcEventTipVsible:bool = "arcEventTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+	(name = 'arc_event_banner')
+	(style
+		(width = "BANNER_SIZE_WIDTH")
+		(bind height "!hasReceivedAllRewards ? BANNER_SIZE_HEIGHT.MEDIUM : BANNER_SIZE_HEIGHT.SMALL")
+	)
+
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onRequest',
+			name: 	isEventFinished ? 'arcEventShowResults' :
+					isSideNeutral	? 'arcEventChooseSide' 
+									: 'arcEventShowMainScreen',
+			args: { }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: 'setPromoSkipped',
+			args: { splashScreenName: SC.Ui_common.SPLASH_SCREEN_TYPE.RVR }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'ArcEventBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+		(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM _triggerExpression = "hasReceivedAllRewards")
+
+		(element BannerItemTitle
+			_title = 'IDS_ARC_EVENT_COMMON_EVENT_TITLE'
+			_multiline = true
+		)
+	
+		(block
+			(style (width = 100%) (vgap = "S"))
+
+			(block
+				(bind visible "!hasReceivedAllRewards")
+				(style (width = 100%))
+				
+				(controller $Instance renderer='ArcEventStatus'
+					(bind enabled "!hasReceivedAllRewards")
+				)
+			)
+
+			(block
+				(bind visible "isProgressBarVisible")
+				(style (width = 100%))
+
+				(controller $Instance renderer = 'BannerProgressBar'
+					(bind enabled "isProgressBarVisible")
+					(args
+						_progress = "personalProgressBarValue"
+					)
+				)
+			)
+		)
+
+		(block
+			(style
+				(position = absolute) (top = "-S") (hitTest = false)
+				(right = "isSideNeutral ? -S : -XS")
+			)
+			(controller $Instance renderer='ArcEventSideStereotype'
+				(bind enabled "!hasReceivedAllRewards")
+				(args
+					_sideId = "playerSideId"
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isArcEventTipVsible")
+		(args
+			_tipId = "arcEventTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element SnowflakesBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var bonustagSeasonEntity:dhEntity = "getSingleEntity(CC.bonusTagSeason, 'snowflakeSeasonCollection')")
+		(var bonusTagSeasonComponent:dhComponent = "bonustagSeasonEntity.bonusTagSeason")
+
+		(var bonusSnowflakesCount:number = 	"bonusTagSeasonComponent.bonusSnowflakes" 	(event "bonusTagSeasonComponent.evChanged"))
+		(var bannerState:number = 			"bonusTagSeasonComponent.bannerState" 		(event "bonusTagSeasonComponent.evBannerStateChanged"))
+
+		(var isInactive:bool = "bonusSnowflakesCount == 0 || bannerState == SC.Ui_common.SNOWFLAKES_BANNER_STATE.INACTIVE")
+
+		(var isNewMarkerVisible:bool = "bonustagSeasonEntity.hasComponent(CC.newItem)")
+
+		
+		(struct snowflakesEventStart =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_START"))
+		(struct snowflakesEventFinish =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_FINISH"))
+		
+		(var snowflakesTipId:number = "	snowflakesEventStart.isActive	? SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_START : 
+										snowflakesEventFinish.isActive	? SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_FINISH
+																		: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isSnowflakesTipVisible:bool = "snowflakesTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+	
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onRequest',
+			name: 'showSnowflakesModal',
+			args: { }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: isNewMarkerVisible ? 'makeSeen' : '',
+			args: { entityId: bonustagSeasonEntity.id }
+		}]"
+	)
+
+
+	(controller $Tooltip
+		(renderer = 'SnowflakesBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+		(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM _triggerExpression = "!isNewMarkerVisible && isInactive")
+
+		(element BannerItemTitle
+			_title = 'IDS_DOCK_BANNER_SNOWFLAKES'
+			_isNewMarker = "isNewMarkerVisible"
+		)
+
+		(block
+			(class $PortBannerStatus)
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "bonusSnowflakesCount > 0")
+				(args
+					_count = "bonusSnowflakesCount"
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isSnowflakesTipVisible")
+		(args
+			_tipId = "snowflakesTipId"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)
+
+(def element ShipyardBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var shipyardBannerStateEntity:dhEntity = "getSingleEntity(CC.shipyardBannerState)")
+		(var shipyardBannerStateComponent:dhComponent = "shipyardBannerStateEntity.shipyardBannerState")
+
+		(var shipyardProgressbar:dict = "shipyardBannerStateComponent.progressbar" 			(event "shipyardBannerStateComponent.evUpdate"))
+		(var rewardsAvailable:bool = 	"shipyardBannerStateComponent.availableRewards > 0" (event "shipyardBannerStateComponent.evUpdate"))
+		(var boosterAvailable:bool = 	"shipyardBannerStateComponent.boosterAvailable" 	(event "shipyardBannerStateComponent.evUpdate"))
+		(var isActiveState:bool = 		"shipyardBannerStateComponent.type != 'finished'" 	(event "shipyardBannerStateComponent.evUpdate"))
+
+		(var shipLevel:number = "shipyardProgressbar.shipLevel")
+		(var curPoints:number = "shipyardProgressbar.points")
+		(var maxPoints:number = "shipyardProgressbar.pointsMax")
+
+		(var hasReward:bool = "boosterAvailable || rewardsAvailable")
+		(var shipyardStepProgress:number = "curPoints / maxPoints")
+		(var isShipyardMaxProgressReached:bool = "curPoints == maxPoints")
+		(var shipyardStep:str = "	isShipyardMaxProgressReached	? 'IDS_SHIPYARD_FINAL_LEVEL_BANNER' : 
+									shipLevel == 0					? 'IDS_SHIPYARD_PREPARE_LEVEL_BANNER'
+																	: subst('IDS_SHIPYARD_LEVEL_BANNER', [], { _level: shipLevel })")
+		
+		(var shipyardIconUrl:str = "rewardsAvailable	? 'url:../service_kit/port_banner/icon_banner_reward.png' :
+									boosterAvailable	? 'url:../service_kit/port_banner/icon_banner_sale.png'
+														: null")
+	)
+	(name = 'shipyardBanner')
+
+	(style
+		(width = "BANNER_SIZE_WIDTH")
+		(bind height "isActiveState ? BANNER_SIZE_HEIGHT.MEDIUM : BANNER_SIZE_HEIGHT.SMALL")
+	)
+
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.SHIPYARD }
+		},
+		{	
+			type: 'inputMapping.onAction',
+			name: 'shipyardBannerClicked',
+			args: { }
+		}]"
+	)
+
+
+	(controller $Tooltip
+		(renderer = 'ShipyardBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_DOCK_BANNER_SHIPYARD'
+			_isStateOwn = "hasReward"
+		)
+
+		(block
+			(class $MarkerRewardPosition)
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "hasReward")
+				(args
+					_iconReward = "shipyardIconUrl"
+					_isAnimate = "rewardsAvailable"
+				)
+			)
+		)
+
+		(block
+			(bind visible "isActiveState")
+			(style (width = 100%) (vgap = "S"))
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer = 'BannerProgressBarDescription'
+					(bind enabled "isActiveState")
+					(args
+						_text = "shipyardStep"
+						_multiline = true
+					)
+				)
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer = 'BannerProgressBar'
+					(bind enabled "isActiveState")
+					(args
+						_progress = "shipyardStepProgress"
+					)
+				)
+			)
+		)
+	)
+
+	(element GuidingTipHub
+		_tipId = "SC.Context_guiding_tip.TIP_TYPE.SHIPYARD_INTRO"
+		_tipPositioning = "TIP_POSITION_RIGHT"
+		_modalWindowName = 'Dock'
+		_offsetX = "-XXS"
+	)
+)
+
+(def element PromoRewardBanner ()
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var promoRewardCollection:dhCollection = "getCollection(CC.accountPromoRewardBanner).getChildByPath('upcoming.sorted')")
+
+		(var promoRewardEntity:dhEntity = "promoRewardCollection.getEntityAtIndex(0)")
+		(var accountPromoRewardBannerComponent:dhComponent = "promoRewardEntity.accountPromoRewardBanner")
+
+		(var promoRewardBattles:number = 	"accountPromoRewardBannerComponent.battles" 	(event "accountPromoRewardBannerComponent.evChanged"))
+		(var promoRewardLevel:number = 		"accountPromoRewardBannerComponent.level" 		(event "accountPromoRewardBannerComponent.evChanged"))
+		(var promoRewardImageSmall:str = 	"accountPromoRewardBannerComponent.imageSmall" 	(event "accountPromoRewardBannerComponent.evChanged"))
+
+		(var promoImageEntity:dhEntity = "getPrimaryEntity(CC.byteArrayData, promoRewardImageSmall)")
+		
+		(var promoImageData:gfx = "promoImageEntity.byteArrayData.data" (event "promoImageEntity.byteArrayData.evChanged"))
+
+		(var accountLevelPointsEntity:dhEntity = "getSingleEntity(CC.accountLevelPoints)")
+		(var accountLevelPointsComponent:dhComponent = "accountLevelPointsEntity.accountLevelPoints")
+		
+		(var currentPoints:number = "accountLevelPointsComponent.currentLevelPoints" (event "accountLevelPointsComponent.evCurrentLevelPointsChanged"))
+		(var battlesToPromoReward:number = "(promoRewardBattles - currentPoints) ?: 0")
+	)
+
+	(style (height = 116px) (width = "BANNER_SIZE_WIDTH"))
+
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: {	route: SC.Ui_windows.ROUTE.LEVELING,
+					data: { promoRewardBattles: promoRewardBattles,
+							promoRewardLevel: promoRewardLevel,
+							isPortBannerClicked: true,
+							rewardTypeReason: AL_REWARD_TYPE_PROMO } }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(args
+			_unifiedStatus=" SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text='IDS_PROMO_REWARD_BANNER_MOVE_TO_REWARD_MOUSE_INSTRUCTION'
+		)
+	)
+	
+	(block
+		(name = 'promoRewardBannerImage')
+		(class $Fullsize)
+		(style
+			(hitTest = false) (backgroundSize = "cover")
+			(bind backgroundImage "promoImageData")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL") (alpha = "portBannerAlpha.alpha"))
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA  _trigger="portBannerAlpha.state" _alpha="portBannerAlpha.alpha")
+	)
+
+	(block
+		(style (position = "absolute") (left = "SXS") (bottom = "SXS"))
+		
+		(tf
+			(name = 'promoRewardBannerBattlesCounter')
+			(class $TextDefaultNM)
+			(style (alpha = "TC"))
+
+			(bind text "subst('IDS_BATTLES_TO_NEXT_STEP', [], { battles: battlesToPromoReward }, battlesToPromoReward)")
+		)
+	)
+)
+
+(def element ProspectiveEventLeftBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var prospectiveEventBannerStateEntity:dhEntity = "getSingleEntity(CC.prospectiveEventBannerState)")
+		(var prospectiveEventBannerStateComponent:dhComponent = "prospectiveEventBannerStateEntity.prospectiveEventBannerState")
+		(var url:str = "prospectiveEventBannerStateComponent.url" (event "prospectiveEventBannerStateComponent.evUrlChanged"))
+	)
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: {	route: SC.Ui_windows.ROUTE.PORTAL,
+					data: { url: url,
+							isPrmp: true,
+							authorization: 'auth_wows' } }
+		}]"
+	)
+
+
+	(controller $Tooltip
+		(renderer = 'ProspectiveEventLeftBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_DOCK_BANNER_KEY_TARGET'
+		)
+
+		(block
+			(class $MarkerRewardPosition)
+			(element MarkerReward
+				_iconReward = 'url:../service_kit/port_banner/icon_banner_key_target.png'
+				_isAnimate = false
+			)
+		)
+	)
+)
+
+(def element CasualCvcBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var selfPlayerDbId:number = "selfPlayerEntity.accountSimple.dbId")
+		(var cwInfoEntity:dhEntity = "getPrimaryEntity(CC.clanWarsInfo, selfPlayerDbId)")
+		
+		(var clanWarsInfoComponent:dhComponent = "cwInfoEntity.clanWarsInfo")
+
+		(var stage:str = 							"clanWarsInfoComponent.stage" 						(event "clanWarsInfoComponent.evChanged"))
+		(var attemptsLeft:number = 					"clanWarsInfoComponent.attemptsLeft" 				(event "clanWarsInfoComponent.evChanged"))
+		(var isPlayerParticipating:bool = 			"clanWarsInfoComponent.playerParticipate" 			(event "clanWarsInfoComponent.evChanged"))
+		(var isPlayerMissPreparation:bool = 		"clanWarsInfoComponent.playerMissPreparation" 		(event "clanWarsInfoComponent.evChanged"))
+		(var clanMaxPreparationProgress:number = 	"clanWarsInfoComponent.clanMaxPreparationProgress"	(event "clanWarsInfoComponent.evChanged"))
+		(var clanPreparationProgress:number = 		"clanWarsInfoComponent.clanPreparationProgress" 	(event "clanWarsInfoComponent.evChanged"))
+
+		(var isAwardStage:bool = 			"stage == SC.Ui_common.CVC_PORT_BANNER_STAGE.REWARDING")
+		(var isWarStage:bool = 				"stage == SC.Ui_common.CVC_PORT_BANNER_STAGE.WAR")
+		(var isMatchingStage:bool = 		"stage == SC.Ui_common.CVC_PORT_BANNER_STAGE.MATCHMAKING")
+		(var isQualificationStage:bool =	"stage == SC.Ui_common.CVC_PORT_BANNER_STAGE.PREPARATION")
+
+		(var isAttempts:bool = "attemptsLeft > 0")
+		(var isQualificationDone:bool = "clanPreparationProgress != 0 && clanMaxPreparationProgress == clanPreparationProgress")
+		(var isDisableState:bool = "isQualificationStage && isQualificationDone || isMatchingStage || isAwardStage ||
+									isWarStage && (!isAttempts || !isQualificationDone || isPlayerMissPreparation)")
+		
+		(var isPlayerParticipateWarStage:bool = "isWarStage && !isPlayerParticipating && !isPlayerMissPreparation")
+		(var hasReward:bool = "isPlayerParticipateWarStage && isAttempts && isQualificationDone")
+		(var isIconVisible:bool = "isQualificationDone && !isWarStage && !isAwardStage && !isPlayerMissPreparation")
+	)
+	(name = 'buttonCwars')
+	
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: {	route: SC.Ui_windows.ROUTE.CLANS,
+					data: { url: SC.Ui_windows.GUI_URL.CLAN_WARS_IN_GAME } }
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'CvCBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+		(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM _triggerExpression = "isDisableState")
+		
+		(element BannerItemTitle
+			_title = 'IDS_DOCK_BANNER_CASUAL_CVC'
+			_isStateOwn = "hasReward"
+		)
+
+		(block
+			(class $PortBannerStatus)
+			(controller $Instance renderer = 'BannerCountTask'
+				(bind enabled "isWarStage && isPlayerParticipating && isAttempts")
+				(args
+					_count = "attemptsLeft"
+				)
+			)
+		)
+
+		(block
+			(class $MarkerRewardPosition)
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "hasReward || isIconVisible")
+				(args
+					_iconReward = "hasReward	? 'url:../service_kit/port_banner/icon_banner_battle_attempt.png' 
+												: 'url:../service_kit/port_banner/icon_banner_battle_attempt_inactive.png'"
+					_isAnimate = "hasReward"
+				)
+			)
+		)
+	)
+)
+
+(def element BigSimpleBanner (_title:str='', _imageUrl:str='', _name:str='', _action:str='', _actionParams:dict={}, _instructionText:str='', _hideHeader:bool = false)
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+	)
+	(name = "_name")
+	
+	(style (height = 80px) (width = "BANNER_SIZE_WIDTH"))
+
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{	
+			type: 'inputMapping.onAction',
+			name: _action,
+			args: _actionParams
+		}]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(args
+			_text = "_instructionText"
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false) (backgroundSize = "cover")
+			(bind backgroundImage "_imageUrl")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL") (alpha = "portBannerAlpha.alpha"))
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA  _trigger="portBannerAlpha.state" _alpha="portBannerAlpha.alpha")
+	)
+	
+	(block
+		(bind visible "!_hideHeader")
+		(class $Fullsize)
+		(class $PortBanner)
+		
+		(tf
+			(class $TextHeaderWhiteBold)
+			(bind text "toUpper(tr(_title))")
+		)
+	)
+)
+
+(def element LeftSideBanners ()
+	(scope
+		(event startShow)
+		(event startHide)
+
+		(struct featureActionUse = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
+		
+		(var accountLevelComponent:dhComponent = "getSingleEntity(CC.accountLevel).accountLevel")
+		(var curAccountLevel:number = "accountLevelComponent.level" (event "accountLevelComponent.evLevelChanged"))
+
+		(var accountLevelPointsComponent:dhComponent = "getSingleEntity(CC.accountLevelPoints).accountLevelPoints")
+
+		(var maxLevelEnabled:number = 	"accountLevelPointsComponent.maxLevelEnabled" 		(event "accountLevelComponent.evMaxLevelEnabledChanged"))
+		(var currentPoints:number = 	"accountLevelPointsComponent.currentLevelPoints" 	(event "accountLevelComponent.evCurrentLevelPointsChanged"))
+
+		
+		(var isEventAccessibleByLevel:bool = "curAccountLevel > 11")
+
+		(var eventBattleStateComponent:dhComponent = "getSingleEntity(CC.eventBattleState).eventBattleState")
+		(var isEventBannerShow:bool = "eventBattleStateComponent.useBanner && isEventAccessibleByLevel" (event "eventBattleStateComponent.evChanged"))
+		(var eventBattleName:str = "eventBattleStateComponent.name" (event "eventBattleStateComponent.evChanged"))
+
+		
+		(var arcEventComponent:dhComponent = "getSingleEntity(CC.arcEvent).arcEvent")
+		(var arcEventState:number = "arcEventComponent.state" (event "arcEventComponent.evEventStateChanged"))
+		
+		(var isArcEventBannerVisible:bool = "(arcEventState & (1 << BINARY_SHIFT_MAP[SC.Sse.RVR_EVENT_STATE.EVENT_ACTIVE])) == 1")
+
+		
+		(var strategicActionsEventComponent:dhComponent = "getSingleEntity(CC.strategicActionsEvent).strategicActionsEvent")
+		(var strategicActionsState:number = "strategicActionsEventComponent.state" (event "strategicActionsEventComponent.evStateChanged"))
+		(var isStrategicActionsVisible:bool = "isIn(strategicActionsState, SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.WITH_BANNER_ENABLED)")
+
+		
+		(var shipyardBannerStateComponent:dhComponent = "getSingleEntity(CC.shipyardBannerState).shipyardBannerState")
+		(var shipyardBannerVisible:bool = "shipyardBannerStateComponent.visible" (event "shipyardBannerStateComponent.evUpdate"))
+		(var isShipyardBannerVisible:bool = "shipyardBannerVisible && featureActionUse.state != 'locked'")
+
+		
+		(var promoRewardCollection:dhCollection = "getCollection(CC.accountPromoRewardBanner).getChildByPath('upcoming.sorted')")
+		(var promoRewardEntity:dhEntity = "promoRewardCollection.getEntityAtIndex(0)")
+		(var promoRewardBattlesComponent:dhComponent = "promoRewardEntity.accountPromoRewardBanner")
+
+		(var accountInfoComponent:dhComponent = "getSingleEntity(CC.accountSelf).accountInfo")
+		(var abuseStatus:number = "accountInfoComponent.abuseStatus" (event "accountInfoComponent.evAbuseStatusChanged"))
+		(var isAbuseStatusConfirmed:bool = "abuseStatus == SC.Common.ABUSE_STATUS.CONFIRMED")
+
+		(var isPromoRewardTaken:bool = "promoRewardBattlesComponent.battles <= currentPoints")
+		(var isPromoRewardVisible:bool = "(promoRewardEntity != null) && !isPromoRewardTaken && !isAbuseStatusConfirmed")
+
+		
+		(var icAccountLevelVisible:bool = "curAccountLevel != maxLevelEnabled")
+
+		
+		
+		(var prospectiveEventBannerStateComponent:dhComponent = "getSingleEntity(CC.prospectiveEventBannerState).prospectiveEventBannerState")
+		(var isProspectiveEventBannerActive:bool = "prospectiveEventBannerStateComponent.active" (event "prospectiveEventBannerStateComponent.evActiveChanged"))
+		(var isProspectiveEventLeftVisible:bool = "isProspectiveEventBannerActive && featureActionUse.state != 'locked'")
+
+		
+		(var newbieQuestsCollection:dhCollection = "getCollection(CC.newbieQuest)")
+		(var isNewbieQuests:bool = "newbieQuestsCollection.length > 0")
+		(var isSSEVisible:bool = "isNewbieQuests || featureActionUse.state != 'locked'")
+
+		
+		(var battlePassComponent:dhComponent = "getSingleEntity(CC.battlePass).battlePass")
+		(var battlePassState:number = "battlePassComponent.state" (event "battlePassComponent.evBattlePassStateChanged"))
+		(var isBattlePassVisible:bool = "battlePassState == SC.Common.BATTLEPASS_SEASON_STATE.ACTIVE")
+
+		
+		(struct featureCampaighs = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.CAMPAIGNS"))
+		(var isCampaignVisible:bool = "featureCampaighs.state != 'locked'")
+
+		
+		(var snowflakeBonusTagSeason:dhComponent = "getSingleEntity(CC.bonusTagSeason, 'snowflakeSeasonCollection').bonusTagSeason")
+		(var snowflakeState:number = "snowflakeBonusTagSeason.bannerState" (event "snowflakeBonusTagSeason.evBannerStateChanged"))
+		(var isSnowflakesVisible:bool = "snowflakeState != null && snowflakeState != SC.Ui_common.SNOWFLAKES_BANNER_STATE.DISABLED")
+
+		
+		(struct featureLootboxes = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.LOOTBOXES"))
+		(var isLootboxVisible:bool = "featureLootboxes.state != 'locked'")
+
+		
+		(var repairDockRouteComponent:dhComponent = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.REPAIR_DOCK).route")
+		(var isRepairDockVisible:bool = "repairDockRouteComponent.isAvailable" (event "repairDockRouteComponent.evIsAvailableChanged"))
+
+		
+		(struct serverTime = SERVER_TIME())
+		(var accountSelfEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var accountSimpleComponent:dhComponent = "accountSelfEntity.accountSimple")
+
+		(var accountSimpleEntity:dhEntity = "getPrimaryEntity(CC.accountSimple, accountSimpleComponent.dbId)")
+		(var playerClanMan:dhComponent = "accountSimpleEntity.clanman")
+		(var clanId:number = "playerClanMan.clanId" (event "playerClanMan.evClanIdChanged"))
+
+		(var clanWarsInfoEntity:dhEntity = "getPrimaryEntity(CC.clanWarsInfo, accountSimpleComponent.dbId)")
+		(var clanWarsInfoComponent:dhComponent = "clanWarsInfoEntity.clanWarsInfo")
+		
+		(var clanParticipate:bool = 	"clanWarsInfoComponent.clanParticipate" 	(event "clanWarsInfoComponent.evChanged"))
+		(var warEnabled:bool = 			"clanWarsInfoComponent.warEnabled" 			(event "clanWarsInfoComponent.evChanged"))
+		(var roundEndTimestamp:number = "clanWarsInfoComponent.roundEndTimestamp" 	(event "clanWarsInfoComponent.evChanged"))
+
+		(var isStageTimeUp:bool = "serverTime.value >= roundEndTimestamp")
+
+		(var isCasualCvcVisible:bool = "clanId && clanParticipate && warEnabled && !isStageTimeUp")
+
+		
+		(var isIngameNewsVisible:bool = "curAccountLevel > 1")
+	)
+
+	(style (height = 100%) (paddingBottom = "SXS"))
+
+	(vtile
+		(style (height = 100%) (gap = "XS"))
+		(macro BANNER_APPEAR_ANIMATION)
+
+		
+		(element MetaShopBanner)
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		(block
+			(bind visible "isArcEventBannerVisible")
+			(controller $Instance renderer='ArcEventBanner'
+				(bind enabled "isArcEventBannerVisible")
+			)
+		)
+
+		(block
+			(bind visible "isShipyardBannerVisible")
+			(controller $Instance renderer='ShipyardBanner'
+				(bind enabled "isShipyardBannerVisible")
+			)
+		)
+
+		(block
+			(bind visible "isPromoRewardVisible")
+			(controller $Instance renderer='PromoRewardBanner'
+				(bind enabled "isPromoRewardVisible")
+			)
+		)
+
+		
+		(block
+			(bind visible "icAccountLevelVisible")
+			(controller $Instance renderer='AccountLevelBanner'
+				(bind enabled "icAccountLevelVisible")
+			)
+		)
+
+		(block
+			(bind visible "isStrategicActionsVisible")
+			(controller $Instance renderer='StrategicActionsBanner'
+				(bind enabled "isStrategicActionsVisible")
+			)
+		)
+
+		(block
+			(bind visible "isBattlePassVisible")
+			(controller $Instance renderer='BattlePassBanner'
+				(bind enabled "isBattlePassVisible")
+			)
+		)
+
+		(block
+			(bind visible "isCampaignVisible")
+			(controller $Instance renderer='CampaignBanner'
+				(bind enabled "isCampaignVisible")
+			)
+		)
+
+		(block
+			(bind visible "isProspectiveEventLeftVisible")
+			(controller $Instance renderer='ProspectiveEventLeftBanner'
+				(bind enabled "isProspectiveEventLeftVisible")
+			)
+		)
+
+		(block
+			(bind visible "isLootboxVisible")
+			(controller $Instance renderer='LootboxBanner'
+				(bind enabled "isLootboxVisible")
+			)
+		)
+
+		(block
+			(bind visible "isRepairDockVisible")
+			(controller $Instance renderer='RepairDockBanner'
+				(bind enabled "isRepairDockVisible")
+			)
+		)
+
+		(block
+			(bind visible "isSnowflakesVisible")
+			(controller $Instance renderer='SnowflakesBanner'
+				(bind enabled "isSnowflakesVisible")
+			)
+		)
+
+
+
+
+
+
+
+
+
+		(block
+			(bind visible "isIngameNewsVisible")
+			(controller $Instance renderer='IngameNewsBanner'
+				(bind enabled "isIngameNewsVisible")
+			)
+		)
+
+		(block
+			(bind visible "isSSEVisible")
+			(controller $Instance renderer='SseBanner'
+				(bind enabled "isSSEVisible")
+			)
 		)
 	)
 )

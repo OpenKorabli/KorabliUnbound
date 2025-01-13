@@ -238,6 +238,9 @@
 
 		(var isInfotipVisible:bool = false)
 
+		(var resourceEntity:dhEntity =		"getSingleEntity(CC.accountResource)")
+		(var operationsAccountLocked:bool =	"resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
+
 		(struct crew =				PULL_CREW(_crewId = "_crewId"))
 
 		(var isMaxLevel:bool =			"crew.component.isMaxLevel"	(event "crew.component.evLevelUp"))
@@ -250,7 +253,7 @@
 		(var talentsAvailableItems:array =					"crewAvailableTalentsCollection.items ?: []"	(event "crewAvailableTalentsCollection.evAdded") (event "crewAvailableTalentsCollection.evRemoved"))
 		(var unavailableTalentsAmount:number =				"_possibleTalents.length - talentsAvailableItems.length")
 
-		(var isClickable:bool = "isMaxLevel")
+		(var isClickable:bool = "!operationsAccountLocked && isMaxLevel")
 
 		(var slotState:number = "	!isClickable		? SC.Ui_styles.BUTTON_STATE.DISABLED :
 									isInfotipVisible	? SC.Ui_styles.BUTTON_STATE.SELECTED :
@@ -258,13 +261,17 @@
 									rollOver			? SC.Ui_styles.BUTTON_STATE.OVER
 														: SC.Ui_styles.BUTTON_STATE.UP")
 
-		(var slotFrameAlpha:number =	"!isClickable																			? FRAME_SLOT_STATE_ALPHA[slotState] :
-										 (talentsAvailableItems.length == 0) && !(isInfotipVisible || mouseDown || rollOver)	? FRAME_SLOT_STATE_ALPHA_NO_ITEM_AVAILABLE_INSIDE
-																																: FRAME_SLOT_STATE_ALPHA[slotState]")
+		(var slotFrameAlpha:number =	"FRAME_SLOT_STATE_ALPHA[slotState]")
 		(var infoStatusLineText:str =	"unavailableTalentsAmount > 0 ? subst('IDS_CREW_INFO_MODAL_NATIONAL_TALENT_NO_MENTOR_INFO_STATUS', [], { _nationName: tr(toUpper('IDS_' + crewNation + '_GENITIVE')) }) : ''")
 
 		(var slotAttentionText:str = "isNoNation ? 'IDS_CREW_INFO_MODAL_NATIONAL_TALENT_UNAVAILABLE_DUE_TO_NO_NATION' : 'IDS_CREW_INFO_MODAL_NATIONAL_TALENT_UNAVAILABLE_DUE_TO_CREW_LEVEL'")
+
+		(var contextClickAction:str =	"isClickable && installedTalentId ? CREW_ACTIONS.OPEN_DENY_TALENT_WINDOW : ''")
+		(var contextActionObj:dict =	"{ _crewId: _crewId, _crewTalentEntityId: talentEntity.id, _selectedShipClass: _selectedShipClass }")
 	)
+
+	(bindcall externalCall "contextClickAction ? 'inputMapping.onRequest' : ''"		"[ contextClickAction, contextActionObj ]"	watch=false on='rightClick')
+	(bindcall externalCall "contextClickAction ? 'sound.playSetSoundDirect' : ''"	"[ 'button_flat', SoundEvent.CLICK ]"		watch=false on='rightClick')
 
 	(style
 		(bind marginLeft	"SKILL_TREE_ICON_MARGINS.HORIZONTAL")
@@ -282,6 +289,7 @@
 			_crewId =					"_crewId"
 			_selectedShipClass =		"_selectedShipClass"
 			_crewInfoMouseInstruction =	'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_SLOT_INFOTIP_OPEN'
+			_isFromSlot =				true
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -344,20 +352,20 @@
 			(width = "CREW_SKILL_SLOT_SIZE")
 			(height = "CREW_SKILL_SLOT_SIZE")
 			(backgroundSize = "fill")
-			
 			(bind backgroundImage "	talentEntity	? 'url:../service_kit/frames/64px_not_empty_field.png' :
-									isMaxLevel		? 'url:../service_kit/frames/64px_empty_field.png'
+									isMaxLevel		? talentsAvailableItems.length == 0		? 'url:../service_kit/frames/64px_orange.png'
+																							: 'url:../service_kit/frames/64px_empty_field.png'
 													: 'url:../service_kit/frames/64px_not_empty_field.png'")
 			(alpha = "slotFrameAlpha")
 		)
 
 		(block
-			(bind visible "!talentEntity && !isMaxLevel")
+			(bind visible "!talentEntity")
 
 			(style
-				(width = 32px)
-				(height = 32px)
-				(backgroundImage = 'url:../service_kit/icons/icon_lock_small.png')
+				(bind width				"isMaxLevel ? 60px : 32px")
+				(bind height			"isMaxLevel ? 60px : 32px")
+				(bind backgroundImage	"isMaxLevel ? 'url:../service_kit/frames/60px_add_item.png' : 'url:../service_kit/icons/icon_lock_small.png'")
 			)
 		)
 
@@ -375,7 +383,7 @@
 	)
 
 	(macro MOUSE_HANDLER
-		_soundSet =	"'button_flat'"
+		_soundSet = "isClickable ? 'button_flat' : ''"
 	)
 )
 
@@ -425,9 +433,8 @@
 
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var resourceEntity:dhEntity = "$dh.getSingleEntity(CC.accountResource)")
-		(var accountResourceComponent:dhComponent = "resourceEntity.accountResource")
-		(var operationsAccountLocked:bool = "accountResourceComponent.operationsLocked" (event "accountResourceComponent.evOperationsLockChanged"))
+		(var resourceEntity:dhEntity =		"getSingleEntity(CC.accountResource)")
+		(var operationsAccountLocked:bool =	"resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
 
 		(var crewTalentEntity:dhEntity = "getPrimaryEntity(CC.crewUniqueSkill, _crewTalentId)")
 
@@ -646,7 +653,8 @@
 	)
 )
 
-(def element CrewTalentTooltip (_id:str, _selectedShipClass:str, _crewId:number, _crewInfoMouseInstruction:str='', _isCrewInfoInfotipItemTooltip:bool=false, _isInstalled:bool=false, _isNoMentorOnAccount:bool=false)
+(def element CrewTalentTooltip (_id:str, _selectedShipClass:str, _crewId:number, _crewInfoMouseInstruction:str='', _isCrewInfoInfotipItemTooltip:bool=false, _isInstalled:bool=false,
+								_isNoMentorOnAccount:bool=false, _isFromSlot:bool=false)
 	(scope
 		(struct windowQueue =	PULL_WINDOW_QUEUE())
 		(var isUnlockTalentMW:bool =	"isIn('ModalWindowUnlockCrewSkill', windowQueue.queue)")
@@ -691,9 +699,13 @@
 
 		(var isPriceShown:bool = "!isLearned && !isDenyTalentMW && !availabilityAttention")
 
-		(var mouseInstruction:dict = "!availabilityAttention && _crewInfoMouseInstruction	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
-																								text:			_crewInfoMouseInstruction }
-																							: null")
+		(var mouseInstruction:dict =			"!availabilityAttention && _crewInfoMouseInstruction	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																											text:			_crewInfoMouseInstruction }
+																										: null")
+		(var cnxtMenuMouseInstruction:dict =	"mouseInstruction	? _isFromSlot && uniqueSkillEntity	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT,
+																											text:			'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_DENY' }
+																										: null
+																	: null")
 	)
 
 	(style (width = 320px) (hitTest = false))
@@ -814,57 +826,26 @@
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "mouseInstruction"))
 		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "mouseInstruction")
-				(args
-					_unifiedStatus =	"mouseInstruction.unifiedStatus"
-					_text =				"mouseInstruction.text"
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="toBool(mouseInstruction)"
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="toBool(mouseInstruction)"
+				(controller $Instance renderer='TooltipSystemStatusLine'
+					(bind enabled "mouseInstruction")
+					(args
+						_unifiedStatus =	"mouseInstruction.unifiedStatus"
+						_text =				"mouseInstruction.text"
+					)
 				)
 			)
-		)
-	)
-)
 
-(def element BarracksForCrewTooltip ()
-	(scope
-		(var dockEntity:dhEntity = "getSingleEntity(CC.dockDataMarker)")
-		(var crewsSingleton:dhComponent = "dockEntity.crewData")
-
-		(var barracksCapacity:number = "crewsSingleton.barracksCapacity" (event "crewsSingleton.evUpdate"))
-		(var crewsInBarracks:number = "crewsSingleton.crewsInBarracks" (event "crewsSingleton.evUpdate"))
-		(var currentValueFreePlacesInBarracks:number = "barracksCapacity - crewsInBarracks")
-
-		(var attributesNeutral:array = "[	{	attributeIDS: 'IDS_TOOLTIP_FREE_PLACES_IN_BARRACKS',
-												measuredValue: currentValueFreePlacesInBarracks,
-												measure: '',
-												category: 'neutral' },
-											{	attributeIDS: 'IDS_TOOLTIP_CREWS_IN_BARRACKS',
-												measuredValue: crewsInBarracks,
-												measure: '',
-												category: 'neutral' },
-											{	attributeIDS: 'IDS_TOOLTIP_BARRACKS_CAPACITY',
-												measuredValue: barracksCapacity,
-												measure: '',
-												category: 'neutral' } ]")
-	)
-	(style (width = 320px) (hitTest = false))
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-
-	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemSecondaryHeaderText
-			_headerText = 'IDS_BARRACKS_LIST_TITLE'
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = 'IDS_TOOLTIP_BARRACKS_LIST_DESC'
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemParamsModifiersList
-			_attributesNeutral = "attributesNeutral"
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="toBool(cnxtMenuMouseInstruction)"
+				(controller $Instance renderer='TooltipSystemStatusLine'
+					(bind enabled "cnxtMenuMouseInstruction")
+					(args
+						_unifiedStatus =	"cnxtMenuMouseInstruction.unifiedStatus"
+						_text =				"cnxtMenuMouseInstruction.text"
+					)
+				)
+			)
 		)
 	)
 )

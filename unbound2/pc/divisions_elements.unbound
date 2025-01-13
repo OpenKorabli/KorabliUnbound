@@ -30,17 +30,17 @@
 	)
 )
 
-(def element ExcludedShipsRestrictionBlock (_headerText:str, _shipsArray:array)
+(def element TooltipSystemExcludedShipsRestrictionBlock (_headerText:str, _shipsArray:array)
 	(style (width = 100%))
 
-	(element StatusLine
+	(element TooltipSystemStatusLine
 		_text = "_headerText"
 		_width = 100%
 	)
 
 	(element TooltipSystemHorizontalDivider)
 
-	(htile
+	(block
 		(style (width = 100%))
 		(controller $Repeat renderer='SeasonShipRestrictionLine'
 			(bind count "_shipsArray.length")
@@ -52,29 +52,31 @@
 	)
 )
 
-(def element ConcreteShipsRestrictionBlock (_headerText:str, _shipsArray:array)
+(def element TooltipSystemConcreteShipsRestrictionBlock (_headerText:str, _shipsCollection:dhCollection)
+	(scope
+		(var shipsCollectionLen:number = "_shipsCollection.length")
+	)
 	(style (width = 100%))
 
-	(element StatusLine
+	(element TooltipSystemStatusLine
 		_text = "_headerText"
 		_width = 100%
 	)
 
 	(element TooltipSystemHorizontalDivider)
-	(htile
+	(block
 		(style (width = 100%))
-		(controller $Repeat renderer='SeasonShipRestrictionLine'
-			(bind count "_shipsArray.length")
+		(controller $Repeat renderer='SeasonShipCollectionRestrictionLine'
+			(bind count "shipsCollectionLen")
 			(args
-				_length = "_shipsArray.length"
-				_entityId = "_shipsArray[$index].id"
+				_shipsCollection = "_shipsCollection"
 			)
 		)
 	)
 )
 
 
-(def element SeasonShipsRestrictionBlock (_headerText:str, _shipsArray:array)
+(def element TooltipSystemSeasonShipsRestrictionBlock (_headerText:str, _shipsArray:array)
 	(scope
 		(var preBattlePlayerSimpleEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
 		(var preBattlePlayerSimpleComponent:dhComponent = "preBattlePlayerSimpleEntity.preBattlePlayerSimple" (event "preBattlePlayerSimpleEntity.evAdded") (event "preBattlePlayerSimpleEntity.evRemoved"))
@@ -88,7 +90,7 @@
 
 	(style (width = 100%))
 
-	(element StatusLine
+	(element TooltipSystemStatusLine
 		_text = "_headerText"
 		_width = 100%
 	)
@@ -119,7 +121,7 @@
 
 	(hblock
 		(style (width = 100%))
-		(htile
+		(block
 			(style (width = 100%))
 			(controller $Repeat renderer='SeasonShipRestrictionLine'
 				(bind count "shipsIds.length")
@@ -141,57 +143,83 @@
 
 (def element SeasonShipRestrictionLine (_length:number, _entityId:number, _chosenShipIdsDict:dict={})
 	(scope
-		(var filterEntity:gfx = "$datahub.getEntity(_entityId)")
+		(var filterEntity:dhEntity = "getEntity(_entityId)")
 		(var shipId:number = "toNumber(filterEntity.shipFilterItem.field)" (event "filterEntity.shipFilterItem.evUpdate"))
-		(macro PULL_SHIP_SCOPE "shipId" "'shipEntity'" "'shipInfo'")
 
-		(var textCommaColor:number = "shipInfo.isFarming || shipInfo.uiSpecial	? SC.Ui_styles.SERVICE_COLORS.YELLOW
-																				: SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
 
-		(var textAlpha:number = "	_chosenShipIdsDict[shipId]								? 0.3 :
-									textCommaColor == SC.Ui_styles.SERVICE_COLORS.YELLOW 	? 1
-																							: TA")
-		(var isCommaShown:bool = "_length - 1 != $index")
+		(var textAlpha:number = "	_chosenShipIdsDict[shipId]					? 0.3 :
+									shipInfo.isFarming || shipInfo.uiSpecial 	? 1
+																				: TA")
 	)
 
 	(style
-		(flow = "horizontal")
 		(maxWidth = 100%)
 		(height = 27px)
 		(align = "center|middle")
 		(marginRight = "SXS")
+		(backgroundColor = "NO_COLOR")
 	)
 
-	(block
-		(style (backgroundColor = "NO_COLOR"))
-		(element ShipLineItemNM
+	(element ShipLineItemNM
+		_shipId = "shipId"
+		_alpha = "textAlpha"
+		_withFlag = true
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipExtendedTooltip')
+		(args
 			_shipId = "shipId"
-			_alpha = "textAlpha"
+			_hasShipImage = true
 		)
-
-		(controller $Tooltip
-			(renderer = 'ShipExtendedTooltip')
-			(args
-				_shipId = "shipId"
-				_hasShipImage = true
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
-	)
-	(tf
-		(bind visible "isCommaShown")
-		(class $TextDefaultBoldNM)
-		(style (marginLeft = "XS") (bind textColor "textCommaColor"))
-		(bind alpha "textAlpha")
-		(text = ',')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )
 
-(def element SeasonShipRestrictionsInfotip (_limitedShips:array, _excludedShips:array, _concreteShips:array)
+(def element SeasonShipCollectionRestrictionLine (_shipsCollection:dhCollection, _chosenShipIdsDict:dict={})
+	(scope
+		(var filterEntity:dhEntity = "_shipsCollection[$index]")
+		(var shipId:number = "toNumber(filterEntity.shipFilterItem.field)" (event "filterEntity.shipFilterItem.evUpdate"))
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+
+		(var textAlpha:number = "	_chosenShipIdsDict[shipId]					? 0.3 :
+									shipInfo.isFarming || shipInfo.uiSpecial 	? 1
+																				: TA")
+	)
+
+	(style
+		(maxWidth = 100%)
+		(height = 27px)
+		(align = "center|middle")
+		(marginRight = "SXS")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(element ShipLineItemNM
+		_shipId = "shipId"
+		_alpha = "textAlpha"
+		_withFlag = true
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipExtendedTooltip')
+		(args
+			_shipId = "shipId"
+			_hasShipImage = true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element SeasonShipRestrictionsInfotip (_limitedShips:array, _excludedShips:array, _concreteShipsCollection:dhCollection)
 	(scope
 		(var isLimitedShipsVisible:bool = "_limitedShips.length > 0")
 		(var isExcludedShipsVisible:bool = "_excludedShips.length > 0")
-		(var isConcreteShipsVisible:bool = "_concreteShips.length > 0")
+		(var isConcreteShipsVisible:bool = "_concreteShipsCollection.length > 0")
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 
 		(var contentScrollHeight:number = 0)
@@ -244,7 +272,7 @@
 				(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 					(block
 						(style (width = 100%))
-						(controller $Instance renderer='SeasonShipsRestrictionBlock'
+						(controller $Instance renderer='TooltipSystemSeasonShipsRestrictionBlock'
 							(bind enabled "isLimitedShipsVisible")
 							(args
 								_shipsArray = "_limitedShips"
@@ -261,7 +289,7 @@
 					)
 					(block
 						(style (width = 100%))
-						(controller $Instance renderer='ExcludedShipsRestrictionBlock'
+						(controller $Instance renderer='TooltipSystemExcludedShipsRestrictionBlock'
 							(bind enabled "isExcludedShipsVisible")
 							(args
 								_shipsArray = "_excludedShips"
@@ -276,10 +304,10 @@
 							(bind enabled "(isLimitedShipsVisible || isExcludedShipsVisible) && isConcreteShipsVisible")
 						)
 					)
-					(controller $Instance renderer='ConcreteShipsRestrictionBlock'
+					(controller $Instance renderer='TooltipSystemConcreteShipsRestrictionBlock'
 						(bind enabled "isConcreteShipsVisible")
 						(args
-							_shipsArray = "_concreteShips"
+							_shipsCollection = "_concreteShipsCollection"
 							_headerText = 'IDS_CONCRETE_SHIPS_HEADER'
 						)
 					)
@@ -1118,7 +1146,7 @@
 													:	!isSelfPlayer && ((isSelfPlayerOwner && ! isSelfPreBattlePlayerSimpleInBattle) || isChatServerAvailable)")
 
 		(var isTrainingObserver:bool = "teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
-		(var isShipLineVisible:bool = "!_isHiddenShip && shipId && (isReady || isInBattle)")
+		(var isShipLineVisible:bool = "!_isHiddenShip && shipId && (isReady || isInBattle && !isTrainingObserver)")
 
 		(var formationPlayerContextMenuVisible:bool = false)
 		
@@ -1234,16 +1262,13 @@
 		(block
 			(style (marginLeft = 3px) (marginTop = 3px) (marginRight = 6px))
 			(bind name "'participantDivisionPlayer_' + teamId + '_' + nickName")
-			
-			(controller $Instance renderer='FormationPlayerIcon'
-				(bind enabled "!isTrainingObserver")
-				(args
-					_isCommander = "isCommanderOwner || isTeamCommander"
-					_isMercenary = "isMercenary"
-					_isReady = "isReady"
-					_isInBattle = "isInBattle"
-					_isOtherTeam = "selfTeamId != teamId"
-				)
+
+			(element FormationPlayerIcon
+				_isCommander = "isCommanderOwner || isTeamCommander"
+				_isMercenary = "isMercenary"
+				_isReady = "isReady"
+				_isInBattle = "isInBattle"
+				_isOtherTeam = "selfTeamId != teamId"
 			)
 		)
 		(tf
@@ -1290,9 +1315,9 @@
 											: selfVoiceChatEnabled	? playerVoiceChatIsEnabled
 																	: true")
 
-		(var bgImage:str = "!isChatEnabled		? 'swf:../service_kit/chat_channels/chat_svg/chat_svg.swf:voice_chat_disabled' :
-							isMuted				? 'swf:../service_kit/chat_channels/chat_svg/chat_svg.swf:voice_chat_muted' :
-							isSpeaking			? 'swf:../service_kit/chat_channels/chat_svg/chat_svg.swf:voice_chat_speak'
+		(var bgImage:str = "!isChatEnabled		? 'swf:../service_kit/chat_channels_svg/chat_channels_svg.swf:voice_chat_disabled' :
+							isMuted				? 'swf:../service_kit/chat_channels_svg/chat_channels_svg.swf:voice_chat_muted' :
+							isSpeaking			? 'swf:../service_kit/chat_channels_svg/chat_channels_svg.swf:voice_chat_speak'
 												: ''")
 	)
 	(style

@@ -1,0 +1,530 @@
+(def element ModalWindowTrials ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evShowTrialInfo)
+		(var trialCollection:dhCollection = "getCollectionByPath(CC.operation, 'byStatus.weekly.trials.sorted')")
+		(var selectedTrialCollection:dhCollection = "getCollectionByPath(CC.operation, 'byStatus.weekly.trials.selectedTrials')")
+
+		(var hasTrials:bool = "trialCollection.length > 0")
+
+		(var preselectedBattleTypeEntityId:number = "	$event							? $event._battleTypeEntityId :
+														selectedTrialCollection.length	? selectedTrialCollection[0].id:
+														hasTrials						? trialCollection[0].id
+																						: 0" watch=false (event "evShowTrialInfo"))
+	)
+
+	(name = 'ModalWindowTrials')
+
+	(class $Fullsize)
+	(style (align = "center"))
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element AnimatedBackground
+			_selectedCategory =	'trials'
+			_type =				"SC.Ui_styles.ANIMATED_BG.DEFAULT"
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.3
+				duration = 0.15
+				from = "{ alpha: 1 }"
+				to = "{ alpha: 0 }"
+				easing = "Easing.line"
+				(event "startHide")
+			)
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_CHOOSE_BATTLETYPE_HEADER'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_methods = "[{ type: 'inputMapping.onRequest', name: 'closeTrials', args: {} }]"
+		)
+	)
+
+	(hblock
+		(bind visible "hasTrials")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style (marginTop = "{720:LM, 1080:XLM}"))
+		(block
+			(style
+				(width = 300px)
+				(padding = 1px)
+				(backgroundColor = "0x1aFFFFFF")
+				(vgap = 1px)
+			)
+			(controller $Repeat renderer='ModalWindowTrialCard'
+				(bind enabled "hasTrials")
+				(bind count "trialCollection.length")
+				(args
+					_battleTypeEntityId = "trialCollection[$index].id"
+					_preselectedBattleTypeEntityId = "preselectedBattleTypeEntityId"
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = "{1280:769px, 1920:996px}")
+				(height = "{720:494px, 1080:640px}")
+				(marginLeft = "{1280:MS, 1920:LS}")
+				(padding = 1px)
+				(backgroundColor = "0x19FFFFFF")
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(alpha = 0.1)
+					(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+					(scale9grid = 2)
+				)
+			)
+
+			(controller $Instance renderer='ModalWindowTrialSelectedContent'
+				(bind enabled "hasTrials")
+				(args
+					_preselectedBattleTypeEntityId = "preselectedBattleTypeEntityId"
+				)
+			)
+		)
+	)
+)
+
+(def element ModalWindowTrialCard (_battleTypeEntityId:number, _preselectedBattleTypeEntityId:number)
+	(scope
+		(event evMouseDoubleClick)
+		(macro MOUSE_HANDLER_SCOPE)
+		(var battleTypeEntity:dhEntity = "getEntity(_battleTypeEntityId)")
+		(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
+		(var battleType:str = "battleTypeComponent.type")
+		(var battleTypeGameParamId:number = "battleTypeComponent.battleTypeGameParamId")
+		(var isSelected:bool = "battleTypeComponent.selected" (event "battleTypeComponent.evSelectionChanged"))
+		(var isPreselected:bool = "_preselectedBattleTypeEntityId == _battleTypeEntityId")
+
+		(var operationBattleComponent:dhComponent =	"battleTypeEntity.operation")
+		(var gpName:str = "operationBattleComponent.gpName" (event "operationBattleComponent.evStatusChanged"))
+		(var battleHeaderIDS:str = "'IDS_' + toUpper(gpName) + '_NAME'")
+
+		(var isNewBattle:bool = "battleTypeEntity.hasComponent(CC.newItem)")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isPreselected ? '' : 'quest_item'")
+
+	(bindcall externalCall "isNewBattle ? 'inputMapping.onAction' : ''" "['makeSeen', {entityId: battleTypeEntity.id}]" watch=false (event "evClicked"))
+	(bindcall externalCall "isNewBattle ? 'inputMapping.onAction' : ''" "['featureSeen',  {featureIndex: SC.Common.ACCOUNT_FEATURE.TRIAL_PVE}]" watch=false (event "evClicked"))
+
+	(dispatch evShowTrialInfo dir="EventDirection.UP" args="{_battleTypeEntityId: _battleTypeEntityId}" (event "evClicked"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setBattleType', { battleType: battleType, battleTypeGameParamId: battleTypeGameParamId }]" watch=false (event "evMouseDoubleClick"))
+	(bindcall externalCall "'inputMapping.onRequest'" "['closeModalSelectBattleType', {}]" watch=false (event "evMouseDoubleClick"))
+
+	(style
+		(width = 100%)
+		(height = 65px)
+		(bind backgroundColor "isPreselected ? 0x4dFFFFFF : 0x73000000")
+		(align = "middle")
+		(flow = "horizontal")
+	)
+
+	(block 
+		(bind visible "isPreselected")
+		(class $MiddleVHAbsolutely)
+		(style
+			(width = 300px)
+			(height = 67px)
+			(alpha = 0.75)
+			(backgroundImage = 'url:../service_kit/frames/two_pixel_frame.png')
+			(scale9grid = 3)
+		)
+	)
+
+	(block 
+		(bind visible "isSelected && _preselectedBattleTypeEntityId != _battleTypeEntityId")
+		(style
+			(position = "absolute")
+			(width = 4px)
+			(height = 100%)
+			(backgroundColor = "0x4dFFFFFF")
+		)
+	)
+
+	(block 
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(bind alpha "rollOver ? 0.05 : 0")
+		)
+		(doubleClickEnabled = true)
+		(dispatch evMouseDoubleClick on='doubleClick')
+	)
+
+	(block
+		(style
+			(width = 44px)
+			(height = 44px)
+			(marginLeft = "SXS")
+			(marginRight = "SXS")
+			(bind alpha "isPreselected ? 1 : 0.3")
+			(bind backgroundImage "'url:../events/battle_challenges/modal_chooser/' + gpName + '.png'")
+			(backgroundSize = "fill")
+		)
+	)
+
+	(tf
+		(class $TextDefaultBold17NM)
+		(style
+			(width = 100%)
+			(marginRight = "SXS")
+			(alpha = "TA")
+			(multiline = false)
+			(elideMode = true)
+		)
+		(bind text "battleHeaderIDS")
+	)
+	
+	(block
+		(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNewBattle")
+		(style (position = "absolute") (top = -10px) (right = 1px))
+		(element MarkerNew)
+	)
+)
+
+(def element ModalWindowTrialSelectedContent (_preselectedBattleTypeEntityId:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var battleTypeEntity:dhEntity = "getEntity(_preselectedBattleTypeEntityId)")
+		(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
+		(var battleType:str =				"battleTypeComponent.type")
+		(var battleTypeGameParamId:number = "battleTypeComponent.battleTypeGameParamId")
+
+		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
+
+		(var operationBattleComponent:dhComponent =	"battleTypeEntity.operation")
+		(var gpName:str = "operationBattleComponent.gpName" (event "operationBattleComponent.evStatusChanged"))
+
+		(var battleHeaderIDS:str = "'IDS_' + toUpper(gpName) + '_NAME'")
+
+		(var briefingLength:dict = "{	PCVT001_DAMAGE_PRIME: 2,
+										PCVT002_CITADEL_PRIME: 2,
+										PCVT003_FRAGS_PRIME: 2}")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(class $Fullsize)
+
+	(style
+		(bind backgroundImage "'url:../events/battle_challenges/modal_chooser/' + gpName + '_BG.png'")
+		(backgroundSize = "fill")
+		(padding = "L")
+	)
+
+	(hblock 
+		(style
+			(width = 100%)
+			(align = "middle")
+		)
+		(block
+			(style
+				(width = 80px)
+				(height = 80px)
+				(marginRight = "S")
+				(marginLeft = -10)
+				(bind backgroundImage "'url:../events/battle_challenges/modal_chooser/' + gpName + '_BIG.png'")
+				(backgroundSize = "fill")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold30NM)
+			(style
+				(width = 100%)
+				(alpha = "TA")
+			)
+			(bind text "battleHeaderIDS")
+		)
+	)
+
+	(block 
+		(style
+			(width = 100%)
+			(marginTop = "L")
+		)
+		(tf
+			(class $TextDefaultBold23NM)
+			(style
+				(width = 100%)
+				(alpha = "TA")
+				(marginBottom = "M")
+			)
+			(text = 'IDS_CONDITIONS')
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='ShipRestrictions'
+				(bind enabled "hasRestrictions")
+				(args
+					_restrictionsEntityId = "restrictionEntity.id"
+					_isFromTooltip = true
+				)
+			)
+		)
+	)
+
+	(block 
+		(style
+			(width = 100%)
+			(marginTop = "L")
+		)
+		(tf
+			(class $TextDefaultBold23NM)
+			(style
+				(width = 100%)
+				(marginBottom = "M")
+				(alpha = "TA")
+			)
+			(text = 'IDS_JUST_GOAL')
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(alpha = "TC")
+			)
+			(bind text "'IDS_' + gpName + '_TASK_DESCR'")
+		)
+	)
+
+	(block 
+		(style
+			(width = 100%)
+			(marginTop = "L")
+		)
+		(tf
+			(class $TextDefaultBold23NM)
+			(style
+				(width = 100%)
+				(marginBottom = "M")
+				(alpha = "TA")
+			)
+			(text = 'IDS_PVE_OPERATION_BRIEFING')
+		)
+		(block
+			(style
+				(vgap = "M")
+			)
+			(controller $Repeat renderer='ModalWindowTrialBriefingBullet'
+				(bind count "briefingLength[gpName]")
+				(args
+					_text="'IDS_' + gpName + '_BRIEFING_' + $index"
+				)
+			)
+		)
+	)
+	(block
+		(class $Fullsize)
+		(style (align = "right|bottom"))
+
+		(element DefaultButton
+			_label =			'IDS_CHOOSE'
+			_width =			160
+			_size =				"SIZE.MEDIUM"
+			_focusIndex =		0
+			_defaultFocused =	true
+			_methods = "[		{	type: 'inputMapping.onAction',
+									name: 'setBattleType',
+									args: { battleType: battleType, battleTypeGameParamId: battleTypeGameParamId }
+								},
+								{	type: 'inputMapping.onRequest',
+									name: 'closeModalSelectBattleType',
+									args: {}
+								}
+							]"
+		)
+	)
+)
+
+(def element ModalWindowTrialBriefingBullet (_text:str)
+	(style (flow = "horizontal"))
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(alpha = "TC")
+			(marginRight = "S")
+		)
+		(text = 'IDS_BULLET')
+	)
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(width = 376px)
+			(alpha = "TC")
+		)
+		(bind text "_text")
+	)
+)
+
+(def element TrialBattleTypeRenderer ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE "'fullButton_'")
+		(macro MOUSE_HANDLER_SCOPE "'battleType_'")
+
+		(var battleType:str = "SC.Common.OPERATION_BATTLE_TYPE.VALUE_TO_NAME[SC.Common.OPERATION_BATTLE_TYPE.TRIAL]")
+
+		(var selectedTrialsCollection:dhCollection = "getCollectionByPath(CC.operation, 'byStatus.weekly.trials.selectedTrials')")
+		(var isSelected:bool = "selectedTrialsCollection.length > 0")
+		(var selectedAnimationElement:str = "isSelected ? 'SelectedBattleTypeAnimation' : ''")
+
+		(var newTrialsCollection:dhCollection = "getCollectionByPath(CC.operation, 'byStatus.weekly.trials.newTrials')")
+		(var isNewBattle:bool = "newTrialsCollection.length > 0")
+
+		
+		(var accountLevelEntity:dhEntity = "getSingleEntity(CC.accountLevel)")
+		(var curAccountLevel:number = "accountLevelEntity.accountLevel.level ?: 0" (event "accountLevelEntity.accountLevel.evLevelChanged"))
+		(var showBattleSubheader:bool = "curAccountLevel < SC.Common.ACCOUNT_LEVEL.WEB_STORAGE")
+
+		(var textAlpha:number = "	isSelected 				? TA :
+									battleType_rollOver 	? 0.8
+															: TC")
+	)
+	(name = 'typeItemTrial')
+
+	(bindcall externalCall "'sound.playSetSoundDirect'" "['battle_type_choose', SoundEvent.OVER]" init=false watch=false (event "battleType_evRollOver"))
+	(bindcall externalCall "'sound.playSetSoundDirect'" "['battle_type_choose', battleType + 'Battle_click']" init=false watch=false (event "battleType_evClicked"))
+	(bindcall externalCall "'inputMapping.onRequest'" "['showTrials', {}]" init=false watch=false (event "battleType_evClicked"))
+
+	(style
+		(width = "BATTLE_TYRES_SIZE")
+		(marginLeft = "BATTLE_TYRES_MARGIN")
+		(marginRight = "BATTLE_TYRES_MARGIN")
+		(marginBottom = "M")
+		(visualOffsetY = 10px)
+		(alpha = 0)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER "'fullButton_'")
+
+	(controller $Animation
+		(bindcall play
+			id = 'trialBattleTypeRenderer'
+			delay = 0.15
+			duration = 0.15
+			to = "{ alpha: 1, visualOffsetY: 0px }"
+			easing = "Easing.quad_out"
+			action = "kill"
+			on = 'addedToStage'
+			(event "startShow")
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(block
+			(style (width = 100%) (align = "center") (backgroundColor = "NO_COLOR"))
+
+			(macro MOUSE_EVENTS_DISPATCHER "'battleType_'")
+
+			(block
+				(bind colorTransform "fullButton_rollOver && !battleType_mouseDown	? COLOR_TRANSFORM_BATTLE_TYPE_ROLLOVER : {}")
+				(class $BattleTypeIconSize)
+				(style (marginBottom = "M"))
+
+				
+				(block
+					(class $MiddleVHAbsolutely)
+					(controller $Instance
+						(bind enabled "selectedAnimationElement != ''")
+						(bind renderer "selectedAnimationElement")
+					)
+				)
+
+				
+				(block
+					(class $FullsizeAbsolute)
+					(style (macro DESATURATION_DEFAULT "true"))
+					(element BattleTypeIcon _iconBattleName = "battleType")
+				)
+
+				
+				(block
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNewBattle")
+					(style (position = "absolute") (top = -10px) (right = 1px))
+					(element MarkerNew)
+				)
+			)
+
+			(tf
+				(class $TextDefaultBold19NM)
+				(style (width = 100%) (textAlign = "center") (leading = -3))
+				(bind alpha "textAlpha")
+				(text = "'IDS_' + battleType")
+			)
+
+			(block
+				(bind visible "showBattleSubheader")
+				(style (width = 100%) (marginTop = "SXS"))
+				(tf
+					(class $TextDefault17NM)
+					(style (width = 100%) (textAlign = "center"))
+					(bind alpha "textAlpha")
+					(text = 'IDS_AGAINST_BOTS')
+				)
+			)
+
+			(controller $Tooltip
+				(renderer='TrialBattleTypeTooltip')
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute") (right = 0px)
+			(alpha = "fullButton_rollOver ? 1 : 0")
+			(visualOffsetY = "fullButton_rollOver ? 0px : 5px")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration=0.1
+				from={alpha: 0, visualOffsetY: 5px}
+				to={alpha: 1, visualOffsetY: 0px}
+				reverse="!fullButton_rollOver"
+				(bind trigger "fullButton_rollOver")
+			)
+		)
+
+		(element DefaultButton
+			_type = "SC.Ui_styles.BUTTON_TYPE.ICON"
+			_icon = "SC.Ui_styles.BUTTON_ICON.INFO"
+			_methods = "[{	type: 'inputMapping.onRequest',
+							name: 'showBattleTypeRules',
+							args: { _rulesType: 'trials' }}]"
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(args _text = 'IDS_TOOLTIP_BATTLE_RULES_DESCRIPTION')
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			(macro TOOLTIP_HIDE_ON_EVENT "startHide")
+		)
+	)
+)

@@ -66,7 +66,7 @@
 )
 
 (def struct PULL_ROUTE (_id:str)
-	(var routeEntity:gfx = "$datahub.getPrimaryEntity(CC.route, _id)")
+	(var routeEntity:dhEntity = "getPrimaryEntity(CC.route, _id)")
 	(var isActive:bool = "routeEntity.route.isActive" (event "routeEntity.route.evIsActiveChanged"))
 )
 
@@ -102,17 +102,17 @@
 )
 
 (def struct GET_PREF_BOOL (_option:expression)
-	(var preferenceComponent:gfx = "$datahub.getPrimaryEntity(CC.preference, _option).preference")
+	(var preferenceComponent:dhComponent = "getPrimaryEntity(CC.preference, _option).preference")
 	(var value:bool = "toBool(preferenceComponent.value)" (event "preferenceComponent.evValueChanged"))
 )
 
 (def struct GET_PREF_NUMBER (_option:expression)
-	(var preferenceComponent:gfx = "$datahub.getPrimaryEntity(CC.preference, _option).preference")
+	(var preferenceComponent:dhComponent = "getPrimaryEntity(CC.preference, _option).preference")
 	(var value:number = "toNumber(preferenceComponent.value)" (event "preferenceComponent.evValueChanged"))
 )
 
 (def struct GET_PREF_STR (_option:expression)
-	(var preferenceComponent:gfx = "$datahub.getPrimaryEntity(CC.preference, _option).preference")
+	(var preferenceComponent:dhComponent = "getPrimaryEntity(CC.preference, _option).preference")
 	(var value:str = "toString(preferenceComponent.value)" (event "preferenceComponent.evValueChanged"))
 )
 
@@ -129,10 +129,36 @@
 	(var alpha:number = "_alphaBannerVariants[state]")
 )
 
+(def struct SSE_TASKS_STATUS_FLAGS (_sseOpenEnded:dhComponent, _sseCorePersistent:dhComponent, _sseCore:dhComponent, _isManualRewardClaim:bool=false, _sseGlobal:dhComponent=null)
+	(var isPostBattle:bool =	"toBool(_sseCorePersistent)")
+	(var isDone:bool =			"isPostBattle	? _sseCorePersistent.isDone		: _sseCore.isDone"		(event "_sseCore.evChanged"))
+	(var isFailed:bool =		"isPostBattle	? false							: _sseCore.isFailed"	(event "_sseCore.evChanged"))
+	(var isLocked:bool =		"isPostBattle	? false							: _sseCore.isLocked"	(event "_sseCore.evChanged"))
+	(var isClaimed:bool =		"isPostBattle	? _sseCorePersistent.isClaimed	: _sseCore.isClaimed"	(event "_sseCore.evChanged") (event "_sseCorePersistent.evIsClaimedChanged"))
+	(var isFeatured:bool =		"isPostBattle	? _sseCorePersistent.isFeatured	: _sseCore.isFeatured"	(event "_sseCore.evChanged"))
+	(var isGlobalSse:bool = 	"toBool(_sseGlobal)")
+
+	(var isRewarded:bool =		"_sseOpenEnded.isRewarded" (event "_sseOpenEnded.evChanged"))
+	(var isReceived:bool =		"_isManualRewardClaim || isGlobalSse 	? isClaimed :
+								 toBool(_sseOpenEnded)					? isRewarded
+																		: isDone")
+
+	(var hasGlobalSseProgress:bool = "_sseGlobal.personalProgress > 0" (event "_sseGlobal.evChanged"))
+	(var isNotParticipatedInGlobalSse:bool = "isDone && isGlobalSse && (!_isManualRewardClaim && !isClaimed || _isManualRewardClaim && !hasGlobalSseProgress)")
+	(var isInactive:bool = "isReceived || isFailed || isLocked || isNotParticipatedInGlobalSse")
+
+)
+
 (def struct PULL_WINDOW_QUEUE ()
 	(var entity:dhEntity =			"getSingleEntity(CC.windowManager)")
 	(var component:dhComponent =	"entity.windowManager")
 	(var queue:array =				"component.windowQueue ?: []" (event "component.evWindowQueueChanged"))
+)
+
+(def struct ADAPTIVE_FONT_SIZE(_minStageSize:number, _maxStageSize:number, _curStageSize:number, _fontSizes:array, _isBold:bool=false)
+	(var inverseLerp:number = "(_curStageSize - _minStageSize) / (_maxStageSize - _minStageSize)")
+	(var index:number = "floor(inverseLerp * (_fontSizes.length - 1))")
+	(var value:str = "'$TextDefault' + (_isBold ? 'Bold' : '') +toString(_fontSizes[index]) + 'NM'")
 )
 
 (def struct GET_TEAM_NAME (_isChallenge:bool=false)
@@ -181,4 +207,12 @@
 	(var shipTTX:dict = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
 	(var isSwitchableDrum:bool = "shipTTX.artillery.drumFireMode.isSwitchable.value")
 	(var showSlot:bool = "_equipmentSlotComponentId != SC.Ships.SHIP_INFO_WEAPON_TYPE.VALUE_TO_NAME[SC.Ships.SHIP_INFO_WEAPON_TYPE.FIRE_MODE] || isSwitchableDrum")
+)
+
+(def struct SERVER_TIME ()
+	(var value:number = "currentServerSeconds()" (event "evInfrequent"))
+)
+
+(def struct COUNTDOWN (_time:number, _serverTime:number, _format:str, _declination:str='', _isLocalTime:bool=false)
+	(var value:str = "formatTime(_time - _serverTime, _format, _declination, _isLocalTime)")
 )

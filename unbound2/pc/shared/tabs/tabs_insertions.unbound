@@ -284,15 +284,13 @@
 	(scope
 		(macro USER_PREF_DATA)
 
-		(var replaysCollection:gfx = "$datahub.getCollection(CC.replayMetadata)")
-		(var lastReplaysCollection:gfx = "replaysCollection.child('lastReplays')")
-		(var savedReplaysCollection:gfx = "replaysCollection.child('savedReplays')")
-		(var lastReplaysItems:array =	"lastReplaysCollection ? lastReplaysCollection.items : []"		(event "lastReplaysCollection.evAdded") (event "lastReplaysCollection.evRemoved"))
-		(var savedReplaysItems:array =	"savedReplaysCollection ? savedReplaysCollection.items : []"	(event "savedReplaysCollection.evAdded") (event "savedReplaysCollection.evRemoved"))
+		(var replaysCollection:dhCollection = "getCollection(CC.replayMetadata)")
+		(var lastReplaysCollection:dhCollection = "replaysCollection.child('lastReplays')")
+		(var savedReplaysCollection:dhCollection = "replaysCollection.child('savedReplays')")
 
 		(var selectedTabIndex:number = "userPrefs.replaysTabIndex != null	? userPrefs.replaysTabIndex
-																			: lastReplaysItems.length == 0 && savedReplaysItems.length > 0	? SC.Common.REPLAYS_TABS.SAVED
-																																			: SC.Common.REPLAYS_TABS.LAST")
+																			: lastReplaysCollection.length == 0 && savedReplaysCollection.length > 0	? SC.Common.REPLAYS_TABS.SAVED
+																																						: SC.Common.REPLAYS_TABS.LAST")
 	)
 
 	(style (width = 0px) (align = "center"))
@@ -332,26 +330,21 @@
 
 (def element ProfileSideTabButtons (_profilePage:str)
 	(scope
-		(macro FEATURES "16")
-		
-		(var rankSeasonCollection:gfx = "$datahub.getCollection(CC.rankSeason)")
-		(var rankSeasonEntity:gfx = "	rankSeasonCollection &&
-										rankSeasonCollection.items.length > 0	? rankSeasonCollection.items[0]
-																				: null"
-										(event "rankSeasonCollection.evAdded") (event "rankSeasonCollection.evRemoved"))
-		(var newMarkerAchievementsEntity:gfx = "$datahub.getPrimaryEntity(CC.newContent,  SC.Common.CONTENT_CATEGORY.ACHIEVEMENT)")
-		(var newMarkerAchievementsCounter:number = "newMarkerAchievementsEntity ? newMarkerAchievementsEntity.newContent.count : 0" (event "newMarkerAchievementsEntity.newContent.evCountChanged"))
+		(struct rankBattkesFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.RANK_BATTLES"))
+		(var rankSeasonEntity:dhEntity = "getSingleEntity(CC.rankSeason)")
 
-		(var isRanksAvailable:bool = "feature_16 != 'locked' && rankSeasonEntity")
-		(var isNewRanksItem:bool = "rankSeasonEntity && rankSeasonEntity.hasComponent(CC.newItem)"	(event "rankSeasonEntity.evAdded")
-																									(event "rankSeasonEntity.evRemoved"))
+		(var newMarkerAchievementsEntity:dhEntity = "getPrimaryEntity(CC.newContent,  SC.Common.CONTENT_CATEGORY.ACHIEVEMENT)")
+		(var newMarkerAchievementsCounter:number = "newMarkerAchievementsEntity.newContent.count ?: 0" (event "newMarkerAchievementsEntity.newContent.evCountChanged"))
+
+		(var isRanksAvailable:bool = "rankBattkesFeature.state != 'locked' && rankSeasonEntity")
+		(var isNewRanksItem:bool = "rankSeasonEntity && rankSeasonEntity.hasComponent(CC.newItem)")
 
 		(macro PULL_NEW_CONTENT "'newCardsEntity'" 			"'newCardsComponent'" 			"'newCardsCounter'"			"SC.Common.CONTENT_CATEGORY.CARDS")
 		(macro PULL_NEW_CONTENT "'newAccountLevelsEntity'" 	"'newAccountLevelsComponent'" 	"'newAccountLevelsCounter'"	"SC.Common.CONTENT_CATEGORY.ACCOUNT_LEVELS")
 
-		(var routeCollectionEntity:gfx = "$datahub.getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.COLLECTIONS)")
-		(var routeCollectionEntityComponent:gfx = "routeCollectionEntity ? routeCollectionEntity.route : null")
-		(var isCollectionsAvailable:bool = "routeCollectionEntityComponent ? routeCollectionEntityComponent.isAvailable : false" (event "routeCollectionEntityComponent.evIsAvailableChanged"))
+		(var routeCollectionEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.COLLECTIONS)")
+		(var routeCollectionEntityComponent:dhComponent = "routeCollectionEntity.route")
+		(var isCollectionsAvailable:bool = "routeCollectionEntityComponent.isAvailable" (event "routeCollectionEntityComponent.evIsAvailableChanged"))
 	)
 
 	(style (width = 200px))
@@ -381,8 +374,8 @@
 				_isSelected = "_profilePage == SC.Ui_windows.ROUTE.RANKS"
 				_methods = "[	{type: 'inputMapping.onAction', name: 'navigateTo', args: {	route: SC.Ui_windows.ROUTE.RANKS,
 																							data: {isPortBannerClicked: false}}},
-								{type: 'inputMapping.onAction', name: 'featureSeen', args: {featureIndex: 16}}]"
-				_isNewMarker = "feature_16 == 'new' || isNewRanksItem"
+								{type: 'inputMapping.onAction', name: 'featureSeen', args: {featureIndex: SC.Common.ACCOUNT_FEATURE.RANK_BATTLES}}]"
+				_isNewMarker = "rankBattkesFeature.state == 'new' || isNewRanksItem"
 				_entityId = "rankSeasonEntity.id"
 			)
 		)
@@ -479,7 +472,7 @@
 															: 'IDS_WARNING_CANT_EQUIP_CAMOUFLAGE'"
 				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
 			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
 
@@ -549,7 +542,7 @@
 				_text =				'IDS_SERVICE_IS_UNAVAILABLE_CHAT'
 				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
 			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
 
@@ -576,32 +569,28 @@
 	(width={1280:250, 1920:320})
 )
 
-(def element SseCategoryTab (_sseTagEntity:gfx, _selectedCategoryId:str, _isSmallStageWidth:bool)
+(def element SseCategoryTab (_sseTagEntity:dhEntity)
 	(scope
-		(event evAddedToStage)
 		(macro PULL_ACTIVE_CHILD_ROUTE
 			_nodeId = "SC.Ui_windows.ROUTE.SSE"
 			_fieldActiveChild = "'activeChild'"
 		)
 
-		(var sseTagComponent:gfx = "_sseTagEntity ? _sseTagEntity.sseTag : null")
-		(var sseCategoryId:str = "sseTagComponent ? sseTagComponent.id : null" (event "sseTagComponent.evChanged"))
-		(var sseRoute:str = "sseTagComponent ? 'sse_' + sseCategoryId : ''")
-		(var sseCategoryLabel:str = "sseTagComponent ? sseTagComponent.name : null")
-		(var unclaimedTasks:number = "sseTagComponent ? sseTagComponent.unclaimedTotal : null" (event "sseTagComponent.evChanged"))
-		(var numTasks:number = "sseTagComponent ? sseTagComponent.activeAmount : null" (event "sseTagComponent.evChanged"))
+		(var sseTagComponent:dhComponent = "_sseTagEntity.sseTag")
+		(var sseCategoryId:str = "sseTagComponent.id" (event "sseTagComponent.evChanged"))
+		(var sseRoute:str = "'sse_' + sseCategoryId")
+		(var sseCategoryLabel:str = "sseTagComponent.name")
+		(var unclaimedTasks:number = "sseTagComponent.unclaimedTotal" (event "sseTagComponent.evChanged"))
+		(var numTasks:number = "sseTagComponent.activeAmount" (event "sseTagComponent.evChanged"))
 
-		(var isNewItem:bool = "_sseTagEntity && _sseTagEntity.hasComponent(CC.newItem)" (event "_sseTagEntity.evAdded") (event "_sseTagEntity.evRemoved"))
+		(var isNewItem:bool = "_sseTagEntity.hasComponent(CC.newItem)")
 
 		(var isSelected:bool = "activeChild == sseRoute")
 		(var isRewardBreadCrumbShown:bool = "unclaimedTasks && !isSelected")
 
-		(var routes:gfx = "$datahub.getCollection(CC.route)")
-		(var sseDynamicRouteEntity:gfx = "sseCategoryId ? $datahub.getPrimaryEntity(CC.route, 'sse_' + sseCategoryId) : null" (event "routes.evAdded")(event "routes.evRemoved"))
+		(var sseDynamicRouteEntity:dhEntity = "getPrimaryEntity(CC.route, 'sse_' + sseCategoryId)")
 	)
-
-	(dispatch evAddedToStage on='addedToStage')
-	(bindcall externalCall "isSelected ? 'direct.action' : ''" "['makeSeen', { entityId: _sseTagEntity.id }]" init=false watch=false (event "evAddedToStage"))
+	(bindcall externalCall "isSelected ? 'direct.action' : ''" "['makeSeen', { entityId: _sseTagEntity.id }]" init=false watch=false on='addedToStage')
 
 	(class $SSETabWidth)
 	(style (marginBottom = 1px))
@@ -619,23 +608,25 @@
 		_name = "_sseTagEntity.sseTag.id + (isSelected ? '_selected' : '')"
 	)
 
-	(controller $Tooltip
-		(bind enabled "isRewardBreadCrumbShown")
-		(renderer = 'SimpleStatusTooltip')
-		(args
-			_text = 'IDS_SSE_REWARD_AVAILABLE'
-			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE"
-		)
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
-	)
-
 	(block
 		(style
 			(hitTest = false)
 			(position = "absolute")
 			(right = 10px)
 			(top = 13px)
-			(bind alpha "isRewardBreadCrumbShown ? 1 : 0" watch=false)
+			(alpha = "isRewardBreadCrumbShown ? 1 : 0")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration	= 0.15
+				from		= "{ alpha: 0 }"
+				to			= "{ alpha: 1 }"
+				action		= "kill"
+				easing		= "Easing.quad_in"
+				reverse		= "!isRewardBreadCrumbShown"
+				(bind trigger "isRewardBreadCrumbShown")
+			)
 		)
 
 		(block
@@ -655,30 +646,17 @@
 				(backgroundImage = "'url:../service_kit/unified_status_icons/icon_' + SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE + '.png'")
 			)
 		)
-
-		(controller $Animation
-			(bindcall play
-				duration	= 0.15
-				from		= "{ alpha: 0 }"
-				to			= "{ alpha: 1 }"
-				action		= "kill"
-				easing		= "Easing.quad_in"
-				reverse		= "!isRewardBreadCrumbShown"
-				(bind trigger "isRewardBreadCrumbShown")
-			)
-		)
 	)
 )
 
-(def element ShipAcesTab (_shipAcesSeasonEntity:gfx, _isShipAcesSelected:bool, _isSmallStageWidth:bool)
+(def element ShipAcesTab (_shipAcesSeasonEntity:dhEntity, _isShipAcesSelected:bool)
 	(scope
-		(var isNewItem:bool = "_shipAcesSeasonEntity && _shipAcesSeasonEntity.hasComponent(CC.newItem)" (event "_shipAcesSeasonEntity.evAdded") (event "_shipAcesSeasonEntity.evRemoved"))
+		(var isNewItem:bool = "_shipAcesSeasonEntity.hasComponent(CC.newItem)")
 	)
-
 	(class $SSETabWidth)
 	(style (marginBottom = 1px))
 
-	(name = "'buttonShipAces'")
+	(name = 'buttonShipAces')
 
 	(element SideTabButton
 		_label = 'IDS_SHIP_ACES_COMMON_TITLE'
@@ -689,26 +667,20 @@
 	)
 )
 
-(def element OpenEndedSSETab (_sseOpenEndedEntity:gfx, _isSseOpenEndedSelected:bool, _isSmallStageWidth:bool)
+(def element OpenEndedSSETab (_sseOpenEndedEntity:dhEntity, _isSseOpenEndedSelected:bool)
 	(scope
-		(var sseOpenEndedCounterCollection:gfx = "$datahub.getCollection(CC.sseOpenEndedCounter)")
-		(var sseOpenEndedCounterEntity:gfx = "	sseOpenEndedCounterCollection &&
-												sseOpenEndedCounterCollection.items.length > 0	? sseOpenEndedCounterCollection.items[0]
-																								: null"
-												(event "sseOpenEndedCounterCollection.evAdded") (event "sseOpenEndedCounterCollection.evRemoved"))
+		(var sseOpenEndedCounterCollection:dhCollection = "getCollection(CC.sseOpenEndedCounter)")
+		(var sseOpenEndedCounterEntity:dhEntity = "sseOpenEndedCounterCollection.getEntityAtIndex(0)")
+		(var sseOpenEndedCounterComponent:dhComponent = "sseOpenEndedCounterEntity.sseOpenEndedCounter")
 
-		(var sseOpenEndedCounterComponent:gfx = "sseOpenEndedCounterEntity ? sseOpenEndedCounterEntity.sseOpenEndedCounter : null"
-												(event "sseOpenEndedCounterEntity.evAdded") (event "sseOpenEndedCounterEntity.evRemoved"))
-		(var activeSseOpenEndedTasks:number = "sseOpenEndedCounterComponent ? sseOpenEndedCounterComponent.activeAmount : null" (event "sseOpenEndedCounterComponent.evChanged"))
-
-		(var isNewItem:bool = "_sseOpenEndedEntity && _sseOpenEndedEntity.hasComponent(CC.newItem)" (event "_sseOpenEndedEntity.evAdded") (event "_sseOpenEndedEntity.evRemoved"))
+		(var activeSseOpenEndedTasks:number = "sseOpenEndedCounterComponent.activeAmount" (event "sseOpenEndedCounterComponent.evChanged"))
+		(var isNewItem:bool = "_sseOpenEndedEntity.hasComponent(CC.newItem)")
 	)
-
 	(class $SSETabWidth)
 	(style (marginBottom = 1px))
 
 	(element SideTabButton
-		_label = "'IDS_PORTAL_SSE_COMMON_TITLE'"
+		_label = 'IDS_PORTAL_SSE_COMMON_TITLE'
 		_isSelected = "_isSseOpenEndedSelected"
 		_methods = "[{ type: isNewItem ? 'inputMapping.onAction' : '', name: 'makeSeen', args: { entityId: _sseOpenEndedEntity.id } },
 					 { type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.SSE_OPEN_ENDED } }]"
@@ -718,25 +690,23 @@
 	)
 )
 
-(def element NewbieQuestsTab (_isSmallStageWidth:bool) layout=true
+(def element NewbieQuestsTab ()
 	(scope
 		(macro PULL_ACTIVE_CHILD_ROUTE
 			_nodeId = "SC.Ui_windows.ROUTE.SSE"
 			_fieldActiveChild = "'activeChild'"
 		)
-		(var activeNewbieQuestsCollection:gfx = "$datahub.getCollection(CC.newbieQuest).getChildByPath('notDone.byTier')")
-		(var activeNewbieQuestsCollectionItems:array = "activeNewbieQuestsCollection.items" (event "activeNewbieQuestsCollection.evAdded") (event "activeNewbieQuestsCollection.evRemoved"))
+		(var activeNewbieQuestsCollection:dhCollection = "getCollection(CC.newbieQuest).getChildByPath('notDone.byTier')")
 	)
-
 	(class $SSETabWidth)
 	(style (marginBottom = 1px))
 
 	(element SideTabButton
-		_label = "'IDS_NEWBIE_QUESTS_COMMON_TITLE'"
+		_label = 'IDS_NEWBIE_QUESTS_COMMON_TITLE'
 		_isSelected = "activeChild == SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS"
 		_methods = "[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS } }]"
 		_hasInlineCounter = true
-		_inlineCounter = "activeNewbieQuestsCollectionItems.length"
+		_inlineCounter = "activeNewbieQuestsCollection.length"
 	)
 )
 
@@ -744,13 +714,12 @@
 (def element SideTabButtonShipResearch (_labelTF:str, _currentNationName:str, _dispatchedEv:str='')
 	(scope
 		(var routeEntity:dhEntity = "getPrimaryEntity(CC.route, _labelTF)")
-		(var hasGiftShip:bool = "routeEntity.hasComponent(CC.giftLabelComponent)" (event "routeEntity.evAdded") (event "routeEntity.evRemoved"))
+		(var hasGiftShip:bool = "routeEntity.hasComponent(CC.giftLabelComponent)")
 		(var isGiftShipAvailable:bool = "hasGiftShip ? routeEntity.giftLabelComponent.canClaim : false" (event "routeEntity.giftLabelComponent.evChanged"))
 		(var isTabSelected:bool = "_currentNationName == _labelTF")
 
 		(var rewardIcon:str = "isGiftShipAvailable ? SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE : SC.Ui_styles.UNIFIED_STATUS.REWARD_DEFAULT")
 	)
-
 	(style (width = 220px) (marginBottom = 1px))
 
 	(element SideTabButton
@@ -770,7 +739,7 @@
 			_unifiedStatus = "isGiftShipAvailable	? SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE
 													: SC.Ui_styles.UNIFIED_STATUS.REWARD_DEFAULT"
 		)
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 
 	(block

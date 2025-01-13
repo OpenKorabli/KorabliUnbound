@@ -1,75 +1,85 @@
-(def macro PULL_SHIP_TYPE_RESTRICTIONS_SCOPE (_scopeName:expression, _typesCount:expression, _defaultTypesCount:expression, _shipType:expression, _hasDefaultRestrictionsEntity:expression)
-	(var name="_scopeName" type=bool value="_typesCount[_shipType] &&
-											_typesCount[_shipType][1] < (_hasDefaultRestrictionsEntity	? _defaultTypesCount[_shipType][1]
-																										: 0)")
+(def struct SHIP_TYPE_RESTRICTIONS(_typesCount:dict, _defaultTypesCount:dict, _shipType:str, _hasDefaultRestrictionsEntity:bool)
+	(var isActive:bool = "	_typesCount[_shipType] &&
+							_typesCount[_shipType][1] < (_hasDefaultRestrictionsEntity	? _defaultTypesCount[_shipType][1]
+																						: 0)")
 )
 
-(def element ShipRestrictions (_restrictionsEntityId:number, _defaultRestrictionsEntityId:number="null", _withShipTypeCounters:bool=false, _flow:number="null", _width:number=0, _isFromTooltip:bool="false")
+(def element ShipRestrictions (	_restrictionsEntityId:number, _defaultRestrictionsEntityId:number = null, _withShipTypeCounters:bool = false,
+								_flow:number = "horizontal", _width:number = "auto", _isCompactListShips:bool = false, _isFromTooltip:bool = false)
 	(scope
-		(event evRestrictionsComponentIdChanged)
-
-		(var restrictionsEntity:gfx = "$datahub.getEntity(_restrictionsEntityId)")
-		(var shipListRestrictionsComponent:gfx = "restrictionsEntity && restrictionsEntity.hasComponent(CC.shipListRestrictions) ? restrictionsEntity.shipListRestrictions : null")
-		(var divisionRestrictionsComponent:gfx = "restrictionsEntity && restrictionsEntity.hasComponent(CC.divisionRestrictions) ? restrictionsEntity.divisionRestrictions : null")
+		(var restrictionsEntity:dhEntity = "getEntity(_restrictionsEntityId)")
+		(var shipListRestrictionsComponent:dhComponent = "restrictionsEntity.shipListRestrictions")
+		(var divisionRestrictionsComponent:dhComponent = "restrictionsEntity.divisionRestrictions")
 
 		(var restrictionsComponentId:str = "null")
 		(bind restrictionsComponentId "shipListRestrictionsComponent ? shipListRestrictionsComponent.id : null" (event "shipListRestrictionsComponent.evUpdate"))
 
-		(var shipLevelString:str = "shipListRestrictionsComponent ? shipListRestrictionsComponent.levelString : null" (event "shipListRestrictionsComponent.evUpdate"))
+		(var shipLevelString:str = "shipListRestrictionsComponent.levelString ?: ''" (event "shipListRestrictionsComponent.evUpdate"))
 
-		(var shipsCount:array = "divisionRestrictionsComponent ? divisionRestrictionsComponent.shipsCount : []" (event "divisionRestrictionsComponent.evUpdate"))
-		(var typesCount:dict = "divisionRestrictionsComponent ? divisionRestrictionsComponent.typesCount : {}" (event "divisionRestrictionsComponent.evUpdate"))
-		(var limitedShips:array = "divisionRestrictionsComponent ? divisionRestrictionsComponent.limitedShips : []" (event "divisionRestrictionsComponent.evUpdate"))
-		(var excludedShips:array = "divisionRestrictionsComponent ? divisionRestrictionsComponent.excludedShips : []" (event "divisionRestrictionsComponent.evUpdate"))
+		(var typesCount:dict =		"divisionRestrictionsComponent.typesCount		?: {}" (event "divisionRestrictionsComponent.evUpdate"))
+		(var shipsCount:array =		"divisionRestrictionsComponent.shipsCount		?: []" (event "divisionRestrictionsComponent.evUpdate"))
+		(var limitedShips:array =	"divisionRestrictionsComponent.limitedShips		?: []" (event "divisionRestrictionsComponent.evUpdate"))
+		(var excludedShips:array =	"divisionRestrictionsComponent.excludedShips	?: []" (event "divisionRestrictionsComponent.evUpdate"))
 
-		(var defaultRestrictionsEntity:gfx = "_defaultRestrictionsEntityId ? $datahub.getEntity(_defaultRestrictionsEntityId) : null")
-		(var defaultDivisionRestrictionsComponent:gfx = "	defaultRestrictionsEntity &&
-															defaultRestrictionsEntity.hasComponent(CC.divisionRestrictions)	? defaultRestrictionsEntity.divisionRestrictions
-																															:  null")
-		(var defaultTypesCount:dict = "defaultDivisionRestrictionsComponent ? defaultDivisionRestrictionsComponent.typesCount : {}" (event "defaultDivisionRestrictionsComponent.evUpdate"))
+		(var defaultRestrictionsEntity:dhEntity = "getEntity(_defaultRestrictionsEntityId)")
+		(var defaultDivisionRestrictionsComponent:dhComponent = "defaultRestrictionsEntity.divisionRestrictions")
+		(var defaultTypesCount:dict = "defaultDivisionRestrictionsComponent.typesCount ?: {}" (event "defaultDivisionRestrictionsComponent.evUpdate"))
 
-		(var shipFilterItemsCollection:gfx = "$datahub.getCollection(CC.shipFilterItem)")
-		(var hasRestrictionsComponent:bool = "shipFilterItemsCollection && restrictionsComponentId != null")
+		(var shipFilterItemsCollection:dhCollection = "getCollection(CC.shipFilterItem)")
+		(var hasRestrictionsComponent:bool = "toBool(shipFilterItemsCollection.length) && toBool(restrictionsComponentId)")
 		
-		(var shipIdsFiltersCollection:gfx = "shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.IDS)" (event "shipFilterItemsCollection.evChildAdded"))
-		(var shipTypeFiltersCollection:gfx = "shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.TYPE)" (event "shipFilterItemsCollection.evChildAdded"))
-		(var nationFiltersCollection:gfx = "shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.NATION)" (event "shipFilterItemsCollection.evChildAdded"))
+		(var concreteShipsFiltersCollection:dhCollection =	"shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.IDS)")
+		(var shipTypeFiltersCollection:dhCollection =		"shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.TYPE)")
+		(var nationFiltersCollection:dhCollection =			"shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.NATION)")
 
-		(var concreteShips:array =		"shipIdsFiltersCollection.items		?: []" (event "shipIdsFiltersCollection.evUpdated"))
-		(var shipTypeFilters:array =	"shipTypeFiltersCollection.items 	?: []" (event "shipTypeFiltersCollection.evUpdated"))
-		(var nationFilters:array =		"nationFiltersCollection.items 		?: []" (event "nationFiltersCollection.evUpdated"))
+		(var concreteShipsLen:number =		"concreteShipsFiltersCollection.length ?: 0")
+		(var shipTypeFiltersLen:number =	"shipTypeFiltersCollection.length ?: 0")
+		(var nationFiltersLen:number =		"nationFiltersCollection.length ?: 0")
 
-		(var isShipLevelFilterVisible:bool =	"shipLevelString && shipLevelString.length > 0")
-		(var isShipTypeFilterVisible:bool =		"shipTypeFilters && shipTypeFilters.length > 0")
-		(var isNationFilterVisible:bool =		"nationFilters && nationFilters.length > 0")
+		(var isShipLevelFilterVisible:bool =	"shipLevelString.length > 0")
+		(var isShipTypeFilterVisible:bool =		"shipTypeFiltersLen > 0")
+		(var isNationFilterVisible:bool =		"nationFiltersLen > 0")
 
-		(var hasForbiddenShipType:bool = "divisionRestrictionsComponent ? divisionRestrictionsComponent.hasForbiddenShipType : false" (event "divisionRestrictionsComponent.evUpdate"))
-		(var hasDefaultRestrictionsEntity:bool = "!!defaultRestrictionsEntity")
+		(var hasForbiddenShipType:bool = "divisionRestrictionsComponent.hasForbiddenShipType" (event "divisionRestrictionsComponent.evUpdate"))
+		(var hasDefaultRestrictionsEntity:bool = "toBool(defaultRestrictionsEntity)")
 
-		(macro PULL_SHIP_TYPE_RESTRICTIONS_SCOPE "'isCarriersRestricted'"		"typesCount" "defaultTypesCount" "SC.Common.SHIP_TYPE.AIRCARRIER"	"hasDefaultRestrictionsEntity")
-		(macro PULL_SHIP_TYPE_RESTRICTIONS_SCOPE "'isBattleShipsRestricted'"	"typesCount" "defaultTypesCount" "SC.Common.SHIP_TYPE.BATTLESHIP"	"hasDefaultRestrictionsEntity")
-		(macro PULL_SHIP_TYPE_RESTRICTIONS_SCOPE "'isCruisersRestricted'"		"typesCount" "defaultTypesCount" "SC.Common.SHIP_TYPE.CRUISER"		"hasDefaultRestrictionsEntity")
-		(macro PULL_SHIP_TYPE_RESTRICTIONS_SCOPE "'isDestroyersRestricted'"		"typesCount" "defaultTypesCount" "SC.Common.SHIP_TYPE.DESTROYER"	"hasDefaultRestrictionsEntity")
-		(macro PULL_SHIP_TYPE_RESTRICTIONS_SCOPE "'isSubmarinesRestricted'"		"typesCount" "defaultTypesCount" "SC.Common.SHIP_TYPE.SUBMARINE"	"hasDefaultRestrictionsEntity")
+		(struct carriersRestricted =	SHIP_TYPE_RESTRICTIONS(	_typesCount = "typesCount"
+																_defaultTypesCount = "defaultTypesCount"
+																_shipType = "SC.Common.SHIP_TYPE.AIRCARRIER"
+																_hasDefaultRestrictionsEntity = "hasDefaultRestrictionsEntity"))
 
-		(var isAnyShipTypeRestricted:bool = "	isCarriersRestricted	||
-												isBattleShipsRestricted	||
-												isCruisersRestricted	||
-												isDestroyersRestricted	||
-												isSubmarinesRestricted")
+		(struct battleShipsRestricted =	SHIP_TYPE_RESTRICTIONS(	_typesCount = "typesCount"
+																_defaultTypesCount = "defaultTypesCount"
+																_shipType = "SC.Common.SHIP_TYPE.BATTLESHIP"
+																_hasDefaultRestrictionsEntity = "hasDefaultRestrictionsEntity"))
 
-		(var isAllShipTypesAllowed:bool = "shipTypeFilters && shipTypeFilters.length == (SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES).length")
-		(var isShipFilterRestrictionsVisible:bool = 	"isAnyShipTypeRestricted &&
-														(hasForbiddenShipType || _withShipTypeCounters) &&
-														!isShipTypeFilterVisible")
+		(struct cruisersRestricted =	SHIP_TYPE_RESTRICTIONS(	_typesCount = "typesCount"
+																_defaultTypesCount = "defaultTypesCount"
+																_shipType = "SC.Common.SHIP_TYPE.CRUISER"
+																_hasDefaultRestrictionsEntity = "hasDefaultRestrictionsEntity"))
+
+		(struct destroyersRestricted =	SHIP_TYPE_RESTRICTIONS(	_typesCount = "typesCount"
+																_defaultTypesCount = "defaultTypesCount"
+																_shipType = "SC.Common.SHIP_TYPE.DESTROYER"
+																_hasDefaultRestrictionsEntity = "hasDefaultRestrictionsEntity"))
+
+		(struct submarinesRestricted =	SHIP_TYPE_RESTRICTIONS(	_typesCount = "typesCount"
+																_defaultTypesCount = "defaultTypesCount"
+																_shipType = "SC.Common.SHIP_TYPE.SUBMARINE"
+																_hasDefaultRestrictionsEntity = "hasDefaultRestrictionsEntity"))
+
+		(var isAnyShipTypeRestricted:bool = "carriersRestricted.isActive || battleShipsRestricted.isActive || cruisersRestricted.isActive || destroyersRestricted.isActive || submarinesRestricted.isActive")
+		(var isAllShipTypesAllowed:bool = "shipTypeFiltersLen == (SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES).length")
+
+		(var isShipFilterRestrictionsVisible:bool = "isAnyShipTypeRestricted && (hasForbiddenShipType || _withShipTypeCounters) && !isShipTypeFilterVisible")
+		(var isShipRestrictionButtonVisible:bool = "(limitedShips.length || excludedShips.length || concreteShipsLen) && _isCompactListShips")
 	)
-	(dispatch evRestrictionsComponentIdChanged init=false watch=false on='addedToStage' (bind trigger "restrictionsComponentId"))
-	(bindcall externalCall "restrictionsComponentId ? 'inputMapping.onAction' : ''" "['createRestrictionsSubCollection', {componentId: restrictionsComponentId}]" init=false watch=false (event "evRestrictionsComponentIdChanged"))
+	(bindcall externalCall "restrictionsComponentId ? 'inputMapping.onAction' : ''" "['createRestrictionsSubCollection', { componentId: restrictionsComponentId }]" watch=false on='addedToStage' (bind trigger "restrictionsComponentId"))
 
 	(style
 		(height = 17px)
-		(bind flow "_flow ? _flow : horizontal")
-		(bind width "_width ? _width : 'auto'")
+		(bind flow "_flow")
+		(bind width "_width")
 	)
 
 	
@@ -80,7 +90,8 @@
 		(controller $Instance renderer='ShipNationsFilterRestrictions'
 			(bind enabled "isNationFilterVisible")
 			(args
-				_nationFilters = "nationFilters"
+				_filterCollection = "nationFiltersCollection"
+				_hideTooltip = "_isFromTooltip"
 			)
 		)
 	)
@@ -97,9 +108,10 @@
 		(hblock
 			(style (height = 21px) (align = "middle"))
 			(controller $Repeat renderer='IconShipClasses'
-				(bind count "shipTypeFilters.length")
+				(bind count "shipTypeFiltersLen")
 				(args
-					_filterEntity = "shipTypeFilters[$index]"
+					_filterCollection = "shipTypeFiltersCollection"
+					_hideTooltip = "_isFromTooltip"
 				)
 			)
 		)
@@ -121,6 +133,7 @@
 				(args
 					_filters = "typesCount"
 					_withShipTypeCounters = "_withShipTypeCounters"
+					_hideTooltip = "_isFromTooltip"
 				)
 			)
 		)
@@ -142,58 +155,142 @@
 		)
 
 		(controller $Tooltip
-			(bind enabled "!_isFromTooltip")
-			(renderer='SimpleStatusTooltip')
+			(bind enabled "isShipLevelFilterVisible && !_isFromTooltip")
+			(renderer = 'SimpleStatusTooltip')
 			(args
 				_text = 'IDS_HINT_SHIP_LEVEL'
 			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
 
 	
 	(hblock
-		(bind visible "!!(limitedShips.length || excludedShips.length || concreteShips.length) && !_isFromTooltip")
-		(style (height = 22px) (marginRight = "S"))
+		(bind visible "!_isCompactListShips && concreteShipsLen > 0")
+		(style (marginTop = 5px) (hgap = "S") (marginRight = "S"))
+
 		(block
-			(style (height = 21px) (marginRight = "S"))
+			(bind visible "isNationFilterVisible || (isShipTypeFilterVisible && !isAllShipTypesAllowed) || isShipFilterRestrictionsVisible || isShipLevelFilterVisible")
+			(style (height = 21px) (marginTop = -5px))
 			(element VerticalDivider)
 		)
-		(block
 
-			(element ImageButton
-				_width = 22
-				_height = 22
-				_backgroundImage = 'url:../service_kit/buttons/icon_info.png'
-			)
-
-			(controller $Tooltip
-				(renderer='SeasonShipRestrictionsTooltip')
-				(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP "0")
-			)
-
-			(controller $Tooltip
-				(renderer='SeasonShipRestrictionsInfotip')
+		(hblock
+			(style (hgap = "S"))
+			(controller $Repeat renderer='ConcreteShipRestriction'
+				(bind count "concreteShipsLen")
+				(bind enabled "!_isCompactListShips")
 				(args
-					_limitedShips = "limitedShips"
-					_excludedShips = "excludedShips"
-					_concreteShips = "concreteShips"
+					_filterCollection = "concreteShipsFiltersCollection"
+					_hideTooltip = "_isFromTooltip"
 				)
-				(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
-				(hideOnMove = true)
-				(pinBottom = 'InfotipPinBottom')
-				(offset = { x: 0, y: 10px })
-				(pinOffset = "{across: 0px, along: 1px}")
+			)
+		)
+	)
+
+	
+	(hblock
+		(bind visible "isShipRestrictionButtonVisible")
+		(style (marginRight = "S"))
+
+		(controller $Instance renderer='SeasonShipRestrictions'
+			(bind enabled "isShipRestrictionButtonVisible")
+			(args
+				_limitedShips = "limitedShips"
+				_excludedShips = "excludedShips"
+				_concreteShipsCollection = "concreteShipsFiltersCollection"
+				_hasDivider = "isNationFilterVisible || (isShipTypeFilterVisible && !isAllShipTypesAllowed) || isShipFilterRestrictionsVisible || isShipLevelFilterVisible"
 			)
 		)
 	)
 )
 
-(def element ShipFilterRestrictions (_filters:dict, _withShipTypeCounters:bool=false)
+(def element ConcreteShipRestriction (_filterCollection:dhCollection, _hideTooltip:bool = false)
+	(scope
+		(var filterEntity:dhEntity = "_filterCollection[$index]")
+		(var concreteShipsLength:number = "_filterCollection.length")
+		(var shipId:number = "toNumber(filterEntity.shipFilterItem.field)" (event "filterEntity.shipFilterItem.evUpdate"))
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+
+		(var isGoldenComma:bool = "shipInfo.isFarming || shipInfo.uiSpecial")
+	)
+	(style (flow = "horizontal") (backgroundColor = "NO_COLOR"))
+
+	(block
+		(element ShipLineItemNM
+			_shipId = "shipId"
+			_withFlag = true
+		)
+
+		(controller $Tooltip
+			(bind enabled "!_hideTooltip")
+			(renderer = 'ShipExtendedTooltip')
+			(args
+				_shipId = "shipId"
+				_isRewards = true
+				_hasShipImage = true
+			)
+			(macro DEFAULT_TOOLTIP_HORIZONTAL_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(bind visible "$index < concreteShipsLength - 1")
+		(style (marginLeft = "XXS"))
+		(tf
+			(class $TextDefault17NM)
+			(bind textColor "isGoldenComma	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+											: SC.Ui_styles.SERVICE_COLORS.WHITE")
+
+			(bind alpha "isGoldenComma ? 1 : TA")
+			(text = 'IDS_KEY_COMMA')
+		)
+	)
+)
+
+(def element SeasonShipRestrictions (_limitedShips:array, _excludedShips:array, _concreteShipsCollection:dhCollection, _hasDivider:bool)
+	(style (flow = "horizontal") (height = 22px))
+
+	(block
+		(bind visible "_hasDivider")
+		(style (height = 21px) (marginRight = "S"))
+		(element VerticalDivider)
+	)
+
+	(block
+		(element ImageButton
+			_width = 22
+			_height = 22
+			_backgroundImage = 'url:../service_kit/buttons/icon_info.png'
+		)
+
+		(controller $Tooltip
+			(renderer = 'SeasonShipRestrictionsTooltip')
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP "0")
+		)
+
+		(controller $Tooltip
+			(renderer = 'SeasonShipRestrictionsInfotip')
+			(args
+				_limitedShips = "_limitedShips"
+				_excludedShips = "_excludedShips"
+				_concreteShipsCollection = "_concreteShipsCollection"
+			)
+			(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+			(hideOnMove = true)
+			(pinBottom = 'InfotipPinBottom')
+			(offset = { x: 0, y: 10px })
+			(pinOffset = "{across: 0px, along: 1px}")
+		)
+	)
+)
+
+(def element ShipFilterRestrictions (_filters:dict, _withShipTypeCounters:bool = false, _hideTooltip:bool = false)
 	(scope
 		(var shipTypes:array = "SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES")
 	)
-	(style (flow = "tile_horizontal"))
+	(style (flow = "tile_horizontal") (hgap = "XS"))
 
 	(controller $Repeat renderer='ShipFilterRestriction'
 		(bind count "shipTypes.length")
@@ -201,17 +298,20 @@
 			_shipType = "shipTypes[$index]"
 			_filter = "_filters[shipTypes[$index]]"
 			_withShipTypeCounters = "_withShipTypeCounters"
+			_hideTooltip = "_hideTooltip"
 		)
 	)
 )
 
-(def element ShipFilterRestriction (_shipType:str, _filter:array, _withShipTypeCounters:bool)
+(def element ShipFilterRestriction (_shipType:str, _filter:array, _withShipTypeCounters:bool, _hideTooltip:bool = false)
 	
 	
 	(bind visible "_filter[1] != -1")
-	(style (flow = "horizontal") (marginRight = "XS"))
+	(style (flow = "horizontal"))
 
-	(element ShipIcon _shipType="_shipType")
+	(element ShipIcon
+		_shipType = "_shipType"
+	)
 
 	(block
 		(bind visible "(_filter[1] > 0 || _filter[1] == -1) && _withShipTypeCounters")
@@ -223,7 +323,8 @@
 	)
 
 	(controller $Tooltip
-		(renderer='SimpleStatusTooltip')
+		(bind enabled "!_hideTooltip")
+		(renderer = 'SimpleStatusTooltip')
 		(args
 			_text = "tr('IDS_' + _shipType + 'S')"
 		)
@@ -231,32 +332,33 @@
 	)
 )
 
-(def element ShipNationsFilterRestrictions (_nationFilters:array)
-	(style (flow = "horizontal"))
+(def element ShipNationsFilterRestrictions (_filterCollection:dhCollection, _hideTooltip:bool = false)
+	(scope
+		(var filterCollectionLen:number = "_filterCollection.length")
+	)
+	(style (flow = "horizontal") (hgap = "XS"))
 
 	(controller $Repeat renderer='ShipNationsRestriction'
-		(bind count "_nationFilters.length")
+		(bind count "filterCollectionLen")
 		(args
-			_shipNationsLength = "_nationFilters.length"
-			_filterEntity = "_nationFilters[$index]"
+			_filterCollection = "_filterCollection"
+			_hideTooltip = "_hideTooltip"
 		)
 	)
 )
 
-(def element ShipNationsRestriction (_shipNationsLength:number, _filterEntity:gfx)
+(def element ShipNationsRestriction (_filterCollection:dhCollection, _hideTooltip:bool = false)
 	(scope
-		(var filterEntity:gfx = "_filterEntity")
-		(var shipFilterItem:gfx = "filterEntity ? filterEntity.shipFilterItem : null")
-		(var shipNation:str = "shipFilterItem ? shipFilterItem.field : ''")
+		(var filterEntity:dhEntity = "_filterCollection[$index]")
+		(var shipNation:str = "filterEntity.shipFilterItem.field ?: ''")
 	)
-	(style (bind marginRight "$index < (_shipNationsLength - 1) ? XS : 0"))
-
 	(element NationFlagsTiny
 		_shipCountry = "shipNation"
 	)
 
 	(controller $Tooltip
-		(renderer='SimpleStatusTooltip')
+		(bind enabled "!_hideTooltip")
+		(renderer = 'SimpleStatusTooltip')
 		(args
 			_text = "tr('IDS_' + shipNation)"
 		)
@@ -264,20 +366,20 @@
 	)
 )
 
-(def element IconShipClasses (_filterEntity:gfx)
+(def element IconShipClasses (_filterCollection:dhCollection, _hideTooltip:bool = false)
 	(scope
-		(var filterEntity:gfx = "_filterEntity")
-		(var shipFilterItem:gfx = "filterEntity ? filterEntity.shipFilterItem : null")
-		(var shipType:str = "shipFilterItem ? shipFilterItem.field : ''")
+		(var filterEntity:dhEntity = "_filterCollection[$index]")
+		(var shipType:str = "filterEntity.shipFilterItem.field ?: ''")
 	)
+	(style (paddingTop = "XXS"))
 
-	(block
-		(style (paddingTop = "XXS"))
-		(element ShipIcon _shipType="shipType")
+	(element ShipIcon
+		_shipType = "shipType"
 	)
 
 	(controller $Tooltip
-		(renderer='SimpleStatusTooltip')
+		(bind enabled "!_hideTooltip")
+		(renderer = 'SimpleStatusTooltip')
 		(args
 			_text = "tr('IDS_' + shipType + 'S')"
 		)

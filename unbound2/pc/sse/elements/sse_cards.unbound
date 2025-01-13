@@ -1,0 +1,966 @@
+
+
+
+(def element SseCardSimpleWrapper (_sseCollection:dhCollection, _selectedSseId:number)
+	(scope
+		(var sseEntity:dhEntity = "_sseCollection[$index]")
+		(var sseEntityId:number = "sseEntity.id")
+		(var isSelected:bool = "_selectedSseId == sseEntityId")
+	)
+	(dispatch "'evBroadcastSelectedItemUpwards'" args="{ sseId: sseEntityId }" dir="EventDirection.UP" on='leftClick' (bind enabled "!isSelected"))
+	(style (width = 100%))
+
+	(element SseCardSimple
+		_sseCollection = "_sseCollection"
+		_isSelected = "isSelected"
+		_isNotMainSseWindow = true
+	)
+)
+
+(def element SseCardSimple (_sseCollection:dhCollection, _isNotMainSseWindow:bool = false, _isSelected:bool = false)
+	(scope
+		(var sseWindowState:dhComponent = "getSingleEntity(CC.sseWindowState).sseWindowState")
+		(var selectedContainerId:number = "sseWindowState.selectedContainerId" (event "sseWindowState.evChanged"))
+		(var itemToShow:str = "sseWindowState.itemToShow" (event "sseWindowState.evChanged"))
+
+		(var sseEntity:dhEntity = "_sseCollection[$index]")
+		(var sseEntityId:number = "sseEntity.id")
+		(var sseOpenEndedComponent:dhComponent =		"sseEntity.sseOpenEnded")
+		(var sseChainComponent:dhComponent =			"sseEntity.sseChain")
+		(var sseEpicComponent:dhComponent =				"sseEntity.sseEpic")
+		(var sseTaskComponent:dhComponent =				"sseEntity.sseTask")
+		(var sseCoreComponent:dhComponent =				"sseEntity.sseCore")
+		(var progressComponent:dhComponent =			"sseEntity.progress")
+		(var sseCorePersistentComponent:dhComponent =	"sseEntity.sseCorePersistent")
+	
+		(var progressFreezeAt:number = "sseOpenEndedComponent.freezeAt ?: 0" (event "sseOpenEndedComponent.evChanged"))
+
+		(var sortIndex:number =		"sseEpicComponent.sortIndex" (event "sseEpicComponent.evChanged"))
+		(var epicsAmount:number =	"sseEpicComponent.epicsAmount" (event "sseEpicComponent.evChanged"))
+
+		(var taskConditions:array = "sseTaskComponent.conditions" (event "sseTaskComponent.evChanged"))
+
+		(var sseConditionEntity:dhEntity = "getEntity(taskConditions[0])")
+		(var sseConditionComponent:dhComponent = "sseConditionEntity.sseConditions")
+		(var isSingleBattle:bool = "sseConditionComponent.isSingleBattle" (event "sseConditionComponent.evConditionSetChanged"))
+		(var countablesIds:array = "sseConditionComponent.countablesIds" (event "sseConditionComponent.evConditionSetChanged"))
+
+		(var isSseOpenEnded:bool =	"sseOpenEndedComponent != null")
+		(var isEpic:bool =			"sseEpicComponent != null")
+		(var isChain:bool =			"sseChainComponent != null")
+
+		(var indexNumber:number = "isEpic ? sortIndex : null")
+		(var isOrTask:bool = "taskConditions.length > 1")
+		(var isSelected:bool = "_isNotMainSseWindow		? _isSelected
+														:	itemToShow == sseCoreComponent.id || (selectedContainerId && selectedContainerId == sseCoreComponent.id)")
+
+		(var isManualRewardClaim:bool = "sseChainComponent.claimRewards || sseEpicComponent.claimRewards || sseTaskComponent.claimRewards")
+
+		(struct sseTaskStatusFlags = SSE_TASKS_STATUS_FLAGS (	_sseOpenEnded =			"sseOpenEndedComponent"
+																_sseCorePersistent =	"sseCorePersistentComponent"
+																_sseCore =				"sseCoreComponent"
+																_isManualRewardClaim =	"isManualRewardClaim"))
+		
+		(var isRewardReceived:bool = "isManualRewardClaim ? (sseTaskStatusFlags.isClaimed || sseTaskStatusFlags.isFailed || sseTaskStatusFlags.isLocked) : sseTaskStatusFlags.isInactive")
+
+		(var sseStopTimestamp:number = "isSseOpenEnded					? progressFreezeAt :
+										sseTaskStatusFlags.isPostBattle	? (sseCorePersistentComponent.stop ?: 0)
+																		: (sseCoreComponent.stop ?: 0)" (event "sseCoreComponent.evChanged"))
+		
+		(macro SERVER_TIME_SCOPE)
+		(macro COUNTDOWN_SCOPE "'formattedLastDayLeft'" "sseStopTimestamp" "'HH:mm:ss'")
+
+		(var timeLeft:number = "sseStopTimestamp - serverTime")
+		(var daysLeft:number = "floor(timeLeft / DAY_IN_SEC)")
+		(var isNotStarted:bool = "sseCoreComponent.start > serverTime")
+		(var isExpirationTimerVisible:bool = "!(daysLeft || sseTaskStatusFlags.isDone || sseTaskStatusFlags.isFailed || isNotStarted)")
+
+		(macro STAGE_SIZE)
+		(var isSmallDimension:bool = "stageWidth <= 1680")
+		(var isVertLineVisible:bool = "isEpic && epicsAmount > 0") 
+
+		(var sseNamePrefix:str = "	isEpic	? 'epic_':
+									isChain	? 'chain_'
+											:'task_'")
+
+		(var sseNameId:str = "sseTaskStatusFlags.isPostBattle ? sseCorePersistentComponent.id : sseCoreComponent.id")
+		(var sseNameStatus:str = "(sseTaskStatusFlags.isDone ? '_done' : '') + (isSelected ? '_selected' : '')")
+
+		(var isSseStatusVisible:bool = "isSseOpenEnded && !sseTaskStatusFlags.isPostBattle || sseTaskStatusFlags.isInactive || (isManualRewardClaim && sseTaskStatusFlags.isDone && !sseTaskStatusFlags.isClaimed)")
+		
+		(var name:str = "'short_sse_'+ sseNamePrefix + sseNameId + sseNameStatus")
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isSelected ? '' : 'quest_item'")
+
+	(bindcall externalCall "(isSelected || _isNotMainSseWindow) ?  '' : 'inputMapping.onAction'" "['SSEProxyCommonUSS.selectItem', { itemId: sseCoreComponent.id }]" watch=false on='leftClick')
+	(dispatch "'evBroadcastSelectedItemUpwards'" args="{}" dir="EventDirection.UP" on='leftClick' (bind enabled "!(isSelected || _isNotMainSseWindow)"))
+
+	
+	
+	
+
+	(style (flow = "horizontal") (width = 100%) (marginBottom = 6px))
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapCustom'
+			(bind enabled "!isHighContrast")
+			(args
+				_map = 'mc_blurmap_medium'
+			)
+		)
+	)
+
+	(block 
+		(class $FullsizeAbsolute)
+		(style (bind backgroundColor "isSelected ? BG_COLOR_SSE_CARD.SELECTED : BG_COLOR_SSE_CARD.DEFAULT"))
+	
+		(block
+			(bind visible "rollOver && !isSelected")
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "BG_COLOR_SSE_CARD.HOVER"))
+		)
+
+		(block
+			(bind name "name")
+			(class $FullsizeAbsolute)
+			(style
+				(bind backgroundImage "'url:../panel_background/selection_panel' + (isExpirationTimerVisible ? '_warning' : '') + '.png'")
+				(bind alpha "(!sseTaskStatusFlags.isInactive && !_isNotMainSseWindow && isEpic) || isExpirationTimerVisible ? 1 : 0.1")
+				(scale9grid = 3)
+			)
+		)
+	)
+
+	(block 
+		(style (width = 24px) (height = 100%) (marginLeft = "M"))
+
+		(block 
+			(style (height = 6px))
+	
+			(block
+				(bind visible "isVertLineVisible && (indexNumber > 1)")
+				(style
+					(width = 2px) (height = 100%)
+					(marginLeft = 11px)
+					(backgroundColor = "BG_COLOR_SSE_LINK_LINE")
+				)
+				(block
+					(bind visible "!sseTaskStatusFlags.isInactive")
+					(style
+						(width = 100%) (height = 32px) (marginTop = -26px)
+						(backgroundImage = 'url:../sse/sse_link_selection_down_up.png')
+						(backgroundSize = "fill")
+					)
+				)
+			)
+		)
+		(block 
+			(style
+				(marginTop = "XS")
+				(bind alpha "sseTaskStatusFlags.isInactive ? 0.4 : 1")
+			)
+			(element SseTypeIcon
+				_sseEntityId = "sseEntityId"
+			)
+		)
+	
+		(block 
+			(bind visible "isVertLineVisible && (indexNumber < epicsAmount)")
+			(style
+				(width = 2px) (height = 100%)
+				(marginLeft = 11px) (paddingTop = "XS") (paddingBottom = "-S")
+			)
+			(block
+				(class $Fullsize)
+				(style (backgroundColor = "BG_COLOR_SSE_LINK_LINE"))
+		
+				(block
+					(bind visible "!sseTaskStatusFlags.isInactive")
+					(style
+						(width = 100%) (height = 32px)
+						(backgroundImage = 'url:../sse/sse_link_selection_up_down.png')
+						(backgroundSize = "fill")
+					)
+				)
+			)
+		)
+	)
+
+	(hblock 
+		(style (width = 100%) (paddingTop = "M") (paddingLeft = "M") (paddingBottom = "M") (paddingRight = "XLM"))
+	
+		(block
+			(style (width = 100%) (minHeight = "LM") (bind alpha "sseTaskStatusFlags.isInactive ? 0.4 : 1"))
+
+			(block
+				(style (marginRight = "S") (width = 100%))
+
+				(element SseTaskDescription
+					_sseEntityId = "sseEntityId"
+					_conditionId = "isOrTask ? null : taskConditions[0]"
+					_indexNumber = "indexNumber"
+					_isHeader = true
+				)
+			)
+			(block
+				(style (width = 100%))
+
+				(block
+					(style
+						(width = 100%)
+						(bind marginTop "!(sseTaskStatusFlags.isInactive || (isManualRewardClaim && sseTaskStatusFlags.isDone && !sseTaskStatusFlags.isClaimed)) && !isSseOpenEnded ? SXS : 0px")
+					)
+					
+					(controller $Instance renderer='SseProgress'
+						(bind enabled "!sseTaskStatusFlags.isInactive && !sseTaskStatusFlags.isDone && !isSingleBattle && !isSseOpenEnded")
+						(args
+							_sseEntityId = "sseEntityId"
+							_conditionId = "taskConditions[0]"
+						)
+					)
+				)
+
+				(block
+					(style (width = 100%) (bind marginTop "isSseStatusVisible ? M : 0px"))
+
+					(controller $Instance renderer='SseStatus'
+						(bind enabled "isSseStatusVisible")
+						(args
+							_sseId = "sseEntityId"
+							_isCardSimple = true
+						)
+					)
+				)
+
+				(block
+					(style (width = 100%) (bind marginTop "isSseOpenEnded && sseTaskStatusFlags.isPostBattle ? M : 0px"))
+
+					(controller $Instance renderer='ProgressParamsElement'
+						(bind enabled "isSseOpenEnded && sseTaskStatusFlags.isPostBattle")
+						(args
+							_text = "!sseTaskStatusFlags.isPostBattle || !isSmallDimension ? 'IDS_SSE_PORTAL_RESULT_COLON' : ''"
+							_param_1 = "countablesIds[0].battleProgress"
+							_param_2 = "countablesIds[0].currentProgress"
+						)
+					)
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "isExpirationTimerVisible")
+		(style
+			(position = "absolute") (top = 6px) (right = 6px)
+			(width = 19px) (height = 19px)
+			(backgroundImage = 'url:../service_kit/unified_status_icons/icon_date_attention.png')
+		)
+
+		(controller $Tooltip
+			(bind enabled "isExpirationTimerVisible")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = "subst('IDS_SUBST_SSE_TIME_LEFT_LAST_DAY', [], { timeLeft: formattedLastDayLeft })"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_bold.png')
+			(scale9grid = 3)
+			(hitTest = false)
+		)
+		(alpha = "isSelected ? TA : 0")
+
+		(controller $Animation
+			(bindcall play
+				from = "{ alpha: 0 }"
+				to = "{ alpha: TA }"
+				duration = 0.15
+				reverse = "!isSelected"
+				(bind trigger "isSelected")
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(right = 0)
+			(width = 48px)
+			(height = 48px)
+			(bind backgroundImage "sseTaskStatusFlags.isFeatured ? 'url:../sse/featured/featured_ribbon.png' : ''")
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleHeaderSubheaderTooltip')
+			(args
+				_headerText = 'IDS_SSE_FEATURED_HINT_TITLE'
+				_subheaderText = 'IDS_SSE_FEATURED_HINT_DESCRIPTION'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	(block
+		(style (position = "absolute") (right = "M") (top = "M") (bind alpha "isRewardReceived ? 0.4 : 1"))
+		(element SseRewardCategory _sseEntityId="sseEntityId")
+	)
+)
+
+(def element SseCardThirdLevel (_sseCollection:dhCollection, _sseEntityId:number, _parentLength:number = 0)
+	(scope
+		(var sseWindowState:dhComponent =	"getSingleEntity(CC.sseWindowState).sseWindowState")
+		(var activeTaskIndex:number =		"sseWindowState.activeTaskIndex" (event "sseWindowState.evChanged"))
+	
+		(var sseEntity:dhEntity = "_sseCollection[$index]")
+		(var sseEntityId:number = "sseEntity.id")
+		(var sseEpicComponent:dhComponent =				"sseEntity.sseEpic")
+		(var sseChainComponent:dhComponent =			"sseEntity.sseChain")
+		(var sseTaskComponent:dhComponent =				"sseEntity.sseTask")
+		(var sseOpenEndedComponent:dhComponent =		"sseEntity.sseOpenEnded")
+		(var sseGlobalComponent:dhComponent =			"sseEntity.sseGlobal")
+		(var sseCorePersistentComponent:dhComponent =	"sseEntity.sseCorePersistent")
+		(var sseCoreComponent:dhComponent =				"sseEntity.sseCore")
+
+		(struct sseTaskStatusFlags = SSE_TASKS_STATUS_FLAGS (	_sseOpenEnded =			"sseOpenEndedComponent"
+																_sseCorePersistent =	"sseCorePersistentComponent"
+																_sseCore =				"sseCoreComponent"))
+
+		(var globalSsePersonalProgress:number =	"sseGlobalComponent.personalProgress ?: 0"	(event "sseGlobalComponent.evChanged"))
+		(var sortEpicIndex:number =				"sseEpicComponent.sortIndex"				(event "sseEpicComponent.evChanged"))
+		(var sortTaskIndex:number =				"sseTaskComponent.sortIndex"				(event "sseTaskComponent.evChanged"))
+		(var taskConditions:array =				"sseTaskComponent.conditions"				(event "sseTaskComponent.evChanged"))
+
+		(var isGlobalSse:bool =	"sseGlobalComponent != null")
+		(var isEpic:bool =		"sseEpicComponent != null")
+		(var isChainTask:bool =	"sseTaskComponent.chainId != null")
+		(var isEpicTask:bool =	"sseTaskComponent.epicId != null")
+		(var isOrTask:bool =	"taskConditions.length > 1")
+	
+		(var indexNumber:number = "isChainTask	? sortTaskIndex :
+									isEpicTask	? sortEpicIndex
+												: null")
+
+		(var parentChainEntity:dhEntity = "getPrimaryEntity(CC.sseCore, sseTaskComponent.chainId)")
+		(var currentChainTaskId:str = "isChainTask ? parentChainEntity.sseChain.currentTaskId : sseChainComponent.currentTaskId" (event "parentChainEntity.sseChain.evChanged") (event "sseChainComponent.evChanged"))
+		(var isPreviousChainTaskDone:bool = "currentChainTaskId == sseCoreComponent.id")
+
+		(var sseConditionEntity:dhEntity = "getEntity(taskConditions.length == 1 ? taskConditions[0] : -1)")
+		(var conditionCategory:str = "sseConditionEntity.sseConditions.conditionCategory" (event "sseConditionEntity.sseConditions.evUpdate"))
+		(var isAggregator:bool = "conditionCategory == SC.Sse.SSE_CONDITION_CATEGORY.COMPLETE_TASK")
+
+		(var battleTypes:array = "sseConditionEntity.battleTypesView.viewList" (event "sseConditionEntity.battleTypesView.evBattleTypesViewChanged"))
+		(var shipRestrictions:array = "sseConditionEntity.shipListRestrictions.selectedFilters" (event "sseConditionEntity.shipListRestrictions.evUpdate"))
+		(var isSseConditionsBlockVisible:bool = "(battleTypes.length > 0 || shipRestrictions.length > 0) && !isAggregator")
+
+		(macro SERVER_TIME_SCOPE)
+		(var sseStopTimestamp:number = "sseTaskStatusFlags.isPostBattle	? (sseCorePersistentComponent.stop ?: 0)
+																		: (sseCoreComponent.stop ?: 0)" (event "sseCoreComponent.evChanged"))
+
+		(var timeLeft:number = "sseStopTimestamp - serverTime")
+
+		(macro COUNTDOWN_SCOPE "'formattedLastDayLeft'" "sseStopTimestamp" "'HH:mm:ss'")
+
+		(var hasGlobalSseProgress:bool = "globalSsePersonalProgress > 0")
+		(var isGlobalSseVisible:bool = "isGlobalSse && (isPreviousChainTaskDone || !isPreviousChainTaskDone && $index == 0 || $index <= activeTaskIndex)")
+		(var name:str=  "'sse_task_' +  sseCoreComponent.id + (	sseTaskStatusFlags.isFailed		? '_failed' :
+																sseTaskStatusFlags.isDone		? '_done'
+																								: '')")
+	
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(var isVertLineVisible:bool = "isChainTask && (_parentLength > 0)") 
+	)
+	
+	
+	
+
+	(style (flow = "horizontal") (width = 100%) (marginBottom = "S"))
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapCustom'
+			(bind enabled "!isHighContrast")
+			(args
+				_map = 'mc_blurmap_medium'
+			)
+		)
+	)
+
+	(block 
+		(bind name "name")
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "BG_COLOR_SSE_CARD.DEFAULT"))
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../panel_background/selection_panel.png')
+				(scale9grid = 3)
+			)
+			(bind alpha "!sseTaskStatusFlags.isInactive && !sseTaskStatusFlags.isPostBattle && (isChainTask || isEpicTask) ? 1 : 0.1")
+		)
+	)
+
+	(block 
+		(style (height = 100%) (width = "L") (marginLeft = "MS"))
+		(block 
+			(style (height = 4px))
+
+			(block
+				(bind visible "isVertLineVisible && (indexNumber > 1)")
+				(style
+					(width = 2px)
+					(height = 100%)
+					(marginLeft = 15px)
+					(backgroundColor = "BG_COLOR_SSE_LINK_LINE")
+				)
+
+				(block
+					(bind visible "!sseTaskStatusFlags.isInactive")
+					(style
+						(width = 100%) (height = 64px) (marginTop = -62px)
+						(backgroundImage = 'url:../sse/sse_link_selection_down_up.png')
+						(backgroundSize = "fill")
+					)
+				)
+			)
+		)
+
+		(block 
+			(style (marginTop = "XS") (bind alpha "sseTaskStatusFlags.isInactive ? 0.4 : 0.8"))
+
+			(element SseTypeIcon
+				_sseId = "sseEntityId"
+				_isBig = true
+			)
+		)
+
+		(block 
+			(bind visible "isVertLineVisible && (indexNumber < _parentLength)")
+			(style
+				(width = 2px) (height = 100%)
+				(marginLeft = 15px) (paddingTop = "XS") (paddingBottom = "-S")
+			)
+			(block
+				(class $Fullsize)
+				(style (backgroundColor = "BG_COLOR_SSE_LINK_LINE"))
+		
+				(block
+					(bind visible "!sseTaskStatusFlags.isInactive")
+					(style
+						(width = 100%) (height = 64px)
+						(backgroundImage = 'url:../sse/sse_link_selection_up_down.png')
+						(backgroundSize = "fill")
+					)
+				)
+			)
+		)
+	)
+
+	(hblock 
+		(style (width = 100%) (padding = "M"))
+		(block
+			(style (width = 100%) (bind alpha "sseTaskStatusFlags.isInactive ? 0.4 : 1"))
+			(block
+				(style (marginRight = "S") (width = 100%))
+
+				(element SseTaskDescription
+					_sseId = "sseEntityId"
+					_conditionId = "isOrTask ? null : taskConditions[0]"
+					_indexNumber = "indexNumber && !sseTaskStatusFlags.isPostBattle ? indexNumber : -1"
+					_isHeader = true
+					_isThirdLevel = true
+				)
+			)
+
+			(block
+				(bind visible "!isOrTask")
+				(style (width = 100%))
+				(block
+					(style (width = 100%) (bind marginTop "!sseTaskStatusFlags.isInactive ? SXS : 0px"))
+
+					(controller $Instance renderer='SseProgress'
+						(bind enabled "!sseTaskStatusFlags.isInactive")
+						(args
+							_sseEntityId = "sseEntityId"
+							_conditionId = "taskConditions[0]"
+						)
+					)
+				)
+	
+				(block
+					(style (width = 100%) (bind marginTop "sseTaskStatusFlags.isInactive ? M : 0px"))
+
+					(controller $Instance renderer='SseStatus'
+						(bind enabled "!isOrTask && sseTaskStatusFlags.isInactive")
+						(args
+							_sseId = "sseEntityId"
+							_isCardSimple = true
+						)
+					)
+				)
+
+				(block
+					(bind visible "isGlobalSseVisible")
+					(style (width = 100%) (paddingRight = "-M") (marginTop = "M"))
+					(element HorizontalDividerTwoPx)
+				)
+
+				(block
+					(bind visible "isGlobalSseVisible")
+					(style (marginTop = "SXS") (width = 100%))
+
+					(controller $Instance renderer='SseGlobalStatus'
+						(bind enabled "isGlobalSseVisible")
+						(args
+							_hasGlobalSseProgress = "hasGlobalSseProgress"
+							_globalSsePersonalProgress = "globalSsePersonalProgress"
+						)
+					)
+				)
+
+				(block
+					(bind visible "isSseConditionsBlockVisible")
+					(style (width = 100%) (paddingRight = "-M") (marginTop = "M"))
+					(element HorizontalDividerTwoPx)
+				)
+
+				(block
+					(bind visible "isSseConditionsBlockVisible")
+					(style (marginTop = "M") (width = 100%))
+
+					(controller $Repeat renderer='SseConditions'
+						(bind enabled "isSseConditionsBlockVisible")
+						(bind count "taskConditions.length")
+						(args
+							_conditionId = "taskConditions[$index]"
+						)
+					)
+				)
+			)
+
+			(block 
+				(bind visible "isOrTask")
+				(style (width = 100%))
+				
+				(block
+					(style (width = 100%) (bind marginTop "sseTaskStatusFlags.isInactive ? M : 0px"))
+
+					(controller $Instance renderer='SseStatus'
+						(bind enabled "isOrTask && sseTaskStatusFlags.isInactive")
+						(args
+							_sseId = "sseEntityId"
+							_isCardSimple = true
+						)
+					)
+				)
+			
+				(block
+					(style (width = 100%) (bind marginTop "isOrTask ? M : 0px"))
+
+					(controller $Repeat renderer='SseCardContentCommon'
+						(bind enabled "isOrTask")
+						(bind count "taskConditions.length")
+						(args
+							_sseEntityId = "sseEntityId"
+							_sseConditionEntityId = "taskConditions[$index]"
+							_isDetails = true
+						)
+					)
+				)
+			)
+		)
+
+		(block 
+			(style (width = 1px) (height = 100%) (marginLeft = 15px) (paddingTop = "-M") (paddingBottom = "-M"))
+			(element VerticalDivider)
+		)
+
+		(hblock 
+			(style (marginLeft = "M") (width = 312px))
+
+			(element SseRewards
+				_sseEntityId = "sseEntityId"
+			)
+		)
+	)
+)
+
+(def element SseCardDetailed (_sseEntityId:number)
+	(scope
+		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
+		(var sseCoreComponent:dhComponent =				"sseEntity.sseCore")
+		(var sseEpicComponent:dhComponent =				"sseEntity.sseEpic")
+		(var sseChainComponent:dhComponent =			"sseEntity.sseChain")
+		(var sseTaskComponent:dhComponent =				"sseEntity.sseTask")
+		(var sseOpenEndedComponent:dhComponent =		"sseEntity.sseOpenEnded")
+		(var progressComponent:dhComponent =			"sseEntity.progress")
+		(var sseCorePersistentComponent:dhComponent =	"sseEntity.sseCorePersistent")
+		(var sseGlobalComponent:dhComponent =			"sseEntity.sseGlobal")
+		(var sseLinkComponent:dhComponent =				"sseEntity.sseLink")
+
+		(var taskConditions:array =				"sseTaskComponent.conditions"			(event "sseTaskComponent.evChanged"))
+		(var progressMax:number =				"progressComponent.max"					(event "progressComponent.evChanged") (event "progressComponent.evMaxChanged"))
+		(var globalSsePersonalProgress:number =	"sseGlobalComponent.personalProgress"	(event "sseGlobalComponent.evChanged"))
+		(var sortIndex:number =					"sseEpicComponent.sortIndex"			(event "sseEpicComponent.evChanged"))
+
+		(var sseConditionEntity:dhEntity = "getEntity(taskConditions.length == 1 ? taskConditions[0] : -1)")
+		(var sseConditionsComponent:dhComponent = "sseConditionEntity.sseConditions")
+		(var countablesIds:array = "sseConditionsComponent.countablesIds ?: []" (event "sseConditionsComponent.evConditionSetChanged"))
+		(var isSingleBattle:bool = "sseConditionsComponent.isSingleBattle" (event "sseConditionsComponent.evConditionSetChanged"))
+		(var battleTypesViewList:array = "sseConditionEntity.battleTypesView.viewList" (event "sseConditionEntity.battleTypesView.evBattleTypesViewChanged"))
+		
+		(var shipListRestrictions:dhComponent = "sseConditionEntity.shipListRestrictions")
+		(var shipRestrictions:array = "shipListRestrictions.selectedFilters ?: []" (event "shipListRestrictions.evUpdate"))
+		(var conditionCategory:str = "sseConditionEntity.sseConditions.conditionCategory" (event "sseConditionsComponent.evUpdate"))
+	
+		(var hasAchievementCondition:bool = "sseEntity.hasComponent(CC.sseAchievementCondition)")
+		(var isGlobalSse:bool = 			"sseGlobalComponent != null")
+		(var isEpic:bool = 					"sseEpicComponent != null")
+		(var isChain:bool = 				"sseChainComponent != null")
+		(var isSseOpenEnded:bool = 			"sseOpenEndedComponent != null")
+	
+		(var indexNumber:number = 			"isEpic ? sortIndex : null")
+		(var isOrTask:bool = 				"taskConditions.length > 1")
+		(var isAggregator:bool = 			"conditionCategory == SC.Sse.SSE_CONDITION_CATEGORY.COMPLETE_TASK")
+		(var isManualRewardClaim:bool =		"sseChainComponent.claimRewards || sseEpicComponent.claimRewards || sseTaskComponent.claimRewards")
+
+		(struct sseTaskStatusFlags = SSE_TASKS_STATUS_FLAGS (	_sseOpenEnded =			"sseOpenEndedComponent"
+																_sseCorePersistent =	"sseCorePersistentComponent"
+																_sseCore =				"sseCoreComponent"
+																_isManualRewardClaim =	"isManualRewardClaim"))
+
+		(var linkUrl:str =			"sseLinkComponent.url"			(event "sseLinkComponent.evChanged"))
+		(var linkMainText:str =		"sseLinkComponent.mainText"		(event "sseLinkComponent.evChanged"))
+		(var linkTooltipText:str =	"sseLinkComponent.tooltipText"	(event "sseLinkComponent.evChanged"))
+		(var isExternalLink:bool =	"sseLinkComponent.isExternal"	(event "sseLinkComponent.evChanged"))
+	
+		(var hasLink:bool = "sseLinkComponent != null")
+		(var hasGlobalSseProgress:bool = "globalSsePersonalProgress > 0")
+		(var isSseConditionsBlockVisible:bool = " !(isEpic || isOrTask || isChain || isAggregator) && (battleTypesViewList.length > 0 || shipRestrictions.length > 0)")
+	
+		(var isButtonClaimRewardVisible:bool = "isManualRewardClaim && !sseTaskStatusFlags.isClaimed && !sseTaskStatusFlags.isFailed &&
+												(hasGlobalSseProgress || !isGlobalSse || !sseTaskStatusFlags.isDone)")
+
+		(var linkRequest:str = "!hasLink 											? '' :
+								sseTaskStatusFlags.isPostBattle && !isExternalLink	? 'startSSEBrowsingInPort'
+																					: 'gotoUrlByPRMP'")
+
+		(var linkRequestParams:dict = "	!hasLink 											? {} :
+										sseTaskStatusFlags.isPostBattle && !isExternalLink	? {	route: SC.Ui_windows.ROUTE.PORTAL,
+																								data: {	url: linkUrl,
+																										isPrmp: true,
+																										authorization: false}}
+																							: {	url: linkUrl,
+																								isIngameUrl: !isExternalLink,
+																								authorization: false}")
+		(var name:str = "'sse_' +	(isEpic ? 'epic_':
+									isChain ? 'chain_'
+											: 'task_' ) + (sseTaskStatusFlags.isPostBattle ? sseCorePersistentComponent.id : sseCoreComponent.id)")
+		(macro STAGE_SIZE)
+		(var isSmallScreen:bool = "stageWidth <= 1600")
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+	)
+	(style (width = 100%))
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapCustom'
+			(bind enabled "!isHighContrast")
+			(args
+				_map = 'mc_blurmap_medium'
+			)
+		)
+	)
+
+	(block
+		(bind name "name")
+		(style (width = 100%))
+		(bind alpha "sseTaskStatusFlags.isInactive ? 0.4 : 1")
+
+		(hblock 
+			(style
+				(width = 100%)
+				(paddingLeft = "MS")
+				(paddingRight = "M")
+				(paddingTop = "M")
+				(paddingBottom = "M")
+				(backgroundColor = "BG_COLOR_SSE_CARD.SELECTED")
+			)
+			
+			(block
+				(element SseTypeIcon
+					_sseEntityId = "_sseEntityId"
+					_isBig = true
+				)
+			)
+			(block
+				(style (width = 100%) (paddingLeft = "M"))
+
+				(block
+					(style (width = 100%))
+
+					(element SseTaskDescription
+						_sseEntityId = "_sseEntityId"
+						_indexNumber = "indexNumber"
+						_isDetails = true
+						_isHeader = true
+					)
+				)
+
+				(block
+					(style (width = 100%) (marginTop = "M"))
+				
+					(element SseStatus
+						_sseId = "_sseEntityId"
+					)
+				)
+			)
+		
+			(block
+				(style (bind flow "!isSmallScreen ? horizontal : vertical"))
+				(block
+					(style
+						(bind marginRight "!isSmallScreen && (hasLink || isGlobalSse || isSseOpenEnded || hasAchievementCondition) ? SXS : 0px")
+						(bind marginBottom "isSmallScreen && hasLink ? SXS : 0px")
+					)
+
+					(controller $Tooltip
+						(bind enabled "linkTooltipText != ''")
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_text = "linkTooltipText"
+							_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(controller $Instance renderer='DefaultButton'
+						(bind enabled "hasLink")
+						(args
+							_label = "linkMainText"
+							_width = 192px
+							_enabled = true
+							_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+							_methods = "[{	type: 'inputMapping.onRequest',
+											name: linkRequest,
+											args: linkRequestParams }]"
+
+						)
+					)
+				)
+
+				(block
+					(controller $Instance renderer='DefaultButton'
+						(bind enabled "isButtonClaimRewardVisible")
+						(args
+							_label = 'IDS_SSE_CLAIM_REWARD'
+							_width = 192px
+							_enabled = "sseTaskStatusFlags.isDone"
+							_focusIndex = 1
+							_defaultFocused = true
+							_methods = "[{	type: 'inputMapping.onRequest',
+											name: 'showSseClaimWindow',
+											args: { sseId: _sseEntityId } }]"
+						)
+					)
+				)
+			)
+		)
+
+		(hblock
+			(style (width = 100%) (backgroundColor = "BG_COLOR_SSE_CARD.DEFAULT"))
+
+			(block
+				(style (position = "absolute") (top = "-XXS") (width = 100%))
+				(element HorizontalDividerTwoPx)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(paddingLeft = "MS")
+					(paddingTop = "M")
+					(paddingRight = "M")
+					(paddingBottom = "M")
+				)
+
+				(block 
+					(bind visible "!isOrTask")
+					(style (width = 100%))
+
+					(block
+						(style (width = 100%))
+
+						(controller $Instance renderer='SseTaskDescription'
+							(bind enabled "!isOrTask")
+							(args
+								_sseEntityId = "_sseEntityId"
+								_isDetails = true
+							)
+						)
+					)
+
+					(block
+						(style (width = 100%) (bind marginTop "isSseOpenEnded ? M : 0px"))
+
+						(controller $Instance renderer='ProgressParamsElement'
+							(bind enabled "!isOrTask && isSseOpenEnded")
+							(args
+								_text = 'IDS_SSE_PORTAL_RESULT_COLON'
+								_param_1 = "sseTaskStatusFlags.isPostBattle ? countablesIds[0].battleProgress : null"
+								_param_2 = "countablesIds[0].currentProgress"
+							)
+						)
+					)
+
+					(block
+						(bind visible "!sseTaskStatusFlags.isInactive && !isSingleBattle && !isSseOpenEnded")
+						(style (marginTop = "SXS") (width = 100%))
+
+						(controller $Instance renderer='SseProgress'
+							(bind enabled "!isOrTask && !sseTaskStatusFlags.isInactive && !sseTaskStatusFlags.isDone && !isSingleBattle && !isSseOpenEnded")
+							(args
+								_sseEntityId = "_sseEntityId"
+								_conditionId = "isOrTask ? null : taskConditions[0]"
+							)
+						)
+					)
+
+					(block
+						(bind visible "isGlobalSse")
+						(style (width = 100%) (paddingLeft = "-MS") (paddingRight = "-M") (marginTop = "M"))
+						(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "isGlobalSse"))
+					)
+
+					(block
+						(bind visible "isGlobalSse")
+						(style (marginTop = "SXS") (width = 100%))
+
+						(controller $Instance renderer='SseGlobalStatus'
+							(bind enabled "!isOrTask && isGlobalSse")
+							(args
+								_hasGlobalSseProgress = "hasGlobalSseProgress"
+								_globalSsePersonalProgress = "globalSsePersonalProgress"
+							)
+						)
+					)
+
+					(block
+						(bind visible "isSseConditionsBlockVisible")
+						(style (width = 100%) (paddingLeft = "-MS") (paddingRight = "-M") (marginTop = "M"))
+						(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "isSseConditionsBlockVisible"))
+					)
+
+					(block
+						(bind visible "isSseConditionsBlockVisible")
+						(style (marginTop = "M") (width = 100%))
+
+						(controller $Repeat renderer='SseConditions'
+							(bind enabled "!isOrTask && isSseConditionsBlockVisible")
+							(bind count "taskConditions.length")
+							(args
+								_conditionId = "taskConditions[$index]"
+							)
+						)
+					)
+				)
+
+				(block 
+					(bind visible "isOrTask")
+					(style (width = 100%))
+
+					(controller $Repeat renderer='SseCardContentCommon'
+						(bind enabled "isOrTask")
+						(bind count "taskConditions.length")
+						(args
+							_sseEntityId = "_sseEntityId"
+							_sseConditionEntityId = "taskConditions[$index]"
+							_isDetails = true
+						)
+					)
+				)
+			)
+		
+			(block 
+				(style (width = 1px) (height = 100%) (marginLeft = -1px)) 
+				(element VerticalDivider)
+			)
+
+			(block 
+				(style (margin = "M") (width = 312px))
+
+				(element SseRewards
+					_sseEntityId = "_sseEntityId"
+					_isFinal = "isEpic || isChain || isAggregator"
+				)
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_bold.png')
+				(scale9grid = 3)
+				(hitTest = false)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(right = 0)
+			(width = 48px)
+			(height = 48px)
+			(bind backgroundImage "sseTaskStatusFlags.isFeatured ? 'url:../sse/featured/featured_ribbon.png' : ''")
+		)
+
+		(controller $Tooltip
+			(bind enabled "sseTaskStatusFlags.isFeatured")
+			(renderer = 'SimpleHeaderSubheaderTooltip')
+			(args
+				_headerText = 'IDS_SSE_FEATURED_HINT_TITLE'
+				_subheaderText = 'IDS_SSE_FEATURED_HINT_DESCRIPTION'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element SseGlobalStatus (_globalSsePersonalProgress:number, _hasGlobalSseProgress:bool=false)
+	(style (width = 100%))
+
+	(hblock
+		(bind visible "_hasGlobalSseProgress")
+		(style (width = 100%) (hgap = "S"))
+		(tf
+			(class $TextDefaultNM)
+			(style (alpha = "TC"))
+			(text = 'IDS_SSE_GLOBAL_PERSONAL_PROGRESS_COLON')
+		)
+		(tf
+			(class $TextDefaultBoldNM)
+			(style (alpha = "TC"))
+			(bind text "formatSeparator(_globalSsePersonalProgress ?: 0)")
+		)
+	)
+
+	(tf
+		(bind visible "!_hasGlobalSseProgress")
+		(class $TextDefaultNM)
+		(style (width = 100%) (alpha = "TC"))
+		(text = 'IDS_SSE_GLOBAL_SKIPPING')
+	)
+)

@@ -1,0 +1,181 @@
+(def constant MINI_SHIP_ACES_TASK_WIDTH 160px)
+(def constant MINI_SHIP_ACES_TASK_HEIGHT 102px)
+
+(def element MiniShipAcesGrid (_selectedSprintId:number)
+	(scope
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var shipAcesSeason:dhComponent = "shipAcesSeasonEntity.shipAcesSeason")
+		(var activeSprintId:number = "shipAcesSeason.activeSprintId" (event "shipAcesSeason.evChanged"))
+		(var isActiveSprint:bool = "_selectedSprintId == activeSprintId")
+
+		(var shipAcesSeasonType:number = "shipAcesSeason.shipAcesType")
+		(var taskCount:number = "shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.NATION	? SC.Common.NATION.SHIP_ACES_ORDER.length
+																						: SC.Common.SHIP_TYPE.SHIP_ACES_ORDER.length")
+	)
+
+	(name = 'miniShipAcesGrid')
+
+	(class $Fullsize)
+	(style
+		(bind hitTest "isActiveSprint")
+		(bind alpha "!isActiveSprint ? 0.5 : 1")
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(align = "center")
+			(flow = "tile_horizontal")
+		)
+
+		(controller $Repeat renderer = 'MiniShipAcesTask'
+			(bind count "taskCount")
+			(args
+				_miniShipAcesType = "shipAcesSeasonType"
+				_sprintId = "_selectedSprintId"
+			)
+		)
+	)
+)
+
+(def element MiniShipAcesTask (_miniShipAcesType:number, _sprintId:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var nation:str = "_miniShipAcesType == SC.Common.SHIP_ACES_TYPE.NATION ? SC.Common.NATION.SHIP_ACES_ORDER[$index]
+																				: SC.Common.SHIP_ACES_EMPTY_PARAM.EMPTY")
+		(var shipType:str = "_miniShipAcesType == SC.Common.SHIP_ACES_TYPE.SHIP_TYPE	? SC.Common.SHIP_TYPE.SHIP_ACES_ORDER[$index]
+																						: SC.Common.SHIP_ACES_EMPTY_PARAM.EMPTY")
+		(var shipAcesTaskEntity:dhEntity = "getPrimaryEntity(CC.shipAcesTask, shipType + '_' + nation + '_' + _sprintId)")
+		(var shipAcesTask:dhComponent = "shipAcesTaskEntity.shipAcesTask")
+		(var conditionCount:number =	"shipAcesTask.conditionCount ?: 0"	(event "shipAcesTask.evChanged"))
+		(var conditionText:str =		"shipAcesTask.conditionText"		(event "shipAcesTask.evChanged"))
+		(var rewards:array =			"shipAcesTask.rewards"				(event "shipAcesTask.evChanged"))
+		(var stepsNumber:number =		"shipAcesTask.stepsNumber ?: 0"		(event "shipAcesTask.evChanged"))
+		(var isEmpty:bool =				"shipAcesTask.isEmpty"				(event "shipAcesTask.evChanged"))
+
+		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
+		(var activeSprintId:number = "shipAcesSeasonEntity.shipAcesSeason.activeSprintId" (event "shipAcesSeasonEntity.shipAcesSeason.evChanged"))
+		(var isActiveSprint:bool = "_sprintId == activeSprintId")
+		(var taskBgImage:str = "_miniShipAcesType == SC.Common.SHIP_ACES_TYPE.NATION	? 'url:../nation_flags/aces/flag_' + nation + '.png'
+																						: 'url:../sse/ship_aces/mini_ship_aces_task_icons/' + shipType + '.png'")
+		(var tooltipHeaderIDS:str = "_miniShipAcesType == SC.Common.SHIP_ACES_TYPE.NATION	? 'IDS_' + nation
+																							: 'IDS_' + shipType")
+
+		(var shipAcesSprintEntity:dhEntity = "getPrimaryEntity(CC.shipAcesSprint, _sprintId)")
+		(var conditionCategory:str = "shipAcesSprintEntity.shipAcesSprint.conditionCategory ?: ''" (event "shipAcesSprintEntity.shipAcesSprint.evChanged"))
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "'default_button'")
+
+	(bind visible "!isEmpty")
+
+	(bindcall externalCall "'inputMapping.onAction'" "[ 'ShipAcesProxyUSS.getCellHistory', { shipType: shipType, nation: nation } ]" watch=false (event "evClicked"))
+
+	(style
+		(height = "MINI_SHIP_ACES_TASK_HEIGHT")
+		(width = "MINI_SHIP_ACES_TASK_WIDTH")
+		(marginRight = "{ 1280:M, 1920:40px }")
+		(marginBottom = "{ 720:MS, 1080:40px }")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(height = "MINI_SHIP_ACES_TASK_HEIGHT")
+			(width = "MINI_SHIP_ACES_TASK_WIDTH")
+			(bind backgroundImage "taskBgImage")
+			(backgroundSize = "cover")
+			(bind alpha  "rollOver ? 1 : 0.6")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../panel_background/selection_panel.png')
+			(scale9grid = 2)
+			(bind alpha  "rollOver ? 0.5 : 0.2")
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShortSseTaskConditionTooltip')
+		(args
+			_isTask = true
+			_headerText = "tooltipHeaderIDS"
+			_descriptionText = "conditionText"
+			_conditionId = "shipAcesTaskEntity.id"
+			_stepsNumber = "stepsNumber"
+			_rewards = "rewards"
+			_hasMouseInstruction = "isActiveSprint"
+			_nation = "nation"
+			_shipType = "shipType"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(style
+			(align = "center|bottom")
+			(paddingBottom = "S")
+			(visualOffsetY = "S")
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration=0.2
+				to="{alpha: 1, visualOffsetY: 0px}"
+				easing="Easing.quad_out"
+				action="kill"
+				(event "evRollOver")
+			)
+			(bindcall play
+				duration=0.2
+				to="{alpha: 0, visualOffsetY: S}"
+				easing="Easing.quad_out"
+				action="kill"
+				(event "evRollOut")
+			)
+		)
+
+		(element DefaultButton
+			_name = 'mini_ship_aces_details'
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_width = 142px
+			_size = "SIZE.SMALL"
+			_label = 'IDS_SSE_DETAILED_INFO_LINK'
+			_externalRollover = "rollOver"
+		)
+	)
+
+	(hblock
+		(class $FullsizeAbsolute)
+
+		(style
+			(align = "right|bottom")
+			(paddingRight = "S")
+			(paddingBottom = "SXS")
+			(bind alpha "rollOver ? 0 : TA")
+		)
+
+		(tf
+			(class $TextDefaultBold17NM)
+			(bind text "formatSeparator(conditionCount)")
+		)
+
+		(block
+			(style
+				(marginLeft = "XS")
+				(marginBottom = "-XXS")
+				(width = 16px)
+				(height = 16px)
+				(bind backgroundImage "'url:../sse/condition_categories/' + conditionCategory + '.png'")
+				(backgroundSize = "cover")
+			)
+		)
+	)
+)
