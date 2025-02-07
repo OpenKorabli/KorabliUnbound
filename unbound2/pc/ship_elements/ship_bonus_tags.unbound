@@ -1,46 +1,111 @@
+(def constant BONUS_TYPE_SNOWFLAKE 'snowflake')
+
 (def element CarouselShipBonusTags (_shipEntityId:number)
 	(scope
 		(var shipEntity:gfx = "$datahub.getEntity(_shipEntityId)")
 		(var expMultiply:number = "shipEntity ? shipEntity.ownShip.expMultiply : 0"	(event "shipEntity.ownShip.evExpMultiplyChanged"))
 		(var bonusTagIds:array = "shipEntity ? shipEntity.ship.bonusTags : []"		(event "shipEntity.ship.evBonusTagsChanged"))
+
 		
-		(var bonusTagEntity:gfx = "bonusTagIds.length ? $datahub.getEntity(bonusTagIds[0]) : null")
-		(var bonusTagComponent:gfx = "bonusTagEntity ? bonusTagEntity.bonusTag : null")
+		(var hasSnowflakeBonus:bool = "!bonusTagIds.length	?	false
+															:	getEntity(bonusTagIds[0]).bonusTag.type == BONUS_TYPE_SNOWFLAKE ||
+																getEntity(bonusTagIds[1]).bonusTag.type == BONUS_TYPE_SNOWFLAKE")
+		(var snowflakeBonusIndex:number = "hasSnowflakeBonus	?	getEntity(bonusTagIds[0]).bonusTag.type==BONUS_TYPE_SNOWFLAKE ? 0 : 1
+																:	null")
+		(var nonSnowflakeBonusIndex:number = "hasSnowflakeBonus ? bonusTagIds.length > 1	? 0 : null
+																: bonusTagIds.length		? 0	: null")
+
+		(var bonusTagEntity:dhEntity = "bonusTagIds.length ? getEntity(bonusTagIds[nonSnowflakeBonusIndex]) : null")
+		(var bonusTagComponent:dhComponent = "bonusTagEntity.bonusTag")
 		(var bonusTagType:str = "bonusTagEntity ? bonusTagEntity.bonusTag.type : ''")
 
-		(var isEntityBonusTagVisible:bool = "bonusTagIds.length > 0")
-		(var isExpBonusTagVisible:bool = "expMultiply > 1 && !bonusTagIds.length")
+		(var isEntityBonusTagVisible:bool = "nonSnowflakeBonusIndex != null")
+		(var isExpBonusTagVisible:bool = "expMultiply > 1 && (!bonusTagIds.length || hasSnowflakeBonus)")
+		(var areBothBonusTagsVisible:bool = "(isEntityBonusTagVisible || isExpBonusTagVisible) && hasSnowflakeBonus")
 
-		(var imageUrl:str = "	isEntityBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_' + bonusTagType :
+		(var imageUrl:str = "	hasSnowflakeBonus		? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_snowflake' :
+								isEntityBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_' + bonusTagType :
 								isExpBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_exp'
 														: ''")
+		(var secondImageUrl:str = "areBothBonusTagsVisible	?	isEntityBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_' + bonusTagType :
+																isExpBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_exp'
+																						: ''
+															: ''")
 	)
+
 	(style
-		(width = 39px)
 		(height = 31px)
-		(backgroundImage = 'url:../service_kit/bonus_tags/bonus_panel.png')
-		
-		(paddingLeft = 13px)
-		(paddingRight = "XS")
-		(paddingTop = 6px)
-		(paddingBottom = "XS")
+		(align = "right")
+		(backgroundColor = "NO_COLOR")
+		(paddingRight = 6px)
+		(bind width "areBothBonusTagsVisible ? 55px : 32px")
 	)
 
-	(block
-		(style
-			(width = 21px)
-			(height = 21px)
-			(bind backgroundImage "imageUrl")
-			(hitTest = false)
-		)
-	)
+	(hblock
+		(block
+			(style
+				(height = 31px)
+				(align = "middle")
+				(backgroundColor = "NO_COLOR")
+			)
+			(block
+				(style
+					(width = 21px)
+					(height = 21px)
+					(bind backgroundImage "imageUrl")
+					(hitTest = false)
+				)
+			)
 
-	(controller $Tooltip
-		(renderer='BonusTagsTooltip')
-		(args
-			_shipEntityId = "_shipEntityId"
+			(controller $Tooltip
+				(renderer='LargeBonusTagsTooltip')
+				(bind enabled "hasSnowflakeBonus")
+				(args
+					_shipEntityId = "_shipEntityId"
+					_isExpBonusTagVisible = false
+					_bonusTagId = "bonusTagIds[snowflakeBonusIndex]"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP)
+			)
+
+			(controller $Tooltip
+				(renderer='BonusTagsTooltip')
+				(bind enabled "!hasSnowflakeBonus")
+				(args
+					_shipEntityId = "_shipEntityId"
+					_snowflakeIndex = "snowflakeBonusIndex"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP)
+			)
 		)
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP)
+
+		(block
+			(bind visible "secondImageUrl")
+			(style
+				(height = 31px)
+				(align = "middle")
+				(backgroundColor = "NO_COLOR")
+			)
+			(block
+				(style
+					(marginLeft = "XXS")
+					(width = 21px)
+					(height = 21px)
+					(bind backgroundImage "secondImageUrl")
+					(hitTest = false)
+				)
+			)
+
+			(controller $Tooltip
+				(renderer='BonusTagsTooltip')
+				(bind enabled "secondImageUrl")
+				(args
+					_shipEntityId = "_shipEntityId"
+					_snowflakeIndex = "snowflakeBonusIndex"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP)
+			)
+		)
 	)
 )
 
@@ -73,17 +138,61 @@
 	)
 )
 
-(def element BonusTagsTooltip (_shipEntityId:number=null, _isInShipResearch:bool=false, _isReceived:bool=false, _bonusTagId:number=null)
+(def element BonusTagsTooltip (_shipEntityId:number=null, _snowflakeIndex:number=null, _isInShipResearch:bool=false, _isReceived:bool=false, _bonusTagId:number=null)
 	(scope
-		(var shipEntity:gfx = "_shipEntityId ? $datahub.getEntity(_shipEntityId) : null")
+		(var shipEntity:dhEntity = "getEntity(_shipEntityId)")
 		(var expMultiply:number = "shipEntity ? shipEntity.ownShip.expMultiply : 0" (event "shipEntity.ownShip.evExpMultiplyChanged"))
 		(var shipEntityBonusTags:array = "shipEntity ? shipEntity.ship.bonusTags : []" (event "shipEntity.ship.evBonusTagsChanged"))
-		
-		(var bonusTagIds:array =	"	_bonusTagId			? [_bonusTagId] :
-										_isInShipResearch 	? [shipEntityBonusTags[0]]
-															: shipEntityBonusTags")
+
+		(var bonusTagIds:array =	"	_bonusTagId									? [_bonusTagId] :
+										_isInShipResearch							? [shipEntityBonusTags[0]] :
+										_snowflakeIndex != null						? shipEntityBonusTags.length > 1	? [shipEntityBonusTags[0]]
+																														: []
+																					: shipEntityBonusTags")
 
 		(var isDoubleExpBlockVisible:bool = "!_isInShipResearch && expMultiply > 1")
+	)
+	(style (width = 320px) (hitTest = false))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+			(controller $Repeat renderer='BonusTagTooltipItem'
+				(bind count "bonusTagIds.length")
+				(args
+					_itemsLength = "bonusTagIds.length"
+					_bonusTagEntityId = "bonusTagIds[$index]"
+					_isReceived = "_isReceived"
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isDoubleExpBlockVisible && bonusTagIds.length > 0"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='DoubleExperienceTooltipItem'
+				(bind enabled "isDoubleExpBlockVisible")
+				(args
+					_shipEntityId = "_shipEntityId"
+				)
+			)
+		)
+	)
+)
+
+(def element LargeBonusTagsTooltip (_shipEntityId:number=null, _isExpBonusTagVisible:bool=true, _isReceived:bool=false, _bonusTagId:number=null)
+	(scope
+		(var shipEntity:dhEntity = "getEntity(_shipEntityId)")
+		(var expMultiply:number = "shipEntity.ownShip.expMultiply ?: 0" (event "shipEntity.ownShip.evExpMultiplyChanged"))
+		(var shipEntityBonusTags:array = "shipEntity.ship.bonusTags ?: []" (event "shipEntity.ship.evBonusTagsChanged"))
+
+		(var bonusTagIds:array = "	_bonusTagId	? [_bonusTagId]
+												: shipEntityBonusTags")
+
+		(var isDoubleExpBlockVisible:bool = "expMultiply > 1 && _isExpBonusTagVisible")
 	)
 	(style (width = 320px) (hitTest = false))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
@@ -122,6 +231,7 @@
 		(var bonusTagComponent:gfx = "bonusTagEntity ? bonusTagEntity.bonusTag : null")
 
 		(var bonusTagType:str = "bonusTagEntity.bonusTag.type ?: ''")
+		(var isSnowflake:bool = "bonusTagType == BONUS_TYPE_SNOWFLAKE")
 		(var bonusTagRewards:array = "bonusTagEntity.bonusTag.rewards ?: []")
 		(var bonusTagsLeft:number = "bonusTagEntity.bonusTag.left ?: 0")
 		(var bonusTagBaseXpConditionAmount:number = "bonusTagEntity.bonusTag.threshold ?: 0")
@@ -193,6 +303,7 @@
 			(bind enabled "bonusTagRewards.length > 0")
 			(args
  				_rewards = "bonusTagRewards"
+ 				_isSnowflake = "isSnowflake"
 			)
 		)
 	)

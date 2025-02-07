@@ -1,0 +1,417 @@
+(def constant MAX_SSE_RESTRICTION_SHIP_LINE_LENGTH 3)
+(def constant RESTRICTION_LINE_HEIGHT 21px)
+(def constant SSE_SHIP_RESTRICTIONS_HEIGHT 400)
+
+(def element SseShipRestrictions (_restrictionsEntityId:number)
+	(scope
+		(var restrictionsEntity:dhEntity = "getEntity(_restrictionsEntityId)")
+		(var shipListRestrictionsComponent:dhComponent = "restrictionsEntity.shipListRestrictions")
+
+		(var restrictionsComponentId:str = "shipListRestrictionsComponent.id" (event "shipListRestrictionsComponent.evUpdate"))
+
+		(var shipLevelString:str = "shipListRestrictionsComponent.levelString ?: ''")
+
+		(var shipFilterItemsCollection:dhCollection = "getCollection(CC.shipFilterItem)")
+
+		(var concreteShipsFiltersCollection:dhCollection =	"shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.IDS)")
+		(var shipTypeFiltersCollection:dhCollection =		"shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.TYPE)")
+		(var nationFiltersCollection:dhCollection =			"shipFilterItemsCollection.getChildByPath(restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.NATION)")
+
+		(var concreteShipsLen:number =		"concreteShipsFiltersCollection.length ?: 0")
+		(var shipTypeFiltersLen:number =	"shipTypeFiltersCollection.length ?: 0")
+		(var nationFiltersLen:number =		"nationFiltersCollection.length ?: 0")
+
+		(var isShipLevelFilterVisible:bool =	"shipLevelString.length > 0")
+		(var isShipTypeFilterVisible:bool =		"shipTypeFiltersLen > 0")
+		(var isNationFilterVisible:bool =		"nationFiltersLen > 0")
+
+		(var isAllShipTypesAllowed:bool = "shipTypeFiltersLen == SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES.length")
+		(var showMoreButton:bool =				"concreteShipsLen > MAX_SSE_RESTRICTION_SHIP_LINE_LENGTH")
+
+		(var selectedShipFilters:array =		"shipListRestrictionsComponent.selectedFilters")
+		(var concreteShipsLenClamped:number =	"showMoreButton		? MAX_SSE_RESTRICTION_SHIP_LINE_LENGTH
+																	: concreteShipsLen")
+		(var hasConcreteShipRestrictions:bool =	"concreteShipsLen > 0")
+
+		(var battleTypes:array =			"restrictionsEntity.battleTypesView.viewList" (event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
+		(var hasReducedBattleTypes:bool =	"restrictionsEntity.battleTypesView.hasReducedBattleTypes" (event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
+		(var pveModifier:number =			"restrictionsEntity.sseConditions.pveModifier")
+		(var isPVEModifierApplied:bool =	"pveModifier != PVE_DEFAULT_MODIFIER_COEFF && hasReducedBattleTypes")
+
+		(var isBattleTypeRestrictionBlockVisible:bool = "battleTypes.length > 0")
+	)
+	(bindcall externalCall "restrictionsComponentId ? 'inputMapping.onAction' : ''" "['createRestrictionsSubCollection', { componentId: restrictionsComponentId }]" watch=false on='addedToStage' (bind trigger "restrictionsComponentId"))
+	(style (width = 100%))
+
+	(htile
+		(bind visible "isBattleTypeRestrictionBlockVisible || isNationFilterVisible || isShipTypeFilterVisible || isShipLevelFilterVisible")
+
+		(style
+			(width = 100%)
+			(marginBottom = "S")
+			(vgap = "XS")
+		)
+
+		
+		(hblock
+			(controller $Repeat renderer='TaskBattleTypeRestriction'
+				(bind enabled "isBattleTypeRestrictionBlockVisible")
+				(bind count "battleTypes.length")
+				(args
+					_isPVEModifierApplied = "battleTypes[$index].hasPVEModifier && isPVEModifierApplied"
+					_battleType = "battleTypes[$index].battleName"
+					_customIcon = "battleTypes[$index].customIconName ?: ''"
+					_isTrial = "battleTypes[$index].customIconName == SC.Common.OPERATION_BATTLE_TYPE.VALUE_TO_NAME[SC.Common.OPERATION_BATTLE_TYPE.TRIAL]"
+				)
+			)
+		)
+
+		(block
+			(bind visible "selectedShipFilters.length > 0 && isBattleTypeRestrictionBlockVisible && !hasConcreteShipRestrictions")
+			(style
+				(height = "RESTRICTION_LINE_HEIGHT")
+				(marginTop = "XXS")
+			)
+			(element VerticalDivider)
+		)
+
+		
+		(block
+			(bind visible "isNationFilterVisible")
+			(style
+				(height = "RESTRICTION_LINE_HEIGHT")
+				(align = "middle")
+				(marginRight = "S")
+				(marginLeft = "S")
+			)
+
+			(controller $Instance renderer='ShipNationsFilterRestrictions'
+				(bind enabled "isNationFilterVisible")
+				(args
+					_filterCollection = "nationFiltersCollection"
+				)
+			)
+		)
+
+		
+		(hblock
+			(bind visible "isShipTypeFilterVisible && !isAllShipTypesAllowed")
+
+			(block
+				(bind visible "isNationFilterVisible")
+				(style
+					(height = "RESTRICTION_LINE_HEIGHT")
+					(marginTop = "XXS")
+				)
+				(element VerticalDivider)
+			)
+			(hblock
+				(style
+					(height = "RESTRICTION_LINE_HEIGHT")
+					(align = "middle")
+					(marginLeft = "XS")
+					(marginRight = "XS")
+				)
+				(controller $Repeat renderer='IconShipClasses'
+					(bind count "shipTypeFiltersLen")
+					(args
+						_filterCollection = "shipTypeFiltersCollection"
+					)
+				)
+			)
+		)
+
+		
+		(hblock
+			(bind visible "isShipLevelFilterVisible")
+
+			(block
+				(bind visible "isNationFilterVisible || (isShipTypeFilterVisible && !isAllShipTypesAllowed)")
+				(style
+					(height = "RESTRICTION_LINE_HEIGHT")
+					(marginTop = "XXS")
+				)
+				(element VerticalDivider)
+			)
+			(block
+				(style
+					(height = "RESTRICTION_LINE_HEIGHT")
+					(align = "middle")
+				)
+				(tf
+					(class $TextDefault17NM)
+					(style
+						(alpha = "TA")
+						(marginTop = "XXS")
+						(marginLeft = "S")
+					)
+					(bind text "shipLevelString")
+				)
+			)
+			(controller $Tooltip
+				(bind enabled "isShipLevelFilterVisible")
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_HINT_SHIP_LEVEL'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+	
+	(htile
+		(bind visible "hasConcreteShipRestrictions")
+		(style
+			(width = 100%)
+			(marginTop = "XS")
+			(marginRight = "S")
+			(hgap = "S")
+			(vgap = "M")
+		)
+
+		(controller $Repeat renderer='SseConcreteShipRestriction'
+			(bind count "concreteShipsLenClamped")
+			(bind enabled "hasConcreteShipRestrictions")
+			(args
+				_selectedShipFilters = "selectedShipFilters"
+				_concreteShipsLenClamped = "concreteShipsLenClamped"
+			)
+		)
+
+		(controller $Instance renderer='MoreShipRestrictions'
+			(bind enabled "showMoreButton && hasConcreteShipRestrictions")
+			(args
+				_selectedShipFilters = "selectedShipFilters"
+			)
+		)
+	)
+)
+
+(def element SseConcreteShipRestriction (_selectedShipFilters:array, _concreteShipsLenClamped:number, _hideTooltip:bool = false)
+	(scope
+		(var filterEntity:dhEntity = "getEntity(_selectedShipFilters[$index])")
+		(var shipId:number = "toNumber(filterEntity.shipFilterItem.field)")
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(element ShipLineItemNM
+			_shipId = "shipId"
+			_withFlag = true
+		)
+
+		(controller $Tooltip
+			(bind enabled "!_hideTooltip")
+			(renderer = 'ShipExtendedTooltip')
+			(args
+				_shipId = "shipId"
+				_isRewards = true
+				_hasShipImage = true
+			)
+			(macro DEFAULT_TOOLTIP_HORIZONTAL_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(bind visible "$index < _concreteShipsLenClamped - 1")
+		(style (marginLeft = "XXS"))
+		(tf
+			(class $TextDefault17NM)
+			(style (alpha = "TA"))
+			(text = 'IDS_KEY_COMMA')
+		)
+	)
+)
+
+(def element MoreShipRestrictions (_selectedShipFilters:array)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var concreteShipsLen:number = "_selectedShipFilters.length - MAX_SSE_RESTRICTION_SHIP_LINE_LENGTH")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(style
+		(align = "center|middle")
+		(width = 62px)
+		(height = 24px)
+		(marginTop = "-S")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../panel_background/selection_panel.png')
+			(scale9grid = 2)
+			(bind alpha  "rollOver ? 0.5 : 0.2")
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'MoreShipRestrictionsTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SseShipRestrictionsInfotip')
+		(args
+			_selectedShipFilters = "_selectedShipFilters"
+		)
+		(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+		(hideOnMove = true)
+		(pinBottom = 'InfotipPinBottom')
+		(offsetMap = "{ left: 0px, top: 10px, right: 0px, bottom: 10px }")
+		(pinOffset = "{across: 0px, along: 1px}")
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TA"))
+		(bind text "subst('IDS_REST_REWARDS_HINT_LOWER', [], { _count: concreteShipsLen })")
+	)
+)
+
+(def element MoreShipRestrictionsTooltip ()
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+	)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+
+	(style (width = "SHIP_RESTRICTIONS_WIDTH"))
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_SSE_TASK_SHIP_RESTRICTIONS'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =	'IDS_HINT_LEFT_CLICK_FOR_FURTHER_INFO'
+		)
+	)
+)
+
+(def element SseShipRestrictionsInfotip (_selectedShipFilters:array)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(var contentScrollHeight:number = 0)
+		(var currentScrollHeight:number = "min(contentScrollHeight, SSE_SHIP_RESTRICTIONS_HEIGHT)")
+	)
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+
+	(style (width = "SHIP_RESTRICTIONS_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style
+				(width = 100%)
+				(paddingRight = "M")
+				(paddingLeft = "M")
+				(paddingTop = "SXS")
+				(paddingBottom = "-SXS")
+			)
+			(element TooltipSystemHeaderSubheaderText
+				_headerText = 'IDS_SSE_TASK_SHIP_RESTRICTIONS'
+			)
+			(element TooltipSystemHorizontalDivider)
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(backgroundColor = "NO_COLOR")
+				(bind height "currentScrollHeight")
+			)
+
+			(verticalSlider = 'ScrollBarVLight')
+			(hscrollPolicy = 'off')
+			(vscrollPolicy = 'auto')
+
+			(wheelScrollSpeed = 1.0)
+			(wheelScrollAcceleration = 0.9)
+			(maxScrollingAnimatedDistance = 150)
+
+			(activeControlsAlpha = 1)
+			(inactiveControlsAlpha = 0.5)
+			(animationDuration = 0.2)
+			(animationEasing = "Easing.cubic_out")
+
+			(content
+				(style (width = 100%))
+				(bind contentScrollHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))
+				(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+					(controller $Instance renderer='TooltipSystemSseConcreteShipsRestrictionBlock'
+						(args
+							_selectedShipFilters = "_selectedShipFilters"
+							_headerText = 'IDS_SSE_TASK_SHIP_RESTRICTIONS_DESC'
+						)
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element TooltipSystemSseConcreteShipsRestrictionBlock (_selectedShipFilters:array, _headerText:str)
+	(scope
+		(var shipsCollectionLen:number = "_selectedShipFilters.length - MAX_SSE_RESTRICTION_SHIP_LINE_LENGTH")
+	)
+	(style (width = 100%))
+
+	(element TooltipSystemStatusLine
+		_text = "_headerText"
+		_width = 100%
+	)
+
+	(element TooltipSystemHorizontalDivider)
+
+	(block
+		(style (width = 100%))
+		(controller $Repeat renderer='SseShipRestrictionLine'
+			(bind count "shipsCollectionLen")
+			(args
+				_selectedShipFilters = "_selectedShipFilters"
+			)
+		)
+	)
+)
+
+(def element SseShipRestrictionLine (_selectedShipFilters:array)
+	(scope
+		(var filterEntity:dhEntity = "getEntity(_selectedShipFilters[$index + MAX_SSE_RESTRICTION_SHIP_LINE_LENGTH])")
+		(var shipId:number = "toNumber(filterEntity.shipFilterItem.field)")
+	)
+
+	(style
+		(align = "center|middle")
+		(maxWidth = 100%)
+		(height = 27px)
+		(marginRight = "SXS")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(element ShipLineItemNM
+		_shipId = "shipId"
+		_alpha = "TA"
+		_withFlag = true
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipExtendedTooltip')
+		(args
+			_shipId = "shipId"
+			_hasShipImage = true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)

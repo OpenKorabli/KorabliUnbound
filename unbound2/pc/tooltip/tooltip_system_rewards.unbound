@@ -1,4 +1,4 @@
-(def element TooltipSystemRewards (_rewards:array, _rewardsTitle:str="null") layout=true
+(def element TooltipSystemRewards (_rewards:array, _rewardsTitle:str="null")
 	(style (width = 100%))
 	(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
 
@@ -19,7 +19,7 @@
 	)
 )
 
-(def element TooltipSystemDHRewards (_rewards:array, _rewardsTitle:str = null) layout=true
+(def element TooltipSystemDHRewards (_rewards:array, _rewardsTitle:str = null)
 	(style (width = 100%))
 	(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
 
@@ -41,9 +41,19 @@
 	)
 )
 
-(def element TooltipSystemDHRewardsList (_rewards:array) layout=true
+(def element TooltipSystemDHRewardsList (_rewards:array, _isSnowflake:bool=false)
 	(style (width = 100%))
 	(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
+
+	(block
+		(style (width = 100%) (bind marginBottom "_isSnowflake ? SXS : 0px"))
+		(controller $Instance renderer='TooltipSystemDescriptionText'
+			(bind enabled "_isSnowflake")
+			(args
+				_descriptionText = 'IDS_TOOLTIP_BATTLE_BONUSES'
+			)
+		)
+	)
 
 	(block
 		(style (width = 100%) (marginBottom = "-SXS"))
@@ -52,12 +62,13 @@
 			(bind count "_rewards.length")
 			(args
 				_rewardEntityId = "_rewards[$index]"
+				_isSnowflake = "_isSnowflake"
 			)
 		)
 	)
 )
 
-(def element TooltipSystemRewardsDHList (_rewards:array, _rewardsTitle:str='') layout=true
+(def element TooltipSystemRewardsDHList (_rewards:array, _rewardsTitle:str='')
 	(style (width = 100%))
 	(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
 
@@ -87,16 +98,24 @@
 	)
 )
 
-
-(def element TooltipSystemRewardListItemAdapter (_rewardEntityId:gfx) layout=true
+(def element TooltipSystemRewardListItemAdapter (_rewardEntityId:number, _isSnowflake:bool=false)
 	(scope
-		(var renderItemList:dict = "{	'Exterior':	'TooltipSystemRewardExteriorAdapter',
-										'Resource':	'TooltipSystemRewardResourceAdapter',
-										'Lootbox':	'TooltipSystemRewardLootboxAdapter' }")
+		(var renderItemList:dict = "{	'Exterior':		'TooltipSystemRewardExteriorAdapter',
+										'Resource':		'TooltipSystemRewardResourceAdapter',
+										'Lootbox':		'TooltipSystemRewardLootboxAdapter',
+										'Snowflake':	'RewardContainerTooltipItem'}")
 
-		(var rewardEntity:gfx = "$datahub.getEntity(_rewardEntityId)")
-		(var type:str = "rewardEntity.rewardComponent.type")
+		(var rewardEntity:dhEntity = "getEntity(_rewardEntityId)")
+		(var rewardComponent:dhComponent = "rewardEntity.rewardComponent")
+		(var type:str = "_isSnowflake ? 'Snowflake' : rewardComponent.type")
 		(var renderItem:str = "type in renderItemList ? renderItemList[type] : null")
+		(var reward:dict = "rewardComponent	?	{	id:			rewardComponent.id,
+													amount:		rewardComponent.amount,
+													name:		rewardComponent.name,
+													type:		rewardComponent.type,
+													subtype:	rewardComponent.subtype,
+													params:		rewardComponent.params}
+											:	null")
 	)
 	(style (width = 100%) (marginBottom = "SXS"))
 
@@ -104,12 +123,12 @@
 		(bind renderer "renderItem")
 		(bind enabled "renderItem")
 		(args
-			_rewardEntity = "rewardEntity"
+			_reward = "reward"
 		)
 	)
 )
 
-(def element TooltipSystemRewardsList (_rewards:array) layout=true
+(def element TooltipSystemRewardsList (_rewards:array)
 	(style (width = 100%))
 	(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
 
@@ -124,7 +143,7 @@
 	)
 )
 
-(def element TooltipSystemRewardListItem (_reward:dict) layout=true
+(def element TooltipSystemRewardListItem (_reward:dict)
 	(scope
 		(var isCurrency:bool = "isIn(_reward.subtype, SC.Common.CURRENCIES.ALL) || _reward.subtype == SC.Common.REWARD_SUBTYPE.CLANRESOURCE")
 
@@ -155,42 +174,50 @@
 	)
 )
 
-(def element TooltipSystemRewardExteriorAdapter (_rewardEntity:gfx) layout=true
+(def element TooltipSystemRewardExteriorAdapter (_reward:dict)
 	(scope
-		(var exteriorEntity:gfx = "$datahub.getPrimaryEntity(CC.exteriorConfig, _rewardEntity.rewardComponent.id)")
-		(var exteriorConfig:gfx = "exteriorEntity ? exteriorEntity.exteriorConfig : null")
+		(var exteriorEntity:dhEntity = "getPrimaryEntity(CC.exteriorConfig, _reward.id)")
+		(var exteriorConfig:dhComponent = "exteriorEntity ? exteriorEntity.exteriorConfig : null")
+		(var rewardSubType:str = "_reward.subtype")
+		(var signalEntity:dhEntity = "getPrimaryEntity(CC.signal, _reward.id)")
+		(var ecoBoostEntity:dhEntity = "getPrimaryEntity(CC.ecoBoost, _reward.id)")
 
-		(var title:str = "subst( tr('IDS_SUBST_' + toUpper(exteriorConfig.type)), [], { _exteriorNameIds: tr('IDS_' + toUpper(exteriorConfig.name)) } )")
-		(var count:number = "_rewardEntity.rewardComponent.amount")
+		(var title:str = "	exteriorEntity	?	subst( tr('IDS_SUBST_' + toUpper(_reward.subtype)), [], { _exteriorNameIds: tr('IDS_' + toUpper(exteriorConfig.name)) } ) :
+							signalEntity	?	tr('IDS_' + signalEntity.signal.name + '_' + signalEntity.signal.rarity) :
+							ecoBoostEntity	?	tr('IDS_' + ecoBoostEntity.ecoBoost.name)
+												:	''")
+
+		(var count:number = "_reward.amount")
+	)
+
+	(style (width = 100%))
+	(element TooltipSystemRewardCounter _title = "title" _count = "count")
+)
+
+(def element TooltipSystemRewardLootboxAdapter (_reward:dict)
+	(scope
+		(var title:str = "tr(toUpper('IDS_REWARD_LOOTBOX_' + _reward.subtype + '_TITLE'))")
+		(var count:number = "_reward.amount")
 	)
 	(style (width = 100%))
 	(element TooltipSystemRewardCounter _title = "title" _count = "count")
 )
 
-(def element TooltipSystemRewardLootboxAdapter (_rewardEntity:gfx) layout=true
+(def element TooltipSystemRewardResourceAdapter (_reward:dict)
 	(scope
-		(var title:str = "tr(toUpper('IDS_REWARD_LOOTBOX_' + _rewardEntity.rewardComponent.subtype + '_TITLE'))")
-		(var count:number = "_rewardEntity.rewardComponent.amount")
-	)
-	(style (width = 100%))
-	(element TooltipSystemRewardCounter _title = "title" _count = "count")
-)
+		(var title:str = "tr(toUpper('IDS_REWARD_' + _reward.subtype + '_TITLE'))")
 
-(def element TooltipSystemRewardResourceAdapter (_rewardEntity:gfx) layout=true
-	(scope
-		(var title:str = "tr(toUpper('IDS_REWARD_' + _rewardEntity.rewardComponent.subtype + '_TITLE'))")
+		(var currency:str = "	_reward.subtype == 'clanResource'	?	SC.Common.CURRENCIES.CLAN_RESOURCE
+																	:	_reward.subtype")
 
-		(var currency:str = "	_rewardEntity.rewardComponent.subtype == 'clanResource'		?	SC.Common.CURRENCIES.CLAN_RESOURCE
-																							:	_rewardEntity.rewardComponent.subtype")
-
-		(var priceInfo:dict = "{ finalPrice: _rewardEntity.rewardComponent.amount, currency: currency}")
+		(var priceInfo:dict = "{ finalPrice: _reward.amount, currency: currency}")
 
 	)
 	(style (width = 100%))
 	(element TooltipSystemRewardPriceTag _title = "title" _priceInfo = "priceInfo")
 )
 
-(def element TooltipSystemRewardPriceTag (_priceInfo:dict, _title:str, _showDiscountTag:bool = false) layout=true
+(def element TooltipSystemRewardPriceTag (_priceInfo:dict, _title:str, _showDiscountTag:bool = false)
 	(style (flow = "horizontal") (backgroundColor = "NO_COLOR") (width = 100%))
 
 	(tf
@@ -204,7 +231,7 @@
 	)
 )
 
-(def element TooltipSystemRewardCounter (_title:str, _count:number) layout=true
+(def element TooltipSystemRewardCounter (_title:str, _count:number)
 	(style (flow = "horizontal") (width = 100%))
 
 	(tf

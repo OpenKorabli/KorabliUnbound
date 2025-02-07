@@ -1,132 +1,213 @@
-(def element AnimatedBackground (_selectedCategory:str='default', _type:number="SC.Ui_styles.ANIMATED_BG.DEFAULT", _startShow:bool=true)
+(def constant DEFAULT_ANIMATED_BG_CT "{	redMultiplier:		1,
+										greenMultiplier:	1,
+										blueMultiplier:		1,
+										alphaMultiplier:	1,
+										redOffset:			0,
+										greenOffset:		0,
+										blueOffset:			0,
+										alphaOffset:		0 }")
+
+(def constant HIDDEN_ANIMATED_BG_CT "{	redMultiplier:		0,
+										greenMultiplier:	0,
+										blueMultiplier:		0,
+										alphaMultiplier:	1,
+										redOffset:			0,
+										greenOffset:		0,
+										blueOffset:			0,
+										alphaOffset:		0 }")
+
+(def struct GET_COLOR_SETTING(_baseColors:dict={})
+	(var value:dict = "{
+							redMultiplier:		'redMultiplier'		in _baseColors ? _baseColors['redMultiplier']	: 1,
+							greenMultiplier:	'greenMultiplier'	in _baseColors ? _baseColors['greenMultiplier']	: 1,
+							blueMultiplier:		'blueMultiplier'	in _baseColors ? _baseColors['blueMultiplier']	: 1,
+							alphaMultiplier:	'alphaMultiplier'	in _baseColors ? _baseColors['alphaMultiplier']	: 1,
+							redOffset:			'redOffset'			in _baseColors ? _baseColors['redOffset']		: 0,
+							greenOffset:		'greenOffset'		in _baseColors ? _baseColors['greenOffset']		: 0,
+							blueOffset:			'blueOffset'		in _baseColors ? _baseColors['blueOffset']		: 0,
+							alphaOffset:		'alphaOffset'		in _baseColors ? _baseColors['alphaOffset']		: 0
+						}")
+)
+
+(def struct ANIMATED_BG_SCOPE(_selectedCategory:str, _type:number, _customData:dict={})
+	
+	(var customBgColor:dict = "'backgroundColor' in _customData	? _customData['backgroundColor'] : null")
+	(var customEffectColor:dict = "'effectColor' in _customData	? _customData['effectColor'] : null")
+	
+
+	(var curConfig:dict = "ANIMATED_BG_CONFIG_MAP[_type]")
+	(var configData:dict =	"_selectedCategory in curConfig				? curConfig[_selectedCategory]
+																		: curConfig['default']")
+
+	
+	(var hasBgPath:bool = "'backgroundPath' in configData")
+	(var currentBgPath:str = "hasBgPath									? configData['backgroundPath']
+																		: 'url:../bg/animated/sse/base/recolor.skel'")
+
+	(var baseBackgroundColor:dict = "customBgColor						? customBgColor :
+									!hasBgPath							? HIDDEN_ANIMATED_BG_CT :
+									'backgroundColor' in configData		? configData['backgroundColor']
+																		: DEFAULT_ANIMATED_BG_CT")
+
+	(struct currentBackgroundColor = GET_COLOR_SETTING(_baseColors="baseBackgroundColor"))
+
+	
+	(var baseEffectColor:dict = "customEffectColor						? customEffectColor :
+								'effectColor' in configData				? configData['effectColor']
+																		: DEFAULT_ANIMATED_BG_CT")
+
+	(struct currentEffectColor = GET_COLOR_SETTING(_baseColors="baseEffectColor"))
+
+	
+	(struct qualityGraphicsPref = GET_PREF_NUMBER(_option="'graphics.preset'"))
+	(var qualityGraphics:number = "qualityGraphicsPref.value")
+	(var isStatic:bool = "'isStatic' in _customData				? _customData['isStatic']
+																: qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.LOW || qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.MINIMUM")
+
+	(var isStaticBG:bool = "isStatic || !hasBgPath")
+
+	(var isEffectPath:bool = "'effectPath' in configData")
+	(var effectPath:str = 	"isEffectPath						? configData['effectPath']
+																: ''")
+)
+
+(def element ModalWindowAnimatedBackground (	_selectedCategory:str = 'default',
+												_type:number = "SC.Ui_styles.ANIMATED_BG.DEFAULT",
+												_hideTime:number = 0.3,
+												_hideDelay:number = 0)
 	(scope
 		(event startShow)
-		(event evStartShow)
-		(event evEffectSpeedChange)
-		(event evEffectAnimEnded)
-		(event evBGAnimEnded)
-		(event evColorSettingsChanged)
+		(event startHide)
 
-		
-		(var customBgColor:dict = null)
-		(bind customBgColor "$event.bg_settings" init=false (event "evColorSettingsChanged"))
-		(var customEffectColor:dict = null)
-		(bind customEffectColor "$event.effect_settings" init=false (event "evColorSettingsChanged"))
-		
-
-		(macro STAGE_SIZE)
-		(macro GET_PREF 'qualityGraphics' "'graphics.preset'")
-
-		(var curConfig:dict = "ANIMATED_BG_CONFIG_MAP[_type]")
-		(var configData:dict = "_selectedCategory in curConfig ? curConfig[_selectedCategory] : curConfig['default']")
-
-		(var isStatic:bool = "qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.LOW || qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.MINIMUM")
-		(var curBgPath:str = 		"configData['animatedBgPath']")
-		(var curBgColor:dict = 		"customBgColor ? customBgColor : configData['colorBG']")
-		(var isColorEffect:bool = 	"'colorEffect' in configData")
-		(var colorEffect:dict = 	"	customEffectColor		? customEffectColor :
-										isColorEffect			? configData['colorEffect']
-																: {}")
-
-		(var isEffectPath:bool = 	"'effectPath' in configData")
-		(var effectPath:str = 		"isEffectPath ? configData['effectPath'] : ''")
-		(var effectChangedTrigger:str = "toString(_startShow) + effectPath")
-
-		(var bgSpeed:number = 0)
-		(bind bgSpeed "isStatic ? 0 : 1" init=false (event "evBGAnimEnded") (bind trigger "isStatic"))
-
-		(var effectSpeed:number = 0)
-		(bind effectSpeed "isStatic ? 0 : 1" init=false (event "evEffectSpeedChange") (bind trigger "isStatic"))
-
-		(var isCacheAsBitmapBg:bool = true)
-		(bind isCacheAsBitmapBg "isStatic" init=false (event "evBGAnimEnded"))
-
-		(var isCacheAsBitmapEffect:bool = true)
-		(bind isCacheAsBitmapEffect "true" init=false (bind trigger "effectChangedTrigger"))
-		(bind isCacheAsBitmapEffect "isStatic" init=false (event "evEffectAnimEnded"))
+		(struct animBgData = ANIMATED_BG_SCOPE(_selectedCategory="_selectedCategory" _type="_type"))
 	)
-	(dispatch evStartShow on='addedToStage' (bind enabled "_startShow"))
-	(dispatch evStartShow (event "startShow"))
+	(class $Fullsize)
+	(alpha = 0)
 
-	(style (bind width "stageWidth") (bind height "stageHeight"))
+	(controller $Animation
+		(bindcall play duration=0.3 to="{ alpha: 1 }" action="kill" (event "startShow"))
+		(bindcall play delay="_hideDelay" duration="_hideTime" to="{ alpha: 0 }" action="kill" watch=false (event "startHide"))
+	)
 
 	
 	(block
 		(class $FullsizeAbsolute)
-		(style
-			(bind backgroundImage "curBgPath")
-			(backgroundSize = "cover")
-		)
-		(bind alpha "0" on='removedFromStage')
 
-		(colorTransform = "curBgColor")
-		(bind cacheAsBitmap "isCacheAsBitmapBg")
-
-		(controller $Spine
-			(bind speed "bgSpeed")
-		)
-
-		
-		(controller $Animation
-			(bindcall play
-				duration = 0.6
-				to = "{colorTransform: curBgColor}"
-				(bind trigger "curBgColor")
-			)
-		)
-
-		
-		(controller $Animation
-			(bindcall play
-				duration = 0.3
-				to = "{alpha: 1}"
-				action = "kill"
-				(event "evStartShow")
-				(bind trigger "_startShow")
-			)
-			(dispatch evBGAnimEnded init=false on=evAnimEnded)
+		(element AnimatedBackgroundSubstrate
+			_curBgPath = "animBgData.currentBgPath"
+			_curBgColor = "animBgData.currentBackgroundColor.value"
+			_isStatic = "animBgData.isStaticBG"
 		)
 	)
 
 	
 	(block
-		(bind visible "isEffectPath")
 		(class $FullsizeAbsolute)
-		(style
-			(bind backgroundImage "effectPath")
-			(backgroundSize = "cover")
-		)
-		(bind alpha "0" on='removedFromStage')
-
-		(colorTransform = "colorEffect")
-		(bind cacheAsBitmap "isCacheAsBitmapEffect")
-
-		(controller $Spine
-			(bind speed "effectSpeed" on=refresh)
-		)
-
-		
-		(controller $Animation
-			(bindcall play
-				duration = 0.6
-				to = "{colorTransform: colorEffect}"
-				(bind trigger "colorEffect")
+		(controller $Instance renderer='AnimatedBackgroundEffect'
+			(bind enabled "animBgData.isEffectPath")
+			(args
+				_curEffectPath = "animBgData.effectPath"
+				_curEffectColor = "animBgData.currentEffectColor.value"
+				_isStatic = "animBgData.isStatic"
 			)
 		)
+	)
+)
 
-		
-		(controller $Animation
-			(bindcall play
-				duration = 0.6
-				from = "{alpha: 0}"
-				to = "{alpha: 1}"
-				easing = "Easing.quad_out"
-				action = "kill"
-				(event "evStartShow")
-				(bind trigger "effectChangedTrigger")
-			)
-			(dispatch evEffectSpeedChange init=false delay=0.2 on=evAnimStarted)
-			(dispatch evEffectAnimEnded init=false on=evAnimEnded)
+(def element AnimatedBackground (	_selectedCategory:str = 'default',
+									_type:number = "SC.Ui_styles.ANIMATED_BG.DEFAULT",
+									_customData:dict = {}
+								)
+	(scope
+		(struct animBgData = ANIMATED_BG_SCOPE(_selectedCategory="_selectedCategory" _type="_type" _customData="_customData"))
+	)
+	(class $Fullsize)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+	
+		(element AnimatedBackgroundSubstrate
+			_curBgPath = "animBgData.currentBgPath"
+			_curBgColor = "animBgData.currentBackgroundColor.value"
+			_isStatic = "animBgData.isStaticBG"
 		)
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='AnimatedBackgroundEffect'
+			(bind enabled "animBgData.isEffectPath")
+			(args
+				_curEffectPath = "animBgData.effectPath"
+				_curEffectColor = "animBgData.currentEffectColor.value"
+				_isStatic = "animBgData.isStatic"
+			)
+		)
+	)
+)
+
+(def element AnimatedBackgroundSubstrate (_curBgPath:str, _curBgColor:dict, _isStatic:bool)
+	(class $FullsizeAbsolute)
+	(style
+		(bind backgroundImage "_curBgPath")
+		(backgroundSize = "cover")
+	)
+	(colorTransform = "_curBgColor")
+
+	(controller $Spine
+		(mergeLayers = true)
+		(bindcall pause init=true	(bind enabled "_isStatic"))
+		(bindcall resume			(bind enabled "!_isStatic"))
+	)
+
+	(controller $Animation
+		
+		(bindcall play duration=0.6 to="{ colorTransform: _curBgColor }" action="kill" (bind trigger "_curBgColor"))
+	)
+)
+
+(def element AnimatedBackgroundEffect (_curEffectPath:str, _curEffectColor:dict, _isStatic:bool)
+	(scope
+		(var curEffectPath:str = "_curEffectPath" watch=false)
+	)
+	(class $FullsizeAbsolute)
+	(style
+		(bind backgroundImage "curEffectPath")
+		(backgroundSize = "cover")
+		(align = "center|middle")
+	)
+	(alpha = 0)
+	(colorTransform = "_curEffectColor")
+
+	(controller $Spine
+		(mergeLayers = true)
+		(bindcall pause init=true	(bind enabled "_isStatic"))
+		(bindcall resume			(bind enabled "!_isStatic"))
+	)
+
+	(controller $Animation
+		(controllerEvents evEffectAlphaAnimStarted)
+		
+		(bindcall play
+			id = 'EffectColorAnim'
+			duration = 0.6
+			to = "{ colorTransform: _curEffectColor }"
+			action = "kill"
+			(bind trigger "_curEffectColor")
+		)
+		
+		(bindcall play
+			id = 'EffectAlphaAnim'
+			duration = 0.6
+			from = "{ alpha:0 }"
+			to = "{ alpha:1 }"
+			action = "kill"
+			onStartedEvent = 'evEffectAlphaAnimStarted'
+			init = true
+			(bind trigger "_curEffectPath")
+		)
+		(bind curEffectPath "_curEffectPath" init=false watch=false on='evEffectAlphaAnimStarted')
 	)
 )

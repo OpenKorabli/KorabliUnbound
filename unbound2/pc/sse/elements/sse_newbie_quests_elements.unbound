@@ -1,3 +1,24 @@
+(def constant NEWBIE_QUEST_ENTRY_BATTLE_TASK 'PCON001')
+(def constant NEWBIE_QUEST_SHIP_LEVEL {
+	'PCON001': 2,
+	'PCON022': 2,
+	'PCON017': 3,
+	'PCON023': 3,
+	'PCON024': 3,
+	'PCON025': 4,
+	'PCON026': 4,
+	'PCON018': 4,
+	'PCON027': 5,
+	'PCON028': 5,
+	'PCON019': 5,
+	'PCON020': 6,
+	'PCON029': 6,
+	'PCON030': 6,
+	'PCON021': 7,
+	'PCON031': 7,
+	'PCON032': 7
+})
+
 (def element SseNewbieQuestsChild ()
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
@@ -8,10 +29,10 @@
 
 		(macro USER_PREF_DATA)
 
-		(var sortedNewbieQuestsCollection:dhCollection = "getCollection(CC.newbieQuest).getChildByPath('byTier')")
+		(var sortedNewbieQuestsCollection:dhCollection = "getCollection(CC.newbieQuest).getChildByPath('sorted')")
 		(var sortedNewbieQuestsLen:number = "sortedNewbieQuestsCollection.length ?: 0")
 
-		(var activeNewbieQuestsCollection:dhCollection = "getCollection(CC.newbieQuest).getChildByPath('notDone.byTier')")
+		(var activeNewbieQuestsCollection:dhCollection = "getCollection(CC.newbieQuest).getChildByPath('notDone.sorted')")
 
 		(var isNQInformerClicked:bool = "userPrefs.isNQInformerClicked ?: false")
 		
@@ -132,13 +153,20 @@
 (def element NewbieQuestCardSimple (_newbieQuests:dhCollection, _selectedNewbieQuestId:number, _isNQInformerClicked:bool)
 	(scope
 		(event evSelectNewbieQuestUpwards)
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro HIGH_CONTRAST_DATA_SCOPE)
 
 		(var questEntity:dhEntity = "_newbieQuests[$index]")
 		(var questId:number = "questEntity.id")
 		(var isDone:bool = "questEntity.newbieQuest.isDone" (event "questEntity.newbieQuest.evChanged"))
+		(var isBattleNewbieQuest:bool = "questEntity.newbieQuest.isBattleNewbieQuest" (event "questEntity.newbieQuest.evChanged"))
+		(var questIndex:str = "questEntity.newbieQuest.index ?: ''" (event "questEntity.newbieQuest.evChanged"))
+
 		(var isSelected:bool = "_selectedNewbieQuestId == questId")
-		(macro MOUSE_HANDLER_SCOPE)
-		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(var isBattleTaskContent:bool = "isBattleNewbieQuest || questIndex == NEWBIE_QUEST_ENTRY_BATTLE_TASK")
+		(var hintText:str = "isBattleTaskContent ? 'IDS_NEWBIE_QUESTS_BATTLE_ICON_HINT' : 'IDS_NEWBIE_QUESTS_COMMON_ICON_HINT'")
+		(var taskIcon:str = "isBattleTaskContent	? 'url:../sse/newbie_quest/task_icon_battle.png'
+													: 'url:../sse/newbie_quest/task_icon_common.png'")
 	)
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(macro SOUND_HANDLER "isSelected ? '' : 'quest_item'")
@@ -178,13 +206,13 @@
 		(style 
 			(width = 24px) (height = 24px)
 			(marginLeft = "M") (marginTop = 10px)
-			(backgroundImage = 'url:../sse/newbie_quest/task_icon.png')
+			(bind backgroundImage "taskIcon")
 		)
 
 		(controller $Tooltip
 			(renderer = 'SimpleStatusTooltip')
 			(args
-				_text = 'IDS_NEWBIE_QUESTS_ICON_HINT'
+				_text = "hintText"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -201,7 +229,6 @@
 
 		(block
 			(style (width = 100%) (minHeight = 48px))
-
 			(block
 				(style (marginRight = "S") (width = 100%))
 
@@ -260,21 +287,49 @@
 		(var questEntity:dhEntity = "getEntity(_questId)")
 		(var isDone:bool = "questEntity.newbieQuest.isDone" (event "questEntity.newbieQuest.evChanged"))
 		(var newTipChainId:number = "questEntity.newbieQuest.tier" (event "questEntity.newbieQuest.evChanged"))
+		(var questIndex:str = "questEntity.newbieQuest.index ?: ''" (event "questEntity.newbieQuest.evChanged"))
 		(var chainIdForButton:number = "!isDone ? newTipChainId : SC.Context_guiding_tip.TIP_CHAIN_ID.REPEAT[newTipChainId-2]")
+		(var isBattleNewbieQuest:bool = "questEntity.newbieQuest.isBattleNewbieQuest" (event "questEntity.newbieQuest.evChanged"))
 
 		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
 		(var hasShips:bool = "toBool(playerShipsCollection.length)")
 
-		(var imagePath:str = "'url:../sse/newbie_quest/' + newTipChainId + '.jpg'")
+		(var isBattleTaskContent:bool = "isBattleNewbieQuest || questIndex == NEWBIE_QUEST_ENTRY_BATTLE_TASK")
 	)
 	(style (width = 640px))
-
 	(block
 		(style
 			(width = 640px)
 			(height = 320px)
 			(backgroundSize = "fill")
-			(bind backgroundImage "imagePath")
+			(bind backgroundImage "'url:../sse/newbie_quest/' + newTipChainId + '.jpg'")
+		)
+		(block
+			(bind visible "isBattleTaskContent")
+			(style (position = "absolute") (left = "L") (bottom = "L"))
+			(tf
+				(class $TextDefaultBold100NM)
+				(style (alpha = "TA"))
+				(bind text "shipLevelsToRoman([NEWBIE_QUEST_SHIP_LEVEL[questIndex] ?: 0])")
+			)
+		)
+	)
+	(block
+		(bind visible "isBattleTaskContent")
+		(style
+			(position = "absolute")
+			(width = 640px)
+			(height = 320px)
+			(backgroundImage = 'url:../sse/newbie_quest/fog_1.png')
+		)
+	)
+	(block
+		(bind visible "isBattleTaskContent")
+		(style
+			(position = "absolute")
+			(width = 640px)
+			(height = 320px)
+			(backgroundImage = 'url:../sse/newbie_quest/fog_2.png')
 		)
 	)
 
@@ -326,23 +381,26 @@
 					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 				)
 
-				(element DefaultButton
-					_width = 200px
-					_enabled = "hasShips"
-					_isTransactionBtn = false
-					_label = 'IDS_NEWBIE_QUESTS_START_TIP_CHAIN_BUTTON'
-
-					_methods = "[	{	type: 'inputMapping.onAction',
-										name: 'activateTipChain',
-										args: { tip_chain_id : chainIdForButton }},
-									{	type: hasShips ? 'inputMapping.onAction' : '',
-										name: 'navigateTo',
-										args: { route: SC.Ui_windows.ROUTE.MAIN }}]"
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "!isBattleNewbieQuest")
+					(args
+						_width = 200px
+						_enabled = "hasShips"
+						_isTransactionBtn = false
+						_label = 'IDS_NEWBIE_QUESTS_START_TIP_CHAIN_BUTTON'
+						_methods = "[	{	type: 'inputMapping.onAction',
+											name: 'activateTipChain',
+											args: { tip_chain_id : chainIdForButton }},
+										{	type: hasShips ? 'inputMapping.onAction' : '',
+											name: 'navigateTo',
+											args: { route: SC.Ui_windows.ROUTE.MAIN }}]"
+					)
 				)
 
 				(element GuidingTipHub
 					_tipId = "SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_FINAL"
 					_tipPositioning = "TIP_POSITION_LEFT"
+					_modalWindowName = 'ModalWindowSse'
 					_offsetX = 5px
 					_hasNextButton = false
 				)
@@ -356,10 +414,8 @@
 		(var questEntity:dhEntity = "getEntity(_questId)")
 		(var newbieQuest:dhComponent = "questEntity.newbieQuest")
 		(var isDone:bool = "newbieQuest.isDone" (event "newbieQuest.evChanged"))
-		(var questName:str = "newbieQuest.name" (event "newbieQuest.evChanged"))
-		(var questDescription:str = "newbieQuest.description" (event "newbieQuest.evChanged"))
-		
-		(var textToDisplay:str = "_isDetails ? questDescription : questName")
+		(var questIndex:str = "newbieQuest.index ?: ''" (event "newbieQuest.evChanged"))
+		(var textToDisplay:str  = "'IDS_NEWBIE_QUESTS_' + questIndex + (_isDetails ? '_DESCRIPTION' : '_NAME')")
 	)
 	(style (width = 100%))
 

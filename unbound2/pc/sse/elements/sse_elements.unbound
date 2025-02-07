@@ -583,7 +583,7 @@
 		(var daysUntilNQFinish:number = "floor(timeLeft / DAY_IN_SEC)")
 
 		(var statusText:str = "daysUntilNQFinish ? 'IDS_SUBST_PL_NEWBIE_QUESTS_TIME_LEFT_DAYS' : 'IDS_SUBST_NEWBIE_QUESTS_TIME_LEFT_LAST_DAY'")
-		(var actualTimeLeft:number = "daysUntilNQFinish  ? daysUntilNQFinish : NQFormattedLastDayLeft")
+		(var actualTimeLeft:str = "daysUntilNQFinish ? toString(daysUntilNQFinish) : NQFormattedLastDayLeft")
 	
 		(var statusTextTimeLeft:str = "subst( statusText, [], { timeLeft: actualTimeLeft }, daysUntilNQFinish)")
 	)
@@ -597,15 +597,10 @@
 (def element SseConditions (_conditionId:number)
 	(scope
 		(var sseConditionEntity:dhEntity = "getEntity(_conditionId)")
-		(var battleTypes:array = "sseConditionEntity.battleTypesView.viewList" (event "sseConditionEntity.battleTypesView.evBattleTypesViewChanged"))
-		(var hasReducedBattleTypes:bool = "sseConditionEntity.battleTypesView.hasReducedBattleTypes" (event "sseConditionEntity.battleTypesView.evBattleTypesViewChanged"))
-		(var isBattleTypeRestrictionBlockVisible:bool = "battleTypes.length > 0")
-		(var shipRestrictions:array = "sseConditionEntity.shipListRestrictions.selectedFilters" (event "sseConditionEntity.shipListRestrictions.evUpdate"))
 		(var conditionCategory:str = "sseConditionEntity.sseConditions.conditionCategory" (event "sseConditionEntity.sseConditions.evUpdate"))
-		(var pveModifier:number = "sseConditionEntity.sseConditions.pveModifier")
-		(var isPVEModifierApplied:bool = "pveModifier != PVE_DEFAULT_MODIFIER_COEFF && hasReducedBattleTypes")
 		(var isAggregator:bool = "conditionCategory == SC.Sse.SSE_CONDITION_CATEGORY.COMPLETE_TASK")
 	)
+
 	(bind visible "!isAggregator")
 	(style (marginTop = -5px) (width = 100%))
 
@@ -616,35 +611,10 @@
 	)
 
 	(block
-		(style (width = 100%) (flow = "tile_horizontal") (marginTop = "SXS"))
-
-		(hblock
-			(style (marginLeft = -1px))
-			(controller $Repeat renderer='TaskBattleTypeRestriction'
-				(bind enabled "isBattleTypeRestrictionBlockVisible")
-				(bind count "battleTypes.length")
-				(args
-					_isPVEModifierApplied = "battleTypes[$index].hasPVEModifier && isPVEModifierApplied"
-					_battleType = "battleTypes[$index].battleName"
-					_customIcon = "battleTypes[$index].customIconName ? battleTypes[$index].customIconName : ''"
-					_isTrial = "battleTypes[$index].customIconName == SC.Common.OPERATION_BATTLE_TYPE.VALUE_TO_NAME[SC.Common.OPERATION_BATTLE_TYPE.TRIAL]"
-				)
-			)
-		)
-		
-		(block
-			(bind visible "shipRestrictions.length > 0 && isBattleTypeRestrictionBlockVisible")
-			(style (height = 21px) (marginTop = "XXS") (marginLeft = "XXS") (marginRight = "S"))
-			(element VerticalDivider)
-		)
-
-		(block
-			(style (marginTop = "XXS"))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "shipRestrictions.length")
-				(args
-					_restrictionsEntityId = "sseConditionEntity.id"
-				)
+		(style (width = 100%) (marginTop = "SXS"))
+		(controller $Instance renderer='SseShipRestrictions'
+			(args
+				_restrictionsEntityId = "sseConditionEntity.id"
 			)
 		)
 	)
@@ -815,7 +785,7 @@
 	)
 )
 
-(def element SseTaskDescription (_sseEntityId:number, _conditionId:number, _indexNumber:number, _isHeader:bool, _isThirdLevel:bool, _isDetails:bool)
+(def element SseTaskDescription (_sseEntityId:number, _conditionId:number, _indexNumber:number, _isHeader:bool, _isThirdLevel:bool, _isDetails:bool, _textClass:str = '', _isShipMasteryTask:bool = false)
 	(scope
 		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
 		(var sseOpenEndedComponent:dhComponent =		"sseEntity.sseOpenEnded")
@@ -864,79 +834,239 @@
 											isOrTask			? 'IDS_SSE_COMPLETE_ANY_TASK' :
 											isEpic || isChain	? subst('IDS_PL_SSE_COMPLETE_TASKS', [], { count: maxTasks }, maxTasks)
 																: 'IDS_TASK'")
+		(var achievements:array =				"countablesIds[0].achievements ?: []")
+		(var ribbons:array =					"countablesIds[0].ribbons ?: []")
+		(var isSubRibbon:bool =					"countablesIds[0].isSubRibbon")
+		(var achievementType:str =				"countablesIds[0].achievementType ?: ''")
+		(var achievementTypeText:str =			"countablesIds[0].achievementTypeText ?: ''")
+		(var achievementTypeShortDesc:str =		"countablesIds[0].achievementTypeShortDesc ?: ''")
+		(var tooltipAchievements:array =		"countablesIds[0].tooltipAchievements ?: []")
+		(var countableIdsMaxProgress:number =	"countablesIds[0].maxProgress ?: 0")
 
-		(var sseTaskDescription:str = "sseTaskDescriptionBase	? (_indexNumber > 0 ? _indexNumber + '. ' : '' ) + tr(sseTaskDescriptionBase)
-																	: ''") 
-		(var achievements:array = "countablesIds[0].achievements ?: []")		
+		(var isThirdLevelOrNotHeaderDetails:bool = "_isDetails && !_isHeader || _isThirdLevel")
+		(var isShortSSEAchievementTaskDescription:bool = "isThirdLevelOrNotHeaderDetails && !isSseOpenEnded && achievementType && !_isShipMasteryTask")
+		(var isAnyBattleAchievementTask:bool = "achievementType == 'battle_any' && achievements.length == 0")
+
+		(var sseTaskDescription:str = "	isShortSSEAchievementTaskDescription	? achievementTypeShortDesc :
+										sseTaskDescriptionBase					? isAnyBattleAchievementTask	? countableIdsMaxProgress == 1	? 'IDS_EARN_ANY_BATTLE_ACHIEVEMENT_SINGLE'
+																																				: subst('IDS_EARN_ANY_BATTLE_ACHIEVEMENT_PLURAL', [], { _amount: countableIdsMaxProgress }, countableIdsMaxProgress)
+																												: (_indexNumber > 0 ? _indexNumber + '. ' : '' ) + tr(sseTaskDescriptionBase)
+																				: ''") 
 	)
+
 	(style (width = 100%))
 
 	(tf
-		(bind class "_isHeader 	?	_isDetails					? '$TextDefaultBold21NM' :
-									_isThirdLevel && !isOrTask	? '$TextDefault17NM'
-																: '$TextDefaultBold17NM'
-								: '$TextDefault17NM'")
+		(bind class "	_textClass	?	_textClass :
+						_isHeader	?	_isDetails					? '$TextDefaultBold21NM' :
+										_isThirdLevel && !isOrTask	? '$TextDefault17NM'
+																	: '$TextDefaultBold17NM'
+									: '$TextDefault17NM'")
 		(style
 			(width = 100%)
-			(bind textColor "isStatusDone	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+			(bind textColor " isStatusDone	? SC.Ui_styles.SERVICE_COLORS.YELLOW
 											: SC.Ui_styles.SERVICE_COLORS.WHITE")
 			(bind alpha "_isHeader ? TA : TC")
 		)
+
 		(bind text "sseTaskDescription")
 	)
 
-	(block
-		(bind visible "(_isDetails && !_isHeader || _isThirdLevel) && achievements")
-		(style (flow = "tile_horizontal") (width = 100%) (marginTop = "S") (vgap = "S"))
-	
+	(hblock
+		(bind visible "isShortSSEAchievementTaskDescription && achievementTypeText")
+
+		(style
+			(width = 100%)
+			(align = "middle")
+			(marginTop = "S")
+		)
+
+		(tf
+			(bind class "	_textClass	?	_textClass :
+							_isHeader	?	_isDetails					? '$TextDefaultBold21NM' :
+											_isThirdLevel && !isOrTask	? '$TextDefault17NM'
+																		: '$TextDefaultBold17NM'
+										: '$TextDefault17NM'")
+
+			(style
+				(bind textColor " isStatusDone	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(bind alpha "_isHeader ? TA : TC")
+				(marginRight = "S")
+			)
+
+			(bind text "achievementTypeText")
+		)
+
+		(block
+			(controller $Instance renderer='AchievementTypeInfoItem'
+				(bind enabled "isShortSSEAchievementTaskDescription && achievementTypeText")
+				(args
+					_achievementType =		"achievementType"
+					_tooltipAchievements =	"tooltipAchievements"
+				)
+			)
+		)
+	)
+
+	(htile
+		(bind visible "isThirdLevelOrNotHeaderDetails && ribbons")
+
+		(style
+			(width = 100%)
+			(marginTop = "S")
+			(vgap = "S")
+		)
+
+		(controller $Repeat renderer='RibbonIconItem'
+			(bind enabled "isThirdLevelOrNotHeaderDetails && ribbons")
+			(bind count "ribbons.length")
+			(args
+				_ribbonName =	"ribbons[$index]"
+				_isSubRibbon =	"isSubRibbon"
+			)
+		)
+	)
+
+	(htile
+		(bind visible "isThirdLevelOrNotHeaderDetails && achievements")
+
+		(style
+			(width = 100%)
+			(marginTop = "S")
+			(vgap = "S")
+		)
+
 		(controller $Repeat renderer='AchievementItem'
+			(bind enabled "isThirdLevelOrNotHeaderDetails && achievements")
 			(bind count "achievements.length")
 			(args
-				_achievementEntityId = "achievements[$index].id"
-				_achievementsLen = "achievements.length"
+				_achievementEntityId =	"achievements[$index].id"
+				_achievementsLen =		"achievements.length"
+				_isShipMasteryTask =	"_isShipMasteryTask"
 			)
 		)
 	)
 )
 
-(def element AchievementItem (_achievementEntityId:number, _achievementsLen:number, _isPostBattle:bool = false)
+(def element RibbonIconItem (_ribbonName:str, _isSubRibbon:bool = "false")
 	(scope
-		(var achievementEntity:dhEntity = "getPrimaryEntity(CC.achievement, _achievementEntityId)")
-		(var isCommaVisible:bool = "$index != _achievementsLen - 1")
+		(var iconPath:str = "_isSubRibbon	? 'url:../ribbons/subribbons/subribbon_' + toLower(_ribbonName) + '.png'
+											: 'url:../ribbons/ribbon_' + toLower(_ribbonName) + '.png'")
+		(var tooltipText:str = "_isSubRibbon	? 'IDS_RIBBON_SUBRIBBON_' + _ribbonName
+												: 'IDS_RIBBON_SSE_' + _ribbonName")
 	)
-	(style (flow = "horizontal") (backgroundColor = "NO_COLOR") (marginBottom = "S"))
+
+	(style
+		(marginRight = "XS")
+		(backgroundSize = "cover")
+		(bind width "_isSubRibbon ? 40px : 74px")
+		(bind height "_isSubRibbon ? 32px : 28px")
+		(bind backgroundImage "iconPath")
+	)
 
 	(controller $Tooltip
-		(bind enabled "!_isPostBattle")
-		(renderer = 'AchievementTooltip')
+		(renderer='SimpleStatusTooltip')
 		(args
-			_id = "achievementEntity.id"
-			_amount = -1
+			_text = "tooltipText"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
+)
 
-	(tf
-		(bind class "_isPostBattle ? '$TextDefaultNM' : '$TextDefault17NM'")
-		(style (alpha = "TA"))
-		(bind text "tr('IDS_LEFT_QUOTE') + tr(achievementEntity.achievementInfo.nameIDS) + tr('IDS_RIGHT_QUOTE')")
+(def element AchievementTypeInfoItem (_achievementType:str, _tooltipAchievements:array)
+	(scope
+		(var headerText:str = "'IDS_ACHIEVEMENT_TYPE_' + _achievementType + '_PLURAL'")
 	)
 
-	(tf
-		(bind visible "isCommaVisible")
-		(bind class "_isPostBattle ? '$TextDefaultNM' : '$TextDefault17NM'")
-		(style (marginLeft = "XXS") (marginRight = "S") (alpha = "TC"))
-		(text = 'IDS_KEY_COMMA')
+	(controller $Tooltip
+		(renderer='AchievementInfoIconTooltip')
+		(args
+			_headerText = "headerText"
+			_achievementType = "_achievementType"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		(align="bottom|right")
+	)
+
+	(controller $Tooltip
+		(renderer = 'AchievementTypeInfotip')
+		(args
+			_achievementType = "_achievementType"
+			_tooltipAchievements = "_tooltipAchievements"
+			_headerText = "headerText"
+		)
+		(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+		(align="bottom|center")
+		(hideOnMove = true)
+		(pinTop='InfotipPinTop')
+		(pinBottom='InfotipPinBottom')
+		(offsetMap = "{ left: 0px, top: 10px, right: 0px, bottom: 10px }")
+		(pinOffset = "{across: 0px, along: 1px}")
+	)
+
+	(element ImageButton
+		_width = 22px
+		_height = 22px
+		_backgroundImage = 'url:../service_kit/buttons/icon_info.png'
+	)
+)
+
+(def element AchievementItem (_achievementEntityId:number, _achievementsLen:number, _isPostBattle:bool = false, _isShipMasteryTask:bool = false)
+	(scope
+		(var achievementEntity:dhEntity = "getPrimaryEntity(CC.achievement, _achievementEntityId)")
+		(var achievementsLeft:number = "_achievementsLen - $index - 1")
+		(var isCommaVisible:bool =		"achievementsLeft > 1")
+		(var isOrVisible:bool =			"achievementsLeft == 1")
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(marginBottom = "S")
 	)
 
 	(block
-		(style
-			(width = 100%)
-			(position = "absolute")
-			(bottom = "-XS")
-			(bind marginRight "isCommaVisible ? '10px' : 0")
+		(controller $Tooltip
+			(bind enabled "!_isPostBattle")
+			(renderer = 'AchievementTooltip')
+			(args
+				_id = "achievementEntity.id"
+				_amount = -1
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
-		(element DottedLine)
+
+		(tf
+			(bind class "_isShipMasteryTask || _isPostBattle ? '$TextDefaultNM' : '$TextDefault17NM'")
+			(style (alpha = "TA"))
+			(bind text "tr('IDS_LEFT_QUOTE') + tr(achievementEntity.achievementInfo.nameIDS) + tr('IDS_RIGHT_QUOTE')")
+		)
+
+		(block
+			(bind visible "!_isPostBattle")
+			(style
+				(width = 100%)
+				(position = "absolute")
+				(bottom = "-XS")
+				(bind marginRight "isOrVisible ? 10px : 0px")
+			)
+
+			(element DottedLine)
+		)
+	)
+
+	(tf
+		(bind visible "isCommaVisible || isOrVisible")
+
+		(bind class "_isShipMasteryTask || _isPostBattle ? '$TextDefaultNM' : '$TextDefault17NM'")
+		(style
+			(bind marginLeft "isCommaVisible ? XXS : S")
+			(marginRight = "S")
+			(alpha = "TC")
+		)
+
+		(bind text "isCommaVisible ? 'IDS_KEY_COMMA' : 'IDS_OR'")
 	)
 )
 

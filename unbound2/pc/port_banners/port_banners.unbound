@@ -48,8 +48,8 @@
 
 (def macro MOTIVATOR_STAGE_SIZES ()
 	(macro STAGE_SIZE)
-	(var isMediumResolution:bool = "stageWidth < 1920 && stageHeight < 1080")
-	(var isSmallResolution:bool = "stageWidth <= 1366 && stageHeight <= 768")
+	(var isMediumResolution:bool = "stageHeight < 1080")
+	(var isSmallResolution:bool = "stageHeight <= 768")
 )
 
 (def element SseBannerMain ()
@@ -79,10 +79,10 @@
 
 		(var newbieQuestCollection:dhCollection = "getCollection(CC.newbieQuest)")
 
-		(var newbieQuestAllCollection:dhCollection = "newbieQuestCollection.child('byTier')")
+		(var newbieQuestAllCollection:dhCollection = "newbieQuestCollection.child('sorted')")
 		(var isNewbieQuestAvailable:bool = "newbieQuestAllCollection.length > 0 ")
 
-		(var newbieQuestActiveCollection:dhCollection = "newbieQuestCollection.getChildByPath('notDone.byTier')")
+		(var newbieQuestActiveCollection:dhCollection = "newbieQuestCollection.getChildByPath('notDone.sorted')")
 		(var newbieQuestActiveCount:number = "newbieQuestActiveCollection.length ?: 0")
 		(var isNewbieQuestCountVisible:bool = "isFeatureLocked && newbieQuestActiveCount > 0")
 
@@ -285,7 +285,12 @@
 	(block
 		(bind visible "isTaskHighlighted && !isTaskCompletedBlock")
 		(class $FullsizeAbsolute)
-		(style (hitTest = false) (backgroundImage = 'url:../animations/spine/sse/motivator/sse_motivator_bg.skel') (backgroundSize = "fill"))
+		(style
+			(hitTest = false)
+			(backgroundImage = 'url:../animations/spine/sse/motivator/sse_motivator_bg.skel')
+			(backgroundSize = "fill")
+		)
+		(controller $Spine (bind enabled "isTaskHighlighted && !isTaskCompletedBlock"))
 	)
 	(block
 		(bind visible "isTaskCompletedBlock")
@@ -362,12 +367,15 @@
 								subtype: rewardEntity.rewardComponent.subtype,
 								params: rewardEntity.rewardComponent.params,
 								isPRMP: rewardEntity.rewardComponent.isPRMP }")
-		(var rewardCounter:number = "rewardEntity.rewardComponent.amount ?: 0")
+		(var isResourceCoeff:bool = "reward.type == SC.Common.REWARD_TYPE.RESOURCE_COEFF")
+		(var rewardAmount:number = "rewardEntity.rewardComponent.amount ?: 0")
+		(var resMulCoeff:str = "(rewardAmount > 0 ? '+' : '') + toString(rewardAmount) + '%'")
+		(var rewardCounter:str = "isResourceCoeff ? resMulCoeff : toString(rewardAmount)")
 
 		(struct sseMotivatorTaskChangedNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_TASK_CHANGED"))
 
-		(var rewardSize:number = "isMediumResolution ? MOTIVATOR_REWARD_SIZE.SMALL : MOTIVATOR_REWARD_SIZE.LARGE")
-		(var rewardScale:number = "rewardSize/90")  
+		(var rewardSize:number = "MOTIVATOR_REWARD_SIZE.LARGE")
+		(var rewardScale:number = "rewardSize / 90")  
 		(var textClass:str = "isMediumResolution ? '$TextDefault13NM' : '$TextDefaultNM'")
 
 		
@@ -413,9 +421,8 @@
 			(bind text "countablesIds[0].ids")
 		)
 	)
-
 	(block
-		(style (position = "absolute") (right = 0))
+		(style (position = "absolute") (right = 0) (top = "XS"))
 		(block
 			(style (bind scaleX "rewardScale") (bind scaleY "rewardScale"))
 			(element RewardItem
@@ -425,7 +432,7 @@
 		)
 		(block
 			(style (position = "absolute") (bottom = 0) (right = "XXS"))
-			(element ImageItemsCounter _amount = "rewardCounter")
+			(element ImageTextCounter _text = "rewardCounter")
 		)
 	)
 	(element SseProgress
@@ -815,84 +822,6 @@
 			_modalWindowName = 'Dock'
 			_offsetX = "-XXS"
 		)
-	)
-)
-
-(def element IngameNewsBanner ()
-	(scope
-		(macro HIGH_CONTRAST_DATA_SCOPE)
-		(macro MOUSE_HANDLER_SCOPE)
-		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
-
-		(var ingamePortalEntity:dhEntity = "getSingleEntity(CC.ingamePortal)")
-		(var ingamePortalComponent:dhComponent = "ingamePortalEntity.ingamePortal")
-		(var hasReward:bool = "ingamePortalComponent.isGiftAwaiting" (event "ingamePortalComponent.evUpdate"))
-		(var unreadRecomendedNewsCount:number = "ingamePortalComponent.unreadNewsCount" (event "ingamePortalComponent.evUpdate"))
-		(var isUnreadRecomendedNews:bool = "unreadRecomendedNewsCount > 0")
-
-		(var url:str = "hasReward	? 	SC.Ui_windows.GUI_URL.NEWS_VERSION_IN_GAME
-									:	isUnreadRecomendedNews	? SC.Ui_windows.GUI_URL.NEWS_IN_GAME
-																: SC.Ui_windows.GUI_URL.NEWS_ALL_IN_GAME")
-	)
-	(name = 'ingame_news_banner')
-
-	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
-
-	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
-	(macro MOUSE_HANDLER_BANNER
-		_methods = "[{	
-			type: 'inputMapping.onAction',
-			name: 'navigateTo',
-			args: { route: SC.Ui_windows.ROUTE.PORTAL,  data: {url: url} }
-		},
-		{
-			type: 'inputMapping.onAction',
-			name: 'ServerUIDataUSS.setUserTaskExecuted',
-			args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_NEWS] }
-		}]"
-	)
-
-	(controller $Tooltip
-		(renderer = 'IngameNewsTooltip')
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-	)
-
-	(block
-		(class $Fullsize)
-		(class $PortBanner)
-
-		(element BannerItemTitle
-			_title = 'IDS_NEWS'
-			_isStateOwn = "hasReward"
-		)
-
-		(block
-			(class $PortBannerStatus)
-			(controller $Instance renderer = 'BannerCountTask'
-				(bind enabled "isUnreadRecomendedNews && !hasReward")
-				(args
-					_count = "unreadRecomendedNewsCount"
-				)
-			)
-		)
-
-		(block
-			(class $MarkerRewardPosition)
-			(controller $Instance renderer = 'MarkerReward'
-				(bind enabled "hasReward")
-				(args
-					_iconReward = 'url:../service_kit/port_banner/icon_banner_reward.png'
-					_isAnimate = true
-				)
-			)
-		)
-	)
-
-	(element GuidingTipHub
-		_tipId = "SC.Context_guiding_tip.TIP_TYPE.INGAME_NEWS"
-		_tipPositioning = "TIP_POSITION_RIGHT"
-		_modalWindowName = 'Dock'
-		_offsetX = "-XXS"
 	)
 )
 
@@ -1880,6 +1809,68 @@
 	)
 )
 
+(def element ShipMasteryBanner ()
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(struct portBannerAlpha = PORT_BANNER_ALPHA(_alphaBannerVariants = "ALPHA_BANNER_STATE" _isMouseDown = "mouseDown" _isRollOver = "rollOver"))
+
+		(var shipMasteryCommonEntity:dhEntity = "getSingleEntity(CC.shipMasteryCommon)")
+		(var shipsWithTrials:number = "shipMasteryCommonEntity.shipMasteryCommon.countOfShipsWithTasksInProgress ?: 0" (event "shipMasteryCommonEntity.shipMasteryCommon.evCountOfShipsWithTasksInProgressChanged"))
+		(var hasShipWithTasksAvailable:bool = "shipMasteryCommonEntity.shipMasteryCommon.hasShipWithTasksAvailable" (event "shipMasteryCommonEntity.shipMasteryCommon.evHasShipWithTasksAvailableChanged"))
+
+		(var isBannerActive:bool = "hasShipWithTasksAvailable && shipsWithTrials < SC.Common.SHIP_MASTERY_CONSTANTS.MAX_SHIPS_WITH_TASKS_IN_PROGRESS")
+
+		(struct shipMasteryTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_MASTERY_INTRO"))
+	)
+
+	(style (height = "BANNER_SIZE_HEIGHT.SMALL") (width = "BANNER_SIZE_WIDTH"))
+
+	(macro PORT_BANNER_BG _portBannerAlpha = "portBannerAlpha")
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[{
+			type: 'inputMapping.onAction',
+			name: 'navigateTo',
+			args: { route: SC.Ui_windows.ROUTE.SHIP_MASTERY }
+		}]"
+	)
+
+
+	(controller $Tooltip
+		(renderer = 'ShipMasteryBannerTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $Fullsize)
+		(class $PortBanner)
+
+		(element BannerItemTitle
+			_title = 'IDS_SHIP_MASTERY'
+			_isStateOwn = "isBannerActive"
+		)
+		(block
+			(class $MarkerRewardPosition)
+			(controller $Instance renderer = 'MarkerReward'
+				(bind enabled "isBannerActive")
+				(args
+					_iconReward = 'url:../service_kit/port_banner/icon_banner_ship_mastery_trial.png'
+					_isAnimate = true
+				)
+			)
+		)
+	)
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "shipMasteryTip.isActive")
+		(args
+			_tipId = "SC.Context_guiding_tip.TIP_TYPE.SHIP_MASTERY_INTRO"
+			_tipPositioning = "TIP_POSITION_RIGHT"
+			_modalWindowName = 'Dock'
+			_offsetX = "-XXS"
+		)
+	)
+)
+
 (def element LeftSideBanners ()
 	(scope
 		(event startShow)
@@ -1987,8 +1978,11 @@
 		(var isCasualCvcVisible:bool = "clanId && clanParticipate && warEnabled && !isStageTimeUp")
 
 		
-		(var isIngameNewsVisible:bool = "curAccountLevel > 1")
+		(var shipMasteryCommonEntity:dhEntity = "getSingleEntity(CC.shipMasteryCommon)")
+		(var hasOwnShipToMaster:bool = "shipMasteryCommonEntity.shipMasteryCommon.hasOwnShipToMaster" (event "shipMasteryCommonEntity.shipMasteryCommon.evHasOwnShipToMasterChanged"))
 	)
+
+	(name = 'port_banners')
 
 	(style (height = 100%) (paddingBottom = "SXS"))
 
@@ -2083,6 +2077,13 @@
 		)
 
 		(block
+			(bind visible "hasOwnShipToMaster")
+			(controller $Instance renderer='ShipMasteryBanner'
+				(bind enabled "hasOwnShipToMaster")
+			)
+		)
+
+		(block
 			(bind visible "isRepairDockVisible")
 			(controller $Instance renderer='RepairDockBanner'
 				(bind enabled "isRepairDockVisible")
@@ -2103,13 +2104,6 @@
 
 
 
-
-		(block
-			(bind visible "isIngameNewsVisible")
-			(controller $Instance renderer='IngameNewsBanner'
-				(bind enabled "isIngameNewsVisible")
-			)
-		)
 
 		(block
 			(bind visible "isSSEVisible")

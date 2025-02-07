@@ -1,0 +1,884 @@
+(def constant RANK_STATE {
+	DEFAULT: 0,
+	LOCK: 1,
+	SKIPPED: 2,
+	DONE: 3
+})
+
+(def constant RANK_ITEM_STATE {
+	0 : 'IDS_RANK_IN_LEAGUE_STATUS_DEFAULT',
+	1 : 'IDS_RANK_IN_LEAGUE_STATUS_LOCK',
+	2 : 'IDS_RANK_IN_LEAGUE_STATUS_SKIPPED',
+	3 : 'IDS_RANK_IN_LEAGUE_STATUS_DONE'
+})
+
+(def constant RANK_QUALIFICATION_STATE {
+	0 : 'IDS_RANKED_QUALIFICATION_STATUS_DEFAULT',
+	1 : 'IDS_RANKED_QUALIFICATION_STATUS_LOCK',
+	2 : 'IDS_RANKED_QUALIFICATION_STATUS_MISSED',
+	3 : 'IDS_RANKED_QUALIFICATION_STATUS_CHECK'
+})
+
+(def constant RANK_ITEM_COMMON_UNIFIED_STATUS {
+	0 : "SC.Ui_styles.UNIFIED_STATUS.DEFAULT",
+	1 : "SC.Ui_styles.UNIFIED_STATUS.LOCK",
+	2 : "SC.Ui_styles.UNIFIED_STATUS.LOCK",
+	3 : "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+})
+
+(def constant RANK_STEREOTYPE_WIDTH {
+	SMALL: 112,
+	MEDIUM: 144,
+	LARGE: 280
+})
+
+(def constant RANK_STEREOTYPE_HEIGHT {
+	SMALL: 146,
+	MEDIUM: 193,
+	LARGE: 376
+})
+
+(def constant RANK_ICON_SIZE {
+	SMALL: 60,
+	MEDIUM: 80,
+	LARGE: 240
+})
+
+(def element RankStereotypeWrapper (	_entityId:number = 0,
+										_league:number = "SC.Ranked.RANK_LEAGUE.BRONZE",
+										_rank:number = 0,
+										_currentStars:number = 0,
+										_isInQualification:bool = false,
+										_isLeagueSkipped:bool = false,
+										_isQualificationPassed:bool = false,
+										_size:number = "SIZE.SMALL",
+										_isStarsBlockVisible:bool = true,
+										_isFrameVisible:bool = false)
+	(scope
+		(var rankInfoEntity:dhEntity = "getEntity(_entityId)")
+		(var isRankComponent:bool = "rankInfoEntity.hasComponent(CC.rankInfo)")
+		(var isQualificationComponent:bool = "rankInfoEntity.hasComponent(CC.rankQualification)")
+		(var renderItem:str = "	isRankComponent				? 'RankStereotype' :
+								isQualificationComponent	? 'RankQualificationStereotype' :
+								toBool(rankInfoEntity)		? 'RankCardTemplate'
+															: ''")
+	)
+
+	(block
+		(bind visible "_isFrameVisible")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+			(scale9grid = 2)
+			(alpha = 0.1)
+		)
+	)
+
+	(block
+		(controller $Instance
+			(bind enabled "renderItem")
+			(bind renderer "renderItem")
+			(args
+				_size = "_size"
+				_isStarsBlockVisible = "_isStarsBlockVisible"
+				_entityId = "_entityId"
+				_league = "_league"
+				_rank = "_rank"
+				_currentStars = "_currentStars"
+				_isInQualification = "_isInQualification"
+				_isLeagueSkipped = "_isLeagueSkipped"
+				_isRankSkipped = "_isLeagueSkipped"
+				_isQualificationPassed = "_isQualificationPassed"
+			)
+		)
+	)
+)
+
+(def element RankStereotypeTooltip (	_entityId:number = 0,
+										_league:number = "SC.Ranked.RANK_LEAGUE.BRONZE",
+										_rank:number = 0,
+										_isInQualification:bool = false,
+										_isQualificationPassed:bool = false,
+										_isLeagueSkipped:bool = false)
+	(scope
+		(var rankInfoEntity:dhEntity = "getEntity(_entityId)")
+		(var isQualificationComponent:bool = "rankInfoEntity.hasComponent(CC.rankQualification)")
+		(var qualificationLeagueId:number = "rankInfoEntity.rankQualification.leagueId ?: 0")
+		(var rankInfoLeagueId:number = "rankInfoEntity.rankInfo.leagueId ?: 0")
+		(var rankId:number = "rankInfoEntity.rankInfo.id ?: 0")
+		(var isGuaranteed:bool = "rankInfoEntity.rankInfo.isGuaranteed")
+		(var rank:number = "isQualificationComponent ? SC.Ranked.RANK_CONSTANTS.TOP_RANK : rankId")
+		(var league:number = "isQualificationComponent ? qualificationLeagueId : rankInfoLeagueId")
+
+		(var leagueEntity:dhEntity = "getPrimaryEntity(CC.rankLeague, league)")
+		(var firstRankRewards:array = "leagueEntity.rankLeague.firstRankRewards ?: []" (event "rankInfoEntity.rankLeague.evChanged"))
+		(var qualificationRewards:array = "leagueEntity.rankLeague.qualificationRewards ?: []" (event "rankInfoEntity.rankLeague.evChanged"))
+
+		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
+		(var currentLeague:number = "rankStateEntity.rankState.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE" (event "rankStateEntity.rankState.evCurrentLeagueChanged"))
+		(var isCurrentLeague:bool = "league == currentLeague")
+		(var isLeagueLocked:bool = "league < currentLeague")
+		(var isCurrentRank:bool = "(_rank == rank) && isCurrentLeague")
+		(var isRankLocked:bool = "rank < _rank")
+		(var isLeague:bool = "_league == rankInfoLeagueId")
+		(var isRank:bool = "_rank == rankId")
+		(var isRankSkipped:bool = "isRank && isLeague && _isLeagueSkipped")
+		(var isTopRank:bool = "rank == SC.Ranked.RANK_CONSTANTS.TOP_RANK")
+		(var isQualificationActive:bool = "isCurrentLeague && _isInQualification")
+		(var rankState:number = "	isCurrentRank && !isTopRank								? RANK_STATE.DEFAULT :
+									(isRankLocked || isLeagueLocked) && !_isLeagueSkipped	? RANK_STATE.LOCK :
+									isRankLocked && _isLeagueSkipped || isRankSkipped		? RANK_STATE.SKIPPED
+																							: RANK_STATE.DONE")
+		(var qualificationState:number = "	isQualificationActive	? RANK_STATE.DEFAULT :
+											_isQualificationPassed	? RANK_STATE.DONE :
+											_isLeagueSkipped		? RANK_STATE.SKIPPED
+																	: RANK_STATE.LOCK")
+		(var state:number = "isQualificationComponent ? qualificationState : rankState")
+		(var unifiedStatus:str = "RANK_ITEM_COMMON_UNIFIED_STATUS[state]")
+		(var statusText:str = "isQualificationComponent ? RANK_QUALIFICATION_STATE[qualificationState] : RANK_ITEM_STATE[rankState]")
+		(var headerText:str = "isQualificationComponent ? 'IDS_RANKED_QUALIFICATION' : subst('IDS_RANK_IN_LEAGUE_' + league, [], { _rankId: toString(rank) })")
+		(var rewardsTitle:str = "isQualificationComponent ? 'IDS_RANK_REWARDS_TOOLTIP_TITLE_QUALIFICATION' : 'IDS_RANK_REWARDS_TOOLTIP_TITLE_TOP_RANK'")
+		(var rewards:array = "isQualificationComponent ? qualificationRewards : firstRankRewards")
+		(var isRewardsBlockVisible:bool = "isTopRank || isQualificationComponent")
+	)
+	(style  (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemHeaderSubheaderText _headerText = "headerText")
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemStatusLine
+					_unifiedStatus = "unifiedStatus"
+					_text = "statusText"
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isQualificationComponent"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "isQualificationComponent")
+				(args
+					_descriptionText = 'IDS_RANKED_QUALIFICATION_DESC'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isGuaranteed"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "isGuaranteed")
+				(args
+					_descriptionText = 'IDS_FIREPROOF_RANK'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRewardsBlockVisible"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDHRewards'
+				(bind enabled "isRewardsBlockVisible")
+				(args
+					_rewardsTitle = "rewardsTitle"
+					_rewards = "rewards"
+				)
+			)
+		)
+	)
+)
+
+(def element RankStereotype (	_entityId:number = 0,
+								_league:number = "SC.Ranked.RANK_LEAGUE.BRONZE",
+								_rank:number = 0,
+								_currentStars:number = 0,
+								_isLeagueSkipped:bool = false,
+								_size:number = "SIZE.SMALL",
+								_isStarsBlockVisible:bool = true)
+	(scope
+		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
+		(var currentLeague:number = "rankStateEntity.rankState.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE" (event "rankStateEntity.rankState.evCurrentLeagueChanged"))
+
+		(var rankInfoEntity:dhEntity = "getEntity(_entityId)")
+		(var rankInfo:dhComponent = "rankInfoEntity.rankInfo")
+
+		(var isGuaranteed:bool = "rankInfo.isGuaranteed")
+		(var leagueId:number = "rankInfo.leagueId ?: 0")
+		(var rankId:number = "rankInfo.id ?: 0")
+		(var starsToNext:number = "rankInfo.starsToNext ?: 0")
+		(var isRankNotReached:bool = "rankId < _rank")
+		(var isTopRank:bool = "rankId == SC.Ranked.RANK_CONSTANTS.TOP_RANK")
+		(var isRank:bool = "_rank == rankId")
+		(var isCurrentLeague:bool = "leagueId == currentLeague")
+		(var isCurrentRank:bool = "isRank && isCurrentLeague")
+		(var isLeague:bool = "_league == leagueId")
+		(var isLeagueLocked:bool = "leagueId < currentLeague")
+		(var isReachedRank:bool = "rankId >= _rank && isLeague")
+		(var isLockedRank:bool = "isRankNotReached && isLeague || isLeagueLocked")
+		(var isCurrentRankSkipped:bool = "isRank && isLeague && _isLeagueSkipped")
+		(var isRankSkipped:bool = "isLeague && _isLeagueSkipped && isLockedRank")
+		(var currentRankStars:number = "isTopRank && isCurrentRank								? 1 :
+										isCurrentRank || isCurrentRankSkipped					? _currentStars :
+										(isLeague && isRankNotReached) || isLeagueLocked		? 0
+																								: starsToNext")
+		(var rankState:number = "	isCurrentRank							? RANK_STATE.DEFAULT :
+									isLockedRank							? RANK_STATE.LOCK :
+									_isLeagueSkipped && !isReachedRank		? RANK_STATE.SKIPPED
+																			: RANK_STATE.DONE")
+		(var isColoredRank:bool = "rankState == RANK_STATE.DONE || isCurrentRank")
+		(var leagueName:str = "toLower(SC.Ranked.RANK_LEAGUE.VALUE_TO_NAME[leagueId])")
+		
+		(var currentRankBg:str = "isLockedRank	? 'url:../ranks/rank_stereotype/bg/lock.png'
+												: 'url:../animations/spine/ranks/card/selected/' + leagueName + '.skel'")
+		(var rankBg:str = "	isCurrentRank	? currentRankBg :
+							isColoredRank	? 'url:../ranks/rank_stereotype/bg/' + leagueName + '.png'
+											: null")
+	)
+
+	(element RankCardTemplate
+		_rank = "rankId"
+		_rankBg = "rankBg"
+		_isRankSkipped = "isRankSkipped"
+		_leagueId = "leagueId"
+		_isDesaturated = "!isLockedRank"
+		_totalStars = "isTopRank ? 0 : starsToNext"
+		_currentStars = "currentRankStars"
+		_size = "_size"
+		_isStarsBlockVisible = "_isStarsBlockVisible"
+	)
+	(controller $Tooltip
+		(renderer='RankStereotypeTooltip')
+		(args
+			_entityId = "rankInfoEntity.id"
+			_league = "_league"
+			_rank = "_rank"
+			_isLeagueSkipped = "_isLeagueSkipped"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RankQualificationStereotype (	_entityId:number = 0,
+											_league:number = "SC.Ranked.RANK_LEAGUE.BRONZE",
+											_currentStars:number = 0,
+											_isLeagueSkipped:bool = false,
+											_size:number = "SIZE.SMALL",
+											_isInQualification:bool = false,
+											_isQualificationPassed:bool = false,
+											_isStarsBlockVisible:bool = true)
+	(scope
+		(var qualificationEntity:dhEntity = "getEntity(_entityId)")
+		(var qualificationLeagueId:number = "qualificationEntity.rankQualification.leagueId ?: 0")
+		(var starsQualification:number = "qualificationEntity.rankQualification.starsToNext ?: 0")
+		(var leagueId:number = "qualificationEntity.rankQualification.leagueId ?: 0")
+		(var isCurrentLeague:bool = "leagueId == _league")
+		(var isLeagueLocked:bool = "leagueId < _league")
+		(var currentRankStars:number = "_isInQualification && isCurrentLeague	? _currentStars :
+										isCurrentLeague || isLeagueLocked		? 0
+																				: starsQualification")
+		(var isQualificationLocked:bool = "_currentStars < starsQualification && isCurrentLeague || isLeagueLocked")
+		(var isQualificationActive:bool = "isCurrentLeague && _isInQualification")
+		(var qualificationState:number = "	isQualificationActive	? RANK_STATE.DEFAULT :
+											isQualificationLocked	? RANK_STATE.LOCK :
+											_isLeagueSkipped		? RANK_STATE.SKIPPED
+																	: RANK_STATE.DONE")
+		(var isQualificationBg:bool = "qualificationState == RANK_STATE.DONE || isQualificationActive")
+		(var qualificationBg:str = "isQualificationBg ? 'url:../animations/spine/ranks/card/qualification.skel' : null")
+	)
+
+	(element RankCardTemplate
+		_isQualification = true
+		_rankBg = "qualificationBg"
+		_isRankSkipped = "_isLeagueSkipped"
+		_leagueId = "leagueId"
+		_isDesaturated = "isQualificationActive"
+		_totalStars = "starsQualification"
+		_currentStars = "currentRankStars"
+		_size = "_size"
+		_isStarsBlockVisible = "_isStarsBlockVisible"
+	)
+
+	(controller $Tooltip
+		(renderer='RankStereotypeTooltip')
+		(args
+			_entityId = "qualificationEntity.id"
+			_league = "_league"
+			_isInQualification = "_isInQualification"
+			_isQualificationPassed = "_isQualificationPassed"
+			_isLeagueSkipped = "_isLeagueSkipped"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RankCardTemplate (	_size:number = "SIZE.SMALL",
+								_rankBg:str = '',
+								_rank:number = 0,
+								_leagueId:number = "SC.Ranked.RANK_LEAGUE.BRONZE",
+								_totalStars:number = 0,
+								_currentStars:number = 0,
+								_isQualification:bool = false,
+								_isRankSkipped:bool = false,
+								_isDesaturated:bool = false,
+								_isStarsBlockVisible:bool = true)
+	(scope
+		(var rankItemWidth:number = "	_size == SIZE.SMALL		? RANK_STEREOTYPE_WIDTH.SMALL :
+										_size == SIZE.MEDIUM	? RANK_STEREOTYPE_WIDTH.MEDIUM
+																: RANK_STEREOTYPE_WIDTH.LARGE")
+		(var rankItemHeight:number = "	_size == SIZE.SMALL		? RANK_STEREOTYPE_HEIGHT.SMALL :
+										_size == SIZE.MEDIUM	? RANK_STEREOTYPE_HEIGHT.MEDIUM
+																: RANK_STEREOTYPE_HEIGHT.LARGE")
+		(var rankImageMargin:number = "	_size == SIZE.SMALL		? MS :
+										_size == SIZE.MEDIUM	? L
+																: XLM")
+
+		(var rankBg:str = "_isRankSkipped ? 'url:../ranks/rank_stereotype/bg/skipped.png' : _rankBg")
+	)
+	(style
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(bind width "rankItemWidth")
+		(bind height "rankItemHeight")
+		(bind align "_isQualification ? center|middle : center")
+	)
+	(block
+		(bind visible "rankBg")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "cover")
+			(bind backgroundImage "rankBg")
+		)
+		(controller $Spine (bind enabled "rankBg"))
+	)
+	(block
+		(style
+			(width = 100%)
+			(bind marginTop "_rank ? rankImageMargin : 0")
+		)
+
+		(element RankWithStarsStereotype
+			_isQualification = "_isQualification"
+			_size = "_size"
+			_rank = "_rank"
+			_leagueId = "_leagueId"
+			_isDesaturated = "_isDesaturated"
+			_isStarsBlockVisible = "_isStarsBlockVisible"
+			_totalStars = "_totalStars"
+			_currentStars = "_currentStars"
+		)
+	)
+)
+
+(def element RankWithStarsStereotype (	_rank:number = 0,
+										_entityId:number = 0,
+										_isQualification:bool = false,
+										_size:number = "SIZE.SMALL",
+										_leagueId:number = "SC.Ranked.RANK_LEAGUE.BRONZE",
+										_totalStars:number = 0,
+										_currentStars:number = 0,
+										_isDesaturated:bool = false,
+										_isStarsBlockVisible:bool = true)
+	(scope
+		(var textClass:str = "	_size == SIZE.SMALL		? '$TextDefaultBoldNM' :
+								_size == SIZE.MEDIUM	? '$TextDefaultBold17NM'
+														: '$TextDefaultBold25NM'")
+	)
+	(style
+		(width = 100%)
+		(align = "center")
+	)
+	(block
+		(style (marginBottom = "{720:S, 1080:M}"))
+		(block
+			(controller $Instance renderer='RankStereotypeImage'
+				(bind enabled "_rank && !_isQualification")
+				(args
+					_size = "_size"
+					_league = "_leagueId"
+					_rank = "_rank"
+					_isDesaturated = "_isDesaturated"
+				)
+			)
+		)
+		(tf
+			(bind visible "_isQualification")
+			(bind class "textClass")
+			(style (alpha = "TA"))
+			(text = 'IDS_RANKED_QUALIFICATION')
+		)
+		(controller $Tooltip
+			(bind enabled "_entityId")
+			(renderer='RankStereotypeTooltip')
+			(args
+				_entityId = "_entityId"
+				_league = "_leagueId"
+				_rank = "_rank"
+				_isInQualification = "_isQualification"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	(htile
+		(style
+			(width = 100%)
+			(gap = "XXS")
+			(align = "center")
+			(macro DESATURATION_DEFAULT "_isDesaturated")
+			(bind paddingLeft "_size == SIZE.SMALL ? SXS : MS")
+			(bind paddingRight "_size == SIZE.SMALL ? SXS : MS")
+		)
+		(controller $Repeat renderer='RankStar'
+			(bind enabled "_totalStars && _isStarsBlockVisible")  
+			(bind count "_totalStars")
+			(args
+				_leagueId = "_leagueId"
+				_isReceived = "($index + 1) <= _currentStars"
+				_size = "_size"
+			)
+		)
+	)
+)
+
+(def element RankStereotypeImage (_league:number, _rank:number, _size:number = "SIZE.SMALL", _isDesaturated:bool = false)
+	(scope
+		(var rankImageSize:number = "	_size == SIZE.SMALL		? RANK_ICON_SIZE['SMALL'] :
+										_size == SIZE.MEDIUM	? RANK_ICON_SIZE['MEDIUM']
+																: RANK_ICON_SIZE['LARGE']")
+
+		(var rankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, _rank + '_' + _league)")
+		(var isGuaranteed:bool = "rankInfoEntity.rankInfo.isGuaranteed")
+
+		(var leagueName:str = "toLower(SC.Ranked.RANK_LEAGUE.VALUE_TO_NAME[_league])")
+		(var rankEmblem:str = "'url:../ranks/rank_stereotype/emblems/' + (_size == SIZE.LARGE ? 'big/' : 'small/') + leagueName + '/bg' + (isGuaranteed ? '' : '_fire') + '.png'")
+		(var rankImage:str = "'url:../ranks/rank_stereotype/emblems/' + (_size == SIZE.LARGE ? 'big/' : 'small/') + leagueName + '/rank_' + _rank + '.png'")
+	)
+	(style
+		(bind width "rankImageSize")
+		(bind height "rankImageSize")
+		(macro DESATURATION_DEFAULT "_isDesaturated")
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "contain")
+			(bind backgroundImage "rankEmblem")
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "contain")
+			(bind backgroundImage "rankImage")
+		)
+	)
+)
+
+(def element RankStar (	_leagueId:number = "SC.Ranked.RANK_LEAGUE.BRONZE",
+						_isReceived:bool = false,
+						_size:number = "SIZE.SMALL")
+	(scope
+		(var status:str = "_isReceived ? 'full' : 'empty'")
+		(var image:str = "'url:../ranks/stars/' + toLower(SC.Ranked.RANK_LEAGUE.VALUE_TO_NAME[_leagueId]) + '_' + status + '.png'")
+		(var iconSize:number = "_size == SIZE.LARGE? 24 : 16")
+	)
+
+	(style
+		(backgroundSize = "cover")
+		(pivotX = 50%) (pivotY = 50%)
+		(bind backgroundImage "image")
+		(bind width "iconSize")
+		(bind height "iconSize")
+	)
+	(controller $Animation
+		(bindcall play  duration=0.3
+						from="{ visualScaleX: 2, visualScaleY: 2, alpha: 0 }"
+						to="{ visualScaleX: 1, visualScaleY: 1, alpha: 1 }"
+						(bind enabled "_isReceived")
+						(bind trigger "_isReceived")
+		)
+	)
+)
+
+(def element RewardsWithProgress (	_victoryRewards:array = [],
+									_victories:array = [],
+									_rewardsCategories:array = [],
+									_currentVictories:number = 0,
+									_achievedRewardsCount:number = 0,
+									_leagueStatus:number = "LEAGUE_STATUS.CURRENT",
+									_isLeagueSkipped:bool = false,
+									_isZeroHidden:bool = false,
+									_progressBarHeight:number = 6,
+									_progressBarWidth:number = 0)
+	(style (flow = "horizontal"))
+	(controller $Repeat renderer='RewardWithProgress'
+		(bind count "_victoryRewards.length")
+		(args
+			_victories = "_victories"
+			_victoryRewards = "_victoryRewards"
+			_rewardsCategories = "_rewardsCategories"
+			_currentVictories = "_currentVictories"
+			_achievedRewardsCount = "_achievedRewardsCount"
+			_leagueStatus = "_leagueStatus"
+			_isLeagueSkipped = "_isLeagueSkipped"
+			_isZeroHidden = "_isZeroHidden"
+			_progressBarHeight = "_progressBarHeight"
+			_progressBarWidth = "_progressBarWidth"
+		)
+	)
+)
+
+(def element RewardWithProgress (	_victories:array = [],
+									_victoryRewards:array = [],
+									_rewardsCategories:array = [],
+									_achievedRewardsCount:number = 0,
+									_currentVictories:number = 0,
+									_leagueStatus:number = "LEAGUE_STATUS.CURRENT",
+									_isLeagueSkipped:bool = false,
+									_isZeroHidden:bool = false,
+									_progressBarHeight:number = 6,
+									_progressBarWidth:number = 0)
+	(scope
+		(var victoriesCount:number = "_victories[$index] ? _victories[$index] : 0")
+		(var previousVictories:number = "_victories[$index-1] ? _victories[$index-1] : 0")
+		(var progress:number = "(_currentVictories - previousVictories) / (_victories[$index] - previousVictories) ?: 0")
+		(var isCurrentLeague:bool = "_leagueStatus == LEAGUE_STATUS.CURRENT")
+		(var isReceived:bool = "_achievedRewardsCount > $index || _leagueStatus == LEAGUE_STATUS.PASSED")
+		(var currentProgress:number = "	isReceived											? 1 :
+										_achievedRewardsCount == $index	? progress
+																							: 0")
+	)
+	(style (flow = "horizontal"))
+	(block
+		(bind visible "$index == 0 && !_isZeroHidden")
+		(style
+			(position = "absolute")
+			(left = "-XXS")
+			(top = 17px)
+		)
+		(tf
+			(class $TextDefault21NM)
+			(style (alpha = "TC"))
+			(text = '0')
+		)
+	)
+	(block
+		(style
+			(marginRight = 1px)
+			(bind width "_progressBarWidth ?: {1280:75, 1920:95}")
+		)
+		(element DefaultProgressBar
+			_progress = "currentProgress"
+			_height = "_progressBarHeight"
+		)
+	)
+	(block
+		(style
+			(position = "absolute")
+			(right = 0)
+			(top = 17px)
+		)
+		(tf
+			(class $TextDefault21NM)
+			(style
+				(width = 65px)
+				(marginRight = -30px)
+				(textAlign = "center")
+				(bind alpha "isReceived ? TC : TA")
+			)
+			(bind text "victoriesCount ? formatSeparator(victoriesCount) : ''")
+		)
+	)
+	(block
+		(style
+			(position = "absolute")
+			(top = -60px)
+			(left = 75%)
+		)
+		(element RewardCategory
+			_rewardCategory = "_rewardsCategories[$index]"
+			_isReceived = "isReceived"
+			_isUnavailable = "isReceived || _leagueStatus == LEAGUE_STATUS.SKIPPED"
+			_isRewardActive = false
+		)
+
+		(controller $Tooltip
+			(renderer='RanksRewardCategoryTooltip')
+			(args
+				_victoryRewards = "_victoryRewards[$index]"
+				_victories = "victoriesCount"
+				_isReceived = "isReceived"
+				_isLeagueSkipped = "_isLeagueSkipped"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element RanksRewardCategoryTooltip (	_victories:number = 0,
+											_victoryRewards:array = [],
+											_isReceived:bool = false,
+											_isLeagueSkipped:bool = false)
+	(scope
+		(var headerText:str = "subst('IDS_PL_RANK_REWARDS_VICTORIES_CURRENT', [], { _victoriesCount: _victories }, _victories)")
+		(var statusText:str = "	_isReceived			? 'IDS_TOOLTIP_REWARD_TAKEN' :
+								_isLeagueSkipped	? 'IDS_RANKS_LEAGUE_REWARDS_STATUS_LOCKED'
+													: 'IDS_RANKS_LEAGUE_REWARDS_STATUS_DEFAULT'")
+		(var unifiedStatus:str = "_isReceived ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.LOCK")
+	)
+	(style (width = 340px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "headerText"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_text = "statusText"
+			_unifiedStatus = "unifiedStatus"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style
+				(width = 100%)
+				(paddingTop = "-S")
+				(paddingBottom = "-S")
+			)
+			(controller $Repeat renderer = 'RewardContainerTooltipItem'
+				(bind count "_victoryRewards.length")
+				(args
+					_reward = "$datahub.getEntity(_victoryRewards[$index]).rewardComponent"
+				)
+			)
+		)
+	)
+)
+
+(def element RanksRewardsContainer (	_isOtherRewardAvailable:bool = false,
+										_dataArray:array = [],
+										_isRemainingRewardAvailable:bool = false,
+										_remainingRewardArray:array = [],
+										_remainingRewardsParams:dict = {},
+										_rewardsParams:dict = {},
+										_victoriesTillNextReward:number = 0,
+										_hasReceivedAllVictoryRewards:bool = false,
+										_isVictoryRewardProgressIncreased:bool = false,
+										_isQualificationPassed:bool = false,
+										_isQualificationView:bool = false,
+										_isTopRank:bool = false,
+										_leagueId:number = "SC.Ranked.RANK_LEAGUE.BRONZE")
+	(scope
+		(var isVictoryRewardsBlockVisible:bool = "!_hasReceivedAllVictoryRewards && _isVictoryRewardProgressIncreased && !_isQualificationPassed")
+	)
+	(style (width = 420px))
+
+	(block
+		(style
+			(width = 100%)
+			(vgap = "MS")
+			(bind marginBottom "_isOtherRewardAvailable ? L : 0")
+		)
+		(controller $Repeat renderer='RankedRewardCategoryRepeater'
+			(bind enabled "_isOtherRewardAvailable && _dataArray.length")
+			(bind count "_dataArray.length")
+			(args
+				_dataArray = "_dataArray"
+			)
+		)
+	)
+
+	(tf
+		(bind visible "_isRemainingRewardAvailable")
+		(class $TextDefault21NM)
+		(style
+			(marginBottom = "{720:XS, 1080:M}")
+			(alpha = "TC")
+		)
+		(text = 'IDS_RANK_REWARDS_LEAGUE_COMPLETED')
+	)
+	(hblock
+		(style (gap = "MS"))
+		(controller $Repeat renderer='RemainingRankedRewards'
+			(bind enabled "_isRemainingRewardAvailable && _remainingRewardArray.length")
+			(bind count "_remainingRewardArray.length")
+			(args
+				_remainingVictories = "_remainingRewardsParams._remainingVictories"
+				_remainingRewardsCategories = "_remainingRewardsParams._remainingRewardsCategories"
+				_remainingRewards = "_remainingRewardArray[$index]"
+			)
+		)
+	)
+
+	(block
+		(bind visible "isVictoryRewardsBlockVisible")
+		(style (marginBottom = "{720:XS,1080:M}"))
+		(tf
+			(class $TextDefault21NM)
+			(style
+				(marginBottom = "SXS")
+				(alpha = "TA")
+			)
+			(bind text "subst('IDS_PL_RANK_REWARDS_VICTORIES_NEXT', [], {_victoriesCount: _victoriesTillNextReward}, _victoriesTillNextReward)")
+		)
+		(block
+			(style (paddingTop = "XL"))
+			(controller $Instance renderer='RewardsWithProgress'
+				(bind enabled "isVictoryRewardsBlockVisible")
+				(args
+					_victoryRewards = "_rewardsParams.victoryRewardsToShow"
+					_victories = "_rewardsParams.victories"
+					_rewardsCategories = "_rewardsParams.rewardsCategories"
+					_currentVictories = "_rewardsParams.currentVictories"
+					_achievedRewardsCount = "_rewardsParams.achievedRewardsCount"
+					_isZeroHidden = "_rewardsParams.isZeroHidden"
+					_leagueStatus = "LEAGUE_STATUS.CURRENT"
+					_isLeagueSkipped = false
+					_progressBarHeight = 8px
+					_progressBarWidth = 120px
+				)
+			)
+		)
+	)
+)
+
+(def element RankedRewardCategory (	_rewardCategory:str = '',
+									_isReceived:bool = false,
+									_rewards:array = [],
+									_tooltipHeader:str = '')
+	(element RewardCategory
+		_rewardCategory = "_rewardCategory"
+		_isReceived = "_isReceived"
+		_isRewardActive = false
+	)
+	(controller $Tooltip
+		(renderer = 'RewardContainerTooltip')
+		(args
+			_rewards = "_rewards"
+			_tooltipHeader = "_tooltipHeader"
+			_isReceived = true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RankedRewardCategoryRepeater (_dataArray:array = [])
+	(bind visible "_dataArray[$index] != null")
+	(tf
+		(class $TextDefault21NM)
+		(style
+			(marginBottom = "{720:XS, 1080:M}")
+			(alpha = "TC")
+		)
+		(bind text "_dataArray[$index][2]")
+	)
+	(block
+		(controller $Instance renderer='RankedRewardCategory'
+			(bind enabled "_dataArray[$index] != null")
+			(args
+				_text = "_dataArray[$index][2]"
+				_rewardCategory = "_dataArray[$index][1]"
+				_rewards = "_dataArray[$index][0]"
+				_tooltipHeader = "_dataArray[$index][2]"
+				_isReceived = true
+			)
+		)
+	)
+)
+
+(def element RemainingRankedRewards (_remainingVictories:array = [], _remainingRewardsCategories:array = [], _remainingRewards:array = [])
+	(scope
+		(var victories:number = "_remainingVictories[$index] ? _remainingVictories[$index] : 0")
+	)
+	(element RankedRewardCategory
+		_rewardCategory = "_remainingRewardsCategories[$index]"
+		_isReceived = true
+		_rewards = "_remainingRewards"
+		_tooltipHeader = "subst('IDS_PL_RANK_REWARDS_VICTORIES_CURRENT', [], { _victoriesCount: victories }, victories)"
+	)
+)
+
+(def element RankPeriodStatusLine (_startTime:number = 0)
+	(scope
+		(macro SERVER_TIME_SCOPE)
+
+		(var rankSeasonEntity:dhEntity = "getSingleEntity(CC.rankSeason)")
+		(var rankSeason:dhComponent = "rankSeasonEntity.rankSeason")
+		(var rankSeasonStage:number = "rankSeason.stage ?: 0" (event "rankSeason.evStageChanged"))
+		(var currentSprintId:number = "rankSeason.currentSprintId ?: 0" (event "rankSeason.evChanged"))
+		(var nextSprintId:number = "rankSeason.nextSprintId ?: 0" (event "rankSeason.evChanged"))
+		(var primeTimeStartTime:number = "rankSeasonEntity.primeTime.primeTimeStartTime	?: 0" (event "rankSeasonEntity.primeTime.evChanged"))
+		(var primeTimeFinishTime:number = "rankSeasonEntity.primeTime.primeTimeFinishTime ?: 0" (event "rankSeasonEntity.primeTime.evChanged"))
+		(var daylightshift:number = "rankSeasonEntity.primeTime.daylightshift ?: 0" (event "rankSeasonEntity.primeTime.evChanged"))
+
+		(var seasonIdForUi:str = "rankSeason.title ?: ''" (event "rankSeason.evChanged"))
+		(var hasNextSprint:bool = "nextSprintId != SC.Ranked.RANK_CONSTANTS.NO_SPRINT")
+
+		(macro RANK_SEASON_STAGES_FLAGS_SCOPE "rankSeasonStage")
+
+		(var isActiveSprint:bool = "currentSprintId != SC.Ranked.RANK_CONSTANTS.NO_SPRINT")
+
+		(var nextSprintEntity:dhEntity = "getPrimaryEntity(CC.rankSprint, nextSprintId)")
+		(var isSprintFinished:bool = "!isActiveSprint && hasNextSprint")
+		(var nextSprintStartTime:number = "nextSprintEntity.rankSprint.startTime ?: 0")
+
+		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
+		(var currentLeague:number = "rankStateEntity.rankState.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE" (event "rankStateEntity.rankState.evCurrentLeagueChanged"))
+
+		(var rankPlayerEntity:dhEntity = "getPrimaryEntity(CC.rankPlayer, currentLeague)")
+		(var rankPlayerComponent:dhComponent = "rankPlayerEntity.rankPlayer")
+		(var currentRank:number = "rankPlayerComponent.rank ?: 0" (event "rankPlayerComponent.evChanged"))
+		(var currentStars:number = "rankPlayerComponent.stars ?: 0" (event "rankPlayerComponent.evChanged"))
+
+		(var rankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, currentRank + '_' + currentLeague)")
+		(var starsToNextRank:number = "rankInfoEntity.rankInfo.starsToNext ?: 0")
+
+		(var isQualificationPassed:bool = "	currentRank == SC.Ranked.RANK_CONSTANTS.TOP_RANK &&
+											currentLeague != SC.Ranked.RANK_CONSTANTS.TOP_LEAGUE &&
+											currentStars == starsToNextRank")
+
+		(var periodStatus:str = "	isRankSeasonFinished || (!isActiveSprint && !hasNextSprint)	? WAIT_FOR_ANNOUNCEMENT :
+									isRankSeasonInactive || isRankSeasonWaiting					? SEASON_ANNOUNCEMENT :
+									isQualificationPassed && hasNextSprint || isSprintFinished	? SPRINT_ANNOUNCEMENT :
+									primeTimeStartTime - daylightshift - serverTime > 0			? PRIME_TIME_INACTIVE :
+									primeTimeFinishTime - daylightshift - serverTime > 0		? PRIME_TIME_ACTIVE
+																								: WAIT_FOR_ANNOUNCEMENT")
+		(var rankStatusLineTimeStamp:dict = "{	WAIT_FOR_ANNOUNCEMENT:	0,
+												SEASON_ANNOUNCEMENT:	_startTime,
+												SPRINT_ANNOUNCEMENT:	nextSprintStartTime,
+												PRIME_TIME_ACTIVE:		primeTimeFinishTime,
+												PRIME_TIME_INACTIVE:	primeTimeStartTime }")
+		(macro COUNTDOWN_SCOPE "'formattedCountDown'" "rankStatusLineTimeStamp[periodStatus]" "'HIGHEST,WITH_DAYS'")
+		(var rankStatusLineData:dict = "{	WAIT_FOR_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
+																		_text: 'IDS_WAIT_FOR_NEXT_RANK_SEASON_ANNOUNCEMENT' },
+											SEASON_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE,
+																		_text: tr(subst('IDS_SUBST_NTH_RANKED_SEASON_STARTS_IN', [], {	_seasonId: seasonIdForUi, _timeTillStart: formattedCountDown }))},
+											SPRINT_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CALENDAR,
+																		_text: tr(subst('IDS_RANKED_SPRINT_STARTS_IN', [], {	_nextSprintId: toString(nextSprintId + 1), _timeLeft: formattedCountDown }))},
+											PRIME_TIME_INACTIVE:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE,
+																		_text: tr(subst('IDS_RANKED_PRIME_TIME_STARTS_IN', [], { _timeLeft: formattedCountDown }))},
+											PRIME_TIME_ACTIVE:		{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE,
+																		_text: tr(subst('IDS_RANKED_PRIME_TIME_ENDS_IN', [], { _timeLeft: formattedCountDown }))},
+											UNDEFINED_PERIOD:		{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
+																		_text: 'IDS_RANKED_STAGE_UNDEFINED' }}")
+	)
+	(style (width = 100%))
+	(element StatusLine
+		_unifiedStatus = "rankStatusLineData[periodStatus]._unifiedStatus"
+		_text = "rankStatusLineData[periodStatus]._text"
+	)
+)

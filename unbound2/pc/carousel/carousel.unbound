@@ -277,6 +277,8 @@
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro FEATURES "17")
 
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
+
 		
 		(var shipEntity:gfx = "_shipsCollection.items[$index]" on='addedToStage' (event "_shipsCollection.evUpdated"))
 		(var ownShipInfo:gfx = "shipEntity && shipEntity.hasComponent(CC.ownShip) ? shipEntity.ownShip : null" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
@@ -351,6 +353,7 @@
 			)
 
 			(controller $Tooltip
+				(bind enabled "!isInShipMastery")
 				(renderer = 'ShipTreeMenu')
 				(args
 					_disableShipActions = "_disableShipActions"
@@ -501,10 +504,13 @@
 (def element ShipCarouselDefaultSlot (_shipEntityId:number, _rollOver:bool, _mouseDown:bool, _isSelected:bool="false")
 	(scope
 		(macro FEATURES "13")
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
 
-		(var shipEntity:gfx = "$datahub.getPrimaryEntity(CC.ship, _shipEntityId)")
-		
-		(var ownShipInfo:gfx = "shipEntity && shipEntity.hasComponent(CC.ownShip) ? shipEntity.ownShip : null" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipEntityId)")
+		(var shipMasteryStatus:number = "shipEntity.shipMastery.status ?: 0" (event "shipEntity.shipMastery.evStatusChanged"))
+		(var masteryRank:number = "shipEntity.shipMastery.rank ?: 0" (event "shipEntity.shipMastery.evRankChanged"))
+
+		(var ownShipInfo:dhComponent = "shipEntity && shipEntity.hasComponent(CC.ownShip) ? shipEntity.ownShip : null")
 		(var isPrimary:bool = "ownShipInfo ? ownShipInfo.isPrimary : false"	(event "ownShipInfo.evIsPrimaryChanged"))
 
 		
@@ -538,34 +544,32 @@
 			(position = "absolute")
 			(top = 0)
 			(right = 0)
-
 			(paddingRight = "XS")
 			(paddingTop = 5px)
 			(paddingLeft = "XS")
 			(paddingBottom = 5px)
+			(hitTest = false)
 		)
 
 		(block
-			(bind visible "!hasCrew")
+			(bind visible "!hasCrew && !isInShipMastery")
 			(style
 				(height = 21px)
 				(width = 21px)
 				(backgroundImage = 'swf:../service_kit/markers_svg/markers_svg.swf:without_commander')
-				(hitTest = false)
 			)
 		)
 
 		(block
-			(bind visible "isNeedRepair")
+			(bind visible "isNeedRepair && !isInShipMastery")
 			(style
 				(height = 21px)
 				(width = 21px)
 				(backgroundImage = 'swf:../service_kit/markers_svg/markers_svg.swf:marker_attention')
-				(hitTest = false)
 			)
 		)
 
-		(block	
+		(block
 			(bind name "isRentShip ? 'timeRent_' + fullName : ''")
 			(controller $Instance renderer='RentTimerIcon'
 				(bind enabled "isRentShip")
@@ -576,12 +580,31 @@
 		)
 
 		(block
-			(bind visible "isEarlyAccess")
+			(bind visible "isInShipMastery && shipMasteryStatus == SC.Common.SHIP_MASTERY_STATUSES.TASKS_AVAILABLE")
+			(style
+				(height = 21px)
+				(width = 21px)
+				(backgroundImage = 'swf:../service_kit/filters_svg/filters_svg.swf:ship_mastery_tasks_available')
+				(backgroundSize = "contain")
+			)
+		)
+
+		(block
+			(bind visible "isInShipMastery && shipMasteryStatus == SC.Common.SHIP_MASTERY_STATUSES.TASKS_IN_PROGRESS")
+			(style
+				(height = 21px)
+				(width = 21px)
+				(backgroundImage = 'swf:../service_kit/filters_svg/filters_svg.swf:ship_mastery_tasks_in_progress')
+				(backgroundSize = "contain")
+			)
+		)
+
+		(block
+			(bind visible "isEarlyAccess && !isInShipMastery")
 			(style
 				(height = 21px)
 				(width = 21px)
 				(backgroundImage = 'swf:../service_kit/icons_svg/icons_svg.swf:early_access')
-				(hitTest = false)
 			)
 		)
 	)
@@ -620,10 +643,18 @@
 		
 		(block
 			(style (marginLeft = -5px))
-			(controller $Instance renderer='CarouselShipBonusTags'
-				(bind enabled "isBonusTagsVisible")
-				(args
+
+			
+			(block
+				(bind visible "isBonusTagsVisible && !isInShipMastery")
+				(element CarouselShipBonusTags
 					_shipEntityId = "shipEntity.id"
+				)
+			)
+			(block
+				(bind visible "isInShipMastery && masteryRank")
+				(element CarouselShipMasteryLeagueRank
+					_rank = "masteryRank"
 				)
 			)
 		)
@@ -637,7 +668,6 @@
 			(position = "absolute")
 			(left = "XXS")
 			(top = -1px)
-
 			(backgroundImage = 'swf:../service_kit/icons_svg/icons_svg.swf:primary')
 			(hitTest = false)
 		)
@@ -647,9 +677,14 @@
 (def element ShipCarouselSmallSlot (_shipEntityId:number, _rollOver:bool, _mouseDown:bool, _isSelected:bool="false")
 	(scope
 		(macro FEATURES "13")
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
 
-		(var shipEntity:gfx = "$datahub.getPrimaryEntity(CC.ship, _shipEntityId)")
-		(var ownShipInfo:gfx = "shipEntity && shipEntity.hasComponent(CC.ownShip) ? shipEntity.ownShip : null" (event "shipEntity.evAdded") (event "shipEntity.evRemoved"))
+		(var shipMasteryEntity:dhEntity = "getPrimaryEntity(CC.shipMastery, _shipEntityId)")
+		(var shipMasteryStatus:number = "shipMasteryEntity.shipMastery.status ?: 0" (event "shipMasteryEntity.shipMastery.evStatusChanged"))
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipEntityId)")
+		(var masteryRank:number = "shipEntity.shipMastery.rank ?: 0" (event "shipEntity.shipMastery.evRankChanged"))
+		(var ownShipInfo:dhComponent = "shipEntity.ownShip")
 		(var isPrimary:bool = "ownShipInfo ? ownShipInfo.isPrimary : false"	(event "ownShipInfo.evIsPrimaryChanged"))
 
 		
@@ -697,30 +732,29 @@
 				(paddingRight = 5px)
 				(paddingTop = 5px)
 				(paddingBottom = 5px)
+				(hitTest = false)
 			)
 
 			(block
-				(bind visible "!hasCrew")
+				(bind visible "!hasCrew && !isInShipMastery")
 				(style
 					(height = 21px)
 					(width = 21px)
 					(backgroundImage = 'swf:../service_kit/markers_svg/markers_svg.swf:without_commander')
-					(hitTest = false)
 				)
 			)
 			
 			(block
-				(bind visible "isNeedRepair")
+				(bind visible "isNeedRepair && !isInShipMastery")
 				(style
 					(height = 21px)
 					(width = 21px)
 					(backgroundImage = 'swf:../service_kit/markers_svg/markers_svg.swf:marker_attention')
-					(hitTest = false)
 				)
 			)
 
 			
-			(block	
+			(block
 				(bind name "'timeRent_' + fullName")
 				(controller $Instance renderer='RentTimerIcon'
 					(bind enabled "rentUntil > 0")
@@ -731,25 +765,48 @@
 			)
 
 			(block
-				(bind visible "isEarlyAccess")
+				(bind visible "isInShipMastery && shipMasteryStatus == SC.Common.SHIP_MASTERY_STATUSES.TASKS_AVAILABLE")
+				(style
+					(height = 21px)
+					(width = 21px)
+					(backgroundImage = 'swf:../service_kit/filters_svg/filters_svg.swf:ship_mastery_tasks_available')
+					(backgroundSize = "contain")
+				)
+			)
+
+			(block
+				(bind visible "isInShipMastery && shipMasteryStatus == SC.Common.SHIP_MASTERY_STATUSES.TASKS_IN_PROGRESS")
+				(style
+					(height = 21px)
+					(width = 21px)
+					(backgroundImage = 'swf:../service_kit/filters_svg/filters_svg.swf:ship_mastery_tasks_in_progress')
+					(backgroundSize = "contain")
+				)
+			)
+
+			(block
+				(bind visible "isEarlyAccess && !isInShipMastery")
 				(style
 					(height = 21px)
 					(width = 21px)
 					(backgroundImage = 'swf:../service_kit/icons_svg/icons_svg.swf:early_access')
-					(hitTest = false)
 				)
 			)
 		)
 
 		
 		(block
-			(bind visible "isBonusTagsVisible")
 			(style (marginLeft = -5px))
-			
 			(controller $Instance renderer='CarouselShipBonusTags'
-				(bind enabled "isBonusTagsVisible")
+				(bind enabled "isBonusTagsVisible && !isInShipMastery")
 				(args
 					_shipEntityId = "shipEntity.id"
+				)
+			)
+			(controller $Instance renderer='CarouselShipMasteryLeagueRank'
+				(bind enabled "isInShipMastery && masteryRank")
+				(args
+					_rank = "masteryRank"
 				)
 			)
 		)
