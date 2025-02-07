@@ -233,22 +233,23 @@
 
 		(mc mc_blurmap_medium
 			(class $FullsizeAbsolute)
-
 			(rendererString = blurMeBaby)
+			(blurIntensity = 0)
+
 			(controller $Animation
 				(bindcall play  id = 'modalWindowBgWithBlur'
 								duration=0.2
-								from = "{ blurIntensity: 0 }"
 								to = "{ blurIntensity: 1 }"
-								action="kill"
+								easing = "Easing.quad_in"
+								action = "kill"
 								(event "startShow")
 				)
 				(bindcall play  id = 'modalWindowBgWithBlur'
 								duration=0.2
 								delay=0.2
-								from = "{ blurIntensity: 1 }"
 								to = "{ blurIntensity: 0 }"
-								action="kill"
+								easing = "Easing.quad_in"
+								action = "kill"
 								(event "startHide")
 				)
 			)
@@ -310,6 +311,38 @@
 	)
 )
 
+(def macro DEFAULT_MODAL_WINDOW_ANIMATION_EXPRESSION (_positionY:expression="0", hideEvent:expression='startHide', animationFinishedEvent:expression=null)
+	(alpha = 0)
+	(style (visualOffsetY = 10px))
+
+	(controller $Animation
+		(bindcall play
+			delay = "0.1 + _positionY * 0.075"
+			duration = 0.15
+			from = "{ alpha: 0, visualOffsetY: 10px }"
+			to = "{ alpha: 1, visualOffsetY: 0px }"
+			easing = "Easing.quad_out"
+			action = "killAll"
+			watch = false
+			on = 'addedToStage'
+			(event "startShow")
+		)
+	)
+	(controller $Animation
+		(bindcall play
+			delay = "_positionY * 0.055"
+			duration = 0.15
+			to = "{ alpha: 0, visualOffsetY: -10px }"
+			easing = "Easing.quad_in"
+			action = "killAll"
+			watch = false
+			(event "$scope[hideEvent]")
+		)
+		(dispatch "animationFinishedEvent ? animationFinishedEvent : 'startShow'" init=false on=evAnimEnded (bind enabled "animationFinishedEvent != null"))
+	)
+)
+
+
 (def macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION (_positionY:number, hideEvent:expression='startHide', animationFinishedEvent:expression=null)
 	(style
 		(bind alpha "0" on='addedToStage' on='removedFromStage')
@@ -340,6 +373,27 @@
 			(event "$scope[hideEvent]")
 		)
 		(dispatch "animationFinishedEvent ? animationFinishedEvent : 'startShow'" on=evAnimEnded (bind enabled "animationFinishedEvent != null"))
+	)
+)
+
+
+(def macro DEFAULT_CACHED_SHOW_ANIMATION (_positionY:number)
+	(style
+		(bind alpha "0" on='addedToStage' on='removedFromStage')
+		(bind visualOffsetY "10px" on='addedToStage' on='removedFromStage')
+	)
+
+	(controller $Animation
+		(bindcall play
+			delay = "0.1 + _positionY * 0.075"
+			duration = 0.15
+			from = "{ alpha: 0, visualOffsetY: 10px }"
+			to = "{ alpha: 1, visualOffsetY: 0px }"
+			easing = "Easing.quad_out"
+			action = "kill"
+			watch = false
+			on = 'addedToStage'
+		)
 	)
 )
 
@@ -499,6 +553,7 @@
 												SC.Ui_styles.UNIFIED_STATUS.RECOMMENDED:			SC.Ui_styles.SERVICE_COLORS.YELLOW,
 												SC.Ui_styles.UNIFIED_STATUS.BATTLEPASS:				SC.Ui_styles.SERVICE_COLORS.YELLOW,
 												SC.Ui_styles.UNIFIED_STATUS.SHIP_CRAFT_AVAILABLE:	SC.Ui_styles.SERVICE_COLORS.YELLOW,
+												SC.Ui_styles.UNIFIED_STATUS.SHIP_MASTERY_TRIAL:		SC.Ui_styles.SERVICE_COLORS.YELLOW,
 												SC.Ui_styles.UNIFIED_STATUS.VICTORY:				SC.Ui_styles.SERVICE_COLORS.GREEN,
 												SC.Ui_styles.UNIFIED_STATUS.DEFEAT:					SC.Ui_styles.SERVICE_COLORS.RED,
 												SC.Ui_styles.UNIFIED_STATUS.NEGATIVE:				SC.Ui_styles.SERVICE_COLORS.RED,
@@ -740,9 +795,9 @@
 
 (def macro HIDE_UI_ON_SHIPOVERVIEW ()
 	(scope
-		(var dockDataEntity:gfx = "$datahub.getSingleEntity(CC.dockData)")
-		(var dockData:gfx = "dockDataEntity.dockData")
-		(var isShipOverviewEnabled:bool = "dockData.isShipOverviewEnabled ?: false" (event "dockData.evIsShipOverviewEnabledChanged"))
+		(var dockDataEntity:dhEntity = "getSingleEntity(CC.dockData)")
+		(var dockData:dhComponent = "dockDataEntity.dockData")
+		(var isShipOverviewEnabled:bool = "dockData.isShipOverviewEnabled" (event "dockData.evIsShipOverviewEnabledChanged"))
 	)
 	(style (bind hitTest "!isShipOverviewEnabled"))
 
@@ -864,13 +919,13 @@
 	(var isDetectionInfoHidden:bool = "_isFogOfWar && isShipUnderFogOfWar")
 )
 
-(def macro PULL_PLAYER_COLOR (_isSelf:expression=false, _ctkStatus:expression=false, _isAbuser:expression=false, _isPremiumAccount:expression=false, _isInSameDivision:expression=false)
-	(var playerNameColor:number = "	_isInSameDivision ?	_isSelf	? SC.Ui_styles.SERVICE_COLORS.WHITE
-																: SC.Ui_styles.SERVICE_COLORS.YELLOW :
-									_ctkStatus					? SC.Ui_styles.SERVICE_COLORS.RED :
-									_isAbuser					? SC.Ui_styles.SERVICE_COLORS.PINK :
-									_isPremiumAccount			? SC.Ui_styles.SERVICE_COLORS.YELLOW
-																: SC.Ui_styles.SERVICE_COLORS.WHITE")
+(def macro PULL_PLAYER_COLOR (_isSelf:expression=false, _ctkStatus:expression=false, _isAbuser:expression=false, _isPremiumAccount:expression=false, _isInSameDivision:expression=false, _isDead:expression=false)
+	(var playerNameColor:number = "	_isInSameDivision	? _isSelf || _isDead	? SC.Ui_styles.SERVICE_COLORS.WHITE
+																				: SC.Ui_styles.SERVICE_COLORS.YELLOW :
+									_ctkStatus			? SC.Ui_styles.SERVICE_COLORS.RED :
+									_isAbuser			? SC.Ui_styles.SERVICE_COLORS.PINK :
+									_isPremiumAccount	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+														: SC.Ui_styles.SERVICE_COLORS.WHITE")
 )
 
 (def macro SELECTED_AVATAR_ID ()
@@ -896,6 +951,7 @@
 	(var isBot:bool = "			avatarComponent.isBot")
 	(var isReady:bool = "		avatarComponent.isLoadedInBattle" (event "avatarComponent.evIsLoadedInBattleChanged"))
 	(var fragsCount:number = "	avatarComponent.frags" (event "avatarComponent.evFragsChanged"))
+	(var masteryRank:number = "avatarComponent.masteryRank")
 
 	(var isAlive:bool = "_avatarEntity.health.isAlive" (event "_avatarEntity.health.evIsAliveChanged"))
 	(var playerEntityDbId:number = "_avatarEntity.accountSimple.dbId")
@@ -926,9 +982,9 @@
 
 (def macro PLAYER_RANK_SCOPE (_entity:expression)
 	(var accountRankComponent:gfx = "_entity.accountRank" (event "_entity.evAdded") (event "_entity.evRemoved"))
-	(var rank:number =				"accountRankComponent.rank"		(event "accountRankComponent.evRankChanged"))
-	(var league:number =			"accountRankComponent.league"	(event "accountRankComponent.evRankChanged"))
-	(var seasonId:number =			"accountRankComponent.seasonId"	(event "accountRankComponent.evRankChanged"))
+	(var rank:number =				"accountRankComponent.rank"		(event "accountRankComponent.evChanged"))
+	(var league:number =			"accountRankComponent.league"	(event "accountRankComponent.evChanged"))
+	(var seasonId:number =			"accountRankComponent.seasonId"	(event "accountRankComponent.evChanged"))
 )
 
 (def macro SHIP_DATA_SCOPE (_shipId:expression)

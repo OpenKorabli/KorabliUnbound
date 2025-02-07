@@ -1,0 +1,92 @@
+(def element ModalWindowRanksLeagueSkip (price:number = 0, currency:str = '')
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(macro MODAL_WINDOW_SYSTEM_PURCHASE_EVENTS_SCOPE)
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountCurrency:number	= "resourceEntity.accountResource[currency] ?: 0" (event "resourceEntity.accountResource.evChangedBrass"))
+
+		(var rankSeasonEntity:dhEntity = "getSingleEntity(CC.rankSeason)")
+		(var currentSprintId:number = "rankSeasonEntity.rankSeason.currentSprintId ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
+		(var seasonId:number = "rankSeasonEntity.rankSeason.id ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
+
+		(var currentRankSprintEntity:dhEntity = "getPrimaryEntity(CC.rankSprint, currentSprintId)")
+		(var rankSeasonFinishTime:number = "rankSeasonEntity.timeOfBattleEvent.finishTime ?: 0" (event "rankSeasonEntity.timeOfBattleEvent.evChanged"))
+		(var rankSprintFinishTime:number = "currentRankSprintEntity.rankSprint.finishTime ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
+
+		(macro SERVER_TIME_SCOPE)
+		(var seasonTimer:number = "rankSeasonFinishTime - serverTime")
+		(var sprintTimer:number = "rankSprintFinishTime - serverTime")
+		(var isSeasonFinished:bool = "floor(seasonTimer) <= 0")
+		(var isSprintFinished:bool = "floor(sprintTimer) <= 0")
+
+		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
+		(var currentLeague:number = "rankStateEntity.rankState.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE")
+
+		(var header:str = "'IDS_RANKS_LEAGUE_SKIP_HEADER_' + currentLeague")
+		(var description:str = "'IDS_RANKS_LEAGUE_SKIP_TEXT_' + currentLeague")
+
+		(var priceInfo:dict = "{finalPrice: price, currency: currency}")
+		(var priceInfoPanel:array = "[{finalPrice: -price, currency: currency}]")
+		(var deficit:number = "price - accountCurrency")
+		(var isDeficit:bool = "deficit > 0")
+
+		(var windowHitTest:bool = true)
+		(bind windowHitTest "false" watch=false init=false (event "evHideContent"))
+	)
+	(dispatch evHideContent (event "startHide"))
+	(bindcall externalCall "isSeasonFinished || isSprintFinished ? 'inputMapping.onRequest' : ''" "['closeSkipLeagueWindow', {}]" (bind trigger "isSeasonFinished") (bind trigger "isSprintFinished"))
+	(bindcall externalCall 'inputMapping.onRequest' "['closeSkipLeagueWindow', {}]" (event "evAnimationFinished") (event "rankStateEntity.rankState.evCurrentLeagueChanged"))
+
+	(name = 'ModalWindowRanksLeagueSkip')
+	(style (align = "center|middle"))
+	(block
+		(style (width = 460px) (align = "center") (bind hitTest "windowHitTest"))
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1 hideEvent = "'evHideContent'")
+			(style (width = 100%))
+			(element ModalWindowShortHeader
+				_header = "header"
+				_hasDivider = false
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5 hideEvent = "'evHideContent'")
+			(style (width = 100%) (marginBottom = "S"))
+			(element CurrenciesPanel
+				_priceInfo = "priceInfoPanel"
+				_width = 460px
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3 hideEvent = "'evHideContent'")
+			(style (width = 100%) (marginBottom = "LS"))
+			(tf
+				(class $TextDefault17NM)
+				(style (width = 100%) (textAlign = "center") (alpha = "TA"))
+				(bind text "description")
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5 hideEvent = "'evHideContent'")
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_priceInfo =		"priceInfo"
+				_questionString =	'IDS_RANKS_LEAGUE_SKIP_QUESTION'
+				_isDeficit =		"isDeficit"
+				_isWarningText =	"isDeficit"
+				_deficit =			"deficit"
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4 hideEvent = "'evHideContent'" animationFinishedEvent = "'evAnimationFinished'")
+			(style (width = 100%) (marginTop = "MS") (align = "center"))
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_hideEventName = 'evHideContent'
+				_isDeficit = "isDeficit"
+				_okMethods = "[{ type: 'inputMapping.onAction', name: 'RankedProxy.skipRankedLeague', args: { seasonId: seasonId } }]"
+			)
+		)
+	)
+)

@@ -1,23 +1,39 @@
-(def element BrowserWindowContainer (elementName:str)
-	(macro MODAL_WINDOW_INIT)
+(def macro MODAL_BROWSER_WINDOW_INIT ()
+	(scope
+		(event startShow)
+		(event startHide)
+		(event sysStartShow)
+		(event sysStartHide)
+
+		(var stageComponent:dhComponent = "getSingleComponent(CC.stage)")
+		(var stageWidth:number = "stageComponent.width" (event "stageComponent.evStageSizeChanged"))
+		(var stageHeight:number = "stageComponent.height" (event "stageComponent.evStageSizeChanged"))
+	)
+	(style (bind width "stageWidth") (bind height "stageHeight") (position = "absolute"))
+
+	
+	(dispatch startShow dir="EventDirection.DOWN" (event "sysStartShow"))
+	(dispatch startHide dir="EventDirection.DOWN" (event "sysStartHide"))
+)
+
+(def element BrowserWindowContainer (elementName:str, skipURLTranslation:bool, authorization:bool)
+	(macro MODAL_BROWSER_WINDOW_INIT)
 	(scope
 		(var url:str = '') 
+		(var isFullscreen:bool = "true") 
 
-		(var uiScale:number = "stageComponent.scale" (event "stageComponent.evStageSizeChanged"))
+		(var browserWindowEntity:dhEntity = "getSingleEntity(CC.webBrowser)")
+		(var webBrowserComponent:dhComponent = "browserWindowEntity.webBrowser")
 
-		(var browserWindowWatcher:gfx = "$datahub.getFirstWatcher(CC.webBrowser)")
-		(var browserWindowEntity:gfx = "browserWindowWatcher.entity" (event "browserWindowWatcher.event"))
-		(var webBrowserComponent:gfx = "browserWindowEntity.webBrowser")
-
-		(var isTextureReady:bool = "webBrowserComponent.isTextureReady" (event "webBrowserComponent.evIsTextureReadyChanged"))
-		(var browserTextureName:str = "webBrowserComponent.browserTextureName")
-		(var isLoadFailed:bool = "webBrowserComponent.isLoadFailed" (event "webBrowserComponent.evIsLoadFailedChanged"))
-		(var browserHasControl:bool = "webBrowserComponent.browserHasControl" (event "webBrowserComponent.evBrowserHasControlChanged"))
+		(var browserTextureName:str =	"webBrowserComponent.browserTextureName")
+		(var isTextureReady:bool =		"webBrowserComponent.isTextureReady"	(event "webBrowserComponent.evIsTextureReadyChanged"))
+		(var isLoadFailed:bool =		"webBrowserComponent.isLoadFailed"		(event "webBrowserComponent.evIsLoadFailedChanged"))
+		(var browserHasControl:bool =	"webBrowserComponent.browserHasControl"	(event "webBrowserComponent.evBrowserHasControlChanged"))
 	)
-	(bindcall externalCall 'direct.action' "['browserUp', [$event.localX, $event.localY, $event.buttonIdx]]" init=false watch=false on='click')
-	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'close_muted']" init=false watch=false (event "startHide"))
 
-	(style (bind width "stageWidth") (bind height "stageHeight"))
+	
+	(bindcall externalCall 'direct.action' "['browserUp', [$event.localX, $event.localY, $event.buttonIdx]]" watch=false on='click')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'close_muted']" (event "startHide"))
 
 	(controller $Instance
 		(bind renderer "elementName")
@@ -35,16 +51,15 @@
 	(scope
 		(event evShowCloseIcon)
 		(event evHideCloseIcon)
+
 		(event evBlurStartShow)
 		(event evBlurStartHide)
 
-		(var routeEntityisInClanBase:gfx = "$datahub.getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.CLANS)")
+		(var routeEntityisInClanBase:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.CLANS)")
 		(var isInClanBase:bool = "routeEntityisInClanBase.route.isActive" (event "routeEntityisInClanBase.route.evIsActiveChanged"))
 		(macro GET_PREF 'isBlurOptionEnabled' "'graphics.GUI.blur'")
 		(macro GET_PREF 'isUIContrastOptionEnabled' "'graphics.GUI.contrast'")
-		(var referralCollection:gfx = "$datahub.getCollection(CC.referral)")
-		(var referralCollectionArray:array = "referralCollection.items" (event "referralCollection.evAdded") (event "referralCollection.evRemoved"))
-		(var isRefSysParticipant:bool = "referralCollectionArray.length > 0")
+
 		(var isBlurVisible:bool = "isBlurOptionEnabled && !isUIContrastOptionEnabled")
 		(var isContentReady:bool = "_isTextureReady && !_isLoadFailed")
 
@@ -53,8 +68,13 @@
 	)
 	(class $Fullsize)
 	(style (bind paddingTop "isInClanBase ? 60px : 0px"))
-	(dispatch 'evShowCloseIcon' (bind enabled "isShowCloseIcon") (bind trigger "isShowCloseIcon"))
-	(dispatch 'evHideCloseIcon' (bind enabled "!isShowCloseIcon") (bind trigger "isShowCloseIcon"))
+	(dispatch evShowCloseIcon (bind enabled "isShowCloseIcon") (bind trigger "isShowCloseIcon"))
+	(dispatch evHideCloseIcon (bind enabled "!isShowCloseIcon") (bind trigger "isShowCloseIcon"))
+
+	(dispatch evBlurStartShow dir="EventDirection.DOWN" (bind enabled "!isContentReady") (event "startShow"))
+	(dispatch evBlurStartShow dir="EventDirection.DOWN" (bind enabled "!isContentReady") (bind trigger "isContentReady"))
+	(dispatch evBlurStartHide dir="EventDirection.DOWN" (event "startHide"))
+	(dispatch evBlurStartHide delay=0.2 dir="EventDirection.DOWN" (bind enabled "isContentReady") (bind trigger "isContentReady"))
 
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION_ALPHA 0)
@@ -74,39 +94,27 @@
 			(bind visible "isBlurVisible")
 			(class $FullsizeAbsolute)
 
-			(dispatch evBlurStartShow dir="EventDirection.DOWN" (bind enabled "!isContentReady") (event "startShow"))
-			(dispatch evBlurStartShow dir="EventDirection.DOWN" (bind enabled "!isContentReady") (bind trigger "isContentReady"))
-			(dispatch evBlurStartHide dir="EventDirection.DOWN" (event "startHide"))
-			(dispatch evBlurStartHide delay=0.2 dir="EventDirection.DOWN" (bind enabled "isContentReady") (bind trigger "isContentReady"))
 			(element DeclareBlurLayer)
 
 			(mc mc_blurmap_medium
 				(class $FullsizeAbsolute)
 				(rendererString = blurMeBaby)
+				(blurIntensity = 0)
 
 				(controller $Animation
-					(bindcall play  duration=0.01
-									to = "{ blurIntensity: 0 }"
-									init=true
+					(bindcall play
+						duration = 0.15
+						to = "{ blurIntensity: 1 }"
+						easing = "Easing.quad_in"
+						action = "kill"
+						(event "evBlurStartShow")
 					)
-
-					(bindcall play  duration=0.15
-									action="kill"
-									keyframes="[
-										{percent:0,		to:{ blurIntensity:0 }},
-										{percent:30,	to:{ blurIntensity:0.4 }},
-										{percent:50,	to:{ blurIntensity:0.8 }},
-										{percent:80,	to:{ blurIntensity:0.9 }},
-										{percent:100,	to:{ blurIntensity:1 }}
-									]"
-									watch=false
-									(event "evBlurStartShow")
-					)
-					(bindcall play  duration=0.1
-									action="kill"
-									to = "{ blurIntensity: 0 }"
-									watch=false
-									(event "evBlurStartHide")
+					(bindcall play 
+						duration = 0.1
+						to = "{ blurIntensity: 0 }"
+						easing = "Easing.quad_in"
+						action = "kill"
+						(event "evBlurStartHide")
 					)
 				)
 			)
@@ -234,9 +242,10 @@
 		(event startHide)
 
 		(macro MOUSE_HANDLER_SCOPE)
-		(var referralCollection:gfx = "$datahub.getCollection(CC.referral)")
-		(var isRefSysParticipant:bool = "referralCollection && referralCollection.items.length > 0" (event "referralCollection.evAdded") (event "referralCollection.evRemoved"))
-		(var widgetEntity:gfx = "$datahub.getSingleEntity(CC.webBrowserIMEInputWidget)")
+		(var referralCollection:dhCollection = "getCollection(CC.referral)")
+		(var isRefSysParticipant:bool = "toBool(referralCollection.length)")
+		
+		(var widgetEntity:dhEntity = "getSingleEntity(CC.webBrowserIMEInputWidget)")
 		(var widgetEnabled:bool = "widgetEntity.webBrowserIMEInputWidget.enabled" (event "widgetEntity.webBrowserIMEInputWidget.evIsEnabledChanged"))
 	)
 	(bind name "_isTextureReady ? 'BrowserIsLoaded' : 'BrowserIsNotLoaded'")
@@ -261,7 +270,7 @@
 			(bind visible "!_isLoadFailed")
 			(style
 				(backgroundSize = "fill")
-				(bind backgroundImage "'img://embedded:' + _browserTextureName")
+				(bind backgroundImage "_browserTextureName ? 'img://embedded:' + _browserTextureName : null")
 			)
 			(alpha = "_isTextureReady ? 1 : 0")
 
@@ -270,11 +279,11 @@
 				(bindcall play id='textureAnim' duration=0.15 to={alpha: 0, visible:false} action="kill" (bind enabled "!_isTextureReady"))
 			)
 
-			(bindcall externalCall 'direct.action' "['browserMove', [$event.localX, $event.localY]]" init=false watch=false on='mouseMove')
-			(bindcall externalCall 'direct.action' "['browserWheel', [$event.localX, $event.localY, $event.delta]]" init=false watch=false on='mouseWheel')
-			(bindcall externalCall 'direct.action' "['browserDown', [$event.localX, $event.localY, $event.buttonIdx]]" init=false watch=false on='mouseDown')
-			(bindcall externalCall 'direct.action' "['rollOverUnderTextureChanged', [rollOver]]" init=false watch=false (bind trigger "rollOver"))
-			(bindcall externalCall 'direct.action' "['browserTextureSizeChanged', [$globalLayoutBounds[2], $globalLayoutBounds[3]]]" init=false watch=false (event "$evLayoutBoundsChanged"))
+			(bindcall externalCall 'direct.action' "['browserMove', [$event.localX, $event.localY]]" watch=false on='mouseMove')
+			(bindcall externalCall 'direct.action' "['browserWheel', [$event.localX, $event.localY, $event.delta]]" watch=false on='mouseWheel')
+			(bindcall externalCall 'direct.action' "['browserDown', [$event.localX, $event.localY, $event.buttonIdx]]" watch=false on='mouseDown')
+			(bindcall externalCall 'direct.action' "['rollOverUnderTextureChanged', [rollOver]]" watch=false (bind trigger "rollOver"))
+			(bindcall externalCall 'direct.action' "['browserTextureSizeChanged', [$globalLayoutBounds[2], $globalLayoutBounds[3]]]" watch=false (event "$evLayoutBoundsChanged"))
 		)
 
 		(controller $Instance renderer='BrowserIMEInput'
@@ -315,14 +324,15 @@
 	(scope
 		(event widgetExternalTextChangeEvent)
 
-		(var widgetEntity:gfx = "$datahub.getSingleEntity(CC.webBrowserIMEInputWidget)")
+		(var widgetEntity:dhEntity = "getSingleEntity(CC.webBrowserIMEInputWidget)")
+		(var webBrowserIMEInputWidget:dhComponent = "widgetEntity.webBrowserIMEInputWidget")
 
-		(var widgetPosition:dict = "widgetEntity.webBrowserIMEInputWidget.position" (event "widgetEntity.webBrowserIMEInputWidget.evBoundRectUpdate"))
-		(var widgetWidth:number = "max(10, widgetEntity.webBrowserIMEInputWidget.width)" (event "widgetEntity.webBrowserIMEInputWidget.evBoundRectUpdate"))
-		(var widgetHeight:number = "max(10, widgetEntity.webBrowserIMEInputWidget.height)" (event "widgetEntity.webBrowserIMEInputWidget.evBoundRectUpdate"))
-		(var widgetMaxTextLength:number = "widgetEntity.webBrowserIMEInputWidget.maxTextLength" (event "widgetEntity.webBrowserIMEInputWidget.evMaxTextLengthUpdate"))
-		(var isWidgetTextArea:bool = "widgetEntity.webBrowserIMEInputWidget.isTextArea" (event "widgetEntity.webBrowserIMEInputWidget.evTextAreaUpdate"))
-		(var externalText:str = "widgetEntity.webBrowserIMEInputWidget.externalText" (event "widgetEntity.webBrowserIMEInputWidget.evExternalTextUpdate"))
+		(var widgetPosition:dict =			"webBrowserIMEInputWidget.position"			(event "webBrowserIMEInputWidget.evBoundRectUpdate"))
+		(var widgetWidth:number =			"max(10, webBrowserIMEInputWidget.width)"	(event "webBrowserIMEInputWidget.evBoundRectUpdate"))
+		(var widgetHeight:number =			"max(10, webBrowserIMEInputWidget.height)"	(event "webBrowserIMEInputWidget.evBoundRectUpdate"))
+		(var widgetMaxTextLength:number =	"webBrowserIMEInputWidget.maxTextLength"	(event "webBrowserIMEInputWidget.evMaxTextLengthUpdate"))
+		(var isWidgetTextArea:bool =		"webBrowserIMEInputWidget.isTextArea"		(event "webBrowserIMEInputWidget.evTextAreaUpdate"))
+		(var externalText:str =				"webBrowserIMEInputWidget.externalText"		(event "webBrowserIMEInputWidget.evExternalTextUpdate"))
 
 		(var inputText:str = "externalText")
 	)

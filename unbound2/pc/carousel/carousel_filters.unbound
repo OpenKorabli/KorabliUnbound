@@ -1,4 +1,5 @@
 (def constant DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE 0)
+(def constant SHIP_MASTERY_CAROUSEL_SHIP_RESTRICTION_TYPE 17)
 
 (def constant CAROUSEL_APPLIED_FILTERS_BUTTON_ALPHA "{
 	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.75,
@@ -14,9 +15,16 @@
 
 (def element CarouselFilters ()
 	(scope
+		(event evSetString)
+
 		(struct crewFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.CREW"))
+
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
+
 		(var panelEntity:dhEntity = "getSingleEntity(CC.filterPanelComponent)")
-		(var selectedFilters:array = "panelEntity.shipListRestrictions.selectedFilters" (event "panelEntity.shipListRestrictions.evUpdate"))
+		(var shipListRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.shipListRestrictions, panelEntity.filterPanelComponent.shipRestrictionType)" (event "panelEntity.filterPanelComponent.evShipRestrictionTypeChanged"))
+		(var shipListRestrictionsComponent:dhComponent = "shipListRestrictionsEntity.shipListRestrictions")
+		(var selectedFilters:array = "shipListRestrictionsComponent.selectedFilters" (event "shipListRestrictionsComponent.evUpdate"))
 
 		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
 
@@ -24,13 +32,13 @@
 		(var selectedBattleTypeComponent:dhComponent = "selectedBattleTypesEntity.battleType")
 		(var selectedBattleType:str = "selectedBattleTypeComponent.type ?: ''" (event "selectedBattleTypeComponent.evBattleTypeChanged"))
 
+		
 		(var shipListRestrictions:array =	"trainingRoomEntity.shipListRestrictions.selectedFilters"	(event "trainingRoomEntity.shipListRestrictions.evUpdate"))
 		(var shipsCount:array =				"trainingRoomEntity.divisionRestrictions.shipsCount"		(event "trainingRoomEntity.divisionRestrictions.evUpdate"))
 		(var typesCount:dict =				"trainingRoomEntity.divisionRestrictions.typesCount"		(event "trainingRoomEntity.divisionRestrictions.evUpdate"))
 
-		(var defaultRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.battleTypeCommonRestrictions, SC.Common.BATTLE_TYPES.TRAINING_BATTLE)")
+		(var defaultRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.battleType, SC.Common.BATTLE_TYPES.TRAINING_BATTLE + '_' + toString(SC.Common.GAME_PARAMS.INVALID_PARAM_ID))")
 		(var defaultTypesCount:dict = "defaultRestrictionsEntity.divisionRestrictions.typesCount" (event "defaultRestrictionsEntity.divisionRestrictions.evUpdate"))
-
 		(var hasForbiddenShipType:bool = "defaultRestrictionsEntity.divisionRestrictions.hasForbiddenShipType ?: false" (event "defaultRestrictionsEntity.divisionRestrictions.evUpdate"))
 
 		(var isCarriersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.AIRCARRIER]	&& typesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1] != defaultTypesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1]")
@@ -43,13 +51,23 @@
 
 		(var hasTrainingRoomRestrictions:bool = "shipListRestrictions.length > 0 || isShipFilterRestrictionsVisible")
 		(var trainingFilterVisible:bool = "trainingRoomEntity && hasTrainingRoomRestrictions && selectedBattleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+		
 
-		(var battleTypeFilterVisible:bool = "isIn(selectedBattleType, SC.Common.BATTLE_TYPES.BATTLE_TYPES_WITH_HARD_FILTER) || trainingFilterVisible")
+		(var battleTypeFilterVisible:bool = "(isIn(selectedBattleType, SC.Common.BATTLE_TYPES.BATTLE_TYPES_WITH_HARD_FILTER) || trainingFilterVisible) && !isInShipMastery")
 		(var searchStr:str = "panelEntity.filterPanelComponent.searchString" (event "panelEntity.filterPanelComponent.evUpdate"))
 
 		(var isResetButtonVisible:bool = "selectedFilters.length + searchStr.length > 0")
 		(var isInfotipVisible:bool = false)
+
+		(var filterTypes:array = "SC.Common.SHIP_FILTER_TYPE.ALL")
+
+		(var ident:number = "isInShipMastery ? SHIP_MASTERY_CAROUSEL_SHIP_RESTRICTION_TYPE : DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE")
+
+		(var prefDir:str = "	ident == DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE			? 'carousel' :
+								ident == SHIP_MASTERY_CAROUSEL_SHIP_RESTRICTION_TYPE	? 'shipMasteryCarousel'
+																						: 'trainingRoom'")
 	)
+	(bindcall externalCall 'direct.action' "['option.set', [ 'ui.' + prefDir + '.filters.searchString', $event.inputStr]]" init=false watch=false (event "evSetString"))
 	(bindcall externalCall "crewFeature.state == 'locked' ? 'direct.action' : ''" "['option.set', [ 'ui.carousel.filters.' + SC.Common.SHIP_FILTER_TYPE.SPECIAL + '.' + SC.Common.SHIP_SPECIAL_FILTER_TYPE.WITH_COMMANDER, false ]]" watch=false on='addedToStage')
 	(bindcall externalCall "crewFeature.state == 'locked' ? 'direct.action' : ''" "['option.set', [ 'ui.carousel.filters.' + SC.Common.SHIP_FILTER_TYPE.SPECIAL + '.' + SC.Common.SHIP_SPECIAL_FILTER_TYPE.WITHOUT_COMMANDER, false ]]" watch=false on='addedToStage')
 
@@ -83,9 +101,9 @@
 		(controller $Tooltip
 			(renderer='CarouselFiltersInfotip')
 			(args
-				_panelEntityId = "panelEntity.id"
 				_selectedFilters = "selectedFilters"
 				_searchStr = "searchStr"
+				_ident = "ident"
 			)
 			(cache = true)
 			(macro CAROUSEL_INFOTIP_BEHAVIOUR "1")
@@ -115,11 +133,12 @@
 
 		(hblock
 			(controller $Repeat renderer='AppliedFilter'
-				(count = "SC.Common.SHIP_FILTER_TYPE.ALL.length")
+				(bind count "filterTypes.length")
 				(args
-					_filterType = "SC.Common.SHIP_FILTER_TYPE.ALL[$index]"
-					_panelEntity = "panelEntity"
+					_filterType = "filterTypes[$index]"
+					_shipListRestrictionsComponent = "shipListRestrictionsComponent"
 					_searchStr = "searchStr"
+					_ident = "ident"
 				)
 			)
 		)
@@ -137,12 +156,13 @@
 
 			(controller $Instance renderer='ResetAllFiltersButton'
 				(bind enabled "isResetButtonVisible")
+				(args "ident")
 			)
 		)
 	)
 )
 
-(def element CarouselFiltersInfotip ( _searchStr:str, _selectedFilters:array, _panelEntityId:number )
+(def element CarouselFiltersInfotip ( _searchStr:str, _selectedFilters:array, _ident:number)
 	(scope
 		(event searchShipButtonClicked)
 		(event closeSearchField)
@@ -151,10 +171,11 @@
 		(event ItemChooser_shipsSortSelected)
 		(event ItemChooser_carouselRowsCountChanged)
 		(event evResetAllFilters)
-		(event evSetString)
-
 
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
+
 		(macro GET_PREF_BOOL 'isSmallCarouselView' "'ui.carousel.isSmallView'")
 		(macro GET_PREF_NUMBER 'uiRowCountIndex' "'ui.carousel.uiRowCountIndex'")
 		(struct userPrefs = USER_PREF_DATA())
@@ -170,21 +191,29 @@
 
 		(var isResetButtonVisible:bool = "_selectedFilters || _searchStr")
 
-		(var filterBlockTitles:array = "['IDS_LEVEL', 'IDS_CLASS', 'IDS_NATION', 'IDS_SPECIAL', 'IDS_SHIP_BONUS']")
+		(var filterBlockTitlesDock:array = "['IDS_LEVEL', 'IDS_CLASS', 'IDS_NATION', 'IDS_SPECIAL', 'IDS_SHIP_BONUS']")
+		(var filterBlockTitlesShipMastery:array = "['IDS_LEVEL', 'IDS_CLASS', 'IDS_NATION', 'IDS_SPECIAL', 'IDS_SHIP_MASTERY']")
+
+		(var filterBlockTitles:array = "isInShipMastery ? filterBlockTitlesShipMastery : filterBlockTitlesDock")
 
 		(var panelEntity:dhEntity = "getSingleEntity(CC.filterPanelComponent)")
-		(var shipSorter:array =			"panelEntity.filterPanelComponent.sortFields" (event "panelEntity.filterPanelComponent.evUpdate"))
-		(var sortFieldIndex:number =	"panelEntity.filterPanelComponent.sortFieldIndex" (event "panelEntity.filterPanelComponent.evUpdate"))
-		(var isReverse:bool =			"panelEntity.filterPanelComponent.reverse" (event "panelEntity.filterPanelComponent.evUpdate"))
+		(var sortFields:array =	"panelEntity.filterPanelComponent.sortFields" (event "panelEntity.filterPanelComponent.evSortFieldsChanged"))
+		(var sortIndex:number =	"panelEntity.filterPanelComponent.sortIndex" (event "panelEntity.filterPanelComponent.evUpdate"))
+		(var isDescending:bool = "panelEntity.filterPanelComponent.isDescending" (event "panelEntity.filterPanelComponent.evUpdate"))
 
+		(var filterTypes:array = "isInShipMastery ? SC.Common.SHIP_FILTER_TYPE.SHIP_MASTERY_FILTERS : SC.Common.SHIP_FILTER_TYPE.SHIP_APPLIED_FILTERS")
+
+		(var prefDir:str = "	_ident == DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE			? 'carousel' :
+		 						_ident == SHIP_MASTERY_CAROUSEL_SHIP_RESTRICTION_TYPE	? 'shipMasteryCarousel'
+																						: 'trainingRoom'")
 	)
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
 	(name = 'CarouselFiltersInfotipClip')
 
-	(dispatch evSetString delay=0.2 reset=true dir="EventDirection.NONE" (event "inputStrChanged") (event "closeSearchField"))
-	(bindcall externalCall 'inputMapping.onAction' "['setSearchString', {value: inputStr}]" init=false watch=false  (event "evSetString"))
-	(bindcall externalCall 'inputMapping.onAction' "['setSortOrder', {sortFieldIndex: $event.selectedIndex, reverse: $event.direction}]" init=false watch=false (event "ItemChooser_shipsSortSelected"))
+	(dispatch evSetString delay=0.2 reset=true dir="EventDirection.UP" args="{inputStr: inputStr}" (event "inputStrChanged") (event "closeSearchField"))
+	(bindcall externalCall 'direct.action' "['option.set', [ 'ui.' + prefDir + '.sorting.sortIndex', $event.selectedIndex]]" init=false watch=false (event "ItemChooser_shipsSortSelected"))
+	(bindcall externalCall 'direct.action' "['option.set', [ 'ui.' + prefDir + '.sorting.isDescending', $event.direction]]" init=false watch=false (event "ItemChooser_shipsSortSelected"))
 	(bindcall externalCall 'direct.action' "['option.set', [ 'ui.carousel.rowCountIndex', $event.selectedIndex]]" init=false watch=false (event "ItemChooser_carouselRowsCountChanged"))
 
 
@@ -219,6 +248,7 @@
 
 				(controller $Instance renderer='ResetAllFiltersButton'
 					(bind enabled "isResetButtonVisible")
+					(args "_ident")
 				)
 			)
 			(block
@@ -284,12 +314,11 @@
 			(macro INNER_PANEL_BACKGROUND)
 
 			(controller $Repeat renderer='FilterBlock'
-				(bind count "filterBlockTitles.length")
+				(bind count "filterTypes.length")
 				(args
 					_title = "filterBlockTitles[$index]"
-					_filterType = "SC.Common.SHIP_FILTER_TYPE.SHIP_APPLIED_FILTERS[$index]"
-					_panelEntityId = "_panelEntityId"
-					_ident = "DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE"
+					_filterType = "filterTypes[$index]"
+					_ident = "_ident"
 					_needDivider = "$index != 0"
 					_inCarousel = true
 				)
@@ -299,10 +328,16 @@
 		(element HorizontalDividerTwoPx)
 
 		(block
-			(style (width = 100%) (marginTop = "S"))
+			(style
+				(width = 100%)
+				(marginTop = "S")
+			)
 
 			(hblock
-				(style (width = 100%) (marginLeft = "SXS"))
+				(style
+					(width = 100%)
+					(marginLeft = "SXS")
+				)
 
 				(block
 					(style (marginTop = "XS"))
@@ -365,9 +400,9 @@
 						(style (marginLeft = "XS"))
 
 						(element ItemChooser
-							_items = "[shipSorter[0].ids, shipSorter[1].ids, shipSorter[2].ids, shipSorter[3].ids]"
-							_curIndex = "sortFieldIndex"
-							_curDirection = "isReverse"
+							_items = "sortFields"
+							_curIndex = "sortIndex"
+							_curDirection = "isDescending"
 							_choosedItemRenderer = 'SmallItemChooserPickedItemRenderer'
 							_listItemRenderer = 'TextListItemRenderer'
 							_onItemSelectedEvent = 'shipsSortSelected'
@@ -445,7 +480,7 @@
 		(var battleTypeGameParamId:number = "selectedBattleTypeComponent.battleTypeGameParamId")
 		(var restrictionsEntityId:number = "selectedBattleTypeComponent.restrictionEntityId" (event "selectedBattleTypeComponent.evRestrictionEntityIdChanged"))
 
-		(var defaultRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.battleTypeCommonRestrictions, SC.Common.BATTLE_TYPES.TRAINING_BATTLE)")
+		(var defaultRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.battleType, SC.Common.BATTLE_TYPES.TRAINING_BATTLE + '_' + toString(SC.Common.GAME_PARAMS.INVALID_PARAM_ID))")
 		(var operationEntity:dhEntity = "getPrimaryEntity(CC.operation, battleTypeGameParamId)")
 		(var operationCustomIconName:str = "operationEntity.operation.customIconName" (event "operationEntity.operation.evStatusChanged"))
 
@@ -523,7 +558,7 @@
 	)
 )
 
-(def element ResetAllFiltersButton ()
+(def element ResetAllFiltersButton (_ident:number)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 		(var backgroundPath:str = "	rollOver || mouseDown	?	'url:../service_kit/buttons/button_dock/down.png'
@@ -601,7 +636,6 @@
 			(element CloseButton)
 		)
 	)
-
 	(block
 		(class $FullsizeAbsolute)
 		(style (backgroundColor = "NO_COLOR"))
@@ -609,7 +643,7 @@
 		(macro MOUSE_HANDLER
 			_methods = "[	{	type: 'inputMapping.onAction',
 								name: 'resetAllFilters',
-								args: {ident: 0}
+								args: {ident: _ident}
 							}]"
 			_dispatchedEv = "'evResetAllFilters'"
 			_soundSet = "'button_secondary'"
@@ -626,12 +660,11 @@
 	)
 )
 
-(def element AppliedFilter ( _panelEntity:dhEntity, _filterType:str = '', _searchStr:str = '' )
+(def element AppliedFilter ( _shipListRestrictionsComponent:dhComponent, _ident:number, _filterType:str = '', _searchStr:str = '')
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
-		(var shipListRestrictions:dhComponent = "_panelEntity.shipListRestrictions")
-		(var selectedTypeFilters:array = "shipListRestrictions.selectedFiltersByType[_filterType] ?: []" (event "shipListRestrictions.evUpdate"))
-		(var levelString:str = "shipListRestrictions.levelString ?: ''" (event "shipListRestrictions.evUpdate"))
+		(var selectedTypeFilters:array = "_shipListRestrictionsComponent.selectedFiltersByType[_filterType] ?: []" (event "_shipListRestrictionsComponent.evUpdate"))
+		(var levelString:str = "_shipListRestrictionsComponent.levelString ?: ''" (event "_shipListRestrictionsComponent.evUpdate"))
 
 		(var isLevelTypeFilter:bool = "_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_LEVEL")
 		(var isShipNameFilter:bool = "_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_NAME")
@@ -642,13 +675,15 @@
 								_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_TYPE		? 'IDS_CLASS' :
 								_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_NATION	? 'IDS_NATION' :
 								_filterType == SC.Common.SHIP_FILTER_TYPE.SPECIAL		? 'IDS_SPECIAL' :
-								_filterType == SC.Common.SHIP_FILTER_TYPE.BONUS			? 'IDS_SHIP_BONUS'
+								_filterType == SC.Common.SHIP_FILTER_TYPE.BONUS			? 'IDS_SHIP_BONUS' :
+								_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_MASTERY  ? 'IDS_SHIP_MASTERY'
 																						: ''")
 
 		(var itemRenderer:str = "_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_TYPE	? 'CarouselFilterShipTypeIcon' :
 								_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_NATION	? 'CarouselFilterTinyNationFlag' :
 								_filterType == SC.Common.SHIP_FILTER_TYPE.SPECIAL		? 'CarouselFilterSpecialSortingIcon' :
-								_filterType == SC.Common.SHIP_FILTER_TYPE.BONUS			? 'CarouselFilterBonusSortingIcon'
+								_filterType == SC.Common.SHIP_FILTER_TYPE.BONUS			? 'CarouselFilterBonusSortingIcon' :
+								_filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_MASTERY  ? 'CarouselFilterShipMasterySortingIcon'
 																						: ''")
 
 		(var isInfotipVisible:bool = false)
@@ -660,6 +695,9 @@
 
 		(var backgroundPath:str = "	rollOver || mouseDown || isInfotipVisible	?	'url:../service_kit/buttons/button_dock/down.png'
 																				:	''")
+		(var prefDir:str = "	_ident == DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE			? 'carousel' :
+								_ident == SHIP_MASTERY_CAROUSEL_SHIP_RESTRICTION_TYPE	? 'shipMasteryCarousel'
+																						: 'trainingRoom'")
 	)
 
 	(bind visible "isAppliedFiltersVisible")
@@ -704,8 +742,8 @@
 			(args
 				_title = "infotipTitle"
 				_filterType = "_filterType"
-				_panelEntityId = "_panelEntity.id"
 				_searchStr = "_searchStr"
+				_ident = "_ident"
 			)
 			(macro CAROUSEL_INFOTIP_BEHAVIOUR "1")
 			(position = "borderNoTrack")
@@ -783,7 +821,6 @@
 				)
 			)
 		)
-
 		(block
 			(style (width = 18px))
 
@@ -794,13 +831,13 @@
 				(controller $Instance renderer='CloseButton'
 					(bind enabled "closeIconAlpha")
 					(args
-						_methods = "isShipNameFilter	?	[{	type: 'inputMapping.onAction',
-																name: 'setSearchString',
-																args: { value: '' }
+						_methods = "isShipNameFilter	?	[{	type: 'direct.action',
+																name: 'option.set',
+																args: { preferenceId: 'ui.' + prefDir + '.filters.searchString', newValue: '' }
 															}]
 														:	[ {	type: 'inputMapping.onAction',
 																name: 'resetFilterType',
-																args: { type: _filterType, ident: DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE }
+																args: { type: _filterType, ident: _ident }
 															}]"
 						_tooltipText = 'IDS_HINT_RESET_FILTER'
 					)
@@ -866,7 +903,8 @@
 
 	(block
 		(style
-			(position = "absolute")(top = -9px)
+			(position = "absolute")
+			(top = -9px)
 			(hitTest = false)
 			(height = 39px)
 			(width = 39px)
@@ -875,12 +913,36 @@
 	)
 )
 
-(def element CarouselAppliedFilterShipNameInfotip ( _searchStr:str )
+(def element CarouselFilterShipMasterySortingIcon (_filterEntityId:number)
+	(scope
+		(var filterEntity:dhEntity = "getEntity(_filterEntityId)")
+		(var field:str = "filterEntity.shipFilterItem.field ?: ''" (event "filterEntity.shipFilterItem.evUpdate"))
+		(var imagePath:str = "field ? 'swf:../service_kit/filters_svg/filters_svg.swf:' + field : ''")
+	)
+	(style
+		(height = 21px)
+		(width = 22px)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(top = "XXS")
+			(left = "XXS")
+			(height = 17px)
+			(width = 19px)
+			(bind backgroundImage "imagePath")
+		)
+	)
+)
+
+(def element CarouselAppliedFilterShipNameInfotip ( _searchStr:str, _ident:number)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 		(event inputStrChanged)
 		(event closeSearchField)
-		(event evSetString)
+
 		(var inputStr:str = "_searchStr" watch=false)
 		(bind inputStr "$event.value" init=false watch=false (event "inputStrChanged"))
 		(bind inputStr "''" init=false watch=false (event "closeSearchField"))
@@ -889,8 +951,7 @@
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
 	(name = 'CarouselAppliedFilterShipNameInfotip')
-	(dispatch evSetString delay=0.2 reset=true dir="EventDirection.NONE" (event "inputStrChanged") (event "closeSearchField"))
-	(bindcall externalCall 'inputMapping.onAction' "['setSearchString', {value: inputStr}]" init=false watch=false  (event "evSetString"))
+	(dispatch evSetString delay=0.2 reset=true dir="EventDirection.UP" args="{inputStr: inputStr}" (event "inputStrChanged") (event "closeSearchField"))
 
 	(block
 		(style (margin = "M"))
@@ -910,7 +971,7 @@
 	)
 )
 
-(def element CarouselAppliedFilterInfotip (_title:str, _filterType:str, _panelEntityId:number)
+(def element CarouselAppliedFilterInfotip (_title:str, _filterType:str, _ident:number)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 	)
@@ -923,14 +984,13 @@
 		(element FilterBlock
 			_title = "_title"
 			_filterType = "_filterType"
-			_panelEntityId = "_panelEntityId"
-			_ident = "DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE"
+			_ident = "_ident"
 			_inCarousel = true
 		)
 	)
 )
 
-(def element FilterBlock (_title:str, _filterType:str, _ident:number, _panelEntityId:number, _tooltipPrefix:str='', _inCarousel:bool=false, _needDivider:bool=false)
+(def element FilterBlock (_title:str, _filterType:str, _ident:number, _tooltipPrefix:str='', _inCarousel:bool=false, _needDivider:bool=false)
 	(scope
 		(var filtersCollection:gfx = "$datahub.getCollection(CC.shipFilterItem).getChildByPath('byFilterType.' + _filterType)")
 		(var filters:array = "filtersCollection.items ?: []" (event "filtersCollection.evAdded") (event "filtersCollection.evRemoved"))
@@ -955,7 +1015,6 @@
 			(bind count "filters.length")
 			(args
 				_filterEntity = "filters[$index]"
-				_panelEntityId = "_panelEntityId"
 				_ident = "_ident"
 				_tooltipPrefix = "_tooltipPrefix"
 				_inCarousel = "_inCarousel"
@@ -970,26 +1029,30 @@
 	)
 )
 
-(def element FilterItem (_filterEntity:gfx, _panelEntityId:number, _ident:number, _tooltipPrefix:str, _inCarousel:bool=false)
+(def element FilterItem (_filterEntity:gfx, _ident:number, _tooltipPrefix:str, _inCarousel:bool=false)
 	(scope
-		(var panelEntity:gfx = "$datahub.getEntity(_panelEntityId)")
+		(var panelEntity:dhEntity = "getSingleEntity(CC.filterPanelComponent)")
 		(var enabledFilters:array = "panelEntity.filterPanelComponent.enabledFilters ?: []" (event "panelEntity.filterPanelComponent.evUpdate"))
 		(var isEnabled:bool = "isIn(_filterEntity.id, enabledFilters)")
 
 		(var filterType:str = "_filterEntity.shipFilterItem.type ?: ''" (event "_filterEntity.shipFilterItem.evUpdate"))
 		(var field:str = "_filterEntity.shipFilterItem.field ?: ''" (event "_filterEntity.shipFilterItem.evUpdate"))
 
-		(var filtersDir:str = "_ident == DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE ? 'carousel' : 'trainingRoom'")
+		(var filtersDir:str = "	_ident == DOCK_CAROUSEL_SHIP_RESTRICTION_TYPE			? 'carousel' :
+								_ident == SHIP_MASTERY_CAROUSEL_SHIP_RESTRICTION_TYPE	? 'shipMasteryCarousel'
+																						: 'trainingRoom'")
+
 		(var prefName:str = "filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_LEVEL	?	'ui.' + filtersDir + '.filters.' + filterType + '.' + shipLevelsToRoman(toNumber(field))
 																					:	'ui.' + filtersDir + '.filters.' + filterType + '.' + field")
-		(macro GET_PREF 'prefValue' "prefName")
+		(struct pref = GET_PREF_BOOL(_option = "prefName"))
 
 		(var renderItem:str = "	filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_LEVEL		? 'ShipLevelCheckBox' :
 								filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_TYPE		? 'ShipClassCheckBox' :
 								filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_NATION	? field != 'Events'	? 'ShipNationCheckBox'
 																											: '' :
 								filterType == SC.Common.SHIP_FILTER_TYPE.SPECIAL		? 'ShipSpecialCheckBox' :
-								filterType == SC.Common.SHIP_FILTER_TYPE.BONUS			? 'ShipBonusCheckBox'
+								filterType == SC.Common.SHIP_FILTER_TYPE.BONUS			? 'ShipBonusCheckBox' :
+								filterType == SC.Common.SHIP_FILTER_TYPE.SHIP_MASTERY	? 'ShipMasteryCheckBox'
 																						: 'FilterCheckBox'")
 	)
 	
@@ -999,7 +1062,7 @@
 		(args
 			_filterType = "filterType"
 			_prefName = "prefName"
-			_value = "prefValue"
+			_value = "pref.value"
 			_field = "field"
 			_tooltipPrefix = "_tooltipPrefix"
 			_isEnabled = "!_inCarousel || isEnabled"
@@ -1105,9 +1168,13 @@
 (def element ShipSpecialCheckBox (_filterType:str, _prefName:str, _value:bool, _field:str, _tooltipPrefix:str, _isEnabled:bool)
 	(scope
 		(macro FEATURES "13")
-		(var isVisible:bool = "	!(	isIn(_field, SC.Common.SHIP_SPECIAL_FILTER_TYPE.COMMANDER_FILTERS) && feature_13 == 'locked' ||
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
+		(var isCommanderFilter:bool = "isIn(_field, SC.Common.SHIP_SPECIAL_FILTER_TYPE.COMMANDER_FILTERS)")
+
+		(var isVisible:bool = "	!(	isInShipMastery && isCommanderFilter ||
+									isCommanderFilter && feature_13 == 'locked' ||
 									isIn(_field, SC.Common.SHIP_SPECIAL_FILTER_TYPE.SPECIAL_SHIP_FILTERS) && !_isEnabled)")
-		
+
 		(var imagePath:str = "'swf:../service_kit/filters_svg/filters_svg.swf:' + _field")
 
 		(var statusTooltipData:dict = "_isEnabled	? { _text: toUpper('IDS_HINT_CHECKBOX_FILTER_' + _field),
@@ -1162,6 +1229,39 @@
 										_imagePath: imagePath}"
 		_statusTooltipData = "statusTooltipData"
 		_enabled = "_isEnabled"
+		_methods = "[{
+						type:	'direct.action',
+						name:	'option.set',
+						args:	[_prefName, !_value]
+					}]"
+	)
+)
+
+(def element ShipMasteryCheckBox (_filterType:str, _prefName:str, _value:bool, _field:str, _tooltipPrefix:str, _isEnabled:bool)
+	(scope
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
+
+		(var imagePath:str = "'swf:../service_kit/filters_svg/filters_svg.swf:' + _field")
+
+		(var statusTooltipData:dict = "_isEnabled	? { _text: toUpper('IDS_HINT_CHECKBOX_FILTER_' + _field),
+														_unifiedStatus:	 SC.Ui_styles.UNIFIED_STATUS.DEFAULT}
+													: {	_text: toUpper('IDS_HINT_CHECKBOX_FILTER_NOT_AVAILABLE_' + _field),
+														_unifiedStatus:	 SC.Ui_styles.UNIFIED_STATUS.ATTENTION}")
+		(var isCheckBoxEnabled:bool = "_isEnabled && isInShipMastery")
+	)
+	(bind name "'CarouselCheckBox_' + _filterType + '_' + _field")
+	(bind visible "isInShipMastery")
+	(style (marginBottom = "S") (width = 80px))
+	(element CheckBox
+		_isChecked = "_value"
+		_customLabelInstance = 'CheckBoxImageLabel'
+		_customLabelInstanceParams = "{	_height: 21px,
+										_width: 21px,
+										_marginTop: 1px,
+										_marginLeft: 6px,
+										_imagePath: imagePath}"
+		_statusTooltipData = "statusTooltipData"
+		_enabled = "isCheckBoxEnabled"
 		_methods = "[{
 						type:	'direct.action',
 						name:	'option.set',

@@ -1,0 +1,506 @@
+(def constant RANKED_STATES {
+	QUALIFICATION_PASSED:	'RANKED_STATE_QUALIFICATION_PASSED',
+	FIRST_RANK_REACHED:		'RANKED_STATE_FIRST_RANK_REACHED',
+	TOP_RANK_REACHED:		'RANKED_STATE_TOP_RANK_REACHED',
+	RANK_CHANGED:			'RANKED_STATE_RANK_CHANGED',
+	STARS_CHANGED:			'RANKED_STATE_STARS_CHANGED',
+	STAR_SAVED:				'RANKED_STATE_STAR_SAVED'
+})
+
+(def constant RANK_EMBLEM_CT {
+	WHITE: {	redMultiplier: 1,
+				greenMultiplier: 1,
+				blueMultiplier: 1,
+				alphaMultiplier: 1,
+				redOffset: 150,
+				greenOffset: 150,
+				blueOffset: 150,
+				alphaOffset: 0},
+	DEFAULT: {	redMultiplier:1,
+				greenMultiplier:1,
+				blueMultiplier:1,
+				alphaMultiplier:1,
+				redOffset:0,
+				greenOffset:0,
+				blueOffset:0,
+				alphaOffset:0}
+})
+
+(def element ModalWindowRankChanged (arenaId:number = 0, isPostBattle:bool=false)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(event evRankEmblemAnimEnded)
+		(event evRankStarsAnimEnded)
+		(event evRankInfoAnimStart)
+
+		(macro PULL_CURRENT_TOP_WINDOW_NAME)
+		(var isOnTop:bool = "currentTopWindowName == 'ModalWindowRankChanged'")
+
+		(var postbattleRankInfoEntity:dhEntity = "getPrimaryEntity(CC.postBattleRankInfo, arenaId)")
+		(var postBattleRankInfo:dhComponent = "postbattleRankInfoEntity.postBattleRankInfo")
+		(var oldInfo:dict = "postBattleRankInfo.oldInfo")
+		(var newInfo:dict = "postBattleRankInfo.newInfo")
+		(var changeRanks:array = "postBattleRankInfo.changeRanks")
+		(var battleResult:number = "postBattleRankInfo.battleResult")
+		(var remainingRewards:array = "postBattleRankInfo.remainingRewards")
+		(var remainingVictories:array = "postBattleRankInfo.remainingVictories")
+		(var remainingRewardsCategories:array = "postBattleRankInfo.remainingRewardsCategories")
+		(var currentLeagueRewardVictories:array = "postBattleRankInfo.victories")
+		(var currentLeagueVictoryRewards:array = "postBattleRankInfo.victoryRewards")
+		(var currentLeagueVictoryRewardCategories:array = "postBattleRankInfo.victoryRewardsCategories")
+		(var currentLeagueVictoryRewardsProgress:number = "postBattleRankInfo.victoryRewardsProgress")
+		(var rewardsQualification:array = "postBattleRankInfo.qualificationRewards")
+		(var rewardCategoryQualification:str = "postBattleRankInfo.qualificationRewardsCategory")
+		(var rewardsTopRank:array = "postBattleRankInfo.firstRankRewards")
+		(var rewardCategoryTopRank:str = "postBattleRankInfo.firstRankRewardsCategory")
+		(var step:number = "postBattleRankInfo.step")
+
+		(var currentLeague:number = "newInfo.league")
+		(var currentRank:number = "newInfo.rank")
+		(var currentStars:number = "newInfo.stars")
+		(var playerVictoryCount:number = "newInfo.victories")
+
+		(var currentVictoryRewardIndex:number = "indexOf(playerVictoryCount, currentLeagueRewardVictories)") 
+		(var rewardsWinCurrent:array = "currentLeagueVictoryRewards[currentVictoryRewardIndex]")
+		(var rewardCategoryWinCurrent:str = "currentLeagueVictoryRewardCategories[currentVictoryRewardIndex]")
+
+		(var isTopRank:bool = "currentRank == SC.Ranked.RANK_CONSTANTS.TOP_RANK")
+		(var isTopLeague:bool = "currentLeague == SC.Ranked.RANK_CONSTANTS.TOP_LEAGUE")
+		(var isQualificationView:bool = "	isTopRank &&
+											currentLeague != SC.Ranked.RANK_CONSTANTS.TOP_LEAGUE &&
+											changeRanks.length == 1")
+
+		(var rankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, currentRank + '_' + currentLeague)")
+		(var starsToNextRank:number = "rankInfoEntity.rankInfo.starsToNext")
+		(var starsToDisplay:number = "isTopRank && !isQualificationView ? 0 : starsToNextRank")
+
+		(var isVictoryRewardProgressIncreased:bool = "battleResult == SC.Battle.BATTLE_RESULT.VICTORY")
+		(var isStarEarnCondition:bool = "oldInfo.stars < newInfo.stars")
+		(var isStarLossCondition:bool = "oldInfo.stars > newInfo.stars")
+		(var isStarAnyCondition:bool = "isStarEarnCondition || isStarLossCondition")
+		(var isOutOfStars:bool = "changeRanks.length == 1 && oldInfo.stars == newInfo.stars && oldInfo.stars == 0") 
+
+		(var categoryRewardsVictories:number = "currentLeagueRewardVictories[currentLeagueRewardVictories.length - 1] ? currentLeagueRewardVictories [currentLeagueRewardVictories.length - 1] : 0")
+		(var hasReceivedAllVictoryRewards:bool = "playerVictoryCount >= categoryRewardsVictories")
+		(var isFinalVictoryReward:bool = "playerVictoryCount == currentLeagueRewardVictories[currentLeagueRewardVictories.length - 1] && isVictoryRewardProgressIncreased")
+
+		(var isBeforeFirstReward:bool = "currentLeagueVictoryRewardsProgress == SC.Ranked.RANK_VICTORIES_REWARDS_PROGRESS.BEFORE_FIRST")  
+		(var isBeforeLastReward:bool = "currentLeagueVictoryRewardsProgress == SC.Ranked.RANK_VICTORIES_REWARDS_PROGRESS.BEFORE_LAST")  
+		(var isBoundaryReward:bool = "isBeforeFirstReward || isBeforeLastReward")
+
+		(var victoryRewardIndexToShow:number = "isBeforeFirstReward ? 0 : 1")
+		(var victoriesTillNextReward:number = "currentLeagueRewardVictories[victoryRewardIndexToShow] - playerVictoryCount")
+
+		(var isRemainingRewardAvailable:bool = "remainingRewards.length > 0")
+		(var remainingRewardsParams:dict = "{	_remainingRewardsCategories: remainingRewardsCategories,
+												_remainingVictories: remainingVictories}")
+
+		(var victoryRewards:array = "[currentLeagueVictoryRewards[0], currentLeagueVictoryRewards[1], currentLeagueVictoryRewards[2]]")
+		(var victoryRewardsToShow:array = "isBoundaryReward	? currentLeagueVictoryRewards : victoryRewards")
+
+		(var victories:array = "[currentLeagueRewardVictories[0], currentLeagueRewardVictories[1], currentLeagueRewardVictories[2]]")
+		(var victoriesToShow:array = "isBoundaryReward ? currentLeagueRewardVictories : victories")
+
+		(var victoryRewardCategories:array = "[currentLeagueVictoryRewardCategories[0], currentLeagueVictoryRewardCategories[1], currentLeagueVictoryRewardCategories[2]]")
+		(var victoryRewardCategoriesToShow:array = "isBoundaryReward ? currentLeagueVictoryRewardCategories : victoryRewardCategories")
+
+		(var rewardsParams:dict = "{	victoryRewardsToShow: victoryRewardsToShow,
+										victories: victoriesToShow,
+										rewardsCategories: victoryRewardCategoriesToShow,
+										currentVictories: playerVictoryCount,
+										achievedRewardsCount: victoryRewardIndexToShow,
+										isZeroHidden: !isBeforeFirstReward }")
+
+		(var rankSeasonEntity:dhEntity = "getSingleEntity(CC.rankSeason)")
+		(var rankSeasonStartTime:number = "rankSeasonEntity.rankSeason.startTime ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
+
+		(var battleResultEntity:dhEntity = "getSingleEntity(CC.battleResultsStructured)")
+		(var postBattleData:dict = "battleResultEntity.dataComponent.data ?: {}" (event "battleResultEntity.dataComponent.evDataChanged"))
+		(var isEconomicallyPunished:bool = "postBattleData['personal']['isEconomicallyPunished']")
+
+		(var windowState:str = "	changeRanks.length == 2	?	isTopRank && isTopLeague	? RANKED_STATES.TOP_RANK_REACHED :
+																isTopRank					? RANKED_STATES.FIRST_RANK_REACHED
+																							: RANKED_STATES.RANK_CHANGED :
+									changeRanks.length == 1	? 	isTopRank					?	currentStars == starsToNextRank	? RANKED_STATES.QUALIFICATION_PASSED :
+																								isStarAnyCondition				? RANKED_STATES.STARS_CHANGED
+																																: RANKED_STATES.STAR_SAVED :
+																isStarAnyCondition			? RANKED_STATES.STARS_CHANGED
+																							: RANKED_STATES.STAR_SAVED
+															: 'RANKED_STATE_UNKNOWN'")
+
+		(var isQualificationPassed:bool = "windowState == RANKED_STATES.QUALIFICATION_PASSED")
+		(var isFirstRankReached:bool = "windowState == RANKED_STATES.FIRST_RANK_REACHED")
+		(var isTopRankReached:bool = "windowState == RANKED_STATES.TOP_RANK_REACHED")
+		(var isStarsChanged:bool = "windowState == RANKED_STATES.STARS_CHANGED")
+		(var isRankChanged:bool = "	windowState == RANKED_STATES.RANK_CHANGED ||
+									windowState == RANKED_STATES.FIRST_RANK_REACHED ||
+									windowState == RANKED_STATES.TOP_RANK_REACHED")
+
+		(var isVictoryRewardsBlockVisible:bool = "!hasReceivedAllVictoryRewards && isVictoryRewardProgressIncreased && !isQualificationPassed")
+
+		(var qualificationTitle:str = "	isQualificationPassed	? 'IDS_RANKED_QUALIFICATION_PASSED_EXCLAMATION' :
+										isStarsChanged			? isVictoryRewardProgressIncreased	? 'IDS_QUALIFICATION_STAR_EARNED'
+																									: 'IDS_QUALIFICATION_STAR_LOST'
+																: 'IDS_QUALIFICATION_STAR_SAVED'")
+		(var rankTitle:str = "	isQualificationView		? qualificationTitle :
+								isRankChanged			? isVictoryRewardProgressIncreased	? isTopRank	? 'IDS_TOP_RANK'
+																										: 'IDS_NEW_RANK'
+																							: 'IDS_OLD_RANK' :
+								isStarsChanged			? isVictoryRewardProgressIncreased	? 'IDS_RANK_STAR_EARNED'
+																							: 'IDS_RANK_STAR_LOST' :
+								isOutOfStars			? 'IDS_RANK_NO_CHANGES'
+														: 'IDS_RANK_STAR_SAVED'"
+		)
+		(var rankDescription:str = "	isEconomicallyPunished							? 'IDS_ABUSE_RANKED_RESULTS_REASON' :
+										isTopRank && !isQualificationView				?	isTopLeague	? 'IDS_RANK_REACHED_TOP'
+																										: 'IDS_RANK_REACHED_FIRST' :
+										isQualificationView && !isQualificationPassed	? 'IDS_RANKED_QUALIFICATION_NEXT_LEAGUE_' + (currentLeague - 1) :
+										isQualificationPassed							? 'IDS_RANKED_NEXT_LEAGUE_DETERMINED_' + (currentLeague - 1)
+																						: ''")
+		(var rewardArray:array = "[	isQualificationPassed && !isTopLeague	?	[	rewardsQualification,
+																					rewardCategoryQualification,
+																					'IDS_RANK_CHANGED_REWARDS_QUALIFICATION' ]
+																			: null,
+									isFirstRankReached || isTopRankReached	?	[	rewardsTopRank,
+																					rewardCategoryTopRank,
+																					'IDS_RANK_CHANGED_REWARDS_TOP_RANK' ]
+																			: null,
+									isFinalVictoryReward					?	[	rewardsWinCurrent,
+																					rewardCategoryWinCurrent,
+																					'IDS_RANK_CHANGED_REWARDS_VICTORIES_FINAL' ]
+																			: null]")
+		(var isOtherRewardAvailable:bool = "	isQualificationPassed ||
+												(isFirstRankReached && !isQualificationView) ||
+												isTopRankReached ||
+												isFinalVictoryReward")
+		(var isRewardsPanelVisible:bool = "	isOtherRewardAvailable ||
+											isRemainingRewardAvailable ||
+											isVictoryRewardsBlockVisible ||
+											isQualificationPassed")
+		(var isRankEmblemVisible:bool = "!(isQualificationView && !isQualificationPassed)")
+		(var isStarsBlockVisible:bool = "!isQualificationPassed && starsToDisplay > 0")
+
+		(struct qualityGraphicsPref = GET_PREF_NUMBER(_option="'graphics.preset'"))
+		(var isStaticAnimBG:bool = "qualityGraphicsPref.value == SC.Ui_prefs.GRAPHICS_PRESET.LOW || qualityGraphicsPref.value == SC.Ui_prefs.GRAPHICS_PRESET.MINIMUM")
+
+		(var sound:str = "	step > 0	? 'star' :
+							step < 0	? 'star_lost'
+										: 'exchange_window'")
+
+		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
+		(var newLeague:number = "rankStateEntity.rankState.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE" (event "rankStateEntity.rankState.evCurrentLeagueChanged"))
+		(var newRankPlayerEntity:dhEntity = "getPrimaryEntity(CC.rankPlayer, newLeague)")
+		(var newRank:number = "newRankPlayerEntity.rankPlayer.rank" (event "newRankPlayerEntity.rankPlayer.evChanged"))
+		(var newRankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, newRank + '_' + newLeague)")
+	)
+	(bindcall externalCall 'sound.playSetSoundDirect' "['rank_window', sound]" watch=false (bind trigger "isOnTop"))
+	(dispatch evStartAnimation dir="EventDirection.DOWN" (bind trigger "isOnTop"))
+
+	(dispatch evRankInfoAnimStart (bind enabled "isRankEmblemVisible") (event "evRankEmblemAnimEnded"))
+	(dispatch evRankInfoAnimStart (bind enabled "!isRankEmblemVisible") (event "startShow"))
+
+	(name = 'ModalWindowRankChanged')
+	(style (align = "center|middle"))
+
+	(block
+		(bind visible "!isRankEmblemVisible")
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(backgroundImage = 'url:../animations/spine/ranks/mist.skel')
+			(backgroundSize = "cover")
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play duration=0.3 to="{ alpha: 1 }" action="kill" (event "startShow"))
+			(bindcall play delay=0.2 duration=0.2 to="{ alpha: 0 }" action="kill" watch=false (event "startHide"))
+		)
+
+		(controller $Spine
+			(bind enabled "!isRankEmblemVisible")
+			(mergeLayers = true)
+			(bindcall pause init=true	(bind enabled "isStaticAnimBG"))
+			(bindcall resume			(bind enabled "!isStaticAnimBG"))
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 900px)
+			(height = 100%)
+			(align = "middle")
+		)
+		(block
+			(controller $Instance renderer='RankEmblemAnimated'
+				(bind enabled "isRankEmblemVisible")
+				(args
+					_entityId = "isQualificationPassed ? newRankInfoEntity.id : rankInfoEntity.id"
+					_currentRank = "isQualificationPassed ? newRank : currentRank"
+					_currentLeague = "isQualificationPassed ? newLeague : currentLeague"
+					_isQualificationView = "isQualificationView"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(block
+				(visible = false)
+				(alpha = 0)
+				(style
+					(width = 100%)
+					(visualOffsetY = 20px)
+					(bind marginBottom "isRewardsPanelVisible ? L : 0")
+				)
+				(controller $Animation
+					(controllerEvents evRankStarsShowAnimationEnded)
+
+					(bindcall play  delay = "isRankEmblemVisible ? 0.075 : 0.2"
+									duration = 0.2
+									from = "{alpha: 0, visualOffsetY: 20px, visible: false}"
+									to = "{alpha: 1, visualOffsetY: 0px, visible: true}"
+									easing = "Easing.quad_in"
+									onEndedEvent = 'evRankStarsShowAnimationEnded'
+									action = "kill"
+									(event "evRankInfoAnimStart")
+					)
+
+					(bindcall play  delay = 0.075
+									duration = 0.2
+									to = "{alpha: 0, visualOffsetY: -20px, visible: false}"
+									easing = "Easing.quad_in"
+									action = "kill"
+									(bind enabled "isRewardsPanelVisible")
+									(event "evRankStarsAnimEnded")
+					)
+
+					(dispatch evRankStarsAnimEnded delay=1 on='evRankStarsShowAnimationEnded')
+				)
+
+				(tf
+					(class $TextDefaultBold46NM)
+					(style (alpha = "TA"))
+					(bind text "rankTitle")
+				)
+
+				(block
+					(style (marginTop = "MS"))
+					(element RankPeriodStatusLine
+						_startTime = "rankSeasonStartTime"
+					)
+				)
+
+				(hblock
+					(bind visible "isStarsBlockVisible")
+					(style
+						(width = 100%)
+						(hgap = "XS")
+						(backgroundColor = "NO_COLOR")
+						(marginTop = "L")
+					)
+
+					(controller $Repeat renderer='RankStar'
+						(bind enabled "isStarsBlockVisible")
+						(bind count "starsToDisplay")
+						(args
+							_leagueId = "currentLeague"
+							_isReceived = "($index + 1) <= currentStars"
+							_size = "SIZE.LARGE"
+						)
+					)
+
+					(controller $Tooltip
+						(renderer='SimpleStatusTooltip')
+						(bind enabled "isStarsBlockVisible")
+						(args
+							_text = 'IDS_RANKED_STAR_CONDITION_REGULAR'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+				(tf
+					(bind visible "rankDescription")
+					(class $TextDefault21NM)
+					(style
+						(alpha = "TA")
+						(width = 100%)
+						(marginTop = "L")
+					)
+					(bind text "rankDescription")
+				)
+			)
+
+			(block
+				(visible = false)
+				(alpha = 0)
+				(style (visualOffsetY = 20px))
+
+				(controller $Animation
+					(bindcall play  delay = 0.3
+									duration = 0.2
+									from = "{alpha: 0, visualOffsetY: 20px, visible: false}"
+									to = "{alpha: 1, visualOffsetY: 0px,  visible: true}"
+									easing = "Easing.quad_in"
+									action = "kill"
+									(event "evRankStarsAnimEnded")
+					)
+				)
+
+				(tf
+					(bind visible "isRewardsPanelVisible")
+					(class $TextDefaultBold46NM)
+					(style
+						(marginBottom = "LS")
+						(alpha = "TA")
+					)
+					(text = 'IDS_RANKED_REWARDS_TITLE')
+				)
+
+				(block
+					(controller $Instance renderer='RanksRewardsContainer'
+						(bind enabled "isRewardsPanelVisible")
+						(args
+							_isOtherRewardAvailable = "isOtherRewardAvailable"
+							_isRemainingRewardAvailable = "isRemainingRewardAvailable"
+							_remainingRewardArray = "remainingRewards"
+							_remainingRewardsParams = "remainingRewardsParams"
+							_rewardsParams = "rewardsParams"
+							_dataArray = "rewardArray"
+							_victoriesTillNextReward = "victoriesTillNextReward ?: 0"
+							_hasReceivedAllVictoryRewards = "hasReceivedAllVictoryRewards"
+							_isVictoryRewardProgressIncreased = "isVictoryRewardProgressIncreased"
+							_isQualificationPassed = "isQualificationPassed"
+							_isQualificationView = "isQualificationView"
+							_isTopRank = "isTopRank"
+							_leagueId = "currentLeague"
+						)
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(class $MiddleAlignedAbsolutely)
+		(style (bottom = "{720: MS, 1080: XLM}"))
+		(block
+			(visible = false)
+			(alpha = 0)
+			(style (visualOffsetY = 20px))
+			(controller $Animation
+				(bindcall play  delay = 0.3
+								duration = 0.2
+								from = "{alpha: 0, visualOffsetY: 20px, visible: false}"
+								to = "{alpha: 1, visualOffsetY: 0px, visible: true}"
+								easing = "Easing.quad_in"
+								action = "kill"
+								(event "evRankStarsAnimEnded")
+				)
+			)
+			(element DefaultButton
+				_width = 154px
+				_name = 'btn_cancel'
+				_label = 'IDS_CLOSE_UPPER_CASE'
+				_defaultFocused = true
+				_focusIndex = 1
+			)
+		)
+	)
+)
+
+(def element ExplosionAnimation ()
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(top = -155px)
+		(left = -155px)
+		(width = 550px)
+		(height = 550px)
+		(backgroundSize = "cover")
+		(backgroundImage = 'url:../animations/spine/account_leveling/explosion/explosion.skel')
+	)
+	(controller $Spine)
+)
+
+(def element RankEmblemAnimated (	_entityId:number = 0,
+									_currentRank:number = 0,
+									_currentLeague:number = 0,
+									_isQualificationView:bool = false)
+	(scope
+		(event evStartAnimation)
+		(event evStartExplosionAnim)
+		(event evRankEmblemAnimEnded)
+	)
+
+	(visible = false)
+	(alpha = 0)
+	(colorTransform = "RANK_EMBLEM_CT.DEFAULT")
+	(style
+		(marginRight = "LM")
+		(visualOffsetX = 160px)
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(scaleX = 2.5)
+		(scaleY = 2.5)
+		(rotation = -30)
+	)
+	(controller $Animation
+		(bindcall play
+			keyframes="[
+				{ time: 0.7, to: {	alpha: 1,
+									scaleX: 1,
+									scaleY: 1,
+									rotation: 0,
+									visible: true,
+									visualOffsetX: 160px,
+									colorTransform: RANK_EMBLEM_CT.WHITE}},
+				{ time: 1, to: {visualOffsetX: 160px }},
+				{ time: 1.3, to: { colorTransform: RANK_EMBLEM_CT.DEFAULT}},
+				{ time: 1.6, to: { visualOffsetX: 0px }}]"
+				(event "evStartAnimation")
+		)
+		(dispatch evStartExplosionAnim delay=0.3 on=evAnimStarted)
+		(dispatch evRankEmblemAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+	)
+	(block
+		(style
+			(position = "absolute")
+			(top = -250px)
+			(left = -250px)
+			(width = 760px)
+			(height = 760px)
+			(backgroundImage = 'url:../animations/spine/account_leveling/fog/fog.skel')
+		)
+		(controller $Spine)
+	)
+
+	(block
+		(controller $FxInstance renderer='ExplosionAnimation' lifetime="2.3"
+			(bindcall create (event "evStartExplosionAnim"))
+		)
+	)
+	(block
+		(element RankStereotypeImage
+			_size = "SIZE.LARGE"
+			_league = "_currentLeague"
+			_rank = "_currentRank"
+			_isDesaturated = true
+		)
+		(controller $Tooltip
+			(bind enabled "_entityId")
+			(renderer='RankStereotypeTooltip')
+			(args
+				_entityId = "_entityId"
+				_league = "_currentLeague"
+				_rank = "_currentRank"
+				_isInQualification = "_isQualificationView"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)

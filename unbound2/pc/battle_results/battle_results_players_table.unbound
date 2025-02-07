@@ -1,10 +1,10 @@
 (def constant PBS_COLUMN_DIVISIONS_WIDTH 40)
-(def constant PBS_COLUMN_NICKNAME_WIDTH 162)
-(def constant PBS_COLUMN_SHIP_WIDTH 190)
-(def constant PBS_COLUMN_FRAGS_WIDTH 48)
-(def constant PBS_COLUMN_PLANE_FRAGS_WIDTH 48)
-(def constant PBS_COLUMN_EXP_WIDTH 80)
-(def constant PBS_COLUMN_ACHIEVEMENTS_WIDTH 48)
+(def constant PBS_COLUMN_NICKNAME_WIDTH 181)
+(def constant PBS_COLUMN_SHIP_WIDTH 211)
+(def constant PBS_COLUMN_FRAGS_WIDTH 44)
+(def constant PBS_COLUMN_PLANE_FRAGS_WIDTH 44)
+(def constant PBS_COLUMN_EXP_WIDTH 72)
+(def constant PBS_COLUMN_ACHIEVEMENTS_WIDTH 40)
 
 
 (def element BattleResultsPlayersTable (_teamResults:dict, _gameData:dict, _personal:dict, _complaintsAvailable:bool)
@@ -197,12 +197,13 @@
 		(var battleInfoEntity:dhEntity = "getSingleEntity(CC.battleInfo)")
 		(var isReplayPlaying:bool = "battleInfoEntity.battleInfo.isReplayPlaying")
 
-		(var rankPlayerEntity:dhEntity = "getSingleEntity(CC.rankPlayer)")
-		(var currentRank:number = "rankPlayerEntity.rankPlayer.currentRank" (event "rankPlayerEntity.rankPlayer.evChanged"))
-		(var currentLeague:number = "rankPlayerEntity.rankPlayer.currentLeague" (event "rankPlayerEntity.rankPlayer.evChanged"))
+		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
+		(var currentLeague:number = "rankStateEntity.rankState.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE" (event "rankStateEntity.rankState.evCurrentLeagueChanged"))
 
+		(var rankPlayerEntity:dhEntity = "getPrimaryEntity(CC.rankPlayer, currentLeague)")
+		(var rank:number = "rankPlayerEntity.rankPlayer.rank" (event "rankPlayerEntity.rankPlayer.evChanged"))
 
-		(var rankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, currentRank + '_' + currentLeague)")
+		(var rankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, rank + '_' + currentLeague)")
 		(var starEarnCondition:bool = "_data.player.is_self ? _personal.starsGained > 0 : _data.place <= rankInfoEntity.rankInfo.starEarnPlace && _data.battleResult == 1")
 		(var starLossCondition:bool = "_data.place >= rankInfoEntity.rankInfo.starLossPlace && _data.battleResult <= 0")
 
@@ -218,17 +219,19 @@
 		(var rawKeyTargetValue:array = "_data.player.keyTargetMarkers ?: []")
 		(var isKeyTargetVisible:bool = "rawKeyTargetValue && feature_9 != 'locked'")
 
-
 		(var battleType:str = "_gameData.battleType")
 		(var isBotInRandom:bool = "_data.isBot && battleType == SC.Common.BATTLE_TYPES.RANDOM_BATTLE")
 		(var isContextMenuAvailable:bool = "!_data.player.is_self && !isPlayerDeletedByGDPR && !isReplayPlaying && !_data.isBot || isBotInRandom")
 
-		(var playerShipColor:number = "!_data.player.is_self && _data.isInSameDivision	? SC.Ui_styles.SERVICE_COLORS.YELLOW
-																						: SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var playerShipColor:number = "!_data.player.is_self && _data.isInSameDivision && _data.is_alive	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																											: SC.Ui_styles.SERVICE_COLORS.WHITE")
 
-		(var alphaOfText:number = "_data.is_alive	? playerShipColor == SC.Ui_styles.SERVICE_COLORS.WHITE	? TA 
+		(var alphaOfShip:number = "_data.is_alive	? playerShipColor == SC.Ui_styles.SERVICE_COLORS.WHITE	? TA
 																											: 1
 													: TS")
+		(var alphaOfPlayerName:number = "_data.player.isAbuser && !_data.isInSameDivision ? 1 : alphaOfShip")
+
+		(var isShipMasteryVisible:bool = "_data.player.masteryRank && isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE)")
 	)
 
 	(macro MOUSE_EVENTS_DISPATCHER)
@@ -326,10 +329,8 @@
 		(block
 			(bind visible "_personal.rankNew || _data.player.rank")
 			(style
-				(marginRight = 6px)
+				(marginRight = 4px)
 				(marginLeft = -3px)
-				(width = 19px)
-				(height = 19px)
 			)
 			(controller $Instance renderer='IconRankSmall'
 				(bind enabled "_personal.rankNew || _data.player.rank")
@@ -343,7 +344,7 @@
 			(style
 				(width = 100%)
 				(marginTop = -1px)
-				(bind alpha "_data.player.isAbuser ? 1 : alphaOfText")
+				(bind alpha "alphaOfPlayerName")
 			)
 			(bind name "'player_tab_stat_' + _data.player.name")
 			(element PlayerNameAndClanTag
@@ -381,6 +382,21 @@
 			)
 		)
 
+		(block
+			(style
+				(width = 24px)
+				(marginLeft = "XS")
+				(marginRight = "XXS")
+				(bind alpha "_data.is_alive ? 1 : 0.45")
+			)
+			(controller $Instance renderer='ShipMasteryIcon'
+				(bind enabled "isShipMasteryVisible")
+				(args
+					_rank = "_data.player.masteryRank"
+				)
+			)
+		)
+
 		(element ShipIconAndLevelAndName
 			_shipIDS =			"shipIDS"
 			_shipLevelRome =	"shipLevelRome"
@@ -388,7 +404,7 @@
 			_shipType =			"subType ? toLower(subType): ''"
 			_name =				"_data.player.name"
 			_isDead =			"!_data.is_alive"
-			_alpha =			"alphaOfText"
+			_alpha =			"alphaOfShip"
 			_playerShipColor =	"playerShipColor"
 		)
 	)

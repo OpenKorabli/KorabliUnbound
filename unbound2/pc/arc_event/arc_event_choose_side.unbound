@@ -1,33 +1,132 @@
+(def constant CHOOSE_SIDE_ANIMATION_NAME {
+	SIDE_ONE: 'phoenix',
+	SIDE_TWO: 'qilin',
+	DEFAULT: 'animation'
+})
+
+(def constant RVR_SIDE_INFO_MAP {
+	SIDE_ONE: 0,
+	SIDE_TWO: 1,
+	SIDES: 2
+})
+
+(def constant SIDE_TO_ANIMATION_NAME_MAP "{
+	0	: CHOOSE_SIDE_ANIMATION_NAME.SIDE_ONE,
+	1	: CHOOSE_SIDE_ANIMATION_NAME.SIDE_TWO
+}")
+
+(def constant SIDE_BG_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.OVER : 0.02,
+	SC.Ui_styles.BUTTON_STATE.UP : 0
+})
+
+(def constant SIDE_BORDER_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.OVER : 0.2,
+	SC.Ui_styles.BUTTON_STATE.UP : 0.1
+})
+
 (def element ModalWindowArcEventChooseSide ()
 	(macro MODAL_WINDOW_INIT)
 	(scope
+		(event evRollOverSideOneCard)
+		(event evRollOverSideTwoCard)
+
+		(event evEnableSideOne)
+		(event evEnableSideTwo)
+
 		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
 		(var sides:number = "arcEventEntity.arcEventConfig.sidesCount ?: 0")
 
 		(var playerArcEventInfoEntity:dhEntity = "getSingleEntity(CC.playerArcEventInfo)")
 		(var chosenSidesMap:dict = "playerArcEventInfoEntity.playerArcEventInfo.chosenSidesMap ?: {}" (event "playerArcEventInfoEntity.playerArcEventInfo.evChosenSidesMapChanged"))
+		(var isTwoSidedBattle:bool = "sides == RVR_SIDE_INFO_MAP.SIDES")
+		(var selectedAnimationCategory:str = "isTwoSidedBattle ? 'choose_side_dong_kou' : 'choose_side'")
+
+		(struct qualityGraphicsPref = GET_PREF_NUMBER(_option="'graphics.preset'"))
+		(var qualityGraphics:number = "qualityGraphicsPref.value")
+		(var isStatic:bool = "qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.LOW || qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.MINIMUM")
+
+		(var isAnimationOneEnabled:bool = "$event ? $event.state : false" (event "evEnableSideOne"))
+		(var isAnimationTwoEnabled:bool = "$event ? $event.state : false" (event "evEnableSideTwo"))
 	)
+	(dispatch "'evRollOverSideOne'" args="$event" dir="EventDirection.DOWN" (bind enabled "!isStatic") (event "evRollOverSideOneCard"))
+	(dispatch "'evRollOverSideTwo'" args="$event" dir="EventDirection.DOWN" (bind enabled "!isStatic") (event "evRollOverSideTwoCard"))
+
+	(dispatch "'evEnableSideOne'" delay=0.1 args="{ state: true }" (event "startShow"))
+	(dispatch "'evEnableSideTwo'" delay=0.2 args="{ state: true }" (event "startShow"))
+
 	(style (align = "center"))
 	(name = 'ModalWindowArcEventChooseSide')
 	(block
 		(class $FullsizeAbsolute)
+
+		(element ModalWindowAnimatedBackground
+			_selectedCategory = "selectedAnimationCategory"
+			_type = "SC.Ui_styles.ANIMATED_BG.ARC_EVENT"
+			_hideTime = 0.2
+			_hideDelay = 0.2
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
 		(style (alpha = 0))
+
 		(controller $Animation
-			(bindcall play  duration=0.2
+			(bindcall play  duration=0.3
 							from = "{ alpha: 0 }"
 							to = "{ alpha: 1 }"
-							(event "startShow")
+							(bind trigger "isAnimationOneEnabled")
 			)
 			(bindcall play  duration=0.2
-							delay=0.2
+							delay=0.1
 							from = "{ alpha: 1 }"
 							to = "{ alpha: 0 }"
-							action="killAll"
+							action="kill"
 							(event "startHide")
 			)
 		)
-		(element AnimatedBackground _selectedCategory="'choose_side'" _type = "SC.Ui_styles.ANIMATED_BG.ARC_EVENT")
+
+		(controller $Instance renderer='SideOneAnimationHolder'
+			(bind enabled "isAnimationOneEnabled")
+			(args
+				_isStatic = "isStatic"
+			)
+		)
 	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(style
+			(align = "right")
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play  duration=0.3
+							from = "{ alpha: 0 }"
+							to = "{ alpha: 1 }"
+							(bind trigger "isAnimationTwoEnabled")
+			)
+			(bindcall play  duration=0.2
+							delay=0.1
+							from = "{ alpha: 1 }"
+							to = "{ alpha: 0 }"
+							action="kill"
+							(event "startHide")
+			)
+		)
+
+		(controller $Instance renderer='SideTwoAnimationHolder'
+			(bind enabled "isAnimationTwoEnabled")
+			(args
+				_isStatic = "isStatic"
+			)
+		)
+	)
+
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
 		(style (width = 100%))
@@ -55,7 +154,10 @@
 		(style (marginTop = "{720:L, 1080:XL}"))
 		(controller $Repeat renderer='ArcEventSideSelectionCard'
 			(bind count "sides")
-			(args _chosenSidesMap = "chosenSidesMap")
+			(args
+				_chosenSidesMap = "chosenSidesMap"
+				_isStatic = "isStatic"
+			)
 		)
 	)
 	(block 
@@ -75,9 +177,48 @@
 	)
 )
 
-(def element ArcEventSideSelectionCard (_chosenSidesMap:dict = {})
+(def element SideOneAnimationHolder (_isStatic:bool = false)
+	(scope
+		(event evRollOverSideOne)
+	)
+
+	(style
+		(height = 100%)
+		(width = { 1280:1200px, 1920:1700px })
+		(backgroundImage = 'url:../bg/animated/arc_event/choose_side_dong_kou/phoenix/phoenix.skel')
+		(backgroundSize = "cover")
+	)
+	(controller $Spine
+		(bindcall play sequence="{name: $event.animationName, mix:0.75}" (event "evRollOverSideOne"))
+		(bindcall pause init=true	(bind enabled "_isStatic"))
+		(bindcall resume			(bind enabled "!_isStatic"))
+	)
+)
+
+(def element SideTwoAnimationHolder (_isStatic:bool = false)
+	(scope
+		(event evRollOverSideTwo)
+	)
+
+	(style
+		(height = 100%)
+		(width = { 1280:1200px, 1920:1700px })
+		(backgroundImage = 'url:../bg/animated/arc_event/choose_side_dong_kou/qilin/qilin.skel')
+		(backgroundSize = "cover")
+	)
+	(controller $Spine
+		(bindcall play sequence="{name: $event.animationName, mix:0.75}" (event "evRollOverSideTwo"))
+		(bindcall pause init=true	(bind enabled "_isStatic"))
+		(bindcall resume			(bind enabled "!_isStatic"))
+	)
+)
+
+(def element ArcEventSideSelectionCard (_chosenSidesMap:dict = {}, _isStatic:bool = false)
 	(scope
 		(event evEnableHitTest)
+		(event evCardRollOver)
+		(event evCardRollOut)
+
 		(macro STAGE_SIZE)
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -93,20 +234,33 @@
 		(var cardHeight:number = "isSmallResolution ? 448 : 512")
 		(var iconSize:number = "isSmallResolution ? SC.Ui_styles.SIZE.MEDIUM : SC.Ui_styles.SIZE.LARGE")
 		(var description:str = "tr('IDS_ARC_EVENT_COMMON_SIDE_DESCRIPTION_' + $index)")
-		(var ctRollOver:dict = "{	redMultiplier: 1, greenMultiplier: 1, blueMultiplier: 1, alphaMultiplier: 1,
-									redOffset: 30, greenOffset: 30, blueOffset: 30, alphaOffset: 0}")
-		(var ctDown:dict = "{	redMultiplier: 1, greenMultiplier: 1, blueMultiplier: 1, alphaMultiplier: 1,
-								redOffset: -30, greenOffset: -30, blueOffset: -30, alphaOffset: 0}")
 		(var sideId:number = "$index")
+		(var animationName:str = "SIDE_TO_ANIMATION_NAME_MAP[sideId]")
+		(var eventName:str = "	animationName == CHOOSE_SIDE_ANIMATION_NAME.SIDE_TWO		? 'evRollOverSideTwoCard' :
+								animationName == CHOOSE_SIDE_ANIMATION_NAME.SIDE_ONE		? 'evRollOverSideOneCard'
+																							: ''")
+
+		(var state:number = "	$event.isCardHovered	? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP" (event "evCardRollOver") (event "evCardRollOut"))
+		(var alphaBg:number = "SIDE_BG_ALPHA[state]")
+		(var alphaBorder:number = "SIDE_BORDER_ALPHA[state]")
+
 	)
 	(name = "'arcEventSideSelectionCard_' + $index")
+
+	(dispatch "eventName" args="{ animationName: animationName }" dir="EventDirection.UP" (bind enabled "!_isStatic") (event "evCardRollOver"))
+	(dispatch "eventName" args="{ animationName: CHOOSE_SIDE_ANIMATION_NAME.DEFAULT }" dir="EventDirection.UP" (bind enabled "!_isStatic") (event "evCardRollOut"))
+
+	(bindcall externalCall "'inputMapping.onRequest'" "['arcEventConfirmSide', { sideId: sideId }]" watch=false on='leftClick')
+
 	(style
 		(align = "middle|center") (alpha = 0)
-		(bind width "cardWidth") (bind height "cardHeight")
+		(bind width "cardWidth")
+		(bind height "cardHeight")
 		(bind marginLeft "$index ? {1280:M, 1920:MS} : 0")
 		(bind hitTest "isLoaded")
 	)
-	(bind colorTransform "mouseDown ? ctDown : rollOver ? ctRollOver : {}")
+
 	(controller $Animation
 		(bindcall play
 			delay		= "0.3 + 0.1*$index"
@@ -121,56 +275,149 @@
 	(block
 		(class $FullsizeAbsolute)
 		(element BlurBackgroundCommon 'mc_blurmap_medium')
-	)
-	(element ArcEventSideStereotype
-		_sideId = "$index"
-		_size = "iconSize"
-		_isChooseSideMW = true
-	)
-	(block
-		(style (width = 256px) (marginTop = "M") (marginBottom = "L"))
-		(tf
-			(class $TextDefaultNM)
-			(style (width = 100%) (leading = -3) (textAlign = "center") (alpha = "TS"))
-			(bind text "description")
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(scale9grid = 2)
+				(alpha = "alphaBorder")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="alphaBorder")
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(alpha = "alphaBg")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="alphaBg")
 		)
 	)
-	(hblock
-		(style (gap = "XS"))
-		(controller $Repeat renderer='RewardItemAdapter'
-			(bind count "mostValuablePersonalRewards.length")
-			(args
-				_entityId = "mostValuablePersonalRewards[$index]"
-				_iconMargin = 0
+
+	(block
+		(style
+			(align = "middle|center")
+			(marginBottom = "XLL")
+		)
+
+		(element ArcEventSideStereotype
+			_sideId = "$index"
+			_size = "iconSize"
+			_isChooseSideMW = true
+		)
+
+		(block
+			(style
+				(width = 256px)
+				(marginTop = "M")
+				(marginBottom = "L")
+			)
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(textAlign = "center")
+					(alpha = "TC")
+				)
+				(bind text "description")
 			)
 		)
 	)
+
+	(element ArcEventSideSelectionCardRewardsHolder
+		_rewards = "mostValuablePersonalRewards"
+		_chosenSidesMap = "_chosenSidesMap"
+	)
+)
+
+(def element ArcEventSideSelectionCardRewardsHolder (_rewards:array, _chosenSidesMap:dict = {})
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(event evRewardHovered)
+		(var isRewardHovered:bool = "$event.isRewardHovered ?: false" (event "evRewardHovered"))
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(dispatch "'evCardRollOver'" args="{ isCardHovered: true }" dir="EventDirection.UP" (event "evRollOver"))
+	(dispatch "'evCardRollOut'" args="{ isCardHovered: false }" dir="EventDirection.UP" (event "evRollOut"))
+
+	(class $FullsizeAbsolute)
+	(style
+		(align = "center|bottom")
+		(backgroundColor = "NO_COLOR")
+	)
+
 	(controller $Tooltip
 		(renderer = 'ArcEventSideSelectionCardTooltip')
 		(args
 			_sideId = "$index"
 			_chosenSidesMap = "_chosenSidesMap"
-			_rewards = "mostValuablePersonalRewards"
+			_isRewardHovered = "isRewardHovered"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 
-	(macro MOUSE_HANDLER
-		_methods = "[ {	type: 'inputMapping.onRequest',
-						name: 'arcEventConfirmSide',
-						args: { sideId: sideId } }]"
-		_soundSet = "'quest_item'"
+	(element ArcEventSideSelectionCardRewards
+		_rewards = "_rewards"
+	)
+
+	(macro SOUND_HANDLER "'quest_item'")
+)
+
+
+(def element ArcEventSideSelectionCardRewards (_rewards:array)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(dispatch "'evRewardHovered'" args="{ isRewardHovered: true }" dir="EventDirection.UP" (event "evRollOver"))
+	(dispatch "'evRewardHovered'" args="{ isRewardHovered: false }" dir="EventDirection.UP" (event "evRollOut"))
+
+	(style (paddingBottom = "MS"))
+
+	(hblock
+		(style (gap = "XS"))
+		(controller $Repeat renderer='RewardItemAdapter'
+			(bind count "_rewards.length")
+			(args
+				_entityId = "_rewards[$index]"
+				_iconMargin = 0
+			)
+		)
 	)
 )
 
-(def element ArcEventSideSelectionCardTooltip (_sideId:number = 0, _chosenSidesMap:dict = {}, _rewards:array = [])
+(def element ArcEventSideSelectionCardTooltip (_sideId:number = 0, _chosenSidesMap:dict = {}, _isRewardHovered:bool = true)
 	(scope
 		(var sideName:gfx = "tr('IDS_ARC_EVENT_COMMON_SIDE_' + _sideId)")
 		(var sideHint:gfx = "tr('IDS_ARC_EVENT_CHOOSE_SIDE_MOUSE_INSTRUCTION_' + _sideId)")
 		(var isChosen:bool = "_chosenSidesMap[_sideId][0]")
 		(var isMainRewardReceived:bool = "_chosenSidesMap[_sideId][1]")
 	)
-	(style (width = 340px) (hitTest = false))
+	(bind visible "!_isRewardHovered")
+
+	(style
+		(width = 340px)
+		(hitTest = false)
+	)
+
+	(controller $Animation
+		(bindcall play
+			easing="Easing.quad_in"
+			keyframes = "[
+				{ time:0, 		to:{ alpha: 0, top: 5 }},
+				{ time:0.3, 	to:{ alpha: 0, top: 5 }},
+				{ time:0.6, 	to:{ alpha: 1, top: 0 }}
+			]"
+			action=kill
+			(bind enabled "!_isRewardHovered")
+			(bind trigger "_isRewardHovered")
+		)
+	)
+
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText _headerText = "sideName")
@@ -205,15 +452,6 @@
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isMainRewardReceived"))
 		)
-
-		(element TooltipSystemDescriptionText _descriptionText = 'IDS_ARC_EVENT_CHANGE_SIDE_IN_NEXT_SPRINT')
-		(element TooltipSystemHorizontalDivider)
-
-		(element TooltipSystemDHRewards
-			_rewardsTitle = 'IDS_TOOLTIP_REWARDS_TITLE'
-			_rewards = "_rewards"
-		)
-		(element TooltipSystemHorizontalDivider)
 
 		(element TooltipSystemStatusLine
 			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
