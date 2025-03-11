@@ -1,0 +1,308 @@
+(def element ModalWindowCrewFastTraining (crewID:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evLevelDownBtnClicked)
+		(event evLevelUpBtnClicked)
+		(event evConfirmBtnClick)
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var accountEliteXP:number =	"accountResourceComponent.eliteXP ?: 0"		(event "accountResourceComponent.evChangedEliteXP"))
+		(var accountFreeXP:number =		"accountResourceComponent.freeXP ?: 0"		(event "accountResourceComponent.evChangedFreeXP"))
+
+		(struct crew =		PULL_CREW(_crewId = "crewID"))
+
+		(var shipId:number = "crew.component.shipID ?: crew.component.specializationID")
+		(struct shipInfo =		PULL_OWN_SHIP(_playerShipId = "shipId"))
+
+		(var timeRent:number =		"crew.component.timeRent"		(event "crew.component.evTimeRentChanged"))
+		(var isInBarracks:bool =	"crew.component.isInBarracks")
+
+		(var currentCrewLevel:number =	"crew.component.allSkillPoints + 1")
+		(var maxCrewLevel:number =		"crew.component.maxSkillPoints + 1")
+
+		(var crewLevelToTrain:number =	"currentCrewLevel + 1" watch=false)
+		(bind crewLevelToTrain			"crewLevelToTrain - 1"		init=false watch=false		(event "evLevelDownBtnClicked"))
+		(bind crewLevelToTrain			"crewLevelToTrain + 1"		init=false watch=false		(event "evLevelUpBtnClicked"))
+
+		(var levelUpBtnEnabled:bool =	"crewLevelToTrain < maxCrewLevel")
+		(var levelDownBtnEnabled:bool =	"crewLevelToTrain > currentCrewLevel + 1")
+
+		(var crewData:dhComponent =		"getSingleComponent(CC.crewData)")
+		(var crewCurExp:number =		"crewData.crewTotalExpPerLevel[currentCrewLevel] + crew.component.experience")
+		(var crewNeedExp:number =		"crewData.crewTotalExpPerLevel[crewLevelToTrain]")
+		(var isRentalCrew:bool =		"timeRent > 0")
+		(var expNeedToPay:number =		"crewNeedExp - crewCurExp")
+		(var eliteExpNeedToPay:number =	"accountEliteXP - expNeedToPay")
+		(var expDeficit:number =		"(accountEliteXP + accountFreeXP) < expNeedToPay	? expNeedToPay - (accountEliteXP + accountFreeXP)
+																							: 0")
+
+		(var deficit:number =			"expNeedToPay - accountEliteXP")
+		(var optionalPriceShown:bool =	"(deficit > 0) && (accountEliteXP + accountFreeXP >= expNeedToPay)")
+		(var isDeficit:bool =			"(deficit > 0) && (accountEliteXP + accountFreeXP < expNeedToPay)")
+
+		(var priceInfo:dict =			"optionalPriceShown	? { finalPrice: accountEliteXP,	currency: SC.Common.CURRENCIES.ELITE_XP }
+															: { finalPrice: expNeedToPay,	currency: SC.Common.CURRENCIES.ELITE_XP }")
+		(var optionalPriceInfo:dict =	"optionalPriceShown ? { finalPrice: deficit,		currency: SC.Common.CURRENCIES.FREE_XP } : {}")
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect'	"['window', 'openExchange']"					on='addedToStage')
+	(bindcall externalCall 'sound.playSetSoundDirect'	"['crew', 'spendMoney']"						(event "evConfirmBtnClick"))
+	(bindcall externalCall 'inputMapping.onRequest'		"['closeModalWindowCrewFastTraining', {}]"		(bind enabled "!isRentalCrew"))
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (align = "center"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+
+			(style
+				(width = 100%)
+				(marginBottom = "L")
+			)
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_CREW_FAST_LEARNING_HEADER'
+			)
+		)
+
+		(hblock
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+				(style
+					(width = 220px)
+					(marginRight = "M")
+				)
+
+				(element CrewStereotypeWithName
+					_crewId =		"crew.component.id"
+					_shipClass =	"shipInfo.shipComponent.subtype"
+					_size =			"SIZE.LARGE"
+				)
+
+				(block
+					(bind visible "isInBarracks")
+
+					(style
+						(width = 100%)
+						(marginTop = 27px)
+					)
+
+					(tf
+						(class $TextDefaultBold17NM)
+						(style
+							(width = 100%)
+							(textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE")
+						)
+
+						(text = "toUpper(tr('IDS_CREW_IN_BARRACKS'))")
+					)
+				)
+			)
+
+			(hblock
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+				(style
+					(width = 320px)
+					(marginTop = "M")
+				)
+
+				(block
+					(style
+						(marginRight = 60px)
+						(vgap = "M")
+					)
+
+					(tf
+						(class $TextDefault19NM)
+						(style (alpha = "TC"))
+						(text = 'IDS_BEFORE_TRAINING')
+					)
+
+					(element PriceTag
+						_priceInfo =	"{ finalPrice: accountEliteXP, currency: SC.Common.CURRENCIES.ELITE_XP }"
+						_size =			"SIZE.MEDIUM"
+					)
+
+					(element PriceTag
+						_priceInfo =	"{ finalPrice: accountFreeXP, currency: SC.Common.CURRENCIES.FREE_XP }"
+						_size =			"SIZE.MEDIUM"
+					)
+				)
+
+				(block
+					(style (vgap = "M"))
+
+					(tf
+						(class $TextDefault19NM)
+						(style (alpha = "TC"))
+						(text = 'IDS_AFTER_TRAINING')
+					)
+
+					(element PriceTag
+						_priceInfo =	"{	finalPrice:	eliteExpNeedToPay > 0 ? eliteExpNeedToPay : 0,
+											currency:	SC.Common.CURRENCIES.ELITE_XP }"
+						_size =			"SIZE.MEDIUM"
+					)
+
+					(element PriceTag
+						_priceInfo =	"{	finalPrice:	eliteExpNeedToPay > 0								? accountFreeXP :
+														accountFreeXP - (expNeedToPay - accountEliteXP) > 0	? accountFreeXP - (expNeedToPay - accountEliteXP)
+																											: 0,
+											currency:	SC.Common.CURRENCIES.FREE_XP }"
+						_size =			"SIZE.MEDIUM"
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(width = 100%)
+				(marginTop = "L")
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+			(style
+				(align = "center")
+				(marginTop = "MS")
+			)
+
+			(tf
+				(class $TextDefault25NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_TRAINING_LEVEL')
+			)
+
+			(hblock
+				(style
+					(align = "center|middle")
+					(width = 86px)
+					(height = 42px)
+					(marginLeft = "SXS")
+					(marginTop = "-SXS")
+					(padding = 1px)
+					(backgroundImage = 'url:../service_kit/text_input/bg.png')
+					(scale9grid = 9)
+				)
+
+				(element ButtonArrow
+					_direction =		"BUTTON_ARROW_DIRECTION.LEFT"
+					_height =			100%
+					_dispatchedEv =		'evLevelDownBtnClicked'
+					_isEnabled =		"levelDownBtnEnabled"
+				)
+
+				(block
+					(class $Fullsize)
+					(style (align = "center|middle"))
+
+					(tf
+						(class $TextDefault25NM)
+						(style (alpha = "TA"))
+
+						(bind text "crewLevelToTrain - 1")
+					)
+				)
+
+				(element ButtonArrow
+					_direction =		"BUTTON_ARROW_DIRECTION.RIGHT"
+					_height =			100%
+					_dispatchedEv =		'evLevelUpBtnClicked'
+					_isEnabled =		"levelUpBtnEnabled"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+			(style
+				(width = 100%)
+				(height = 36px)
+				(marginTop = "SXS")
+			)
+
+			(block
+				(style
+					(align = "center")
+					(width = 100%)
+				)
+
+				(controller $Instance renderer = 'ModalWindowSystemPurchaseItemPriceAndInfo'
+					(bind enabled "!isDeficit")
+					(args
+						_priceInfo =			"priceInfo"
+						_optionalPriceInfo =	"optionalPriceInfo"
+						_questionString =		"tr('IDS_TRAINING_FOR') + ' '"
+						_isWarningText =		false
+						_isDeficit =			false
+					)
+				)
+			)
+
+			(block
+				(bind visible "isDeficit")
+
+				(style
+					(align = "center")
+					(width = 100%)
+				)
+
+				(block
+					(controller $Instance renderer = 'PriceTagWithLabel'
+						(bind enabled "isDeficit")
+						(args
+							_priceInfo =	"{ finalPrice: expNeedToPay, currency: SC.Common.CURRENCIES.ELITE_XP }"
+							_label =		'IDS_TRAINING_COST'
+							_size =			"SIZE.MEDIUM"
+						)
+					)
+				)
+
+				(block
+					(style (marginTop = "SXS"))
+
+					(controller $Instance renderer = 'PriceDeficit'
+						(bind enabled "isDeficit")
+						(args
+							_priceInfo =	"{ currency: SC.Common.CURRENCIES.ELITE_XP }"
+							_deficit =		"expDeficit"
+							_hideIcon =		true
+						)
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "M")
+			)
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_isDeficit =				"isDeficit"
+				_okMethods =				"[{ type: 'inputMapping.onRequest',	name: CREW_ACTIONS.TRAIN_FAST,	args: { crewID: crewID, level: crewLevelToTrain } }]"
+				_customOkBtnName =			'btn_ok'
+				_isBtnOkGUIEventLocked =	true
+				_okDispatchedEv =			'evConfirmBtnClick'
+			)
+		)
+	)
+)

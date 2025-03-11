@@ -1,0 +1,274 @@
+(def element CrewMenuTTX (_crewId:number = 0)
+	(scope
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
+		(var retrainingComponent:dhComponent = "crew.entity.retraining")
+
+		(var crewData:dhComponent =		"getSingleComponent(CC.crewData)")
+		(var canDisassignCrew:bool =	"crewData.freeBarracksSlots > 0"			(event "crewData.evFreeBarracksSlotsChanged"))
+		(var shipId:number =			"crew.component.shipID ?: 0"				(event "crew.component.evShipChanged"))
+		(var isCrewFireAvailable:bool =	"crew.component.canDismiss"					(event "crew.component.evChanged"))
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel"					(event "crew.component.evLevelUp"))
+		(var shipOwnEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, shipId)")
+		
+		(var isLocked:bool =		"shipOwnEntity.ownShip.isLocked"				(event "shipOwnEntity.ownShip.evUpdateLock"))
+		(var isInFormation:bool =	"shipOwnEntity.ownShip.isInFormation"			(event "shipOwnEntity.ownShip.evUpdateLock"))
+
+		(var isInAdaptation:bool =				"retrainingComponent.isInAdaptation"	(event "retrainingComponent.evRetrainingUpdated"))
+		(var isAllRetrainingTypesBlocked:bool =	"retrainingComponent.allTypesBlocked"	(event "retrainingComponent.evRetrainingUpdated"))
+
+		(var isCrewActionNotBlocked:bool =		"!isLocked && !isInFormation")
+
+		(var isCrewInfoButtonEnabled:bool =			"!(permissions.isDisabledLearnSkills || isInFormation)")
+		(var isDisassignButtonEnabled:bool =		"isCrewActionNotBlocked && !permissions.isDisabledBarracks && canDisassignCrew")
+		(var isFinishAdaptationButtonEnabled:bool =	"!isAllRetrainingTypesBlocked && !isLocked && !isInFormation")
+		(var isFireButtonEnabled:bool =				"!permissions.isDisabledCrewFire && isCrewActionNotBlocked")
+		(var isFastTrainingButtonEnabled:bool =		"!isInFormation && !isLocked && !isInAdaptation && !permissions.isDisabledCrewLevelUp")
+
+		(var crewInfoDisabledTooltipText:str =	"permissions.isDisabledLearnSkills	? 'IDS_CONTEXT_BUTTON_STATUS_CREW_HAS_RESTRICTION_ON_LEARN_SKILL' :
+												 isInFormation						? 'IDS_HINT_CREW_INFO_UNAVAILABLE_DUE_IN_FORMATION'
+																					: ''")
+
+		(var finishAdaptationDisabledTooltipText:str =	"isInFormation						? 'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
+														 isLocked							? 'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
+														 isAllRetrainingTypesBlocked		? 'IDS_NOT_ENOUGH_FUNDS'
+																							: ''")
+
+		(var disassignDisabledTooltipText:str =		"isInFormation						? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_FORMATION' :
+													 isLocked							? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_BATTLE' :
+													 permissions.isDisabledBarracks		? 'IDS_CONTEXT_BUTTON_STATUS_CREW_HAS_RESTRICTION_ON_BARRACKS' :
+													 !canDisassignCrew					? 'IDS_ASSIGN_NEW_CREW_DISABLE_REASON_FULL_BARRACKS'
+																						: ''")
+
+		(var fireDisabledTooltipText:str =	"isInFormation													? 'IDS_FIRE_CREW_DENY_REASON_IN_FORMATION' :
+											 isLocked														? 'IDS_FIRE_CREW_DENY_REASON_IN_BATTLE' :
+											 permissions.isDisabledCrewFire || !isCrewActionNotBlocked		? 'IDS_CREW_CAN_NOT_BE_DEMOBOLIZED'
+																											: ''")
+
+		(var fastTrainingDisabledTooltipText:str =	"isInFormation							? 'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
+													 isLocked								? 'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
+													 isInAdaptation							? 'IDS_FAST_TRAINING_DISABLE_REASON_IN_ADAPTATION' :
+													 permissions.isDisabledCrewLevelUp		? 'IDS_CONTEXT_BUTTON_STATUS_CREW_HAS_RESTRICTION_ON_LEVEL_UP'
+																							: ''")
+	)
+
+	(class $ContextMenuDimensions)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	
+	(block
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title =	'IDS_CREW_PROFILE_INFO'
+			_enabled =	"isCrewInfoButtonEnabled"
+			_methods =	"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_CREW_INFO_WINDOW, args: { _crewId: _crewId } }]"
+		)
+
+		(controller $Tooltip
+			(bind enabled "!isCrewInfoButtonEnabled")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"crewInfoDisabledTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+
+	
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='ContextMenuItem'
+			(bind enabled "isInAdaptation")
+			(args
+				_title =	'IDS_FINISH_RETRAINING_LOWER_CASE_BUTTON'
+				_enabled =	"isFinishAdaptationButtonEnabled"
+				_methods =	"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_CREW_RETRAIN_WINDOW, args: { shipId: shipId, crewId: _crewId } }]"
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "isInAdaptation && !isFinishAdaptationButtonEnabled")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"finishAdaptationDisabledTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+
+	
+	(block
+		(name = 'dismissCrew')
+
+		(style (width = 100%))
+
+		(element ContextMenuItem
+			_title =	'IDS_CREW_TO_BARRACKS'
+			_enabled =	"isDisassignButtonEnabled"
+			_methods =	"[{ type: 'inputMapping.onAction', name: CREW_ACTIONS.DISASSIGN, args: { crewId: _crewId } }]"
+		)
+
+		(controller $Tooltip
+			(bind enabled "!isDisassignButtonEnabled")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"disassignDisabledTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+
+	
+	(block
+		(bind visible "isCrewFireAvailable")
+		(name = 'CrewFireButton')
+
+		(style (width = 100%))
+
+		(controller $Instance renderer='ContextMenuItem'
+			(bind enabled "isCrewFireAvailable")
+			(args
+				_title =	'IDS_CREW_FIRE'
+				_enabled =	"isFireButtonEnabled"
+				_methods =	"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_FIRE_CREW_WINDOW, args: { crewId: _crewId } }]"
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "isCrewFireAvailable && !isFireButtonEnabled")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"fireDisabledTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+
+	
+	(block
+		(bind visible "!isMaxLevel")
+
+		(style (width = 100%))
+
+		(controller $Instance renderer='ContextMenuItem'
+			(bind enabled "isCrewFireAvailable")
+			(args
+				_title =	'IDS_CREW_FAST_LEARNING'
+				_enabled =	"isFastTrainingButtonEnabled"
+				_methods =	"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_FAST_TRAINING_WINDOW, args: { shipId: shipId, crewID: _crewId } }]"
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "!isMaxLevel && !isFastTrainingButtonEnabled")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"fastTrainingDisabledTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+)
+
+(def element CrewListMenu (_crewId:number = 0, _shipId:number = 0)
+	(scope
+		(var crewData:dhComponent =		"getSingleComponent(CC.crewData)")
+		(var freeBarracksSlots:number =	"crewData.freeBarracksSlots ?: 0"			(event "crewData.evFreeBarracksSlotsChanged"))
+		(var canDisassignCrew:bool =	"freeBarracksSlots > 0")
+
+		(struct crew = PULL_CREW(_crewId = "_crewId"))
+
+		(var shipId:number =			"crew.component.shipID ?: 0"				(event "crew.component.evShipChanged"))
+		(var isCrewFireAvailable:bool =	"crew.component.canDismiss"					(event "crew.component.evChanged"))
+		(var isInBarracks:bool =		"crew.component.isInBarracks")
+		(var classificationId:number =	"crew.component.classificationId")
+		(var dismissDelay:number =		"crew.component.dismissDelay ?: 0"			(event "crew.component.evDismissDelayChanged"))
+		(var crewNation:str =			"crew.component.nation ?: ''"				(event "crew.component.evChanged"))
+		(var canMove:bool =				"crew.component && crew.component.canMove"	(event "crew.component.evChanged"))
+
+		(var ownShipEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, shipId)")
+		(var isThisLocked:bool =		"ownShipEntity.ownShip.isLocked"			(event "ownShipEntity.ownShip.evUpdateLock"))
+		(var isThisInFormation:bool =	"ownShipEntity.ownShip.isInFormation"		(event "ownShipEntity.ownShip.evUpdateLock"))
+
+		(var isDisassignButtonEnabled:bool =	"!isThisLocked && !isThisInFormation && canDisassignCrew")
+		(var isDisassignTooltip:bool =			"isThisInFormation || isThisLocked || !canDisassignCrew")
+
+		(var disassignDisableTooltipText:str =	"isThisInFormation	? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_FORMATION' :
+												 isThisLocked		? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_BATTLE'
+																	: 'IDS_ASSIGN_NEW_CREW_DISABLE_REASON_FULL_BARRACKS'")
+
+		(var isDismissCrewVisible:bool =		"canMove && !isInBarracks")
+		(var isFireButtonEnabled:bool =			"!isThisLocked && !isThisInFormation")
+		(var isFireCrewTooltip:bool =			"isThisInFormation || isThisLocked || !isCrewFireAvailable")
+
+		(var fireCrewTooltipText:str =			"isThisInFormation	? 'IDS_FIRE_CREW_DENY_REASON_IN_FORMATION' :
+												 isThisLocked		? 'IDS_FIRE_CREW_DENY_REASON_IN_BATTLE'
+																	: 'IDS_CREW_CAN_NOT_BE_DEMOBOLIZED'")
+	)
+
+	(name = 'CrewContextMenu')
+	(class $ContextMenuDimensions)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(block
+		(name = 'dismissCrew')
+
+		(style (width = 100%))
+
+		(controller $Instance renderer='ContextMenuItem'
+			(bind enabled "isDismissCrewVisible")
+			(args
+				_title =	'IDS_CREW_TO_BARRACKS'
+				_enabled =	"isDisassignButtonEnabled"
+				_methods =	"[{ type: 'inputMapping.onAction', name: canDisassignCrew ? CREW_ACTIONS.DISASSIGN : '', args: { crewId: _crewId } }]"
+			)
+		)
+
+		(controller $Tooltip
+			(bind enabled "isDisassignTooltip")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"disassignDisableTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(name = 'CrewFireButton')
+
+		(style (width = 100%))
+
+		(controller $Instance renderer='ContextMenuItem'
+			(bind enabled "isCrewFireAvailable")
+			(args
+				_title =	'IDS_CREW_FIRE'
+				_enabled =	"isFireButtonEnabled"
+				_methods =	"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_FIRE_CREW_WINDOW, args: { crewId: _crewId } }]"
+			)
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(bind enabled "isFireCrewTooltip")
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"fireCrewTooltipText"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)

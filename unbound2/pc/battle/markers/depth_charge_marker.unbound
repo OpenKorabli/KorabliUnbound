@@ -1,14 +1,46 @@
+
+
+(def constant MAP_DANGER_LEVEL_TO_POSTFIX {
+	SC.Battle.DANGER_LEVEL.NORMAL: '',
+	SC.Battle.DANGER_LEVEL.NOT_DANGEROUS: '',
+	SC.Battle.DANGER_LEVEL.WARNING: '_danger_warning',
+	SC.Battle.DANGER_LEVEL.CRITICAL: '_danger_critical',
+})
+
+
 (def element WorldDepthChargeMarker (_markerEntity:gfx) layout=true
 	(scope
 		(event evMarkerShow)
 
 		(macro GET_MARKER_ENTITY_COMPONENT 'depthCharge')
+		(macro GET_MARKER_ENTITY_COMPONENT 'worldMarkerScale')
+		(macro GET_PREF 'altVisionMode' "'battle.altVision.mode'")
+
+		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)	
+		(var isSubCustomization:bool = "(customisedElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.SUB_IMPROVE) > 0")	
+		(var selfVehicleEntity:dhEntity = "getSingleEntity(CC.selfVehicle)")
+		(var isSubmarine:bool = "selfVehicleEntity.hasComponent(CC.submarine)")
+
+		(var cameraEntity:dhEntity = "getSingleEntity(CC.camera)")
+		(var altVision:bool = "cameraEntity.camera.altVision" (event "cameraEntity.camera.evAltVisionChanged"))
+		(var isFullAltVisionMode:bool = "altVision || altVisionMode >= AltVisionMode.ENABLED")
+
+		(var markerScaleRaw:number = "worldMarkerScaleComponent ? worldMarkerScaleComponent.value : 1" (event "worldMarkerScaleComponent.evValueChanged"))
+		(var markerScale:number = "isFullAltVisionMode ? 1 : round(markerScaleRaw*10)/10") 
 
 		(var dangerLevel:number = "depthChargeComponent.dangerLevel" (event "depthChargeComponent.evDangerLevelChanged"))
-		(var dangerPostfix:str = "dangerLevel == SC.Battle.DANGER_LEVEL.CRITICAL ? '_danger' : ''")
+		(var isFromSquadron:bool = "depthChargeComponent.isFromSquadron")
 
-		(var markerIcon:str = "'icon_depth_charge' + dangerPostfix")
+		(var relation:number = "_markerEntity.relation.value" (event "_markerEntity.relation.evChanged"))
+		(var relationName:str = "'_' + toLower(SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relation])")
+
+		(var iconShipModifier:str = "isSubCustomization ? (isSubmarine || isFromSquadron) && relation != SC.Battle.PLAYER_RELATION.ALLY	? ''
+																																		: '_from_ship'
+														: ''")
+		(var markerIcon:str = "'icon' + iconShipModifier + '_depth_charge' + relationName + MAP_DANGER_LEVEL_TO_POSTFIX[dangerLevel]")
+		(var isShowMarker:bool = "isIn(dangerLevel, SC.Battle.DANGER_LEVEL.SHOW_DANGER_LEVEL) || (isSubCustomization && !isFromSquadron)")
 	)
+	(macro BIND_FAIR_SCALE "markerScale")
 
 	(dispatch evMarkerShow args="{}" on='addedToStage')
 
@@ -33,7 +65,7 @@
 	)
 
 	(block
-		(bind visible "dangerLevel != SC.Battle.DANGER_LEVEL.NORMAL")
+		(bind visible "isShowMarker")
 		(style
 			(bind backgroundImage "'url:../battle_hud/markers/depth_charges/' + markerIcon + '.png'")
 			(backgroundSize = "autosize")

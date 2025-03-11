@@ -1,122 +1,97 @@
+(def constant CT_SLIDER_OVER "{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								redOffset: 15,		greenOffset: 15,	blueOffset: 15,		alphaOffset: 0 }")
+
+(def constant CT_SLIDER_DOWN "{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								redOffset: -20,		greenOffset: -20,	blueOffset: -20,	alphaOffset: 0 }")
 
 (def element DefaultSlider (_value:number, _intervalsCount:number, _width:number=200)
 	(scope
-		(event evSliderValueChanged)
-		(event evSliderValueChangedForTrack)
-
-		(event evRollOver)
-		(event evRollOut)
-		(event evMouseDown)
-		(event evStageMouseUp)
-
 		(event evSliderThumbMouseDown)
 
 		(event evSliderValueChangedInternal)
-		(var curValue:number = "$event ? $event.newValue : _value" (event "evSliderValueChangedInternal"))
+		(var curValue:number = "_value")
+		(bind curValue "$event.newValue" init=false watch=false (event "evSliderValueChangedInternal"))
 
-		(var rollOver:bool = "$event.isOver" init=false watch=false (event "evRollOver") (event "evRollOut"))
-		(var isMouseDown:bool = "$event.isDown" init=false watch=false (event "evMouseDown") (event "evSliderThumbMouseDown") (event "evStageMouseUp"))
+		(var rollOver:bool = "false")
+		(bind rollOver "false"	init=false watch=false on='rollOut')
+		(bind rollOver "true"	init=false watch=false on='rollOver')
 
-		
-		(var ctRollOver:dict = "{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
-								  redOffset: 15,	greenOffset: 15,	blueOffset: 15,		alphaOffset: 0 }")
-		(var ctDown:dict = "	{ redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
-								  redOffset: -20,	greenOffset: -20,	blueOffset: -20,	alphaOffset: 0 }")
+		(var mouseDown:bool = "false")
+		(bind mouseDown "false"	init=false watch=false on='stageMouseUp')
+		(bind mouseDown "true"	init=false watch=false on='leftMouseDown' (event "evSliderThumbMouseDown"))
 	)
-		
-	(dispatch evRollOver		on='rollOver'	args="{isOver: true}")
-	(dispatch evRollOut			on='rollOut'	args="{isOver: false}")
+	(dispatch 'evSliderValueChanged' args="{ value: $event.newValue }" dir="EventDirection.UP" (event "evSliderValueChangedInternal"))
 
-	(dispatch evStageMouseUp	on='stageMouseUp'	args="{isDown: false}")
-	(dispatch evMouseDown		on='mouseDown'		args="{isDown: true}")
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.OVER]"		on='rollOver')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.PRESS]"	on='leftMouseDown')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.CHANGE]"	(event "evSliderValueChangedInternal"))
 
-	(bind colorTransform "	rollOver && !isMouseDown	? ctRollOver :
-							isMouseDown					? ctDown
-														: CT_NONE")
-
-	(dispatch evSliderValueChanged	args="{value: curValue}" dir="EventDirection.UP" on='addedToStage' (event "evSliderValueChangedInternal"))
-	(dispatch evSliderValueChangedForTrack	args="{value: curValue, intervalsCount: _intervalsCount}" dir="EventDirection.DOWN" (event "evSliderValueChanged"))
-
-	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.OVER]" init=false watch=false on='rollOver')
-	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.PRESS]" init=false watch=false on='mouseDown')
-	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.CHANGE]" init=false watch=false  (event "evSliderValueChangedInternal"))
-
-	(style
-		(bind width "_width")
-	)
+	(style (width = "_width"))
+	(bind colorTransform "	rollOver && !mouseDown	? CT_SLIDER_OVER :
+							mouseDown				? CT_SLIDER_DOWN
+													: CT_NONE")
 
 	(scroll_bar
 		(style (width = 100%))
 
-		(bind maximum "_intervalsCount")	
-		(bind value "curValue")				
-	
+		(bind maximum "_intervalsCount")
+		(bind value "curValue")
+
 		(singleStep = 1)
 		(scrollDuration = 2)
 
 		(orientation = "horizontal")
 		(alignThumbToBorders = false)
 
-		(thumb = 'DefaultSliderThumb')
-		(track = 'DefaultSliderTrack')
+		(thumb DefaultSliderThumb)
 
-		(dispatch evSliderValueChangedInternal on='valueChanged' dir="EventDirection.NONE")
+		(track DefaultSliderTrack
+			_value = "curValue"
+			_intervalsCount = "_intervalsCount"
+		)
+
+		(dispatch evSliderValueChangedInternal args="$event" dir="EventDirection.NONE" on='valueChanged' (bind enabled "mouseDown"))
 	)
 )
 
 (def element DefaultSliderThumb ()
 	(scope
-		(event evSliderThumbMouseDown)
-		(event evSliderThumbMouseUp)
+		(var mouseDown:bool = "false")
+		(bind mouseDown "false" init=false watch=false on='stageMouseUp')
+		(bind mouseDown "true" init=false watch=false on='leftMouseDown')
 	)
-
-	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.PRESS]" init=false watch=false on='mouseDown')
-
-	(dispatch evSliderThumbMouseDown args="{isDown: true}" on='mouseDown' dir="EventDirection.UP")
-	(dispatch evSliderThumbMouseUp args="{isDown: false}" on='stageMouseUp' dir="EventDirection.UP")
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.PRESS]" on='leftMouseDown')
+	(dispatch 'evSliderThumbMouseDown'	dir="EventDirection.UP" (bind enabled "mouseDown")	(bind trigger "mouseDown"))
+	(dispatch 'evSliderThumbMouseUp'	dir="EventDirection.UP" (bind enabled "!mouseDown")	(bind trigger "mouseDown"))
 
 	(style
-		(align = "center")
 		(marginTop = -6px)
 		(width = 10px)
 		(height = 22px)
-		(backgroundColor = "NO_COLOR")
-	)
-
-	(block
-		(class $Fullsize)
-		(style
-			(backgroundImage = 'url:../service_kit/slider/slider_thumb.png')
-		)
+		(backgroundImage = 'url:../service_kit/slider/slider_thumb.png')
 	)
 )
 
-(def element DefaultSliderTrack ()
+(def element DefaultSliderTrack (_value:number, _intervalsCount:number)
 	(scope
-		(event evSliderValueChangedForTrack)
-
-		(var filledWidth:number = 0)
-		(bind filledWidth "($event.value/$event.intervalsCount) * 100" init=false (event "evSliderValueChangedForTrack"))
+		(var filledWidth:number = "((_value / _intervalsCount) * 100) ?: 0")
+	)
+	(style
+		(height = 10px)
+		(paddingLeft = "XXS")
+		(paddingRight = "XXS")
+		(width = 100%)
+		(backgroundImage = 'url:../service_kit/slider/slider_track.png')
+		(scale9grid = "[4, 0, 4, 0]")
 	)
 
 	(block
 		(style
-			(height = 10px)
-			(paddingLeft = "XXS")
-			(paddingRight = "XXS")
-			(width = 100%)
-			(backgroundImage = 'url:../service_kit/slider/slider_track.png')
-			(scale9grid = "[4, 0, 4, 0]")
-		)
-
-		(block
-			(style
-				(position = "absolute")
-				(top = 2px)
-				(height = 6px)
-				(backgroundColor = 0xFF4CE7A9)
-				(bind width "1% * filledWidth")
-			)
+			(position = "absolute")
+			(top = 2px)
+			(height = 6px)
+			(backgroundColor = 0xFF4CE7A9)
+			(bind width "1% * filledWidth")
 		)
 	)
 

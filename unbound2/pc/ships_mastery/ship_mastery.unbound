@@ -1,6 +1,8 @@
 (def constant LEAGUE_CHANGE_BG_THRESHOLD 4)
 (def constant MAX_RANK_TO_DISPLAY 10000)
 (def constant RANKS_COUNT_IN_EACH_LEAGUE 20)
+(def constant RESET_TASKS_TYPE_ALL 0)
+(def constant RESET_TASKS_TYPE_SINGLE 1)
 
 (def element ShipMastery ()
 	(scope
@@ -113,7 +115,7 @@
 		(var shipMasteryCommonEntity:dhEntity = "getSingleEntity(CC.shipMasteryCommon)")
 		(var totalRank:number = "shipMasteryCommonEntity.shipMasteryCommon.totalRank ?: 0" (event "shipMasteryCommonEntity.shipMasteryCommon.evTotalRankChanged"))
 		(var totalRankDisplay:str = "totalRank >= MAX_RANK_TO_DISPLAY ? 'IDS_SHIP_MASTERY_MAX_RANK' : toString(totalRank)")
-		(var shipsWithTrials:number = "shipMasteryCommonEntity.shipMasteryCommon.countOfShipsWithTasksInProgress ?: 0" (event "shipMasteryCommonEntity.shipMasteryCommon.evCountOfShipsWithTasksInProgressChanged"))
+		(var shipsWithTrials:number = "shipMasteryCommonEntity.shipMasteryCommon.countOfOwnShipsWithTasksInProgress ?: 0" (event "shipMasteryCommonEntity.shipMasteryCommon.evCountOfOwnShipsWithTasksInProgressChanged"))
 	)
 	(style (width = 184px))
 	(tf
@@ -200,6 +202,10 @@
 
 (def element ShipMasteryTrials (_playerShipId:number = 0)
 	(scope
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimple:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+		(var isReadyInDivision:bool = "preBattlePlayerSimple.isReady" (event "preBattlePlayerSimple.evIsReadyChanged"))
+
 		(var shipMasteryEntity:dhEntity = "getPrimaryEntity(CC.shipMastery, _playerShipId)")
 		(var shipMasteryComponent:dhComponent = "shipMasteryEntity.shipMastery")
 		(var rank:number = "shipMasteryComponent.rank ?: 0" (event "shipMasteryComponent.evRankChanged"))
@@ -214,10 +220,12 @@
 		(var trialText:str = "	isRankInProgress	? subst('IDS_SHIP_MASTERY_TRIALS_STATUS_1',[],{_threshold: threshold + 1}) :
 								isTrialAvailable	? 'IDS_SHIP_MASTERY_TRIALS_STATUS_3'
 													: 'IDS_SHIP_MASTERY_TRIALS_STATUS_2'")
-	
+
 		(var shipMasteryCommonEntity:dhEntity = "getSingleEntity(CC.shipMasteryCommon)")
-		(var shipsWithTrials:number = "shipMasteryCommonEntity.shipMasteryCommon.countOfShipsWithTasksInProgress ?: 0" (event "shipMasteryCommonEntity.shipMasteryCommon.evCountOfShipsWithTasksInProgressChanged"))
+		(var shipsWithTrials:number = "shipMasteryCommonEntity.shipMasteryCommon.countOfOwnShipsWithTasksInProgress ?: 0" (event "shipMasteryCommonEntity.shipMasteryCommon.evCountOfOwnShipsWithTasksInProgressChanged"))
 		(var isFullCountShipsWithTrials:bool = "shipsWithTrials == SC.Common.SHIP_MASTERY_CONSTANTS.MAX_SHIPS_WITH_TASKS_IN_PROGRESS")
+
+		(var battleTypes:array = "shipMasteryCommonEntity.battleTypesView.viewList ?: []")
 	)
 
 	(style (width = 360px))
@@ -246,8 +254,10 @@
 					_type =		"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
 					_size =		"SIZE.SMALL"
 					_width =	96px
-					_label =	'IDS_SHIPS_MASTERY_TRIALS_RESET_BUTTON'
-					_methods = "[{ type: 'inputMapping.onRequest', name: 'resetTrials', args: {} }]"
+					_label =	'IDS_SHIPS_MASTERY_TRIALS_RESET_BUTTON_ALL'
+					_methods = "[{	type: 'inputMapping.onRequest',
+									name: 'resetTrials',
+									args: {	type: RESET_TASKS_TYPE_ALL} }]"
 				)
 			)
 		)
@@ -290,7 +300,7 @@
 			(controller $Instance renderer = 'DefaultButton'
 				(bind enabled "isTrialsButtonVisible")
 				(args
-					_enabled = "isTrialAvailable && !isFullCountShipsWithTrials"
+					_enabled = "isTrialAvailable && !isFullCountShipsWithTrials && !isReadyInDivision"
 					_label = 'IDS_SHIP_MASTERY_TRIALS_BUTTON_OPEN'
 					_width = 100%
 					_focusIndex = 0
@@ -317,15 +327,51 @@
 			(paddingRight = "S")
 			(paddingBottom = "S")
 		)
-		(tf
-			(class $TextDefaultNM)
+		(block
 			(style
-				(width = 100%)
-				(marginBottom = "M")
+				(marginBottom = "SXS")
 				(marginLeft = "S")
-				(alpha = "TA")
 			)
-			(text = 'IDS_SHIP_MASTERY_TRIALS_TASKS_TITLE')
+			(tf
+				(class $TextDefaultNM)
+				(style (alpha = "TA"))
+				(text = 'IDS_SSE_TASK_RESTRICTIONS_COLON')
+			)
+			(hblock
+				(style
+					(width = 100%)
+					(marginTop = "S")
+				)
+				(hblock
+					(style
+						(marginTop = "-XXS")
+						(marginRight = "XS")
+					)
+					(controller $Repeat renderer='TaskBattleTypeRestriction'
+						(bind count "battleTypes.length")
+						(args
+							_battleType = "battleTypes[$index].battleName"
+							_isPVEModifierApplied = "battleTypes[$index].hasPVEModifier"
+							_customIcon = "battleTypes[$index].customIconName"
+						)
+					)
+				)
+				(block
+					(style
+						(height = 21px)
+						(marginRight = "SXS")
+					)
+					(element VerticalDivider)
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginTop = "XS")
+						(alpha = "TC")
+					)
+					(text = 'IDS_SHIP_MASTERY_TRIALS_CONDITION')
+				)
+			)
 		)
 		(block
 			(style
@@ -344,17 +390,19 @@
 
 (def element ShipMasteryTask (_entityId:number = 0)
 	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
 		(var sseConditionEntity:dhEntity = "getEntity(_entityId)")
+		(var taskID:number = "sseConditionEntity.shipMasteryTask.id")
 		(var isCompleted:bool = "sseConditionEntity.shipMasteryTask.isDone" (event "sseConditionEntity.shipMasteryTask.evIsDoneChanged"))
 		(var unifiedStatus:str = "isCompleted ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
 		(var statusText:str = "isCompleted ? 'IDS_TASK_COMPLETED' : 'IDS_TASK_NOT_DONE'")
 	)
-
+	(macro MOUSE_EVENTS_DISPATCHER)
 	(style
 		(width = 100%)
 		(backgroundColor = 0x1AFFFFFF)
 	)
-
 	(block
 		(style
 			(width = 100%)
@@ -363,14 +411,12 @@
 			(paddingLeft = "M")
 			(paddingRight = "M")
 		)
-
 		(block
 			(style
 				(width = 100%)
 				(minHeight = 41px)
 				(bind alpha "isCompleted ? 0.4 : 1")
 			)
-
 			(element SseTaskDescription
 				_sseEntityId = "_entityId"
 				_conditionId = "sseConditionEntity.id"
@@ -380,26 +426,49 @@
 				_isShipMasteryTask = true
 			)
 		)
-
-		(block
+		(hblock
 			(style
+				(width = 100%)
 				(marginTop = "SXS")
+				(align = "middle")
 				(bind alpha "isCompleted ? 1 : 0.7")
 			)
-
 			(element StatusLine
 				_unifiedStatus = "unifiedStatus"
 				_text = "statusText"
 				_textClass = '$TextDefault13NM'
+				_width = 100%
 			)
-
-
-
-
-
-
-
-
+			(block
+				(style
+					(alpha = 0)
+					(visualOffsetY = "S")
+				)
+				(controller $Animation
+					(bindcall play
+						duration = 0.1
+						from = "{alpha: 0, visualOffsetY: S}"
+						to = "{ alpha: 1, visualOffsetY: 0px }"
+						easing = "Easing.quad_out"
+						action = "kill"
+						reverse = "!rollOver"
+						(bind trigger "rollOver")
+					)
+				)
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "!isCompleted")
+					(args
+						_width = 96px
+						_size = "SIZE.SMALL"
+						_label = 'IDS_SHIPS_MASTERY_TRIALS_RESET_BUTTON'
+						_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_methods = "[{	type: 'inputMapping.onRequest',
+										name: 'resetTrials',
+										args: {	type: RESET_TASKS_TYPE_SINGLE,
+												taskID: taskID}}]"
+					)
+				)
+			)
 		)
 	)
 )

@@ -1,14 +1,6 @@
 (def constant CREW_ITEM_WIDTH 339px)
 (def constant CREW_ITEM_HEIGHT 124px)
-(def constant MAX_SCREEN_WIDTH_TO_FIT_2 1864px)
-(def constant MIN_SCREEN_WIDTH_TO_FIT_3 1865px)
-
-
-(def constant CREW_LIST_PADDINGS "{
-	HOR_2:	{ 1280: 8px, 1864: 16px },
-	HOR_3:	{ 1865: 8px, 1920: 16px },
-	VERT:	{ 720: 8px, 1080: 16px }
-}")
+(def constant MIN_SCREEN_WIDTH_TO_FIT_3 1870px)
 
 (def constant CREW_LIST_CARD_COLORS "{
 	BACKGROUND:	0xBF242933,
@@ -26,34 +18,54 @@
 		(event evGuidingTipEnabled)
 
 		(macro STAGE_SIZE)
+		(var collectionLen:number = "_collection.length")
 
-		(var collectionItems:array = "_collection.items ?: []")
+		(var stageRelativeWidth:number = "min(stageWidth, 1920)")
+		(var isAbleToFit3Cards:bool = "stageRelativeWidth >= MIN_SCREEN_WIDTH_TO_FIT_3")
+		(var cardsInRow:number = "isAbleToFit3Cards ? 3 : 2")
 
-		(var operatingStageWidth:number =	"stageWidth > 1920 ? 1920 : stageWidth")
-		(var operatingStageHeight:number =	"stageHeight > 1080 ? 1080 : stageHeight")
-
-		(var isAbleToFit3Cards:bool = "operatingStageWidth >= MIN_SCREEN_WIDTH_TO_FIT_3")
-
-		(var hGapSize:number =		"isAbleToFit3Cards	? round(XS + ((operatingStageWidth - MIN_SCREEN_WIDTH_TO_FIT_3) * (S / (1920 - MIN_SCREEN_WIDTH_TO_FIT_3))))
-														: round(XS + ((operatingStageWidth - 1280) * (S / (MAX_SCREEN_WIDTH_TO_FIT_2 - 1280))))")
-		(var vGapSize:number =		"round(XS + ((operatingStageHeight - 720) * (S / HEIGHT_RATIO)))")
-		(var cardsInRow:number =	"isAbleToFit3Cards ? 3 : 2")
-		(var crewTileWidth:number =	"(CREW_ITEM_WIDTH * cardsInRow) + (hGapSize * (cardsInRow - 1))")
+		(var hGapSize:number = "round(XS + (S - XS) * (stageRelativeWidth - 1280) / (1920 - 1280))") 
+		(var crewTileWidth:number =	"round((CREW_ITEM_WIDTH * cardsInRow) + (hGapSize * (cardsInRow - 1)))")
 
 		(var isGuidingTipEnabled:bool = true)
 		(bind isGuidingTipEnabled "false"	init=false watch=false		(event "evScrollAreaValueChanged"))
 		(bind isGuidingTipEnabled "true"	init=false watch=false		(event "evGuidingTipEnabled"))
+
+		(var selectedTypeFiltersCollection:dhCollection =	"getCollection(CC.crewFilter).getChildByPath('byFilterType.' + SC.Common.CREW_FILTER_TYPE.CREW_TYPE + '.selected')")
+		(var selectedNationFiltersCollection:dhCollection =	"getCollection(CC.crewFilter).getChildByPath('byFilterType.' + SC.Common.CREW_FILTER_TYPE.CREW_NATION + '.selected')")
+		(var isAnyFilterShown:bool = "selectedTypeFiltersCollection.length > 0 || selectedNationFiltersCollection.length > 0")
 	)
 
 	(dispatch evGuidingTipEnabled delay=1 reuse=true (event "evScrollAreaValueChanged"))
 
 	(class $FullsizeAbsolute)
 
+	
+	(hblock
+		(bind visible "isAnyFilterShown")
+		(style
+			(width = 100%)
+			(hgap = "XS")
+			(align = "right")
+			(paddingTop = "XS")
+			(paddingBottom = "XS")
+			(paddingRight = "S")
+			(backgroundColor = "NO_COLOR")
+		)
+		(controller $Repeat renderer='CrewAppliedFilter'
+			(bind count "SC.Common.CREW_FILTER_TYPE.ALL.length")
+			(args
+				_filterType = "SC.Common.CREW_FILTER_TYPE.ALL[$index]"
+			)
+		)
+	)
+	
+
 	(scrollArea
 		(class $Fullsize)
 		(style (backgroundColor = "NO_COLOR"))
 
-		(verticalSlider = 'ScrollBarVLightWithValueChangedEvent')
+		(verticalSlider ScrollBarVLightWithValueChangedEvent)
 		(hscrollPolicy = 'off')
 		(vscrollPolicy = 'auto')
 		(scrollPerItem = true)
@@ -72,47 +84,34 @@
 		(repeatController = 'crewListItemRenderer')
 
 		(content
-			(class $Fullsize)
 			(style
 				(width = 100%)
-				(bind paddingLeft	"isAbleToFit3Cards ? CREW_LIST_PADDINGS.HOR_3 : CREW_LIST_PADDINGS.HOR_2")
-				(bind paddingRight	"isAbleToFit3Cards ? CREW_LIST_PADDINGS.HOR_3 : CREW_LIST_PADDINGS.HOR_2")
-				(backgroundColor = "NO_COLOR")
+				(paddingLeft = "S")
+				(paddingRight = "S")
+				(paddingBottom = "S")
+				(bind paddingTop "isAnyFilterShown ? 0px : { 720: S, 1080: M }")
+				(align = "center")
 			)
 
 			(block
-				(style (width = 100%) (height = "CREW_LIST_PADDINGS.VERT"))
-			)
-
-			(block
-				(style (align = "center") (width = 100%))
-
-				(block
-					(style
-						(flow = "tile_horizontal")
-						(bind width "crewTileWidth")
-						(bind paddingTop "-vGapSize")
-						(bind paddingBottom "-vGapSize")
-						(bind hgap "hGapSize")
-						(bind vgap "vGapSize")
-					)
-
-					(controller $DynamicRepeat renderer='CrewListItemRenderer' name='crewListItemRenderer'
-						(bind count "collectionItems.length")
-						(args
-							_shipId =				"_shipId"
-							_crewEntityId =			"collectionItems[$index].id"
-							_isGuidingTipEnabled =	"isGuidingTipEnabled"
-						)
-						(itemWidth =	"CREW_ITEM_WIDTH")
-						(itemHeight =	"CREW_ITEM_HEIGHT")
-						(itemOffset =	"CREW_ITEM_HEIGHT")
-					)
+				(style
+					(bind width "crewTileWidth")
+					(flow = "tile_horizontal")
+					(bind hgap "hGapSize")
+					(vgap = "{ 720: XS, 1080: S }")
 				)
-			)
 
-			(block
-				(style (width = 100%) (height = "CREW_LIST_PADDINGS.VERT"))
+				(controller $DynamicRepeat renderer='CrewListItemRenderer' name='crewListItemRenderer'
+					(bind count "collectionLen")
+					(args
+						_shipId =				"_shipId"
+						_collection =			"_collection"
+						_isGuidingTipEnabled =	"isGuidingTipEnabled"
+					)
+					(itemWidth =	"CREW_ITEM_WIDTH")
+					(itemHeight =	"CREW_ITEM_HEIGHT")
+					(itemOffset =	"CREW_ITEM_HEIGHT")
+				)
 			)
 		)
 
@@ -122,10 +121,13 @@
 
 	(block
 		(class $FullsizeAbsolute)
-		(style (hitTest = false) (align = "center|middle"))
+		(style
+			(hitTest = false)
+			(align = "center|middle")
+		)
 
 		(controller $Instance renderer='NoCrewInListPlug'
-			(bind enabled "collectionItems.length == 0")
+			(bind enabled "collectionLen == 0")
 			(args
 				_text = 'IDS_NO_CREW_FOUND_WITH_APPLIED_FILTERING'
 			)
@@ -141,14 +143,14 @@
 	)
 )
 
-(def element CrewListItemRenderer (_shipId:number = 0, _crewEntityId:number = 0, _isGuidingTipEnabled:bool = false)
+(def element CrewListItemRenderer (_collection:dhCollection, _shipId:number = 0, _isGuidingTipEnabled:bool = false)
 	(scope
 		(event evCrewIdChanged)
 
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(macro PULL_CREW_DATA "'crewsSingleton'")
-		(var freeBarracksSlots:number =		"crewsSingleton.freeBarracksSlots ?: 0"	(event "crewsSingleton.evUpdate"))
+		(var crewData:dhComponent =			"getSingleComponent(CC.crewData)")
+		(var freeBarracksSlots:number =		"crewData.freeBarracksSlots ?: 0"	(event "crewData.evFreeBarracksSlotsChanged"))
 		(var canDisassignCrew:bool =		"freeBarracksSlots > 0")
 
 		(var shipTargetOwnEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, _shipId)")
@@ -161,7 +163,7 @@
 		(var operationsAccountLocked:bool =	"resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
 
 
-		(struct crew =	PULL_CREW_BY_ENTITY_INDEX(_id = "_crewEntityId"))
+		(struct crew =	PULL_CREW_BY_ENTITY_INDEX(_id = "_collection[$index].id"))
 
 		(var crewId:number =			"crew.component.id ?: 0")
 		(var baseUrl:str =				"crew.component.baseUrl ?: ''"				(event "crew.component.evRankChanged"))
@@ -171,11 +173,15 @@
 		(var timeRentTimeStamp:number =	"crew.component.timeRent ?: 0"				(event "crew.component.evTimeRentChanged") (event "crew.component.evChanged"))
 		(var canMove:bool =				"crew.component && crew.component.canMove"	(event "crew.component.evChanged"))
 		(var crewNation:str =			"crew.component.nation ?: ''"				(event "crew.component.evChanged"))
+		(var peculiarityType:str =		"crew.component.peculiarity"				(event "crew.component.evChanged"))
 		(var dismissDelay:number =		"crew.component.dismissDelay ?: 0"			(event "crew.component.evDismissDelayChanged"))
 		(var specializationID:number =	"crew.component.specializationID ?: 0"		(event "crew.component.evChanged"))
 		(var shipId:number =			"crew.component.shipID ?: 0"				(event "crew.component.evShipChanged"))
 		(var isCrewFireAvailable:bool =	"crew.component.canDismiss"					(event "crew.component.evChanged"))
 		(var isInBarracks:bool =		"crew.component.isInBarracks")
+
+		(struct peculiarityPref = GET_PREF_BOOL(_option = "'ui.peculiarityEnabled'"))
+		(var isPeculiarityDisabled:bool = "!peculiarityPref.value && peculiarityType")
 
 		(var isDismissing:bool =				"dismissDelay > 0")
 		(var crewShipId:number =				"isInBarracks || isDismissing ? specializationID : shipId")
@@ -195,7 +201,7 @@
 		(var isTargetFormation:bool =	"shipTargetOwnEntity.ownShip.isInFormation"	(event "shipTargetOwnEntity.ownShip.evUpdateLock"))
 		(var targetCrewId:number =		"shipTargetOwnEntity.ownShip.crewId ?: 0"	(event "shipTargetOwnEntity.ownShip.evCrewChanged"))
 
-		(var targetCrewEntity:dhEntity =	"getPrimaryEntity(CC.crew, targetCrewId)")
+		(struct targetCrew =	PULL_CREW(_crewId = "targetCrewId"))
 
 		(var isFromBarracks:bool =			"shipId == 0")
 		(var hasSpaceToAssignCrew:bool =	"isFromBarracks || canDisassignCrew || (!canDisassignCrew && targetCrewId == 0)")
@@ -208,15 +214,14 @@
 
 		(var isRental:bool = "timeRentTimeStamp > 0")
 		(var isDisabledAssign:bool = "targetCrewId == 0	? crew.component && !canMove
-														: crew.component && (!canMove || (targetCrewEntity && !targetCrewEntity.crew.canMove))" (event "targetCrewEntity.crew.evChanged"))
+														: crew.component && (!canMove || (targetCrew.entity && !targetCrew.component.canMove))" (event "targetCrew.component.evChanged"))
 
 		(var isCrewCompatibleShipBySpecialList:bool =	"indexOf(targetShipInfo.fullName, crew.component.shipsToSeat) > -1"				(event "crew.component.evChanged") (event "targetShipInfo.evUpdate"))
 		(var isCrewCompatibleShipByNation:bool =		"indexOf(targetShipInfo.nation, crew.component.nationsToSeat) > -1"				(event "crew.component.evChanged") (event "targetShipInfo.evUpdate"))
-		(var isCrewCompatibleShipByPeculiarity:bool =	"indexOf(targetShipInfo.peculiarity, crew.component.peculiaritiesToSeat) > -1"	(event "crew.component.evChanged") (event "targetShipInfo.evUpdate"))
 		(var isCrewCompatibleShipByGroup:bool =			"indexOf(targetShipInfo.group, crew.component.shipGroups) > -1"					(event "crew.component.evChanged") (event "targetShipInfo.evUpdate"))
 
 		(var isCrewCompatibleShipBySpecialization:bool =	"specializationID == _shipId")
-		(var crewHasCompatibleShip:bool =					"isCrewCompatibleShipBySpecialList || isCrewCompatibleShipByNation || isCrewCompatibleShipByPeculiarity || isCrewCompatibleShipByGroup")
+		(var crewHasCompatibleShip:bool =					"isCrewCompatibleShipBySpecialList || isCrewCompatibleShipByNation || isCrewCompatibleShipByGroup")
 		(var isCrewCompatibleForTargetShip:bool =			"isRental			? isCrewCompatibleShipBySpecialization :
 															 isDisabledAssign	? false
 																				: crewHasCompatibleShip")
@@ -342,6 +347,13 @@
 
 		
 		(block
+			(style (position = "absolute") (top = "XS") (left = "XS"))
+			(controller $Instance renderer='PeculiarityDisabledIcon' (bind enabled "isPeculiarityDisabled"))
+		)
+		
+
+		
+		(block
 			(class $Fullsize)
 
 			(block
@@ -354,7 +366,6 @@
 
 				(element CrewNameWithIcon
 					_crewId =			"crewId"
-					_isAutoSized =		false
 					_isCrewNameElided =	true
 				)
 			)
@@ -576,12 +587,12 @@
 
 (def element CrewListItemDismissDelayStatus (_crewId:number = 0)
 	(scope
-		(macro PULL_CREW_DATA "'crewsSingleton'")
-		(var freeBarracksSlots:number =		"crewsSingleton.freeBarracksSlots ?: 0"	(event "crewsSingleton.evUpdate"))
+		(var crewData:dhComponent =			"getSingleComponent(CC.crewData)")
+		(var freeBarracksSlots:number =		"crewData.freeBarracksSlots ?: 0"			(event "crewData.evFreeBarracksSlotsChanged"))
 		(var canDisassignCrew:bool =		"freeBarracksSlots > 0")
 
 		(var resourceEntity:dhEntity =		"getSingleEntity(CC.accountResource)")
-		(var operationsAccountLocked:bool =	"resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
+		(var operationsAccountLocked:bool =	"resourceEntity.accountResource.operationsLocked"	(event "resourceEntity.accountResource.evOperationsLockChanged"))
 
 		(struct crew = PULL_CREW(_crewId = "_crewId"))
 		(var dismissDelay:number = "crew.component.dismissDelay ?: 0" (event "crew.component.evDismissDelayChanged"))
@@ -667,96 +678,5 @@
 		)
 
 		(bind text "formattedFinishTime")
-	)
-)
-
-(def element CrewListMenu (_crewId:number = 0, _shipId:number = 0)
-	(scope
-		(macro PULL_CREW_DATA "'crewsSingleton'")
-		(var freeBarracksSlots:number =	"crewsSingleton.freeBarracksSlots ?: 0"	(event "crewsSingleton.evUpdate"))
-		(var canDisassignCrew:bool =	"freeBarracksSlots > 0")
-
-		(struct crew = PULL_CREW(_crewId = "_crewId"))
-
-		(var shipId:number =			"crew.component.shipID ?: 0"				(event "crew.component.evShipChanged"))
-		(var isCrewFireAvailable:bool =	"crew.component.canDismiss"					(event "crew.component.evChanged"))
-		(var isInBarracks:bool =		"crew.component.isInBarracks")
-		(var classificationId:number =	"crew.component.classificationId")
-		(var dismissDelay:number =		"crew.component.dismissDelay ?: 0"			(event "crew.component.evDismissDelayChanged"))
-		(var crewNation:str =			"crew.component.nation ?: ''"				(event "crew.component.evChanged"))
-		(var canMove:bool =				"crew.component && crew.component.canMove"	(event "crew.component.evChanged"))
-
-		(var ownShipEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, shipId)")
-		(var isThisLocked:bool =		"ownShipEntity.ownShip.isLocked"			(event "ownShipEntity.ownShip.evUpdateLock"))
-		(var isThisInFormation:bool =	"ownShipEntity.ownShip.isInFormation"		(event "ownShipEntity.ownShip.evUpdateLock"))
-
-		(var isDisassignButtonEnabled:bool =	"!isThisLocked && !isThisInFormation && canDisassignCrew")
-		(var isDisassignTooltip:bool =			"isThisInFormation || isThisLocked || !canDisassignCrew")
-
-		(var disassignDisableTooltipText:str =	"isThisInFormation	? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_FORMATION' :
-												 isThisLocked		? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_BATTLE'
-																	: 'IDS_ASSIGN_NEW_CREW_DISABLE_REASON_FULL_BARRACKS'")
-
-		(var isDismissCrewVisible:bool =		"canMove && !isInBarracks")
-		(var isFireButtonEnabled:bool =			"!isThisLocked && !isThisInFormation")
-		(var isFireCrewTooltip:bool =			"isThisInFormation || isThisLocked || !isCrewFireAvailable")
-
-		(var fireCrewTooltipText:str =			"isThisInFormation	? 'IDS_FIRE_CREW_DENY_REASON_IN_FORMATION' :
-												 isThisLocked		? 'IDS_FIRE_CREW_DENY_REASON_IN_BATTLE'
-																	: 'IDS_CREW_CAN_NOT_BE_DEMOBOLIZED'")
-	)
-
-	(name = 'CrewContextMenu')
-	(class $ContextMenuDimensions)
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-
-	(block
-		(name = 'dismissCrew')
-
-		(style (width = 100%))
-
-		(controller $Instance renderer='ContextMenuItem'
-			(bind enabled "isDismissCrewVisible")
-			(args
-				_title =	'IDS_CREW_TO_BARRACKS'
-				_enabled =	"isDisassignButtonEnabled"
-				_methods =	"[{ type: 'inputMapping.onAction', name: canDisassignCrew ? CREW_ACTIONS.DISASSIGN : '', args: { crewId: _crewId } }]"
-			)
-		)
-
-		(controller $Tooltip
-			(bind enabled "isDisassignTooltip")
-			(renderer = 'SimpleStatusTooltip')
-			(args
-				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
-				_text =				"disassignDisableTooltipText"
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
-	)
-
-	(block
-		(name = 'CrewFireButton')
-
-		(style (width = 100%))
-
-		(controller $Instance renderer='ContextMenuItem'
-			(bind enabled "isCrewFireAvailable")
-			(args
-				_title =	'IDS_CREW_FIRE'
-				_enabled =	"isFireButtonEnabled"
-				_methods =	"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_FIRE_CREW_WINDOW, args: { crewId: _crewId } }]"
-			)
-		)
-
-		(controller $Tooltip
-			(renderer = 'SimpleStatusTooltip')
-			(bind enabled "isFireCrewTooltip")
-			(args
-				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
-				_text =				"fireCrewTooltipText"
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
 	)
 )

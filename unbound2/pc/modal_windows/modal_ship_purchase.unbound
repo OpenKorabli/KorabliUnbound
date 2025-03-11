@@ -1,0 +1,479 @@
+(def element ModalWindowPurchaseShip (shipId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(macro USER_PREF_DATA)
+		(macro PULL_SHIP_SCOPE "shipId" "'shipEntity'" "'shipInfo'")
+
+		(struct shipBuyPrice =				PULL_PRICE(_entityId = "shipId"						_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct slotPrice =					PULL_PRICE(_entityId = "'SLOT_COST'"				_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct moneyTrainingHirePrice =	PULL_PRICE(_entityId = "'CREW_CR_TRAINING_Cost'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct goldTrainingHirePrice =		PULL_PRICE(_entityId = "'CREW_GOLD_TRAINING_Cost'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var crewToHireEntity:dhEntity =		"getSingleEntity(CC.crewToHirePersonality)")
+		(var crewToHireComponent:dhComponent =	"crewToHireEntity.crewToHirePersonality")
+		(var goldTrainingLevel:number =			"crewToHireComponent.goldTrainingLevel ?: 0"	(event "crewToHireComponent.evChanged"))
+		(var moneyTrainingLevel:number =		"crewToHireComponent.moneyTrainingLevel ?: 0"	(event "crewToHireComponent.evChanged"))
+		(var baseTrainingLevel:number =			"crewToHireComponent.baseTrainingLevel ?: 0"	(event "crewToHireComponent.evChanged"))
+
+		(struct crewFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.CREW"))
+
+		(var hireTypes:array = "[	{ skillPoints: baseTrainingLevel - 1,	priceInfo: { currency: SC.Common.CURRENCIES.CREDITS, finalPrice : 0 } },
+									{ skillPoints: moneyTrainingLevel - 1,	priceInfo: moneyTrainingHirePrice.info },
+									{ skillPoints: goldTrainingLevel - 1,	priceInfo: goldTrainingHirePrice.info } ]")
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var accountSlotsNum:number =	"accountResourceComponent.slotsNum"		(event "accountResourceComponent.evChangedSlotsNum"))
+		(var accountGold:number =		"accountResourceComponent.gold"			(event "accountResourceComponent.evChangedGold"))
+		(var accountCredits:number =	"accountResourceComponent.credits"		(event "accountResourceComponent.evChangedCredit"))
+
+		(struct crewPurchaseOptionPref =			GET_PREF_NUMBER(_option="'ui.crew.purchase'"))
+		(struct switchPurchaseShipBuyCommander =	GET_PREF_BOOL(_option="'ui.switchPurchaseShipBuyCommander'"))
+		(struct switchPurchaseShipBuySlots =		GET_PREF_BOOL(_option="'ui.switchPurchaseShipBuySlots'"))
+
+		(var crewData:dhComponent =			"getSingleComponent(CC.crewData)")
+		(var freeBarracksSlots:number =		"crewData.freeBarracksSlots ?: 0"	(event "crewData.evFreeBarracksSlotsChanged"))
+		(var areAnySlotsInBarracks:bool =	"freeBarracksSlots > 0")
+		(var hireCrewSwitchState:bool =		"areAnySlotsInBarracks ? switchPurchaseShipBuyCommander.value : false")
+		(var selectedHireType:number =		"crewPurchaseOptionPref.value")
+
+		(var isSelectedHireTypeCredits:bool =	"selectedHireType == SC.Common.CREW_TRAINING_TYPE.MoneyTraining")
+		(var isSelectedHireTypeGold:bool =		"selectedHireType == SC.Common.CREW_TRAINING_TYPE.GoldTraining")
+
+		(var crewCreditTrainingCost:number =	"hireCrewSwitchState && isSelectedHireTypeCredits	? moneyTrainingHirePrice.info.finalPrice : 0")
+		(var crewGoldTrainingCost:number =		"hireCrewSwitchState && isSelectedHireTypeGold		? goldTrainingHirePrice.info.finalPrice : 0")
+
+		(var isNotEnoughSlots:bool =	"accountSlotsNum == 0")
+		(var buySlotSwitchState:bool =	"switchPurchaseShipBuySlots.value || isNotEnoughSlots")
+
+		(var slotCost:number =				"buySlotSwitchState ? slotPrice.info.finalPrice : 0")
+
+		(var isShipCostCredits:bool =	"shipBuyPrice.info.currency == SC.Common.CURRENCIES.CREDITS")
+		(var isShipCostGold:bool =		"shipBuyPrice.info.currency == SC.Common.CURRENCIES.GOLD")
+
+		(var totalShipCreditCost:number =	"isShipCostCredits	? shipBuyPrice.info.finalPrice : 0")
+		(var totalShipGoldCost:number =		"isShipCostGold	? shipBuyPrice.info.finalPrice : 0")
+
+		(var finalCreditCost:number =	"totalShipCreditCost + crewCreditTrainingCost")
+		(var finalGoldCost:number =		"totalShipGoldCost + crewGoldTrainingCost + slotCost")
+
+		(var totalGoldAfterPurchase:number =	"accountGold - finalGoldCost")
+		(var totalCreditsAfterPurchase:number =	"accountCredits - finalCreditCost")
+		(var isEnoughGold:bool =				"totalGoldAfterPurchase >= 0")
+		(var isEnoughCredits:bool =				"totalCreditsAfterPurchase >= 0")
+
+		(var remainingResAfterShipCost:number =	"isShipCostCredits	? accountCredits - totalShipCreditCost
+																	: accountGold - totalShipGoldCost")
+		(var isNotEnoughResourcesForShip:bool =	"remainingResAfterShipCost < 0")
+
+		(var remainingSlotCost:number = "isShipCostGold	? isNotEnoughResourcesForShip	? slotCost
+																						: remainingResAfterShipCost - slotCost < 0	? slotCost - remainingResAfterShipCost
+																																	: 0
+														: accountGold - slotCost < 0	? slotCost - accountGold
+																						: 0")
+
+		(var isNotEnoughGoldButSlotSwitchIsOn:bool = "!isEnoughGold && buySlotSwitchState")
+		(var isNotEnoughFunds:bool = "!isEnoughGold || !isEnoughCredits")
+
+		(var priceInfo:dict = "(hireCrewSwitchState && isSelectedHireTypeCredits) || !shipInfo.isPremium	? {	finalPrice:	finalCreditCost,
+																												currency:	SC.Common.CURRENCIES.CREDITS }
+																											: null")
+		(var optionalPriceInfo:dict = "shipInfo.isPremium || (hireCrewSwitchState && isSelectedHireTypeGold) || buySlotSwitchState	? {	finalPrice:	finalGoldCost,
+																																		currency:	SC.Common.CURRENCIES.GOLD }
+																																	: null")
+
+		(var currenciesPanelPrices:array =	"[	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: -finalGoldCost },
+												{ currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: -finalCreditCost }]")
+
+
+		(var contentWidth:number = 412)
+	)
+
+	(bindcall externalCall "crewFeature.state == 'locked' ? 'direct.action' : ''" "['option.set', [ 'ui.crew.purchase', SC.Common.CREW_TRAINING_TYPE.BaseTraining ]]"	watch=false on='addedToStage')
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = "contentWidth"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element ModalWindowShortHeader
+				_header =		'IDS_PURCHASE_SHIP_HEADER'
+				_hasDivider =	false
+			)
+
+			(block
+				(style (width = 100%))
+
+				(controller $Instance renderer='CurrenciesPanel'
+					(args
+						_priceInfo =	"currenciesPanelPrices"
+						_width =		"contentWidth"
+					)
+				)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginBottom = "SXS")
+				)
+
+				(element ModalWindowShipPreview
+					_shipId = "shipId"
+				)
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+
+			(style (width = 100%))
+
+			(block
+				(style
+					(align = "middle")
+					(width = 100%)
+					(paddingLeft = "M")
+					(paddingRight = "M")
+
+					(paddingTop = "isNotEnoughResourcesForShip ? S : M")
+					(paddingBottom = "isNotEnoughResourcesForShip ? S : M")
+				)
+
+				(controller $Animation
+					(bindcall play
+						duration = 0.15
+						from	 = "{ paddingTop: M, paddingBottom: M }"
+						to		 = "{ paddingTop: S, paddingBottom: S }"
+						easing	 = "Easing.quad_out"
+						action	 = "kill"
+						reverse	 = "!isNotEnoughResourcesForShip"
+						(bind trigger "isNotEnoughResourcesForShip")
+					)
+				)
+
+				(hblock
+					(style (width = 100%))
+
+					(tf
+						(class $TextDefault17NM)
+						(style
+							(width = 100%)
+							(alpha = "TC")
+						)
+
+						(text = 'IDS_MODAL_WINDOW_SHIP_PURCHASE_SHIP_PRICE')
+					)
+
+					(block
+						(style
+							(marginRight = -9px)
+							(marginTop = 1px)
+						)
+
+						(element PriceTag
+							_priceInfo =		"shipBuyPrice.info"
+							_showDiscountTag =	true
+						)
+					)
+				)
+
+				(block
+					(visible = "isNotEnoughResourcesForShip")
+
+					(style
+						(width = 100%)
+						(paddingRight = "-XXS")
+						(marginTop = "S")
+						(alpha = "isNotEnoughResourcesForShip ? 1 : 0")
+						(ubScaleY = "isNotEnoughResourcesForShip ? 1 : 0")
+					)
+
+					(controller $Animation
+						(bindcall play
+							duration = 0.15
+							from	 = "{ alpha: 0, ubScaleY: 0, visible: false }"
+							to		 = "{ alpha: 1, ubScaleY: 1, visible: true }"
+							easing	 = "Easing.quad_out"
+							action	 = "kill"
+							reverse	 = "!isNotEnoughResourcesForShip"
+							(bind trigger "isNotEnoughResourcesForShip")
+						)
+					)
+
+					(element PriceTagWithDeficitAndLabelRow
+						_priceInfo =	"{ finalPrice: abs(remainingResAfterShipCost), currency: shipBuyPrice.info.currency }"
+						_title =		'IDS_NOT_ENOUGH'
+					)
+				)
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+		
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(align = "middle")
+				(width = 100%)
+				(paddingLeft = "M")
+				(paddingRight = "M")
+
+				(paddingTop = "isNotEnoughGoldButSlotSwitchIsOn ? S : M")
+				(paddingBottom = "isNotEnoughGoldButSlotSwitchIsOn ? S : M")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from	 = "{ paddingTop: M, paddingBottom: M }"
+					to		 = "{ paddingTop: S, paddingBottom: S }"
+					easing	 = "Easing.quad_out"
+					action	 = "kill"
+					reverse	 = "!isNotEnoughGoldButSlotSwitchIsOn"
+					(bind trigger "isNotEnoughGoldButSlotSwitchIsOn")
+				)
+			)
+
+			(hblock
+				(style (width = 100%))
+
+				(block
+					(style (width = 100%))
+
+					(element SwitchWithRightLabel
+						_enabled =		"!isNotEnoughSlots"
+						_state =		"buySlotSwitchState"
+						_textClass =	'$TextDefault17NM'
+						_label =		'IDS_PURCHASE_SLOT'
+						_methods =		"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.switchPurchaseShipBuySlots', !buySlotSwitchState ] }]"
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_unifiedStatus =	"!isNotEnoughSlots	? SC.Ui_styles.UNIFIED_STATUS.DEFAULT : SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+							_text =				"!isNotEnoughSlots	? buySlotSwitchState	? 'IDS_BUY_SLOT_SWITCH_OFF_TOOLTIP'
+																							: 'IDS_BUY_SLOT_SWITCH_ON_TOOLTIP'
+																	: 'IDS_NO_FREE_SLOTS'"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+
+				(block
+					(bind visible "buySlotSwitchState")
+
+					(style
+						(marginTop = 1px)
+						(marginRight = "-XXS")
+					)
+
+					(controller $Instance renderer='PriceTag'
+						(bind enabled "buySlotSwitchState")
+						(args
+							_priceInfo =		"slotPrice.info"
+							_showDiscountTag =	true
+						)
+					)
+				)
+			)
+
+			(block
+				(visible = "isNotEnoughGoldButSlotSwitchIsOn")
+
+				(style
+					(width = 100%)
+					(marginTop = "S")
+					(paddingRight = "-XXS")
+					(paddingLeft = 44px)
+					(alpha = "isNotEnoughGoldButSlotSwitchIsOn ? 1 : 0")
+					(ubScaleY = "isNotEnoughGoldButSlotSwitchIsOn ? 1 : 0")
+				)
+
+				(controller $Animation
+					(bindcall play
+						duration = 0.15
+						from	 = "{ alpha: 0, ubScaleY: 0, visible: false }"
+						to		 = "{ alpha: 1, ubScaleY: 1, visible: true }"
+						easing	 = "Easing.quad_out"
+						action	 = "kill"
+						reverse	 = "!isNotEnoughGoldButSlotSwitchIsOn"
+						(bind trigger "isNotEnoughGoldButSlotSwitchIsOn")
+					)
+				)
+
+				(element PriceTagWithDeficitAndLabelRow
+					_priceInfo =	"{ finalPrice: remainingSlotCost, currency: SC.Common.CURRENCIES.GOLD }"
+					_title =		'IDS_NOT_ENOUGH'
+				)
+			)
+		)
+		
+
+		
+		(block
+			(bind visible "crewFeature.state != 'locked'")
+
+			(style (width = 100%))
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+				(style (width = 100%))
+
+				(element HorizontalDividerTwoPx)
+
+				(block
+					(style
+						(width = 100%)
+						(padding = "M")
+					)
+
+					(element SwitchWithRightLabel
+						_enabled =		"areAnySlotsInBarracks"
+						_state =		"hireCrewSwitchState"
+						_textClass =	'$TextDefault17NM'
+						_label =		'IDS_HIRE_CREW'
+						_methods =		"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.switchPurchaseShipBuyCommander', !hireCrewSwitchState ] }]"
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_unifiedStatus =	"!areAnySlotsInBarracks		? SC.Ui_styles.UNIFIED_STATUS.NEGATIVE : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+							_text =				"!areAnySlotsInBarracks		? 'IDS_UNABLE_HIRE_CREW_NO_PLACE_IN_BARRACKS_TOOLTIP' :
+												 hireCrewSwitchState		? 'IDS_HIRE_CREW_SWITCH_OFF_TOOLTIP'
+																			: 'IDS_HIRE_CREW_SWITCH_ON_TOOLTIP'"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+
+				(element HorizontalDividerTwoPx)
+			)
+
+			
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+				(style
+					(width = 100%)
+					(marginTop = "-XXS")
+				)
+
+				(controller $Repeat renderer='CrewHireTypeSmallItem'
+					(bind count "hireTypes.length")
+					(args
+						_selectedHireType =						"selectedHireType"
+						_hireTypeIndex =						"2 - $index"
+						_crewHireType =							"hireTypes[2 - $index]"
+						_availableGoldAfterShipPurchase =		"accountGold - totalShipGoldCost - slotCost"
+						_availableCreditsAfterShipPurchase =	"accountCredits - totalShipCreditCost"
+						_isVisible =							"hireCrewSwitchState"
+					)
+				)
+			)
+			
+		)
+		
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "{ 720: M, 800: MS }")
+			)
+
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_priceInfo =			"priceInfo"
+				_optionalPriceInfo =	"optionalPriceInfo"
+				_questionString =		'IDS_QUESTION_PURCHASE_SHIP_FOR'
+				_isPriceForceShown =	true
+				_isWarningText =		"isNotEnoughFunds"
+			)
+		)
+		
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "{ 720: M, 800: MS }")
+			)
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_customOkBtnName =	'btn_ok'
+				_isDeficit =		"isNotEnoughFunds"
+				_okMethods =		"[{ type: 'inputMapping.onRequest', name: 'buyShip', args: { shipId: shipInfo.id, hireCrew: hireCrewSwitchState, trainingType: selectedHireType, buySlot: buySlotSwitchState } }]"
+			)
+		)
+		
+	)
+)
+
+(def element CrewHireTypeSmallItem (_selectedHireType:number, _hireTypeIndex:number, _crewHireType:dict, _availableGoldAfterShipPurchase:number, _availableCreditsAfterShipPurchase:number, _isVisible:bool)
+	(scope
+		(var availableBalanceAfterShipPurchase:number = "_crewHireType.priceInfo.currency == SC.Common.CURRENCIES.GOLD ? _availableGoldAfterShipPurchase : _availableCreditsAfterShipPurchase")
+		(var isAvailable:bool =	"_crewHireType.priceInfo.finalPrice == 0 ?: availableBalanceAfterShipPurchase - _crewHireType.priceInfo.finalPrice >= 0")
+		(var isSelected:bool =	"_hireTypeIndex == _selectedHireType")
+
+		(var title:str =				"'IDS_CREW_HIRE_TYPE_HEADER_' + _hireTypeIndex")
+		(var disableReasonText:str =	"'IDS_NOT_ENOUGH_' + _crewHireType.priceInfo.currency")
+	)
+
+	(bindcall externalCall "isSelected ? 'direct.action' : ''"					"['option.set', [ 'ui.crew.purchase', SC.Common.CREW_TRAINING_TYPE.BaseTraining ]]"	watch=false (bind enabled "!isAvailable"))
+	(bindcall externalCall "isSelected && !isAvailable ? 'direct.action' : ''"	"['option.set', [ 'ui.crew.purchase', SC.Common.CREW_TRAINING_TYPE.BaseTraining ]]"	watch=false on='addedToStage')
+
+	(visible = "_isVisible")
+
+	(style
+		(width = 100%)
+		(alpha = "_isVisible ? 1 : 0")
+		(scaleY = "_isVisible ? 1 : 0")
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.15
+			delay	 = "0.05 * $index"
+			watch	 = false
+			from	 = "{ alpha: 0, visible: false, scaleY: 0 }"
+			to		 = "{ alpha: 1, visible: true, scaleY: 1 }"
+			easing	 = "Easing.quad_out"
+			action	 = "kill"
+			reverse	 = "!_isVisible"
+			(bind trigger "_isVisible")
+		)
+	)
+
+	(element SmallMenuItemWithPrice
+		_title =				"title"
+		_isSelected =			"isSelected"
+		_isAvailable =			"isAvailable"
+		_disableReasonText =	"disableReasonText"
+		_priceInfo =			"_crewHireType.priceInfo.finalPrice > 0 ? _crewHireType.priceInfo : {}"
+		_newContentCounter =	"_crewHireType.skillPoints"
+		_methods =				"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.crew.purchase', _hireTypeIndex ] }]"
+	)
+)

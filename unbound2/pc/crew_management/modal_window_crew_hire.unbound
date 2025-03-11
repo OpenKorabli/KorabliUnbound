@@ -1,0 +1,303 @@
+(def constant CREW_TRAINING_COST {
+	CREDITS:	'CREW_CR_TRAINING_Cost',
+	GOLD:		'CREW_GOLD_TRAINING_Cost'
+})
+
+(def element ModalWindowHireCrew ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(struct shipInfo =	PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+
+		(var ownShipTimeRent:number =	"shipInfo.ownShipComponent.timeRent"		(event "shipInfo.ownShipComponent.evUpdateDockState"))
+
+		(var crewData:dhComponent =		"getSingleComponent(CC.crewData)")
+		(var freeBarracksSlots:number =	"crewData.freeBarracksSlots ?: 0"			(event "crewData.evFreeBarracksSlotsChanged"))
+
+		(var isRentalOwnShip:bool =				"ownShipTimeRent > 0")
+		(var areAnySlotsInBarracks:bool =		"freeBarracksSlots > 0")
+		(var isNewCrewHiringImpossible:bool =	"!areAnySlotsInBarracks && isRentalOwnShip")
+
+		(struct moneyTrainingHirePrice =	PULL_PRICE(_entityId = "CREW_TRAINING_COST.CREDITS"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct goldTrainingHirePrice =		PULL_PRICE(_entityId = "CREW_TRAINING_COST.GOLD"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var crewToHireEntity:dhEntity =			"getSingleEntity(CC.crewToHirePersonality)")
+		(var crewToHirePersonality:dhComponent =	"crewToHireEntity.crewToHirePersonality")
+		(var goldTrainingLevel:number =				"crewToHirePersonality.goldTrainingLevel"		(event "crewToHirePersonality.evChanged"))
+		(var moneyTrainingLevel:number =			"crewToHirePersonality.moneyTrainingLevel"		(event "crewToHirePersonality.evChanged"))
+		(var baseTrainingLevel:number =				"crewToHirePersonality.baseTrainingLevel"		(event "crewToHirePersonality.evChanged"))
+
+		(var hireTypesInfo:dict = "{	SC.Common.CREW_TRAINING_TYPE.BaseTraining:	{ hireSkillPoints: baseTrainingLevel - 1,	hireLevel: baseTrainingLevel,	priceInfo: { finalPrice: 0, currency: SC.Common.CURRENCIES.CREDITS } },
+										SC.Common.CREW_TRAINING_TYPE.MoneyTraining:	{ hireSkillPoints: moneyTrainingLevel - 1,	hireLevel: moneyTrainingLevel,	priceInfo: moneyTrainingHirePrice.info },
+										SC.Common.CREW_TRAINING_TYPE.GoldTraining:	{ hireSkillPoints: goldTrainingLevel - 1,	hireLevel: goldTrainingLevel,	priceInfo: goldTrainingHirePrice.info } }")
+
+		(struct selectedHireTypePref = GET_PREF_NUMBER(_option="'ui.crew.hire'"))
+		(var selectedHireType:number = "selectedHireTypePref.value")
+
+		(var isSelectedHireTypeGold:bool =	"selectedHireType == SC.Common.CREW_TRAINING_TYPE.GoldTraining")
+
+		(var priceInfo:dict =				"hireTypesInfo[selectedHireType].priceInfo")
+		(var currenciesPanelPrices:array =	"[	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: isSelectedHireTypeGold ? -priceInfo.finalPrice : 0 },
+												{ currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: !isSelectedHireTypeGold ? -priceInfo.finalPrice : 0 }]")
+
+		(var windowWidth:number = 702)
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'openExchange']"	watch=false on='addedToStage')
+	(bindcall externalCall "'inputMapping.onAction'"	"['setCrewToHireLevel', { level: hireTypesInfo[selectedHireType].hireLevel }]"	on='addedToStage')
+	(bindcall externalCall "isNewCrewHiringImpossible ? 'inputMapping.onRequest' : ''"	"['close', {}]")
+
+	(name = 'ModalWindowHireCrew')
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = "windowWidth"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "M")
+			)
+
+			(element ModalWindowShortHeader
+				_header =		'IDS_CREW_TRAINING'
+				_hasDivider =	false
+			)
+
+			(element CurrenciesPanel
+				_priceInfo =	"currenciesPanelPrices"
+				_width =		"windowWidth"
+			)
+		)
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style (marginBottom = "L"))
+
+			(block
+				(style
+					(width = 220px)
+					(marginRight = "L")
+				)
+
+				(block
+					(style
+						(width = 100%)
+						(marginBottom = "MS")
+					)
+
+					(element HireCrewStereotype
+						_hireSkillPoints = "hireTypesInfo[selectedHireType].hireSkillPoints"
+					)
+				)
+
+				(block
+					(style
+						(width = 100%)
+						(marginBottom = "S")
+					)
+
+					(element DefaultButton
+						_type =		"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_width =	100%
+						_label =	'IDS_CREW_HIRE_CHANGE_PORTRAIT_BUTTON_LABEL'
+						_methods =	"[{ type: 'inputMapping.onAction', name: 'changeCrewPortrait', args: {} }]"
+					)
+				)
+
+				(element DefaultButton
+					_type =		"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_width =	100%
+					_label =	'IDS_CREW_HIRE_CHANGE_NAME_BUTTON_LABEL'
+					_methods =	"[{ type: 'inputMapping.onAction', name: 'changeCrewName', args: {} }]"
+				)
+			)
+
+			(block
+				(style (width = 450px))
+
+				(element HorizontalDividerTwoPx)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Repeat renderer='CrewHireTypeItem'
+						(bind count "SC.Common.CREW_TRAINING_TYPE.ALL.length")
+						(args
+							_items =				"SC.Common.CREW_TRAINING_TYPE.ALL"
+							_hireType =				"SC.Common.CREW_TRAINING_TYPE.ALL[2 - $index]"
+							_hireTypeInfo =			"hireTypesInfo[2 - $index]"
+							_selectedHireType =		"selectedHireType"
+						)
+					)
+				)
+
+				(element HorizontalDividerTwoPx)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(alpha = 1)
+					(visualOffsetY = 0px)
+				)
+
+				(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+					_trigger =		"selectedHireType"
+					_delay =		"0.1"
+					_duration =		"0.15"
+				)
+
+				(element ModalWindowSystemPurchaseItemPriceAndInfo
+					_priceInfo =		"priceInfo"
+					_questionString =	"hireTypesInfo[selectedHireType].priceInfo.finalPrice ? 'IDS_HIRE_FOR' : 'IDS_HIRE_FOR_FREE'"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_okMethods =		"[{ type: 'inputMapping.onAction', name: CREW_ACTIONS.HIRE, args: { shipId: playerShipId, trainingType: selectedHireType } }]"
+				_customOkBtnName =	'btn_hireCrew'
+			)
+		)
+	)
+)
+
+(def element CrewHireTypeItem (_items:array, _hireType:number, _hireTypeInfo:dict, _selectedHireType:number)
+	(scope
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+
+		(var itemResourceAmount:number =	"accountResourceComponent[_hireTypeInfo.priceInfo.currency]" (event "accountResourceComponent.evChangedGold") (event "accountResourceComponent.evChangedCredit"))
+
+		(var isAvailable:bool =	"_hireTypeInfo.priceInfo.finalPrice <= itemResourceAmount")
+		(var isSelected:bool =	"_hireType == _selectedHireType")
+
+		(var title:str =	"'IDS_CREW_HIRE_TYPE_HEADER_' + _hireType")
+		(var subTitle:str =	"_hireTypeInfo.hireSkillPoints > 0	? subst('IDS_CREW_HIRE_TYPE_DESCRIPTION_CLIENT_PAID_PL', [], { _amount: _hireTypeInfo.hireSkillPoints }, _hireTypeInfo.hireSkillPoints)
+																: ''")
+
+		(var disableReasonText:str = "toUpper('IDS_NOT_ENOUGH_' + _hireTypeInfo.priceInfo.currency)")
+	)
+
+	(bindcall externalCall "isSelected ? 'direct.action' : ''"					"['option.set', [ 'ui.crew.hire', SC.Common.CREW_TRAINING_TYPE.BaseTraining ]]"	watch=false (bind enabled "!isAvailable"))
+	(bindcall externalCall "isSelected && !isAvailable ? 'direct.action' : ''"	"['option.set', [ 'ui.crew.hire', SC.Common.CREW_TRAINING_TYPE.BaseTraining ]]"	watch=false on='addedToStage')
+
+	(bind name "'crew_hire_type_' + _hireType")
+	(style (width = 100%))
+
+	(element BigMenuItemWithPrice
+		_title =				"title"
+		_subTitle =				"subTitle"
+		_isSelected =			"isSelected"
+		_isAvailable =			"isAvailable"
+		_disableReasonText =	"disableReasonText"
+		_newContentCounter =	"_hireTypeInfo.hireSkillPoints"
+		_priceInfo =			"_hireTypeInfo.priceInfo.finalPrice > 0 ? _hireTypeInfo.priceInfo : {}"
+		_methods =				"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.crew.hire', _hireType ] }]"
+	)
+)
+
+(def element HireCrewStereotype (_hireSkillPoints:number)
+	(scope
+		(var crewToHireEntity:dhEntity =			"getSingleEntity(CC.crewToHirePersonality)")
+		(var crewToHirePersonality:dhComponent =	"crewToHireEntity.crewToHirePersonality")
+
+		(var skillPoints:number =		"crewToHirePersonality.level"			(event "crewToHirePersonality.evChanged"))
+		(var crewRank:str =				"crewToHirePersonality.rankIDS"			(event "crewToHirePersonality.evChanged"))
+		(var fullName:str =				"crewToHirePersonality.fullName"		(event "crewToHirePersonality.evChanged"))
+		(var baseCommanderUrl:str =		"crewToHirePersonality.baseUrl"			(event "crewToHirePersonality.evChanged"))
+		(var overlayCommanderUrl:str =	"crewToHirePersonality.overlayUrl"		(event "crewToHirePersonality.evChanged"))
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style (marginBottom = "SXS"))
+
+		(element CrewPortraitWithBGR
+			_classificationId =	"SC.Common.COMMANDER_CLASSIFICATIONS.COMMON"
+			_baseUrl =			"baseCommanderUrl"
+			_overlayUrl =		"overlayCommanderUrl"
+			_portraitWidth =	160px
+			_portraitHeight =	147px
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(bottom = "XS")
+				(right = "XS")
+			)
+
+			(controller $Instance renderer='CrewSkillPointsView'
+				(bind enabled "_hireSkillPoints > 0")
+				(args
+					_allSkillPoints =	"_hireSkillPoints"
+					_freeSkillPoints =	"_hireSkillPoints"
+					_isBig =			true
+					_isMaxLevelCrew =	false
+				)
+			)
+		)
+	)
+
+	(element HireCrewName
+		_fullName =	"fullName"
+		_crewRank =	"toUpper(crewRank)"
+	)
+)
+
+(def element HireCrewName (_fullName:str, _crewRank:str)
+	(style (width = 100%))
+
+	(tf
+		(class $TextDefaultBold19NM)
+		(style
+			(width = 100%)
+			(leading = -4)
+			(marginBottom = 6px)
+			(alpha = "TA")
+		)
+
+		(bind text "_fullName")
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TC"))
+
+		(bind text "tr(_crewRank)")
+	)
+)

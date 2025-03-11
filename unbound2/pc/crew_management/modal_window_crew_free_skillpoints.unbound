@@ -1,0 +1,185 @@
+(def element ModalWindowFreeSkillPoints (crewId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evSetPrefByAvailabilityChange)
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var accountGold:number =		"accountResourceComponent.gold		?: 0"	(event "accountResourceComponent.evChangedGold"))
+		(var eliteXP:number =			"accountResourceComponent.eliteXP	?: 0"	(event "accountResourceComponent.evChangedEliteXP"))
+		(var accountFreeXP:number =		"accountResourceComponent.freeXP	?: 0"	(event "accountResourceComponent.evChangedFreeXP"))
+
+		(struct crew =	PULL_CREW(_crewId = "crewId"))
+
+		(macro PULL_SHIP_ID)
+		(struct shipInfo =	PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+		(var selectedShipClass:str = "shipInfo.shipComponent.subtype")
+
+		(var skillTreeEntity:dhEntity =	"getPrimaryEntity(CC.skillTree, toString(crewId) + '_' + selectedShipClass)")
+
+		(var canCrewResetSkillPointsForFree:bool = "crew.component.canResetSkillsForFree")
+
+		(var usedSkillPoints:number =	"canCrewResetSkillPointsForFree ? 0 : skillTreeEntity.skillTree.usedSkillPoints")
+		(var resetGoldPricePK:str =		"'POINT_RESET_GOLD_' + toString(usedSkillPoints)")
+		(var resetEliteXPPricePK:str =	"'POINT_RESET_ELXP_' + toString(usedSkillPoints)")
+
+		(struct resetSkillsForGold =		PULL_PRICE(_entityId = "resetGoldPricePK"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct resetSkillsForEliteXP =		PULL_PRICE(_entityId = "resetEliteXPPricePK"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+
+		(var eliteXPPrice:number =	"eliteXP >= resetSkillsForEliteXP.info.finalPrice ? resetSkillsForEliteXP.info.finalPrice : eliteXP")
+		(var freeXPPrice:number =	"(accountFreeXP >= resetSkillsForEliteXP.info.finalPrice - eliteXPPrice) ? resetSkillsForEliteXP.info.finalPrice - eliteXPPrice : 0")
+		(var isEnoughGold:bool =	"accountGold >= resetSkillsForGold.info.finalPrice")
+		(var isEnoughEXP:bool =		"(eliteXPPrice + freeXPPrice) >= resetSkillsForEliteXP.info.finalPrice")
+
+		(var isAvailableResetFreeSkillPoints:bool = "isEnoughGold || isEnoughEXP")
+
+		(struct selectedFreeSkillPointsTypePref = GET_PREF_NUMBER(_option="'ui.crew.skillResetType'"))
+		(var selectedFreeSkillPointsType:number = "selectedFreeSkillPointsTypePref.value")
+
+		(var isSelectedFreeSkillPointsEliteXP:bool =	"selectedFreeSkillPointsType == SC.Common.CREW_RESET_SKILL_TYPE.XPReset")
+		(var isSelectedFreeSkillPointsGold:bool =		"selectedFreeSkillPointsType == SC.Common.CREW_RESET_SKILL_TYPE.GoldReset")
+
+		(var priceInfo:dict =			"isSelectedFreeSkillPointsEliteXP	? { finalPrice: eliteXPPrice, currency: SC.Common.CURRENCIES.ELITE_XP }
+																			: resetSkillsForGold.info")
+		(var optionalPriceInfo:dict =	"isSelectedFreeSkillPointsEliteXP && freeXPPrice != 0	? {	finalPrice:	accountFreeXP >= freeXPPrice ? freeXPPrice : 0,
+																									currency:	SC.Common.CURRENCIES.FREE_XP }
+																								: {}")
+
+		(var hideFreeXP:bool = "eliteXPPrice >= resetSkillsForEliteXP.info.finalPrice")
+
+		(var currenciesPanelPrices:array = "hideFreeXP	? [	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: !isSelectedFreeSkillPointsEliteXP	? -priceInfo.finalPrice			: 0 },
+															{ currency: SC.Common.CURRENCIES.ELITE_XP,	finalPrice: isSelectedFreeSkillPointsEliteXP	? -priceInfo.finalPrice			: 0 } ]
+														: [	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: !isSelectedFreeSkillPointsEliteXP	? -priceInfo.finalPrice			: 0 },
+															{ currency: SC.Common.CURRENCIES.ELITE_XP,	finalPrice: isSelectedFreeSkillPointsEliteXP	? -priceInfo.finalPrice			: 0 },
+															{ currency: SC.Common.CURRENCIES.FREE_XP,	finalPrice: -optionalPriceInfo.finalPrice		? -optionalPriceInfo.finalPrice	: 0 } ]")
+
+		(var crewResetSkillTypePrefByAutochange:number = "isSelectedFreeSkillPointsGold		? isEnoughGold	? SC.Common.CREW_RESET_SKILL_TYPE.GoldReset
+																											: SC.Common.CREW_RESET_SKILL_TYPE.XPReset
+																							: isEnoughEXP	? SC.Common.CREW_RESET_SKILL_TYPE.XPReset
+																											: SC.Common.CREW_RESET_SKILL_TYPE.GoldReset"	init=false watch=false		(event "evSetPrefByAvailabilityChange"))
+
+		(var resetSkillsArgs:dict = "{ crewID: crewId, shipType: selectedShipClass, resetType: selectedFreeSkillPointsType }")
+
+		(var windowWidth:number = 460)
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'openYesNoConfirmation']"	watch=false on='addedToStage')
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.crew.skillResetType', crewResetSkillTypePrefByAutochange ]]")
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = "windowWidth"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "XS")
+			)
+
+			(element ModalWindowShortHeader
+				_header =		'IDS_RESET_SKILLPOINTS_HEADER'
+				_hasDivider =	false
+			)
+
+			(element CurrenciesPanel
+				_priceInfo =	"currenciesPanelPrices"
+				_width =		"windowWidth"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(controller $Repeat renderer='CrewFreeSkillPointsItem'
+				(bind count "SC.Common.CREW_RESET_SKILL_TYPE.RESET_SKILL_OPTIONS.length")
+				(args
+					_selectedFreeSkillPointsType =	"selectedFreeSkillPointsType"
+					_priceInfo =					"$index == SC.Common.CREW_RESET_SKILL_TYPE.GoldReset ? resetSkillsForGold.info : resetSkillsForEliteXP.info"
+					_isDeficit =					"$index == SC.Common.CREW_RESET_SKILL_TYPE.GoldReset ? !isEnoughGold : !isEnoughEXP"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(alpha = 1)
+					(visualOffsetY = 0px)
+				)
+
+				(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+					_trigger =		"selectedFreeSkillPointsType"
+					_delay =		"0.1"
+					_duration =		"0.15"
+				)
+
+				(element ModalWindowSystemPurchaseItemPriceAndInfo
+					_priceInfo =			"priceInfo"
+					_optionalPriceInfo =	"optionalPriceInfo"
+					_questionString =		"'IDS_QUESTION_RESET_SKILLPOINTS_FOR_' + toUpper(selectedShipClass)"
+					_isWarningText =		"!isAvailableResetFreeSkillPoints"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+			(style (align = "center") (width = 100%))
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_isDeficit =		"!isAvailableResetFreeSkillPoints"
+				_okMethods =		"[{ type: 'inputMapping.onAction',	name: CREW_ACTIONS.FREE_SKILL_POINTS,	args: resetSkillsArgs }]"
+				_customOkBtnName =	'btn_ok'
+			)
+		)
+	)
+)
+
+(def element CrewFreeSkillPointsItem (_selectedFreeSkillPointsType:number, _priceInfo:dict={}, _isDeficit:bool=false)
+	(scope
+		(event evSetPrefByAvailabilityChange)
+
+		(var isOptionGold:bool =	"$index == SC.Common.CREW_RESET_SKILL_TYPE.GoldReset")
+		(var isOptionEliteXp:bool =	"$index == SC.Common.CREW_RESET_SKILL_TYPE.XPReset")
+
+		(var title:str =		"'IDS_RESET_SKILLPOINTS_TYPE_' + $index")
+		(var isAvailable:bool =	"!_isDeficit")
+		(var isSelected:bool =	"$index == _selectedFreeSkillPointsType")
+
+		(var disableReasonText:str = "_isDeficit	? $index == SC.Common.CREW_RESET_SKILL_TYPE.GoldReset	? 'IDS_NOT_ENOUGH_GOLD'
+																											: 'IDS_RESET_SKILLPOINTS_DISABLED_NOT_ENOUGH_ELXP'
+													: ''")
+	)
+
+	(dispatch evSetPrefByAvailabilityChange		args={}		dir="EventDirection.UP"		(bind trigger "isAvailable"))
+	(dispatch "!isAvailable && isSelected ? 'evSetPrefByAvailabilityChange' : ''"	args={}		dir="EventDirection.UP"		on='addedToStage')
+
+	(style (width = 100%))
+
+	(element SmallMenuItemWithPrice
+		_title =				"title"
+		_isSelected =			"isSelected"
+		_isAvailable =			"isAvailable"
+		_disableReasonText =	"disableReasonText"
+		_priceInfo =			"_priceInfo"
+		_methods =				"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.crew.skillResetType', $index ] }]"
+	)
+)

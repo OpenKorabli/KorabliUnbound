@@ -6,9 +6,13 @@
 		(var selfVehicleWatcher:gfx = "$datahub.getFirstWatcher(CC.selfVehicle)")
 		(var selfVehicleEntity:gfx = "selfVehicleWatcher.entity" (event "selfVehicleWatcher.event"))
 		(var controller:gfx = "selfVehicleEntity.weaponController" (event "selfVehicleEntity.evAdded") (event "selfVehicleEntity.evRemoved"))
-		(var slot:gfx = "$datahub.getPrimaryEntity(CC.weaponSlot, _id)")
+		(var slot:dhEntity = "getPrimaryEntity(CC.weaponSlot, _id)")
+		(var isPingerMode:bool = "slot.weaponSlot.isPingerMode && slot.weaponSlot.id == 'torpedo_subdefault_improve'" (event "slot.weaponSlot.evPingerModeChanged")) 
+		(var pingerEntity:dhEntity = "getPrimaryEntity(CC.gun, SC.Ships.SHIP_WEAPON_TYPES.PINGER)") 
+		(var pingerState:number = "pingerEntity.gun.state ?: 0" (event "pingerEntity.gun.evStateChanged")) 
+		(var isPingerCrit:bool = "isIn(pingerState, SC.Weapons.GUN_STATE.CRITICAL_STATES)") 
 
-		(var slotOptions:gfx = "slot ? slot.slotOptions : null" (event "slot.evAdded") (event "slot.evRemoved"))
+		(var slotOptions:dhComponent = "slot ? slot.slotOptions : null" (event "slot.evAdded") (event "slot.evRemoved"))
 		(var state:number = "slot ? slot.weaponSlot.state : 0" (event "slot.weaponSlot.evStateChanged"))
 
 		(var visualSlotDataEntity:gfx = "$datahub.getPrimaryEntity(CC.visualSlotData, tr(slot.weaponSlot.id) + '_' + DEFAULT_AVATAR_ID)")
@@ -26,10 +30,16 @@
 		(var isActiveDrum:bool = "isCanDrum && isDrumFireModeActive")
 
 		
-		(var status:str = "isIn(slot.weaponSlot.state, [SC.Weapons.GUN_STATE.SWITCHING_CRITICAL, SC.Weapons.GUN_STATE.CRITICAL])	? '_disabled'
-																																	: ''" (event "slot.weaponSlot.evStateChanged"))
+		(var status:str = "(isPingerMode && isPingerCrit) || isIn(state, SC.Weapons.GUN_STATE.CRITICAL_STATES) ? '_disabled'
+																							 : ''" (event "slot.weaponSlot.evStateChanged"))
+		
+		
+		(var critModulePrefix:str = "isPingerMode	? isPingerCrit && isIn(state, SC.Weapons.GUN_STATE.CRITICAL_STATES)	? '_all' :
+		 																								isPingerCrit	? '_ping'
+		 																												: ''
+		 											: ''" (event "slot.weaponSlot.evPingerModeChanged"))
 
-		(var icon:str = "'url:../consumables/ammo_' + _id + status + '.png'")
+		(var icon:str = "'url:../consumables/ammo_' + slot.weaponSlot.id + critModulePrefix + status + '.png'")
 
 		
 		(var command:number = "slot.weaponSlot.command")
@@ -44,7 +54,7 @@
 		(var isWeaponActive:bool = "controller ? (controller.selectedWeapon == _type) : false" (event "controller.evSelectedWeaponChanged"))
 		(var isActive:bool = "slot.weaponSlot.active" (event "slot.weaponSlot.evActiveChanged"))
 		(var isSelected:bool = "slot.weaponSlot.selected" (event "slot.weaponSlot.evSelectedChanged"))
-		(var isAlive:bool = "state < SC.Weapons.GUN_STATE.CRITICAL")
+		(var isAlive:bool = "isPingerMode ? pingerState < SC.Weapons.GUN_STATE.CRITICAL : state < SC.Weapons.GUN_STATE.CRITICAL")
 		(var isWorking:bool = "state == SC.Weapons.GUN_STATE.WORK")
 		(var isReloading:bool = "state == SC.Weapons.GUN_STATE.RELOAD")
 		(var isCharging:bool = "state == SC.Weapons.GUN_STATE.CHARGE")
@@ -72,8 +82,13 @@
 		(var isHotKeyToggled:bool = "isActive && isWeaponActive")
 
 		
-		(var progress:number = "slot.progress.max != 0 ? 1 - slot.progress.value / slot.progress.max : 0" (event "slot.progress.evChanged"))
-		(var remain:number = "isWorking ? slot.progress.value : slot.progress.max - slot.progress.value" (event "slot.progress.evChanged"))
+		
+		(var progressComponent:dhComponent = "isPingerMode ? pingerEntity.progress : slot.progress")
+
+		(var progress:number = "isPingerMode && !isAlive 	? 0 :
+		 						progressComponent.max != 0  ? 1 - progressComponent.value / progressComponent.max
+		 													: 0" (event "progressComponent.evChanged"))
+		(var remain:number = "isWorking ? progressComponent.value : progressComponent.max - progressComponent.value" (event "progressComponent.evChanged"))
 
 		(var showProgressBar:bool = "(isActive || isAirplanesVisType) && progress > 0")
 
@@ -90,7 +105,6 @@
 
 		(macro STAGE_SIZE)
 	)
-
 	(style
 		(flow = "horizontal")
 		(bind marginRight "slot.weaponSlot.tail	&& stageHeight >= 900	? PANEL_GROUP_MARGIN
@@ -177,8 +191,8 @@
 				(bind _atCharge "isCharging || isAnimated")
 				(bind _inverted "false")
 				(bind _showTime "!(isAnimated)")
-				(bind _percentPassed "progress")
-				(bind _remainTime "remain")
+				(bind _percentPassed "progress ?: 0")
+				(bind _remainTime "remain ?: 0")
 			)
 
 			(class $FullsizeAbsolute)

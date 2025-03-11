@@ -9,6 +9,11 @@
 
 (def constant DEPTH_RULER_LINE_SIZE 3)
 
+(def constant DEPTH_METR_WIDTH 13)
+(def constant DEPTH_METR_HEIGHT 181)
+(def constant COUNT_MAX_MIN_DEPTH_LINE 2)
+(def constant MULTIPLY_DEPHT_FOR_CONVERT_TO_HEIGHT 3)
+
 (def constant SPEED_CONTROL_VALUES "{
 	'-1':'scale_value_full',
 	'0':'scale_value_stop',
@@ -39,6 +44,7 @@
 (def layout SpeedControl ()
 	(scope
 		(macro IS_ALIVE)
+		(macro STAGE_SIZE)
 
 		(var ownCarrierEntity:gfx = "$datahub.getSingleEntity(CC.aircarrier)")
 		(var aircarrier:gfx = "ownCarrierEntity.aircarrier")
@@ -48,8 +54,20 @@
 		(var isEnabled:bool = "isAlive && (aircarrier == null || activeSquadron == DEFAULT_SQUADRON_OWNER_ID && squadronCameraMode == SquadronCameraModes.DEFAULT)")
 	)
 
-	(element SpeedControlContent
-		(bind alpha "isEnabled")
+	(style
+		(bind width "stageWidth")
+		(bind height "stageHeight")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(bottom = 51px)
+			(left = 245px)
+		)
+		(controller $Instance renderer='SpeedControlContent'
+			(bind enabled "isEnabled")
+		)
 	)
 )
 
@@ -71,7 +89,6 @@
 		(var speedWarning:number = "cruiseEntity.cruiseLimit ? cruiseEntity.cruiseLimit.limitValue : 0")
 		(var clampedSpeedWarning:number = "speedWarning > maxSpeed ? maxSpeed : speedWarning")
 		(var limitWarningEnabled:bool = "cruiseEntity.cruiseLimit ? cruiseEntity.cruiseLimit.limitWarningEnabled : false" (event "cruiseEntity.cruiseLimit.evLimitWarningEnabledChanged"))
-
 
 		(var fwdItemsNum:number = "cruiseEntity.cruise ? cruiseEntity.cruise.statesPositiveNum : 1")
 		(var bwdItemsNum:number = "cruiseEntity.cruise ? cruiseEntity.cruise.statesNegativeNum : 1")
@@ -138,26 +155,32 @@
 		(var relativeSpeedState:number = "0")
 
 		(var cruiseEntity:gfx = "$datahub.getPrimaryEntity(CC.cruise, SC.Battle.CRUISE_CONTROL_TYPE.SPEED)")
-		(var state:number = "cruiseEntity.cruise.state" (event "cruiseEntity.cruise.evStateChanged"))
+		(var cruiseComponent:gfx = "cruiseEntity.cruise" (event "cruiseEntity.evAdded"))
+
+		(var isDebuffDepth:bool = "cruiseComponent.isDebuffDepth" (event "cruiseComponent.evDebuffDepthChanged"))
+		(var isSoftCriticalEnabled:bool = "cruiseComponent.softCriticalEnabled" (event "cruiseComponent.evJammedChanged"))
+		(var isJammed:bool = "cruiseComponent.jammed" (event "cruiseComponent.evJammedChanged"))
+
+		(var state:number = "cruiseComponent.state" (event "cruiseComponent.evStateChanged"))
 
 		(var battleInfoComponent:gfx = "$datahub.getSingleComponent(CC.battleInfo)")
 
-		(var isSet:bool = "state == cruiseEntity.cruise.states[$index]")
-		(var isHighlighted:bool = "abs(relativeSpeedState - cruiseEntity.cruise.states[$index]) < 0.5 || isSet")
+		(var isSet:bool = "state == cruiseComponent.states[$index]")
+		(var isHighlighted:bool = "abs(relativeSpeedState - cruiseComponent.states[$index]) < 0.5 || isSet")
 
-		(var softCriticalEnabled:bool = "cruiseEntity.cruise.softCriticalEnabled" (event "cruiseEntity.cruise.evJammedChanged"))
-		(var isJammed:bool = "cruiseEntity.cruise.jammed" (event "cruiseEntity.cruise.evJammedChanged"))
+		(var isSoftCriticalEnabledState:bool = "isSoftCriticalEnabled || isDebuffDepth" (event "cruiseComponent.evJammedChanged"))
+		(var isJammedState:bool = "isJammed || isDebuffDepth" )
 
-		(var hotkeyState:number = "isJammed		? softCriticalEnabled	? HotkeyState.WARNING
-																		: HotkeyState.CRITICAL
-												: state == 0	? HotkeyState.WARNING
-												: HotkeyState.DEFAULT")
+		(var hotkeyState:number = "isJammedState	? isSoftCriticalEnabledState	? HotkeyState.WARNING
+																					: HotkeyState.CRITICAL
+													: state == 0					? HotkeyState.WARNING
+																					: HotkeyState.DEFAULT")
 
-		(var stateFolder:str = "    cruiseEntity.cruise.states[$index] == 0 && isSet    ? 'default/' :
-									!(isSet)                                            ? isJammed  ? softCriticalEnabled   ? 'yellow/'
-																															: 'red/'
-																									: 'default/'
-																						: 'black/'")
+		(var stateFolder:str = "    cruiseComponent.states[$index] == 0 && isSet    ? 'default/'
+																					: !isSet	? isJammedState	? isSoftCriticalEnabledState	? 'yellow/'
+																																				: 'red/'
+																												: 'default/'
+																								: 'black/'")
 	)
 
 	(style
@@ -188,7 +211,7 @@
 	(block
 		(alpha = "isHighlighted ? 1 : 0.5")
 		(style
-			(bind backgroundImage "'url:../battle_hud/cruise_control/scale_values/' + stateFolder + SPEED_CONTROL_VALUES[cruiseEntity.cruise.states[$index]] + '.png'")
+			(bind backgroundImage "'url:../battle_hud/cruise_control/scale_values/' + stateFolder + SPEED_CONTROL_VALUES[cruiseComponent.states[$index]] + '.png'")
 		)
 		(controller $Animation
 			(bindcall play  duration = 0.3
@@ -499,7 +522,7 @@
 	(marginTextBottom = -5px)
 )
 
-(def element DepthRulerNumber (_num:number) layout=true
+(def element DepthRulerNumber (_num:number)
 	(scope
 		(var cruiseEntity:gfx = "$datahub.getPrimaryEntity(CC.cruise, SC.Battle.CRUISE_CONTROL_TYPE.DEPTH)")
 		(var cruise:gfx = "cruiseEntity.cruise")
@@ -628,94 +651,23 @@
 	)
 )
 
-(def element DepthRulerLine (_keyValues:array) layout=true
+(def element RangeReachedEffect (_range:array)
 	(scope
-		(var currentDepthRange:array = "[0,0]")
-		(var isSelected:bool = "(-currentDepthRange[0] <= $index) && ($index <= -currentDepthRange[1])")
-
-		(var depth:number = "0")
-		(var depthLimit:number = "0")
-		(var longLine:bool = "(isIn(-$index, _keyValues)) || -$index == depthLimit")
-		(var isDepthLimitLine:bool = "abs(depthLimit) < $index")
-
-		(var selectedDepth:number = "0")
-		(var additionalPaddingLeft:number = "isSelected ? -3 : 0")
-	)
-	(style
-		(width = "10")
-		(bind paddingLeft "longLine ? additionalPaddingLeft : 5")
-		(bind paddingRight "(-selectedDepth == $index) ? -3 : 0")
-		(height = "(-$index == _keyValues[_keyValues.length - 1]) ? 1 : DEPTH_RULER_LINE_SIZE")
-	)
-	(bind alpha "isDepthLimitLine ? 0.3 : isSelected ? 1 : 0.6")
-	
-	(block
-		(style
-			(width = 100%)
-			(height = 1px)
-			(backgroundColor = 0xFFFFFFFF)
-		)
-	)
-)
-
-(def element DepthRulerLineDisabled (_keyValues:array) layout=true
-	(scope
-		(var longLine:bool = "(isIn(-$index, _keyValues))")
-
-		(var currentDepthRange:array = "[0,0]")
-		(var isSelected:bool = "(-currentDepthRange[0] <= $index) && ($index <= -currentDepthRange[1])")
-		(var additionalPaddingLeft:number = "isSelected ? 3 : 0")
-		
-		(var drawMiddle:bool = "(-$index == _keyValues[0] || -$index == (_keyValues[_keyValues.length - 1]))")
-	)
-	(style
-		(width = "10")
-		(height = "(-$index == _keyValues[_keyValues.length - 1]) ? 1 : DEPTH_RULER_LINE_SIZE")
-		(flow = "horizontal")
-		(align = "right")
-	)
-	(block
-		(bind alpha "longLine ? 1 : 0.8")
-		(style
-			(width = 5px)
-			(bind width "longLine ? additionalPaddingLeft + 4 : 1")
-			(height = 1px)
-			(backgroundColor = 0xFFFFFFFF)
-		)
-	)
-	(block
-		(bind alpha "drawMiddle ? 1 : 0")
-		(style
-			(width = 3px)
-			(height = "1px")
-			(backgroundColor = "0xFFFFFFFF")
-		)
-	)
-	(block
-		(style
-			(width = 1px)
-			(height = 1px)
-			(backgroundColor = 0xFFFFFFFF)
-		)
-	)
-)
-
-(def element RangeReachedEffect () layout=true
-	(scope
-		(var range:array = "[0,0]")
-		(var linesCount:number = "abs(range[1] - range[0])")
+		(var minDepth:number = "_range[0]")
+		(var maxDepth:number = "_range[1]")
+		(var linesCount:number = "abs(maxDepth - minDepth)")
 		(var totalHeight:number = "DEPTH_RULER_LINE_SIZE*linesCount")
-		(var offsetTop:number = "abs(range[0])*DEPTH_RULER_LINE_SIZE")
+		(var offsetTop:number = "abs(minDepth)*DEPTH_RULER_LINE_SIZE")
 	)
 	(alpha = "0")
-	(bind alpha "1" init=false (bind trigger "range"))
+	(bind alpha "1" init=false (bind trigger "_range"))
 	(controller $Animation
 		(bindcall play  duration = "1"
 						delay = 0.1
 						from = "{ alpha: 1 }"
 						to = "{ alpha: 0 }"
 						action="kill"
-						(bind trigger "range")
+						(bind trigger "_range")
 		)
 	)
 	(style
@@ -727,7 +679,7 @@
 	)
 )
 
-(def element DepthCurrentValue (_currentDepth:number, _depthStatesValues:array) layout=true
+(def element DepthCurrentValue (_currentDepth:number, _depthStatesValues:array)
 	(scope
 		(var cruiseEntity:gfx = "$datahub.getPrimaryEntity(CC.cruise, SC.Battle.CRUISE_CONTROL_TYPE.DEPTH)")
 		(var cruise:gfx = "cruiseEntity.cruise")
@@ -770,7 +722,7 @@
 	)
 )
 
-(def element DepthCurrentValueFX (_text:str) layout=true
+(def element DepthCurrentValueFX (_text:str)
 	(scope
 		(event evShow)
 	)
@@ -799,7 +751,7 @@
 	)
 )
 
-(def element DepthCurrentState () layout=true
+(def element DepthCurrentState ()
 	(scope
 		(var selfVehicleEntity:gfx = "$datahub.getSingleEntity(CC.selfVehicle)")
 		(var submarine:gfx = "selfVehicleEntity.submarine")
@@ -830,92 +782,195 @@
 	)
 )
 
-(def element DepthRuler (_keyValues:array) layout=true
+(def element DepthRulerCurrentDepthLine (_currentRange:number, _depthLimit:number)
 	(scope
-		(var currentDepth:number = "0")
-		(var valuesRange:number = "0")
-		(var currentRange:array = "[0,0]")
-		(var selectedDepth:number = "0")
-		(var maskHeight:number = "0")
-		(var depthLimit:number = "0")
+		(var isUnderLimit:bool = "_depthLimit > _currentRange")
+	)
+	(style
+		(bind alpha "isUnderLimit ? 0.25 : 1")
+		(bind width "isUnderLimit ? 8px : 13px")
+		(height = 1px)
+		(position = "absolute")
+		(bind top "abs(_currentRange) * MULTIPLY_DEPHT_FOR_CONVERT_TO_HEIGHT")
+		(bind right "isUnderLimit ? 5px : 0px")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+	)
+)
+
+(def element DepthRulerDepthLine (_depthLine:number, _depthLimit:number, _currentRange:array)
+	(scope
+		(var isUnderLimit:bool = "_depthLimit > _depthLine")
+	)
+	(style
+		(bind alpha "isIn(_depthLine, _currentRange) ? 0 : isUnderLimit ? 0.25 : 0.5")
+		(width = 5px)
+		(height = 1px)
+		(position = "absolute")
+		(bind top "abs(_depthLine) * MULTIPLY_DEPHT_FOR_CONVERT_TO_HEIGHT")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+	)
+)
+(def element DepthRulerCurrentDepthMask (_currentDepthRange:array, _depthLimitPositive:number)
+	(scope
+		(var maxHeight:number = "_depthLimitPositive < abs(_currentDepthRange[1]) ? _depthLimitPositive : abs(_currentDepthRange[1])")
 	)
 	(block
 		(style
-			(paddingLeft = "8")
+			(width = "DEPTH_METR_WIDTH")
+			(bind height "(maxHeight - abs(_currentDepthRange[0])) * MULTIPLY_DEPHT_FOR_CONVERT_TO_HEIGHT")
+			(position = "absolute")
+			(bind top "abs(_currentDepthRange[0]) * MULTIPLY_DEPHT_FOR_CONVERT_TO_HEIGHT")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
 		)
-		(block
-			(style
-				(position = "absolute")
-				(width = 13px)
-				(right = 0)
-				(top = 0)
-				(bind height "maskHeight")
-				(backgroundColor = "0xFFFFFFFF")
-			)
-			(isMask = true)
-		)
-		(controller $Repeat renderer='DepthRulerLine'
-			(bind count "valuesRange+1")
-			(args "_keyValues")
-			(exprs
-				(scope
-					(bind currentDepthRange "currentRange")
-					(bind depth "currentDepth")
-					(bind depthLimit "depthLimit")
-					(bind selectedDepth "selectedDepth")
-				)
-			)
-		)
-		(element RangeReachedEffect
-			(style (left = 5))
-			(scope
-				(bind range "currentRange")
-			)
+		(isMask = true)
+	)
+	(block
+		(style
+			(height = "DEPTH_METR_HEIGHT")
+			(backgroundImage = 'swf:../battle_hud/depth_ruler_svg/depth_ruler_svg.swf:DeepMetr')
 		)
 	)
 )
 
-(def element DisabledDepthRuler (_keyValues:array) layout=true
+(def element DepthRulerMainMask (_depthLimitPositive:number)
 	(scope
-		(var valuesRange:number = "0")
-		(var currentRange:array = "[0,0]")
-		(var maskHeight:number = "(valuesRange)*DEPTH_RULER_LINE_SIZE+1")
+		(var isInvert:bool = "$index>0")
+		(var depthLimitInPixel:number = "_depthLimitPositive*3+1")
+	)
+	(style
+		(position = "absolute")
+		(alpha = "isInvert? 0.25 : 0.5")
 	)
 	(block
 		(style
+			(width = "DEPTH_METR_WIDTH")
+			(bind height "isInvert ? DEPTH_METR_HEIGHT-depthLimitInPixel : depthLimitInPixel")
 			(position = "absolute")
-			(width = 13px)
+			(bind top "isInvert ? depthLimitInPixel : 0")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+		)
+		(isMask = true)
+	)
+	(block
+		(style
+			(height = "DEPTH_METR_HEIGHT")
+			(backgroundImage = 'swf:../battle_hud/depth_ruler_svg/depth_ruler_svg.swf:DeepMetr')
+		)
+	)
+)
+
+(def element DepthRuler (_depthStatesValues:array, _currentRange:array, _maskHeight:number, _depthLimit:number)
+	(scope
+		(var depthLimitPositive:number = "abs(_depthLimit)")
+	)
+	(style
+		(marginLeft = "S")
+		(width = 10px)
+	)
+	(block
+		(style
+			(width = "DEPTH_METR_WIDTH")
+			(bind height "_maskHeight")
+			(position = "absolute")
 			(right = 0)
-			(bottom = 0)
-			(bind height "(valuesRange)*DEPTH_RULER_LINE_SIZE+1 - maskHeight")
+			(top = 0)
 			(backgroundColor = "0xFFFFFFFF")
 		)
 		(isMask = true)
 	)
-	(alpha = 0.3)
-	(controller $Repeat renderer='DepthRulerLineDisabled'
-		(bind count "valuesRange+1")
-		(args "_keyValues")
-		(exprs
-			(scope
-				(bind currentDepthRange "currentRange")
-			)
+
+	(controller $Repeat renderer='DepthRulerMainMask'
+		(count = "COUNT_MAX_MIN_DEPTH_LINE")
+		(args
+			_depthLimitPositive="depthLimitPositive"
 		)
 	)
-	(block
-		(alpha = 0.8)
-		(style
-			(position = "absolute")
-			(width = 3px)
-			(right = 1px)
-			(top = 1px)
-			(bind height "(valuesRange)*DEPTH_RULER_LINE_SIZE-1")
-			(backgroundColor = 0xFF000000)
+
+	(element DepthRulerCurrentDepthMask
+		_currentDepthRange="_currentRange"
+		_depthLimitPositive="depthLimitPositive"
+	)
+
+	(controller $Repeat renderer='DepthRulerCurrentDepthLine'
+		(count = "COUNT_MAX_MIN_DEPTH_LINE")
+		(args
+			_currentRange="_currentRange[$index]"
+			_depthLimit="_depthLimit"
 		)
+	)
+
+	(controller $Repeat renderer='DepthRulerDepthLine'
+		(bind count "_depthStatesValues.length")
+		(args
+			_currentRange="_currentRange"
+		 	_depthLine="_depthStatesValues[$index]"
+		 	_depthLimit="_depthLimit"
+		)
+	)
+
+	(element RangeReachedEffect
+		_range = "_currentRange"
+		(style (left = 5px))
 	)
 )
 
-(def element DepthControlNew () layout=true
+(def element DisabledDepthRulerStandardLine (_depthLine:number, _currentRange:array)
+	(scope
+		(var isCurrentRange:bool = "isIn(_depthLine, _currentRange)")
+	)
+	(style
+		(alpha = 0.25)
+		(bind width "isCurrentRange ? 6px : 3px")
+		(height = 1px)
+		(position = "absolute")
+		(bind top "abs(_depthLine)*3")
+		(bind left "isCurrentRange ? -1px : 2px")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+	)
+)
+
+(def element DisabledDepthRulerMainLimitMask ()
+	(style
+		(alpha = 0.5)
+		(height = "DEPTH_METR_HEIGHT")
+		(backgroundImage = 'swf:../battle_hud/depth_ruler_svg/depth_ruler_svg.swf:DeepMetr_black')
+	)
+)
+
+
+(def element DisabledDepthRuler (_depthStatesValues:array, _valuesRange:number, _currentRange:array, _maskHeight:number)
+	(style
+		(width = 10px)
+		(position = "absolute")
+		(right = 0)
+	)
+	(block
+		(style
+			(width = "DEPTH_METR_WIDTH")
+			(bind height "(_valuesRange)*DEPTH_RULER_LINE_SIZE+1 - _maskHeight")
+			(position = "absolute")
+			(right = 0)
+			(bottom = 0)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+		)
+		(isMask = true)
+	)
+	(element DisabledDepthRulerMainLimitMask)
+	(controller $Repeat renderer='DisabledDepthRulerStandardLine'
+		(bind count "_depthStatesValues.length")
+		(args
+			_depthLine="_depthStatesValues[$index]"
+			_currentRange="_currentRange"
+		)
+	)
+
+	(element RangeReachedEffect
+		_range = "_currentRange"
+		(style (left = 5px))
+	)
+)
+
+(def element DepthControlNew ()
 	(scope
 		(var cruiseEntity:gfx = "$datahub.getPrimaryEntity(CC.cruise, SC.Battle.CRUISE_CONTROL_TYPE.DEPTH)")
 		(var cruise:gfx = "cruiseEntity.cruise")
@@ -1052,32 +1107,22 @@
 
 		(hblock
 			(bind alpha "depthIndex > SC.Battle.DEPTH_STATE.PERISCOPE ? 0.8 : 1")
-			
-			(element DepthRuler "depthStatesValues"
-				(style
-					(paddingLeft = "S")
-				)
-				(scope
-					(bind currentDepth "currentDepth")
-					(bind selectedDepth "selectedDepth")
-					(bind valuesRange "valuesRange")
-					(bind currentRange "currentRange")
-					(bind maskHeight "rulerMaskHeight+1")
-					(bind depthLimit "currentDepthLimit")
-				)
+
+			(element DepthRuler
+				_depthStatesValues="depthStatesValues"
+				_currentRange="currentRange"
+				_maskHeight="rulerMaskHeight+1"
+				_depthLimit="currentDepthLimit"
 			)
 
-			(element DisabledDepthRuler "depthStatesValues"
+			(element DisabledDepthRuler
+
+				_depthStatesValues="depthStatesValues"
+				_valuesRange="valuesRange"
+				_currentRange="currentRange"
+				_maskHeight="rulerMaskHeight+1"
+
 				(bind visible "isEmptyBattery")
-				(style
-					(position = "absolute")
-					(right = 0)
-				)
-				(scope
-					(bind valuesRange "valuesRange")
-					(bind currentRange "currentRange")
-					(bind maskHeight "rulerMaskHeight+1")
-				)
 			)
 			
 			

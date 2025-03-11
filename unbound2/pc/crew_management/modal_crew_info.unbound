@@ -3,18 +3,19 @@
 
 	(scope
 		(event evShowSkills)
+		(event evSetActiveTab)
 		(event evCrewInfoModalHideInfotips)
 
 		(macro MOUSE_HANDLER_SCOPE "'freeExp_'")
 
-		(macro USER_PREF_DATA)
 		(var isSmallPanel:bool = "stageHeight < 760")
 
 		(struct crew =	PULL_CREW(_crewId = "_crewId"))
 
 		(var classificationId:number =	"crew.component.classificationId")
 		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
-		(var isMaxLevel:bool =			"crew.component.isMaxLevel" (event "crew.component.evLevelUp"))
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel"		(event "crew.component.evLevelUp"))
+		(var crewNation:str =			"crew.component.nation ?: ''"	(event "crew.component.evChanged"))
 
 		(var eliteCrewLearning:dhComponent =		"crew.entity.eliteCrewLearning"						(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
 		(var exploredSkillsTotal:number =			"eliteCrewLearning.exploredSkillsTotal"				(event "eliteCrewLearning.evChanged"))
@@ -28,9 +29,8 @@
 		(var shipId:number = "crew.component.shipID > 0 ? crew.component.shipID : crew.component.specializationID")
 		(macro PULL_SHIP_SCOPE "shipId" "'shipEntity'" "'shipInfo'")
 
-		(var selectedShipClass:str = "	userPrefs.crewInfoActiveShipClass != '' && userPrefs.crewInfoActiveShipClass != null	? userPrefs.crewInfoActiveShipClass :
-										isIn(shipInfo.subtype, SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES)							? shipInfo.subtype
-																																: SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES[0]")
+		(var selectedShipClass:str =	"isIn(shipInfo.subtype, SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES) ? shipInfo.subtype : SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES[0]")
+		(bind selectedShipClass			"$event.value"	init=false watch=false		(event "evSetActiveTab"))
 
 		(var skillTreeEntity:dhEntity =			"getPrimaryEntity(CC.skillTree, toString(_crewId + '_' + selectedShipClass))")
 		(var skillTreeComponent:dhComponent =	"skillTreeEntity.skillTree")
@@ -55,21 +55,18 @@
 	
 	(bindcall externalCall "hasCrewEntity ? '' : 'inputMapping.onRequest'" "[CREW_ACTIONS.CLOSE_SKILLS_INFO_WINDOW, { }]"	watch=false (bind trigger "hasCrewEntity"))
 
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'crewInfoActiveShipClass', value: '' }]"		watch=false on='addedToStage')
 	(dispatch evShowSkills dir="EventDirection.NONE" delay="0.2" reset=true (bind trigger "selectedShipClass"))
-
 	(bindcall externalCall "'inputMapping.onAction'" "['featureSeen', { featureIndex: 5 }]" watch=false (event "freeExp_evClicked"))
-
 	(dispatch evCrewInfoModalHideInfotips dir="EventDirection.DOWN" (event "startHide"))
 
 	(block
 		(class $FullsizeAbsolute)
 
 		(element ModalWindowAnimatedBackground
-			_selectedCategory = 'default'
-			_type = "SC.Ui_styles.ANIMATED_BG.ALMANAC_AND_SNOWFLAKES"
-			_hideTime = 0.3
-			_hideDelay = 0
+			_selectedCategory =	"crewNation"
+			_type =				"SC.Ui_styles.ANIMATED_BG.DETAILED_SHIP_ACES"
+			_hideTime =			0.3
+			_hideDelay =		0.2
 		)
 	)
 
@@ -310,9 +307,38 @@
 				)
 			)
 
-			(element CrewSkillsInfoTabButtons
-				_selectedShipClass = "selectedShipClass"
+			
+			(block
+				(style (width = 100%))
+
+				(element HorizontalDividerTwoPx)
+
+				(hblock
+					(style
+						(width = 100%)
+						(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+					)
+
+					(controller $Repeat renderer='TabButton'
+						(bind count "SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES.length")
+						(args
+							_label =			"tr(toUpper('IDS_' + SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES[$index] + 'S'))"
+							_isSelected =		"selectedShipClass == SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES[$index]"
+							_dispatchedEv =		'evSetActiveTab'
+							_dispatchParams =	"{ value: SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES[$index] }"
+						)
+					)
+
+					(element HorizontalDividerTwoPx
+						(style
+							(position = "absolute")
+							(width = 100%)
+							(bottom = 0)
+						)
+					)
+				)
 			)
+			
 
 			(block
 				(style
@@ -366,13 +392,14 @@
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
 		(style
+			(position = "absolute")
 			(align = "center")
-			(marginTop = "{ 720: MS, 1080: XL }")
 			(width = 100%)
+			(bottom = "{ 720: M, 1080: XL }")
 		)
 
 		(element DefaultButton
-			_width =			140px
+			_width =			180px
 			_focusIndex =		0
 			_defaultFocused =	true
 			_label =			'IDS_CLOSE_UPPER_CASE'

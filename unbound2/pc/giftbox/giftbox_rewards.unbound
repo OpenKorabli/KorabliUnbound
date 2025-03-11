@@ -98,6 +98,7 @@
 												'goldMoney': 'RewardPersonalExchangeRates',
 												'CollectionCard': 'RewardCollectionItem',
 												'CollectionAlbum': 'RewardCollectionItem',
+												'RandomCollectionCard': 'RewardCollectionItem',
 												'paragonXP': 'RewardResources',
 												'recruitment_points': 'RewardResources',
 												'snowflake': 'RewardResources',
@@ -148,8 +149,9 @@
 														'creditsGold': 'RewardResourcesTooltip',
 														'xpFreeExp': 'RewardResourcesTooltip',
 														'goldMoney': 'RewardResourcesTooltip',
-														'CollectionCard': 'RewardResourcesTooltip',
-														'CollectionAlbum': 'RewardResourcesTooltip',
+														'CollectionCard': 'RewardCollectionTooltip',
+														'CollectionAlbum': 'RewardCollectionTooltip',
+														'RandomCollectionCard': 'RewardCollectionTooltip',
 														'paragonXP': 'RewardResourcesCommonTooltip',
 														'recruitment_points': 'RewardResourcesTooltip',
 														'snowflake': 'RewardResourcesTooltip',
@@ -167,7 +169,7 @@
 												'Ensign':		'EnsignItemStatic' })
 
 (def element RewardItem (	_reward:dict, _disableWarning:bool = false, _isBattlePassSmallShipView:bool = false, _isClickDisabled:bool = false,
-							_isReceived:bool = false, _isUnavailable:bool = false, _withTooltip:bool = true)
+							_isReceived:bool = false, _isUnavailable:bool = false, _withTooltip:bool = true, _isCollectionActionEnabled:bool = false)
 	(scope
 		(var isPRMP:bool = "_reward && 'isPRMP' in _reward ? _reward.isPRMP : false")
 		(var rewardItem:dict = "_reward	?	{	id:			_reward.id,
@@ -205,6 +207,7 @@
 				_disableWarning = "_disableWarning"
 				_isClickDisabled = "_isClickDisabled"
 				_isBattlePassSmallShipView = "_isBattlePassSmallShipView"
+				_isCollectionActionEnabled = "_isCollectionActionEnabled"
 			)
 		)
 	)
@@ -480,11 +483,11 @@
 	)
 	(block
 		(style (width = 100%))
+
 		(element CrewNameWithIcon
 			_crewHistoryId = "_rewardItem.params.primaryKey"
-
-			(style (width = 100%))
 		)
+
 		(block
 			(style (width = 100%) (bind marginTop "isCrewSpecialization ? SXS : XXS"))
 			(controller $Instance renderer='ShipLineItemNM'
@@ -631,25 +634,42 @@
 	)
 )
 
-(def element RewardCollectionCardTooltipItem (_rewardItem:dict, _withTooltip:bool = "false", _disableWarning:bool = "false", _isBattlePassSmallShipView:bool = "false") layout=true
+(def element RewardCollectionCardTooltipItem (	_rewardItem:dict,
+												_withTooltip:bool = false,
+												_disableWarning:bool = false,
+												_isBattlePassSmallShipView:bool = false,
+												_isAmountVisible:bool = true)
 	(scope
-		(var title:str = "'IDS_' + _rewardItem.params.item.title")
-		(var collectionNameQuotes:str = "tr(toUpper('IDS_' + _rewardItem.params.collectionName + '_QUOTES'))")
-		(var description:str = "_rewardItem.params.collectionName	? subst('IDS_COLLECTION_NAME', [], { _collectionName: collectionNameQuotes })
-																	: 'IDS_ITEM_TYPE_COLLECTION'")
+		(var isRandomCollectionItem:bool = "_rewardItem.subtype == SC.Common.REWARD_SUBTYPE.RANDOMCOLLECTIONCARD")
+		(var isCollectionCard:bool = "_rewardItem.subtype == SC.Common.REWARD_SUBTYPE.COLLECTIONCARD")
+		(var title:str = "isRandomCollectionItem ? 'IDS_COLLECTION_RANDOM_ITEM' : 'IDS_' + _rewardItem.params.item.title")
+		(var collectionNameQuotes:str = "tr('IDS_' + _rewardItem.params.collectionName + '_QUOTES')")
+		(var description:str = "isRandomCollectionItem || isCollectionCard	? subst('IDS_COLLECTION_NAME', [], { _collectionName: collectionNameQuotes })
+																			: 'IDS_ITEM_TYPE_COLLECTION'")
 	)
-	(style (width = 100%) (minHeight = 80px) (flow = "horizontal") (align = "middle"))
+	(style
+		(width = 100%)
+		(minHeight = 80px)
+		(flow = "horizontal")
+		(align = "middle")
+	)
 
 	(block
-		(style (width = 80px) (height = 100%) (align = "top|center") (marginRight = "M"))
+		(style
+			(width = 80px)
+			(height = 100%)
+			(align = "top|center")
+			(marginRight = "M")
+		)
 
 		(element RewardCollectionItem
 			_rewardItem = "_rewardItem"
+			_isAmountVisible = "_isAmountVisible"
 		)
 	)
-	
+
 	(element RewardTooltipItemText
-		_title =	"tr(toUpper(title))"
+		_title = "title"
 		_description = "description"
 	)
 )
@@ -700,17 +720,20 @@
 	)
 )
 
-(def element RewardCollectionItem (_rewardItem:dict)
+(def element RewardCollectionItem (_rewardItem:dict, _isAmountVisible:bool = true, _isCollectionActionEnabled:bool = false)
 	(scope
-		(event onClick)
+		(struct bargeRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BARGE"))
+
 		(var iconPath:str = "_rewardItem ? 'url:' +  _rewardItem.params.item.iconPath : ''")
 		(var isDuplicate:bool = "_rewardItem ? _rewardItem.params.isDuplicate : false")
 		(var amount:number = "_rewardItem ? _rewardItem.amount : 0")
 	)
-	(dispatch onClick on=click)
-	(bindcall externalCall "'inputMapping.onAction'" "['moveFromRewards', { }]" init=false watch=false (event "onClick"))
-	(bindcall externalCall "'inputMapping.onAction'" "['goToReward', { type: 'Lootbox', subtype: _rewardItem.params.collectionName, subAlbum: _rewardItem.params.subAlbum  }]" init=false watch=false (event "onClick"))
-
+	(bindcall externalCall
+		"(bargeRoute.isActive || (_isCollectionActionEnabled && _rewardItem.params.collectionIsUnlocked)) ? 'inputMapping.onAction' : ''"
+		"['goToReward', { type: 'Lootbox', subtype: _rewardItem.params.collectionName, subAlbum: _rewardItem.params.subAlbum  }]"
+		watch=false
+		on='leftClick'
+	)
 	(style
 		(width = 80px)
 		(height = 80px)
@@ -720,13 +743,12 @@
 	)
 	(block
 		(controller $Instance renderer='ImageItemsCounter'
-			(bind enabled "amount > 1")
+			(bind enabled "amount > 1 && _isAmountVisible")
 			(args
 				_amount = "amount"
 			)
 		)
 	)
-
 	(block
 		(bind visible "isDuplicate")
 		(class $FullsizeAbsolute)
@@ -740,11 +762,22 @@
 			)
 		)
 	)
+
+	(block
+		(bind visible "_rewardItem.subtype == SC.Common.REWARD_SUBTYPE.RANDOMCOLLECTIONCARD")
+		(style
+			(position = "absolute")
+			(width = 24px)
+			(height = 24px)
+			(backgroundImage = 'url:../collections/icon_random.png')
+		)
+	)
 )
 
 
 
-(def element RewardResourceItem (_rewardItem:dict, _withTooltip:bool = "false", _disableWarning:bool = "false", _isClickDisabled:bool = "false", _isBattlePassSmallShipView:bool = "false") layout=true
+(def element RewardResourceItem (	_rewardItem:dict, _withTooltip:bool = false, _disableWarning:bool = false,
+									_isClickDisabled:bool = false, _isBattlePassSmallShipView:bool = false, _isCollectionActionEnabled:bool = false)
 	(scope
 		(var isEventumCNReward:bool = "_rewardItem.subtype == SC.Common.CURRENCIES.EVENTUM_CN")
 		(var selectedRenderRewardResourceItem:str = "_rewardItem.subtype in RENDER_REWARD_RESOURCE_ITEMS ? RENDER_REWARD_RESOURCE_ITEMS[_rewardItem.subtype] : null")
@@ -757,6 +790,7 @@
 		(bind enabled "isAvailableForRender")
 		(args
 			_rewardItem = "_rewardItem"
+			_isCollectionActionEnabled = "_isCollectionActionEnabled"
 		)
 	)
 
@@ -768,6 +802,7 @@
 			_currency = "_rewardItem.subtype"
 			_amount = "_rewardItem.amount"
 			_isEventumReward = "!isEventumCNReward"
+			_isCollectionActionEnabled = "_isCollectionActionEnabled"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -1144,14 +1179,10 @@
 
 (def element RewardResourcesTooltip (_rewardItem:dict, _disableWarning:bool = false) layout=true
 	(scope
-		(var mouseInstructionText:str = "	_rewardItem.subtype == 'CollectionCard'	?	'IDS_GO_TO_COLLECTION_SCREEN':
-											_rewardItem.type == 'Token' &&
-											_rewardItem.subtype == 'Campaign'		?	'IDS_GO_TO_CAMPAIGNS_MOUSE_INSTRUCTION'
-																					: null")
+		(var isMouseInstructionVisible:bool = "_rewardItem.type == 'Token' && _rewardItem.subtype == 'Campaign'")
 		(var isAmountVisible:bool = "(_rewardItem.type == SC.Common.REWARD_TYPE.ABILITY || _rewardItem.subtype == SC.Common.REWARD_SUBTYPE.SLOTS) && !_rewardItem.isPRMP")
 	)
 	(style (hitTest = false) (width = 340px))
-
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -1180,14 +1211,16 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "mouseInstructionText"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isMouseInstructionVisible")
+			)
 		)
 		(block
 			(style (width = "100%"))
 			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "mouseInstructionText")
+				(bind enabled "isMouseInstructionVisible")
 				(args
-					_text = "mouseInstructionText"
+					_text = 'IDS_GO_TO_CAMPAIGNS_MOUSE_INSTRUCTION'
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 				)
 			)
@@ -1411,6 +1444,44 @@
 	)
 )
 
+(def element RewardCollectionTooltip (_rewardItem:dict, _isCollectionActionEnabled:bool = false)
+	(scope
+		(struct bargeRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BARGE"))
+		(var isMouseInstructionVisible:bool = "bargeRoute.isActive || (_isCollectionActionEnabled && _rewardItem.params.collectionIsUnlocked)")
+	)
+	(style (width = 340px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element RewardCollectionCardTooltipItem
+			_rewardItem = "_rewardItem"
+			_isAmountVisible = false
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemCounterLine
+			_title = 'IDS_COUNT'
+			_count = "_rewardItem.amount"
+			_isAutoWidth = true
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isMouseInstructionVisible")
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isMouseInstructionVisible")
+				(args
+					_text = 'IDS_GO_TO_COLLECTION_SCREEN'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				)
+			)
+		)
+	)
+)
+
 (def element RewardCollectionCrewItem (_rewardItem:dict, _withTooltip:bool = "false", _disableWarning:bool = "false", _isClickDisabled:bool = "false", _isBattlePassSmallShipView:bool = "false") layout=true
 	(scope
 		(var rewardShipClasses:array = "_rewardItem.params.shipClasses")
@@ -1536,12 +1607,19 @@
 
 	(block
 		(style (height = "100%") (align = "top") (marginRight = "M"))
-		(element CrewStereotype _crewHistoryId = "_crewHistoryId" _size = "SIZE.SMALL")
+		(element CrewStereotype
+			_crewHistoryId = "_crewHistoryId"
+			_size = "SIZE.SMALL"
+			_showPeculiarityInfo = false
+		)
 	)
 
 	(block
 		(style (width = 100%) (marginBottom = "S"))
-		(element CrewNameWithIcon _crewHistoryId = "_crewHistoryId")
+
+		(element CrewNameWithIcon
+			_crewHistoryId = "_crewHistoryId"
+		)
 	)
 )
 
@@ -1875,7 +1953,7 @@
 	)
 )
 
-(def element RewardItemAdapter (_entityId:number, _isUnavailable:bool=false, _isReceived:bool=false, _iconMargin:number = "S")
+(def element RewardItemAdapter (_entityId:number, _isUnavailable:bool=false, _isReceived:bool=false, _iconMargin:number = "S", _isCollectionActionEnabled:bool = false)
 	(scope
 		(var rewardEntity:gfx = "$datahub.getEntity(_entityId)")
 		(var rewardComponent:gfx = "rewardEntity.rewardComponent")
@@ -1889,7 +1967,12 @@
 									isPRMP:		rewardEntity ? rewardComponent.isPRMP : null}")
 	)
 	(style (marginTop = "S") (bind marginRight "_iconMargin"))
-	(element RewardItem _reward="rewardItem" _isUnavailable="_isUnavailable" _isReceived="_isReceived")
+	(element RewardItem
+		_reward = "rewardItem"
+		_isUnavailable = "_isUnavailable"
+		_isReceived = "_isReceived"
+		_isCollectionActionEnabled = "_isCollectionActionEnabled"
+	)
 )
 
 (def element RewardContainerTooltipItemAdapter (_entityId:number)

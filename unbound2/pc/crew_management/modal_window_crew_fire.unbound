@@ -1,0 +1,292 @@
+(def element ModalWindowFireCrew (crewId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(struct crew =		PULL_CREW(_crewId = "crewId"))
+
+		(var shipId:number = "crew.component.shipID ?: crew.component.specializationID")
+		(struct shipInfo =	PULL_OWN_SHIP(_playerShipId = "shipId"))
+
+		(var isInBattle:bool =		"crew.component.isInBattle"		(event "crew.component.evIsInBattleChanged"))
+		(var timeRent:number =		"crew.component.timeRent"		(event "crew.component.evTimeRentChanged"))
+		(var isRentalCrew:bool =	"timeRent > 0")
+
+		(var currentCrewLevel:number =					"crew.component.allSkillPoints + 1")
+		(var isCrewDemobilizationOptionsEnabled:bool =	"currentCrewLevel + crew.component.experience > 1 && !timeRent")
+
+		(struct crewFiringOptionPref = GET_PREF_NUMBER(_option="'ui.crew.firing'"))
+		(var crewFiringOption:number = "crewFiringOptionPref.value")
+
+		(struct baseFiringCrew =		PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.BASE"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct firingCrewForCredits =	PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.CREDIT"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct firingCrewForGold =		PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "SC.Common.CREW_FIRING_COST.GOLD"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var selectedFiringType:number = "timeRent ? SC.Common.CREW_FIRING_TYPE.BASE : crewFiringOption")
+
+		(var isSelectedFiringTypeGold:bool =	"selectedFiringType == SC.Common.CREW_FIRING_TYPE.GOLD")
+		(var isSelectedFiringTypeCredits:bool =	"selectedFiringType == SC.Common.CREW_FIRING_TYPE.MONEY")
+
+		(var priceInfo:dict =			"isSelectedFiringTypeGold		? { finalPrice: firingCrewForGold.info.finalPrice,		currency: firingCrewForGold.info.currency } :
+										 isSelectedFiringTypeCredits	? { finalPrice: firingCrewForCredits.info.finalPrice,	currency: firingCrewForCredits.info.currency }
+																		: { finalPrice: baseFiringCrew.info.finalPrice,			currency: baseFiringCrew.info.currency }")
+
+		(var crewFiringProfit:number =	"isSelectedFiringTypeGold		? firingCrewForGold.refundComponent.profit :
+										 isSelectedFiringTypeCredits	? firingCrewForCredits.refundComponent.profit
+																		: baseFiringCrew.refundComponent.profit")
+
+		(var priceDataELXP:dict =	"selectedFiringType != SC.Common.CREW_FIRING_TYPE.BASE	? { finalPrice: crewFiringProfit, currency: SC.Common.CURRENCIES.ELITE_XP }
+																							: null")
+
+		(var currenciesPanelPrices:array = "[	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: isSelectedFiringTypeGold	? -firingCrewForGold.info.finalPrice : 0 },
+												{ currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: isSelectedFiringTypeCredits	? -firingCrewForCredits.info.finalPrice : 0 },
+												{ currency: SC.Common.CURRENCIES.ELITE_XP,	finalPrice: crewFiringProfit } ]")
+
+		(var contentWidth:number = "isCrewDemobilizationOptionsEnabled ? 702px : 600px")
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect'	"['window', 'openExchange']"		on='addedToStage')
+	(bindcall externalCall 'inputMapping.onRequest'		"['closeModalWindowFireCrew', {}]"	(bind enabled "!isRentalCrew"))
+	(bindcall externalCall "!isCrewDemobilizationOptionsEnabled ? 'direct.action' : ''"	"['option.set', [ 'ui.crew.firing', SC.Common.CREW_FIRING_TYPE.BASE ]]"	watch=false on='addedToStage')
+
+	(name = 'ModalWindowFireCrew')
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (bind width "contentWidth"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element ModalWindowShortHeader
+				_header =		'IDS_CREW_MODAL_HEADER_FIRE_UPPERCASE'
+				_hasDivider =	"!isCrewDemobilizationOptionsEnabled"
+			)
+
+			(block
+				(style (width = 100%))
+
+				(controller $Instance renderer='CurrenciesPanel'
+					(bind enabled "isCrewDemobilizationOptionsEnabled")
+					(args
+						_priceInfo =	"currenciesPanelPrices"
+						_width =		"contentWidth"
+					)
+				)
+			)
+		)
+
+		(hblock
+			(bind visible "isCrewDemobilizationOptionsEnabled")
+
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(marginTop = "M")
+				(marginBottom = "M")
+			)
+
+			(block
+				(style
+					(marginRight = "L")
+					(width = 220px)
+				)
+
+				(element CrewStereotypeWithName
+					_crewId =		"crew.component.id"
+					_shipClass =	"shipInfo.shipComponent.subtype"
+					_size =			"SIZE.LARGE"
+				)
+			)
+
+			(block
+				(style (width = 450px))
+
+				(element HorizontalDividerTwoPx)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Repeat renderer='CrewFiringTypeItem'
+						(bind count "SC.Common.CREW_FIRING_COST.ALL.length")
+						(args
+							_items =				"SC.Common.CREW_FIRING_COST.ALL"
+							_firingCostType =		"SC.Common.CREW_FIRING_COST.ALL[2 - $index]"
+							_crewId =				"crewId"
+							_selectedFiringType =	"selectedFiringType"
+						)
+					)
+				)
+
+				(element HorizontalDividerTwoPx)
+			)
+		)
+
+		(block
+			(bind visible "isCrewDemobilizationOptionsEnabled")
+
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(width = 100%)
+				(marginTop = "M")
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		
+		(block
+			(style
+				(align = "center")
+				(width = 100%)
+				(height = 145px)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+				(style (marginTop = "MS") (width = 100%))
+
+				(block
+					(style
+						(width = 100%)
+						(alpha = 1)
+						(visualOffsetY = 0px)
+					)
+
+					(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+						_trigger =		"selectedFiringType"
+						_delay =		"0.1"
+						_duration =		"0.15"
+					)
+
+					(element ModalWindowSystemPurchaseItemPriceAndInfo
+						_priceInfo =		"priceInfo"
+						_questionString =	"selectedFiringType == SC.Common.CREW_FIRING_TYPE.BASE ? 'IDS_CREW_FIRE_FULL_FREE' : 'IDS_CREW_FIRE_FULL'"
+					)
+				)
+
+				(block
+					(bind visible "priceDataELXP")
+
+					(style
+						(align = "center")
+						(marginTop = "SXS")
+						(width = 100%)
+						(alpha = 1)
+						(visualOffsetY = 0px)
+					)
+
+					(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+						_trigger =		"selectedFiringType"
+						_delay =		"0.15"
+						_duration =		"0.15"
+					)
+
+					(controller $Instance renderer='PriceTagWithLabel'
+						(bind enabled "priceDataELXP")
+						(args
+							_priceInfo =	"priceDataELXP"
+							_label =		'IDS_FIRE_CREW_WILL_RECEIVE'
+							_size =			"SIZE.MEDIUM"
+							_labelAlpha =	"TC"
+						)
+					)
+				)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+				(style
+					(align = "center")
+					(marginTop = "M")
+					(width = 100%)
+				)
+
+				(element StatusLine
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text =				'IDS_INSTRUCTION_FIRE_CREW'
+				)
+
+				(block
+					(style (bind marginTop "isInBattle ? S : 0"))
+
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "isInBattle")
+						(args
+							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+							_text =				'IDS_INSTRUCTION_FIRE_CREW_IN_BATTLE'
+						)
+					)
+				)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+				(style
+					(align = "center")
+					(marginTop = "MS")
+					(width = 100%)
+				)
+
+				(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+					_okMethods = "[{ type: 'inputMapping.onAction', name: CREW_ACTIONS.FIRE, args: { crewId: crew.component.id, firing: selectedFiringType } }]"
+				)
+			)
+		)
+		
+	)
+)
+
+(def element CrewFiringTypeItem (_items:array, _firingCostType:str, _crewId:number, _selectedFiringType:number)
+	(scope
+		(var firingType:number =	"_firingCostType == SC.Common.CREW_FIRING_COST.GOLD		? SC.Common.CREW_FIRING_TYPE.GOLD :
+									 _firingCostType == SC.Common.CREW_FIRING_COST.CREDIT	? SC.Common.CREW_FIRING_TYPE.MONEY
+																							: SC.Common.CREW_FIRING_TYPE.BASE")
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+
+		(struct firingPrice =	PULL_PRICE_WITH_REFUND_OPERATIONS(_entityId = "_firingCostType"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(var priceInfoELXP:dict = "{ finalPrice: firingPrice.refundComponent.profit, currency: SC.Common.CURRENCIES.ELITE_XP }")
+
+		(var firingCurrencyAmount:number =	"accountResourceComponent[firingPrice.info.currency]" (event "accountResourceComponent.evChangedGold") (event "accountResourceComponent.evChangedCredit"))
+		(var isCurrencyDeficit:bool =		"_firingCostType != SC.Common.CREW_FIRING_COST.BASE && (firingCurrencyAmount - firingPrice.info.finalPrice < 0)")
+
+		(var isFiringNotWorth:bool =	"_firingCostType != SC.Common.CREW_FIRING_COST.BASE && (firingPrice.info.finalPrice <= 0 || priceInfoELXP.finalPrice <= 0)")
+		(var isSelected:bool =			"firingType == _selectedFiringType")
+		(var isAvailable:bool =			"!isCurrencyDeficit && !isFiringNotWorth")
+
+		(var disableReasonText:str =	"isFiringNotWorth	? 'IDS_CREW_NOT_ENOUGH_EXP_TO_DEMOBILIZE' :
+										 isCurrencyDeficit	? _firingCostType == SC.Common.CREW_FIRING_COST.CREDIT	? 'IDS_NOT_ENOUGH_CREDITS'
+																													: 'IDS_NOT_ENOUGH_GOLD'
+															: ''")
+
+		(var timeRent:number =							"crew.component.timeRent"		(event "crew.component.evTimeRentChanged"))
+		(var currentCrewLevel:number =					"crew.component.allSkillPoints + 1")
+		(var isCrewDemobilizationOptionsEnabled:bool =	"currentCrewLevel + crew.component.experience > 1 && !timeRent")
+	)
+
+	(bindcall externalCall "isSelected && isCrewDemobilizationOptionsEnabled ? 'direct.action' : ''"	"['option.set', [ 'ui.crew.firing', SC.Common.CREW_FIRING_TYPE.BASE ]]"	watch=false (bind enabled "!isAvailable"))
+	(bindcall externalCall "isCurrencyDeficit && isSelected ? 'direct.action' : ''"						"['option.set', [ 'ui.crew.firing', SC.Common.CREW_FIRING_TYPE.BASE ]]"	watch=false on='addedToStage')
+
+	(style (width = 100%))
+
+	(element BigMenuItemWithPrice
+		_subTitle =				"'IDS_CREW_FIRING_TYPE_WITH_EXP_CONVERT_' + firingType"
+		_isSelected =			"isSelected"
+		_isAvailable =			"!isCurrencyDeficit"
+		_disableReasonText =	"disableReasonText"
+		_priceInfo =			"firingPrice.info"
+		_titlePriceInfo =		"priceInfoELXP"
+		_methods =				"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.crew.firing', firingType ] }]"
+	)
+)

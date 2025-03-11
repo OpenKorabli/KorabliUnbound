@@ -1,0 +1,284 @@
+(def constant CREW_RETRAINING_INIT -1)
+(def constant CREW_RETRAINING_FORCE_QUIT -2)
+
+(def element ModalWindowRetrainCrew (crewId:number, shipId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evConfirmBtnClick)
+		(event evOptionSetForced)
+		(event evOptionSetManually)
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var eliteXP:number =			"accountResourceComponent.eliteXP ?: 0"		(event "accountResourceComponent.evChangedEliteXP"))
+		(var accountFreeXP:number =		"accountResourceComponent.freeXP ?: 0"		(event "accountResourceComponent.evChangedFreeXP"))
+
+		(struct crew =	PULL_CREW(_crewId = "crewId"))
+		(var crewRetraining:dhComponent = "crew.entity.retraining")
+
+		(var isAllRetrainingTypesBlocked:bool = "crewRetraining.allTypesBlocked"	(event "crewRetraining.evRetrainingUpdated"))
+
+		(struct shipInfo =	PULL_OWN_SHIP(_playerShipId = "shipId"))
+		(var selectedShipClass:str = "shipInfo.shipComponent.subtype")
+
+		(var isRetrainedAndAssignedOnSameShip:bool = "shipId == crew.component.shipID")
+
+		(var okButtonRequest:str =		"isRetrainedAndAssignedOnSameShip ? CREW_ACTIONS.RETRAIN : CREW_ACTIONS.RETRAIN_AND_ASSIGN")
+		(var retrainToShipId:number =	"isRetrainedAndAssignedOnSameShip ? crew.component.specializationID : shipId")
+
+		(var availableRetrainingOptions:array = "isRetrainedAndAssignedOnSameShip	? SC.Common.CREW_RETRAINING_TYPE.INSTANT_RETRAINING_OPTIONS
+																					: SC.Common.CREW_RETRAINING_TYPE.RETRAINING_OPTIONS")
+
+		(struct crewRetrainingOptionPref =			GET_PREF_NUMBER(_option="'ui.crew.retrain'"))
+		(var crewRetrainingOption:number =			"crewRetrainingOptionPref.value")
+		(struct crewAssignRetrainingOptionPref =	GET_PREF_NUMBER(_option="'ui.crew.assignRetrain'"))
+		(var crewAssignRetrainingOption:number =	"crewAssignRetrainingOptionPref.value")
+
+		(var selectedTrainingType:number =			"isRetrainedAndAssignedOnSameShip ? crewRetrainingOption : crewAssignRetrainingOption")
+
+		(var retrainingOptionEntity:dhEntity =			"getPrimaryEntity(CC.retrainingOption, selectedTrainingType)")
+		(var retrainingOptionComponent:dhComponent =	"retrainingOptionEntity.retrainingOption")
+		(var retrainingPriceInfoComponent:dhComponent =	"retrainingOptionEntity.priceComponent"		(event "retrainingOptionComponent.evUpdate"))
+		(var freeRetrainingPrice:number =				"retrainingOptionComponent.needExpForRetraining")
+
+		(var retrainingPriceInfo:dict = "{	finalPrice:	retrainingPriceInfoComponent.finalPrice ?: 0,
+											currency:	retrainingPriceInfoComponent.currency ?: '' }")
+
+		(var eliteXPDeficit:number =	"retrainingPriceInfo.finalPrice > eliteXP ? retrainingPriceInfo.finalPrice - eliteXP : 0")
+		(var isEliteXPRetraining:bool =	"retrainingPriceInfo.currency ==  SC.Common.CURRENCIES.ELITE_XP")
+
+		(var priceInfo:dict =			"isEliteXPRetraining	? {	finalPrice:	retrainingPriceInfo.finalPrice - eliteXPDeficit,
+																	currency:	SC.Common.CURRENCIES.ELITE_XP }
+																: {	finalPrice:	retrainingPriceInfo.finalPrice,
+																	currency:	retrainingPriceInfo.currency }")
+
+		(var freeXPPriceInfo:dict =		"isEliteXPRetraining	? {	finalPrice:	eliteXPDeficit,
+																	currency:	SC.Common.CURRENCIES.FREE_XP }
+																: {	finalPrice:	0,
+																	currency:	SC.Common.CURRENCIES.FREE_XP }")
+
+		(var isFreeOperation:bool =		"priceInfo.finalPrice + freeXPPriceInfo.finalPrice == 0")
+
+
+		
+		(var retrainingOptionEntityGold:dhEntity =	"getPrimaryEntity(CC.retrainingOption, SC.Common.CREW_RETRAINING_TYPE.GoldRetraining)")
+		(var retrainingOptionEntityELXP:dhEntity =	"getPrimaryEntity(CC.retrainingOption, SC.Common.CREW_RETRAINING_TYPE.XPRetraining)")
+
+		(var blockReasonGold:number =	"retrainingOptionEntityGold.retrainingOption.blockReason"	(event "retrainingOptionEntityGold.retrainingOption.evUpdate"))
+		(var blockReasonELXP:number =	"retrainingOptionEntityELXP.retrainingOption.blockReason"	(event "retrainingOptionEntityELXP.retrainingOption.evUpdate"))
+
+		(var retrainingOptionForceSet:number = "CREW_RETRAINING_INIT")
+		(bind retrainingOptionForceSet "CREW_RETRAINING_INIT"	init=false	(event "evOptionSetManually"))
+		(bind retrainingOptionForceSet "isRetrainedAndAssignedOnSameShip	?	blockReasonGold != SC.Common.RETRAINING_OPTION_BLOCK_REASON.NEED_MORE_GOLD	? SC.Common.CREW_RETRAINING_TYPE.GoldRetraining :
+																				blockReasonELXP != SC.Common.RETRAINING_OPTION_BLOCK_REASON.NEED_MORE_EXP	? SC.Common.CREW_RETRAINING_TYPE.XPRetraining
+																																							: CREW_RETRAINING_FORCE_QUIT
+																			:	SC.Common.CREW_RETRAINING_TYPE.FreeRetraining"		init=false watch=false	(event "evOptionSetForced"))
+		(var isOptionForceSetFictional:bool = "isIn(retrainingOptionForceSet, [CREW_RETRAINING_INIT, CREW_RETRAINING_FORCE_QUIT])")
+		
+
+
+		(var isFreeRetrainingSelected:bool = "selectedTrainingType == SC.Common.CREW_RETRAINING_TYPE.FreeRetraining")
+
+		(var questionText:str =			"isFreeRetrainingSelected			? 'IDS_CREW_START_FREE_RETRAINING_QUESTION' :
+										 isRetrainedAndAssignedOnSameShip	? isFreeOperation	? 'IDS_SPEED_UP_RETRAINING_FOR_FREE_QUESTION'
+																								: 'IDS_SPEED_UP_RETRAINING_FOR' :
+										 isFreeOperation					? 'IDS_RETRAIN_CREW_FOR_FREE_QUESTION'
+																			: 'IDS_RETRAIN_CREW_FOR'")
+		(var optionalPriceInfo:dict =	"!isFreeOperation && freeXPPriceInfo.finalPrice > 0		? freeXPPriceInfo
+																								: {}")
+		(var hideFreeXP:bool =			"eliteXP - freeRetrainingPrice >= 0")
+		(var isGoldOperation:bool =		"!isFreeOperation && priceInfo.currency == SC.Common.CURRENCIES.GOLD")
+		(var isEliteXpOperation:bool =	"priceInfo.currency == SC.Common.CURRENCIES.ELITE_XP")
+
+		(var currenciesPanelPrices:array = "hideFreeXP	? [	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: isGoldOperation		? -priceInfo.finalPrice : 0 },
+															{ currency: SC.Common.CURRENCIES.ELITE_XP,	finalPrice: isEliteXpOperation	? -priceInfo.finalPrice : 0 } ]
+														: [	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: isGoldOperation		? -priceInfo.finalPrice : 0 },
+															{ currency: SC.Common.CURRENCIES.ELITE_XP,	finalPrice: isEliteXpOperation	? -priceInfo.finalPrice : 0 },
+															{ currency: SC.Common.CURRENCIES.FREE_XP,	finalPrice: -optionalPriceInfo.finalPrice ? -optionalPriceInfo.finalPrice : 0  } ]")
+
+		(var prefToForceSet:str =		"isRetrainedAndAssignedOnSameShip ? 'ui.crew.retrain' : 'ui.crew.assignRetrain'")
+		(var soundAssetOnConfirm:str = "!isRetrainedAndAssignedOnSameShip	? '' :
+										isFreeOperation						? 'setup'
+																			: 'spendMoney'")
+
+		(var windowWidth:number = 702)
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect'	"['window', 'openExchange']"						(event "startShow"))
+	(bindcall externalCall 'sound.playSetSoundDirect'	"['crew', soundAssetOnConfirm]"		watch=false		(event "evConfirmBtnClick"))
+	(bindcall externalCall "isRetrainedAndAssignedOnSameShip ? 'inputMapping.onRequest' : ''" "['close', {}]" (bind enabled "isAllRetrainingTypesBlocked"))
+	(bindcall externalCall "'direct.action'"	"['option.set', [ prefToForceSet, retrainingOptionForceSet ]]"		watch=false		(bind enabled "!isOptionForceSetFictional") (bind trigger "retrainingOptionForceSet"))
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = "windowWidth"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "XS")
+			)
+
+			(element ModalWindowShortHeader
+				_header =		'IDS_CREW_RETRAINING'
+				_hasDivider =	false
+			)
+
+			(element CurrenciesPanel
+				_priceInfo =	"currenciesPanelPrices"
+				_width =		"windowWidth"
+			)
+		)
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(marginTop = "M")
+				(marginBottom = "M")
+			)
+
+			(block
+				(style
+					(marginRight = "L")
+					(width = 220px)
+				)
+
+				(element CrewStereotypeWithName
+					_crewId =		"crewId"
+					_shipClass =	"selectedShipClass"
+					_size =			"SIZE.LARGE"
+				)
+			)
+
+			(block
+				(style (width = 450px))
+
+				(element HorizontalDividerTwoPx)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Repeat renderer='CrewRetrainingTypeItem'
+						(bind count "availableRetrainingOptions.length")
+						(args
+							_selectedTrainingType =				"selectedTrainingType"
+							_retrainingOptionType =				"availableRetrainingOptions[$index]"
+							_isRetrainedAndAssignedOnSameShip =	"isRetrainedAndAssignedOnSameShip"
+						)
+					)
+				)
+
+				(element HorizontalDividerTwoPx)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+			(style
+				(width = 100%)
+				(marginTop = "M")
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		
+		(block
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+				(style (marginTop = "MS") (width = 100%))
+
+				(block
+					(style
+						(width = 100%)
+						(alpha = 1)
+						(visualOffsetY = 0px)
+					)
+
+					(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+						_trigger =		"selectedTrainingType"
+						_delay =		"0.1"
+						_duration =		"0.15"
+					)
+
+					(element ModalWindowSystemPurchaseItemPriceAndInfo
+						_priceInfo =					"!isFreeOperation && priceInfo.finalPrice > 0 ? priceInfo : {}"
+						_optionalPriceInfo =			"optionalPriceInfo"
+						_questionString =				"questionText"
+						_additionalInfoUnifiedStatus =	"isFreeRetrainingSelected ? SC.Ui_styles.UNIFIED_STATUS.ATTENTION : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+						_additionalInfoStr =			"isFreeRetrainingSelected ? 'IDS_CREW_SKILLS_FREE_RETRAINING_PENALTY_INFO' : ''"
+					)
+				)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+				(style
+					(align = "center")
+					(width = 100%)
+					(marginTop = "MS")
+				)
+
+				(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+					_isDeficit =				"isAllRetrainingTypesBlocked"
+					_okMethods =				"[{ type: 'inputMapping.onRequest',	name: okButtonRequest,	args: { crewId: crewId, specialization: retrainToShipId, retrainingType: selectedTrainingType } }]"
+					_customOkBtnName =			'btn_ok'
+					_isBtnOkGUIEventLocked =	true
+					_okDispatchedEv =			'evConfirmBtnClick'
+				)
+			)
+		)
+		
+	)
+)
+
+(def element CrewRetrainingTypeItem (_selectedTrainingType:number, _retrainingOptionType:number, _isRetrainedAndAssignedOnSameShip:bool)
+	(scope
+		(event evOptionSetForced)
+
+		(var retrainingOptionEntity:dhEntity =			"getPrimaryEntity(CC.retrainingOption, _retrainingOptionType)")
+		(var retrainingOptionComponent:dhComponent =	"retrainingOptionEntity.retrainingOption")
+		(var priceInfo:dhComponent =					"retrainingOptionEntity.priceComponent"				(event "retrainingOptionComponent.evUpdate"))
+		(var disableReason:number =						"retrainingOptionComponent.blockReason"				(event "retrainingOptionComponent.evUpdate"))
+		(var freeRetrainingPrice:number =				"retrainingOptionComponent.needExpForRetraining")
+
+		(var disableReasonText:str =	"'IDS_CREW_TRAINING_TYPE_DISABLE_REASON_' + disableReason")
+		(var title:str =				"'IDS_CREW_TRAINING_TYPE_HEADER_' + _retrainingOptionType")
+		(var subTitle:str =				"_retrainingOptionType == SC.Common.CREW_RETRAINING_TYPE.FreeRetraining	? subst('IDS_CREW_TRAINING_TYPE_DESCRIPTION_1', [], { _amount: freeRetrainingPrice }, freeRetrainingPrice)
+																												: 'IDS_CREW_TRAINING_TYPE_DESCRIPTION_' + _retrainingOptionType")
+
+		(var isSelected:bool =	"_retrainingOptionType == _selectedTrainingType")
+		(var isAvailable:bool =	"disableReason == SC.Common.RETRAINING_OPTION_BLOCK_REASON.NO_REASON")
+
+		(var prefToBeSet:str =	"_isRetrainedAndAssignedOnSameShip ? 'ui.crew.retrain' : 'ui.crew.assignRetrain'")
+	)
+
+	(style (width = 100%))
+
+	(dispatch evOptionSetForced		dir="EventDirection.UP"						(bind enabled "!isAvailable && isSelected") (bind trigger "isAvailable"))
+	(dispatch evOptionSetForced		dir="EventDirection.UP"	on='addedToStage'	(bind enabled "!isAvailable && isSelected"))
+
+	(element BigMenuItemWithPrice
+		_title =				"title"
+		_subTitle =				"subTitle"
+		_isSelected =			"isSelected"
+		_isAvailable =			"isAvailable"
+		_disableReasonText =	"disableReasonText"
+		_priceInfo =			"priceInfo.finalPrice ? { finalPrice: priceInfo.finalPrice, currency: priceInfo.currency } : {}"
+		_dispatchedEv =			'evOptionSetManually'
+		_methods =				"[{ type: 'direct.action', name: 'option.set', args: [ prefToBeSet, _retrainingOptionType ] }]"
+	)
+)
