@@ -55,23 +55,28 @@
 		(event startShow)
 		(event startHide)
 
-		(macro PULL_TRAINING_ROOM_ENTITY)
-		(macro USER_PREF_DATA)
 		(macro CAROUSEL_HEIGHT_SCOPE)
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 		(macro CALCULATE_PORT_HEADER_ELEM_SIDE_PADDING)
-		
-		(var roomMapId:number = "trainingRoomEntity.trainingRoom.mapId" (event "trainingRoomEntity.trainingRoom.evUpdate"))
-		(var mapInfoEntity:gfx = "$datahub.getPrimaryEntity(CC.mapInfo, roomMapId)")
 
-		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
-		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
 
-		(var isSelfPlayerCommander:bool = "preBattlePlayerSimpleComponent.isCommander" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
-		(var selfTeamId:number = "preBattlePlayerSimpleComponent.teamId ?: 0" (event "preBattlePlayerSimpleComponent.evTeamIdChanged"))
-		(var isSpectatorsTeam:bool = "selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
-		
+		(var preBattlePlayerSimpleComponent:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+
+		(var isSelfPlayerCommander:bool = 	"preBattlePlayerSimpleComponent.isCommander" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+		(var selfTeamId:number = 			"preBattlePlayerSimpleComponent.teamId ?: 0" (event "preBattlePlayerSimpleComponent.evTeamIdChanged"))
+
+		(var isSpectatorsTeam:bool = 	"selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+		(var isNeutralTeam:bool = 		"selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM")
+
 		(var commanderPostfix:str = "isSelfPlayerCommander ? '_COMMANDER' : ''")
+
+		(var isTournamentRoomInfo:bool = "getSingleComponent(CC.tournamentRoomInfo) != null")
+
+		(var closeIconTooltipText:str = "isTournamentRoomInfo ? 'IDS_LEAVE_TOURNAMENT' : 'IDS_LEAVE_ROOM_CREATED' + commanderPostfix")
+
+		(var isStartBattleButtonBigVisible:bool = "isSelfPlayerCommander || isSpectatorsTeam || (isTournamentRoomInfo && isNeutralTeam)")
 	)
 	(bindcall externalCall "'inputMapping.onAction'" "['createRestrictionsSubCollection', { componentId: trainingRoomEntity.shipListRestrictions.id }]" init=false watch=false on='addedToStage')
 	
@@ -151,24 +156,35 @@
 					(style (marginTop = "S"))
 
 					(controller $Instance renderer='StartBattleButtonBig'
-						(bind enabled "isSelfPlayerCommander || isSpectatorsTeam")
+						(bind enabled "isStartBattleButtonBigVisible")
 					)
 
 					(controller $Instance renderer='BigReadyForFormationBattleButton'
-						(bind enabled "!isSelfPlayerCommander && !isSpectatorsTeam")
+						(bind enabled "!isStartBattleButtonBigVisible")
 						(args
 							_isTrainingRoom = true
 						)
 					)
 				)
-
-				(block
+				(hblock
 					(style
 						(position = "absolute")
 						(marginLeft = -100%)
+						(height = 100%)
+						(align = "left | middle")
 					)
 
-					(element TrainingRoomPlayerState)
+					(block
+						(bind visible "isTournamentRoomInfo")
+						(style
+							(marginBottom = "XXS")
+							(marginRight = "{ 1920:LS, 1440:L }")
+						)
+						(controller $Instance renderer='TimerStartTournament'
+							(bind enabled "isTournamentRoomInfo")
+						)	
+					)	
+					(element TrainingRoomPlayerState)				
 				)
 
 				(block
@@ -184,7 +200,7 @@
 			(block
 				(style (position = "absolute") (top = 21px) (right = 19px))
 				(element ModalWindowCloseIcon
-					_tooltipText = "'IDS_LEAVE_ROOM_CREATED' + commanderPostfix"
+					_tooltipText = "closeIconTooltipText"
 				)
 			)
 		)
@@ -273,6 +289,12 @@
 	(scope
 		(macro PULL_TRAINING_ROOM_ENTITY)
 		(var trainingRoomComponent:gfx = "trainingRoomEntity.trainingRoom")
+		
+		(var tournamentRoomInfoEntity:dhEntity = "getSingleEntity(CC.tournamentRoomInfo)")
+		(var isTournamentRoomInfo:bool = "tournamentRoomInfoEntity != null")
+		(var tournamentRoomInfoComponent:dhComponent = "tournamentRoomInfoEntity.tournamentRoomInfo")
+		(var isHadAnyRoomSessionStarted:bool = "tournamentRoomInfoComponent.hadAnyRoomSessionStarted" (event "tournamentRoomInfoComponent.evChanged"))
+		(var isVisibleRoomData:bool = "isTournamentRoomInfo ? isHadAnyRoomSessionStarted : true")
 
 		(var roomMapId:number =	"trainingRoomComponent.mapId" 			(event "trainingRoomComponent.evUpdate"))
 		(var scenario:str = 	"trainingRoomComponent.scenario" 		(event "trainingRoomComponent.evUpdate"))
@@ -326,83 +348,132 @@
 		(paddingBottom = "{ 720:S, 1080:MS }")
 	)
 
-	
-	(hblock
-		(style (width = 100%) (align = "middle"))
+	(block
+		(bind visible "!isVisibleRoomData")
+		(class $FullsizeAbsolute)
+		(style
+			(align = "center|middle")
+			(gap = "M")
+		)
+		
+		(mc indicator_busy_main)
 
+		(tf
+			(class $TextDefault19NM)
+			(style (alpha = "TC"))
+			(text = 'IDS_TOURNAMENT_ROOM_LOADING')
+		)
+	)
+
+	
+	(block
+		(bind visible "isVisibleRoomData")
+		(style
+			(height = 50px)
+			(width = 100%)
+			(align = "middle")
+			(gap = "SXS")
+		)
+		(hblock
+			(style
+				(width = 100%)
+				(align = "middle")
+			)
+
+			(block
+				(style (width = 100%))
+				
+				(block
+					(bind visible "isVisibleRoomData")
+					(style (width = 100%))
+					(tf
+						(class $TextDefaultBold19NM)
+						(style
+							(width = 100%)
+							(alpha = "TA")
+							(wordWrap = false)
+							(elideMode = true)
+						)
+						(bind text "tr('IDS_' + mapInfoEntity.mapInfo.name)")
+					)
+				)
+			)
+
+			(hblock
+				(style
+					(height = 1px)
+					(align = "middle")
+				)
+				(block
+					(name = 'icon_hide_enemy_ships')
+
+					(bind visible "isEnemyShipsHidden")
+					(style
+						(width = 24px) (height = 24px)
+						(backgroundImage = 'url:../service_kit/training_room/icon_ship_not_detected.png')
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_text = "isFogOfWar ? 'IDS_FOG_OF_WAR_IN_TRAINING' : 'IDS_ENEMY_SHIPS_ARE_HIDDEN'"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+				(block
+					(bind visible "isObserversAvailable")
+					(style
+						(width = 24px)
+						(height = 24px)
+						(marginLeft = "XS")
+						(backgroundImage = 'url:../service_kit/training_room/icon_observer.png')
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_text = 'IDS_TRAINING_ROOM_SPECTATORS_IS_ENABLED'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+				(block
+					(bind visible "isClosed")
+					(style
+						(width = 24px)
+						(height = 24px)
+						(marginLeft = "XS")
+						(backgroundImage = 'url:../service_kit/training_room/icon_locked_room.png')
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_text = 'IDS_PRIVATE_TRAINING_ROOM'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+			)
+		)
 		(block
 			(style (width = 100%))
-			
 			(tf
-				(class $TextDefaultBold19NM)
-				(style (width = 100%) (alpha = "TA") (wordWrap = false) (elideMode = true))
-				(bind text "tr('IDS_' + mapInfoEntity.mapInfo.name)")
-			)
-		)
-
-		(hblock
-			(style (height = 1px) (align = "middle"))
-			(block
-				(name = 'icon_hide_enemy_ships')
-
-				(bind visible "isEnemyShipsHidden")
+				(class $TextDefault17NM)
 				(style
-					(width = 24px) (height = 24px)
-					(backgroundImage = 'url:../service_kit/training_room/icon_ship_not_detected.png')
+					(alpha = "TC")
+					(width = 100%)
+					(wordWrap = false)
+					(elideMode = true)
 				)
-
-				(controller $Tooltip
-					(renderer = 'SimpleStatusTooltip')
-					(args
-						_text = "isFogOfWar ? 'IDS_FOG_OF_WAR_IN_TRAINING' : 'IDS_ENEMY_SHIPS_ARE_HIDDEN'"
-					)
-					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				)
+				(bind text "scenario != '' ? tr('IDS_SCENARIO_' + toUpper(scenario)) : ''")
 			)
-			(block
-				(bind visible "isObserversAvailable")
-				(style
-					(width = 24px) (height = 24px)
-					(marginLeft = "XS")
-					(backgroundImage = 'url:../service_kit/training_room/icon_observer.png')
-				)
-
-				(controller $Tooltip
-					(renderer = 'SimpleStatusTooltip')
-					(args
-						_text = 'IDS_TRAINING_ROOM_SPECTATORS_IS_ENABLED'
-					)
-					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				)
-			)
-			(block
-				(bind visible "isClosed")
-				(style
-					(width = 24px) (height = 24px)
-					(marginLeft = "XS")
-					(backgroundImage = 'url:../service_kit/training_room/icon_locked_room.png')
-				)
-
-				(controller $Tooltip
-					(renderer = 'SimpleStatusTooltip')
-					(args
-						_text = 'IDS_PRIVATE_TRAINING_ROOM'
-					)
-					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				)
-			)
-		)
-	)
-	(block
-		(style (width = 100%) (marginTop = "SXS"))
-		(tf
-			(class $TextDefault17NM)
-			(style (alpha = "TC") (width = 100%) (wordWrap = false) (elideMode = true))
-			(bind text "scenario != '' ? tr('IDS_SCENARIO_' + toUpper(scenario)) : ''")
 		)
 	)
 
 	(block
+		(bind visible "isVisibleRoomData")
 		(name = 'trainingRoomInfo')
 		(style
 			(bind width "mapSize")
@@ -427,7 +498,12 @@
 	)
 	
 	(hblock
-		(style (width = 100%) (marginTop = "{ 720:SXS, 1080:M }"))
+		(bind visible "isVisibleRoomData")
+
+		(style
+			(width = 100%)
+			(marginTop = "{ 720:SXS, 1080:M }")
+		)
 		
 		(block
 			(style (width = 100%))
@@ -446,7 +522,13 @@
 	)
 
 	(hblock
-		(style (width = 100%) (marginTop = "{ 720:SXS, 1080:M }"))
+		(bind visible "isVisibleRoomData")
+
+		(style
+			(width = 100%)
+			(marginTop = "{ 720:SXS, 1080:M }")
+		)
+
 		(block
 			(style (width = 100%))
 			(tf
@@ -465,8 +547,11 @@
 	)
 
 	(hblock
-		(bind visible "isEnemyShipsHidden")
-		(style (width = 100%) (marginTop = "{ 720:SXS, 1080:M }"))
+		(bind visible "isVisibleRoomData && isEnemyShipsHidden")
+		(style
+			(width = 100%)
+			(marginTop = "{ 720:SXS, 1080:M }")
+		)
 
 		(block
 			(style (width = 100%))
@@ -486,7 +571,7 @@
 	)
 
 	(hblock
-		(bind visible "isSelfPlayerOwner")
+		(bind visible "isVisibleRoomData && isSelfPlayerOwner")
 
 		(class $Fullsize)
 		(style (align = "center|bottom"))
@@ -1187,6 +1272,8 @@
 		(var isObserversAvailable:bool = 	"_trainingRoomComponent.observersAvailable" 	(event "_trainingRoomComponent.evUpdate"))
 		
 		(var mapInfoComponent:gfx = "$datahub.getPrimaryEntity(CC.mapInfo, mapId).mapInfo")
+
+		(var isTournamentRoomInfo:bool = "getSingleComponent(CC.tournamentRoomInfo) != null")
 	)
 	(style (width = 380px) (hitTest = false))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
@@ -1206,11 +1293,21 @@
 			_subheaderText = "scenario != '' ? tr('IDS_SCENARIO_' + toUpper(scenario)) : ''"
 		)
 
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemParamTextLine
-			_text = 'IDS_TOOLTIP_TRAINING_ORGANIZER'
-			_value = "ownerNameDH"
-			_valueClass = '$TextDefaultBoldNM'
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!isTournamentRoomInfo"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance
+				renderer='TooltipSystemParamTextLine'
+				(bind enabled "!isTournamentRoomInfo")
+				(args
+					_text = 'IDS_TOOLTIP_TRAINING_ORGANIZER'
+					_value = "ownerNameDH"
+					_valueClass = '$TextDefaultBoldNM'
+				)
+			)
 		)
 
 		(block
@@ -1245,12 +1342,12 @@
 
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isCommandersManagement"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!isTournamentRoomInfo && isCommandersManagement"))
 		)
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isCommandersManagement")
+				(bind enabled "!isTournamentRoomInfo && isCommandersManagement")
 				(args
 					_text = 'IDS_COMMANDERS_MANAGEMENT_ENABLED'
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.COMMANDER_NOT_READY"
@@ -1443,8 +1540,9 @@
 	)
 	(style
 		(flow = "horizontal")
+		(height = 44px)
+		(width = 164px)
 		(bind marginRight "PORT_HEADER_CONTROL_DEFAULT_PADDING + PORT_HEADER_START_BATTLE_BTN_SIDE_MARGIN")
-		(height = 60px)
 	)
 
 	(block
@@ -1452,6 +1550,7 @@
 			(hitTest = false)
 			(align = "right|middle")
 			(height = 100%)
+			(width = 100%)
 		)
 
 		(hblock

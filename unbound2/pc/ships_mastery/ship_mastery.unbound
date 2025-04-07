@@ -3,6 +3,37 @@
 (def constant RANKS_COUNT_IN_EACH_LEAGUE 20)
 (def constant RESET_TASKS_TYPE_ALL 0)
 (def constant RESET_TASKS_TYPE_SINGLE 1)
+(def constant TOP_LEAGUE 6)
+(def constant MASTERY_EMBLEM_CT_WHITE {
+	redMultiplier: 1,
+	greenMultiplier: 1,
+	blueMultiplier: 1,
+	alphaMultiplier: 1,
+	redOffset: 200,
+	greenOffset: 200,
+	blueOffset: 200,
+	alphaOffset: 0,
+})
+
+(def struct PROGRESS_COUNT (_pointsForNextRank:number, _points:number, _pointsForCurrentRank:number)
+	(var pointsTillNextRank:number = "max(0, _pointsForNextRank - _points)")
+	(var maxPointsTillNextRank:number = "_pointsForNextRank - _pointsForCurrentRank")
+	(var progress:number = "maxPointsTillNextRank > 0	?	(maxPointsTillNextRank - pointsTillNextRank) / maxPointsTillNextRank
+														:	0")
+)
+
+(def struct LEAGUE_COUNT (_rank:number = 0)
+	(var value:number = "_rank > 0 ? floor(_rank / RANKS_COUNT_IN_EACH_LEAGUE) + 1 : 0")
+)
+
+(def css $MasteryAnimationStyle ()
+	(hitTest = false)
+	(position = "absolute")
+	(top = -56px)
+	(left = -50px)
+	(width = 620px)
+	(height = 360px)
+)
 
 (def element ShipMastery ()
 	(scope
@@ -225,7 +256,13 @@
 		(var shipsWithTrials:number = "shipMasteryCommonEntity.shipMasteryCommon.countOfOwnShipsWithTasksInProgress ?: 0" (event "shipMasteryCommonEntity.shipMasteryCommon.evCountOfOwnShipsWithTasksInProgressChanged"))
 		(var isFullCountShipsWithTrials:bool = "shipsWithTrials == SC.Common.SHIP_MASTERY_CONSTANTS.MAX_SHIPS_WITH_TASKS_IN_PROGRESS")
 
-		(var battleTypes:array = "shipMasteryCommonEntity.battleTypesView.viewList ?: []")
+		(var battleTypes:array = "shipMasteryCommonEntity.battleTypesView.viewList ?: []" (event "shipMasteryCommonEntity.battleTypesView.evBattleTypesViewChanged"))
+
+		(var buttonHintText:str = "	isReadyInDivision			? 'IDS_SHIP_MASTERY_TRIALS_TASKS_DIVISION_READY_BUTTON_HINT' :
+									isFullCountShipsWithTrials	? 'IDS_SHIP_MASTERY_TRIALS_TASKS_MAX_SHIPS_COUNT_BUTTON_HINT'
+																: 'IDS_SHIP_MASTERY_TRIALS_TASKS_AVAILABLE_SOON_BUTTON_HINT'")
+
+		(var isMaxBattleTypePerRow:bool = "battleTypes.length > 6")
 	)
 
 	(style (width = 360px))
@@ -241,20 +278,26 @@
 		)
 		(tf
 			(class $TextDefaultBold17NM)
-			(style (alpha = "TA") (width = 100%))
+			(style
+				(width = 100%)
+				(alpha = "TA")
+			)
 			(text = 'IDS_SHIP_MASTERY_TRIALS_TITLE')
 		)
 
 		(block
-			(style (height = 1px) (align = "middle"))
+			(style
+				(height = 1px)
+				(align = "middle")
+			)
 
 			(controller $Instance renderer='DefaultButton'
 				(bind enabled "isTrialInProgress")
 				(args
-					_type =		"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
-					_size =		"SIZE.SMALL"
-					_width =	96px
-					_label =	'IDS_SHIPS_MASTERY_TRIALS_RESET_BUTTON_ALL'
+					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_size = "SIZE.SMALL"
+					_width = 96px
+					_label = 'IDS_SHIPS_MASTERY_TRIALS_RESET_BUTTON_ALL'
 					_methods = "[{	type: 'inputMapping.onRequest',
 									name: 'resetTrials',
 									args: {	type: RESET_TASKS_TYPE_ALL} }]"
@@ -309,10 +352,11 @@
 				)
 			)
 			(controller $Tooltip
-				(bind enabled "isTrialAvailableSoon")
+				(bind enabled "isReadyInDivision || isFullCountShipsWithTrials || !isTrialAvailable")
 				(renderer = 'SimpleStatusTooltip')
 				(args
-					_text = 'IDS_SHIP_MASTERY_TRIALS_TASKS_BUTTON_HINT'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text = "buttonHintText"
 				)
 				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 			)
@@ -337,15 +381,17 @@
 				(style (alpha = "TA"))
 				(text = 'IDS_SSE_TASK_RESTRICTIONS_COLON')
 			)
-			(hblock
+			(block
 				(style
 					(width = 100%)
 					(marginTop = "S")
+					(bind flow "isMaxBattleTypePerRow ? vertical : horizontal")
 				)
 				(hblock
 					(style
 						(marginTop = "-XXS")
 						(marginRight = "XS")
+						(marginLeft = "-XS")
 					)
 					(controller $Repeat renderer='TaskBattleTypeRestriction'
 						(bind count "battleTypes.length")
@@ -357,17 +403,20 @@
 					)
 				)
 				(block
+					(bind visible "!isMaxBattleTypePerRow")
 					(style
 						(height = 21px)
 						(marginRight = "SXS")
 					)
-					(element VerticalDivider)
+					(controller $Instance renderer='VerticalDivider'
+						(bind enabled "!isMaxBattleTypePerRow")
+					)
 				)
 				(tf
 					(class $TextDefaultNM)
 					(style
-						(marginTop = "XS")
 						(alpha = "TC")
+						(bind marginTop "isMaxBattleTypePerRow ? 6px : XS")
 					)
 					(text = 'IDS_SHIP_MASTERY_TRIALS_CONDITION')
 				)
@@ -475,28 +524,51 @@
 
 (def element ShipMasteryProgress (_playerShipId:number = 0)
 	(scope
+		(event evLeagueChanged)
+		(event evMasteryEmblemAnimEnded)
+		(event evProgressAnimEnded)
+		(event evAddedToStage)
+
 		(var shipMasteryEntity:dhEntity = "getPrimaryEntity(CC.shipMastery, _playerShipId)")
 		(var shipMasteryComponent:dhComponent = "shipMasteryEntity.shipMastery")
-		(var rank:number = "shipMasteryComponent.rank ?: 0" (event "shipMasteryComponent.evRankChanged"))
 		(var status:number = "shipMasteryComponent.status ?: 0" (event "shipMasteryComponent.evStatusChanged"))
 
-		(var league:number = "rank > 0	? floor(rank / RANKS_COUNT_IN_EACH_LEAGUE) + 1
-										: 0")
-
+		(var rank:number = "shipMasteryComponent.rank ?: 0" (event "shipMasteryComponent.evRankChanged"))
 		(var points:number = "shipMasteryComponent.points ?: 0" (event "shipMasteryComponent.evPointsChanged"))
-		(var pointsForCurrentRank:number = "shipMasteryComponent.pointsForCurrentRank ?: 0" (event "shipMasteryComponent.evPointsForCurrentRankChanged"))
 		(var pointsForNextRank:number = "shipMasteryComponent.pointsForNextRank ?: 0" (event "shipMasteryComponent.evPointsForNextRankChanged"))
-		(var pointsTillNextRank:number = "max(0, pointsForNextRank - points)")
-		(var maxPointsTillNextRank:number = "pointsForNextRank - pointsForCurrentRank")
-		(var progress:number = "maxPointsTillNextRank > 0	?	(maxPointsTillNextRank - pointsTillNextRank) / maxPointsTillNextRank
-															:	0")
+		(var pointsForCurrentRank:number = "shipMasteryComponent.pointsForCurrentRank ?: 0" (event "shipMasteryComponent.evPointsForCurrentRankChanged"))
+
+		(var prevRank:number = "shipMasteryComponent.prevRank ?: 0" (event "shipMasteryComponent.evPrevRankChanged"))
+		(var prevPoints:number = "shipMasteryComponent.prevPoints ?: 0" (event "shipMasteryComponent.evPrevPointsChanged"))
+		(var prevPointsForNextRank:number = "shipMasteryComponent.prevPointsForNextRank ?: 0" (event "shipMasteryComponent.evPrevPointsForNextRankChanged"))
+		(var prevPointsForCurrentRank:number = "shipMasteryComponent.prevPointsForCurrentRank ?: 0" (event "shipMasteryComponent.evPrevPointsForCurrentRankChanged"))
+
+		(struct currentValue = PROGRESS_COUNT(_pointsForNextRank = "pointsForNextRank" _points = "points" _pointsForCurrentRank="pointsForCurrentRank"))
+		(struct previousValue = PROGRESS_COUNT(_pointsForNextRank = "prevPointsForNextRank" _points = "prevPoints" _pointsForCurrentRank="prevPointsForCurrentRank"))
+
+		(var isTrialsButtonEnabled:bool = "status == SC.Common.SHIP_MASTERY_STATUSES.TASKS_AVAILABLE")
 		(var description:str = "status == SC.Common.SHIP_MASTERY_STATUSES.TASKS_AVAILABLE_SOON ||
-								status == SC.Common.SHIP_MASTERY_STATUSES.RANK_IN_PROGRESS	? subst('IDS_SHIP_MASTERY_STATUS_1', [], {_pointsNext: pointsTillNextRank}, pointsTillNextRank)
+								status == SC.Common.SHIP_MASTERY_STATUSES.RANK_IN_PROGRESS	? subst('IDS_SHIP_MASTERY_STATUS_1', [],
+																								{_pointsNext: currentValue.pointsTillNextRank}, currentValue.pointsTillNextRank)
 																							: 'IDS_SHIP_MASTERY_STATUS_' + status")
 		(var isTopRank:bool = "rank == SC.Common.SHIP_MASTERY_CONSTANTS.MAX_RANK")
-		(var bgImage:str = "isTopRank	? 'url:../ship_mastery/league/top_rank.png'
-										: 'url:../ship_mastery/league/level_' + league + '.png'")
+
+		(struct league = LEAGUE_COUNT(_rank="rank"))
+		(struct prevLeague = LEAGUE_COUNT(_rank="prevRank"))
+
+		(var leagueSaved:number = "prevLeague.value" watch=false)
+		(bind leagueSaved "league.value" init=false watch=false (bind trigger "_playerShipId") (event "evMasteryEmblemAnimEnded"))
+
+		(var iconName:str = "league.value == TOP_LEAGUE ? 'top_rank' : 'level_' + league.value")
+
+		(var leagueChangeSound:str = "isTopRank ? 'mastery_leveling_final' : 'mastery_leveling'")
 	)
+	(dispatch evAddedToStage delay=0.4 on='addedToStage')  
+	(dispatch evLeagueChanged dir="EventDirection.DOWN" (bind enabled "league.value != leagueSaved") (event "evAddedToStage") (event "shipMasteryComponent.evRankChanged"))
+	(bindcall externalCall 'direct.action' "['shipsMastery.setProgressAnimationSeen', { shipID: _playerShipId}]" (event "evProgressAnimEnded") (event "evMasteryEmblemAnimEnded"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['mastery_progressbar', 'start']" (event "shipMasteryComponent.evPointsChanged"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "[leagueChangeSound, 'start']" watch=false (event "evLeagueChanged"))
+
 	(style (flow = "reverse_horizontal"))
 
 	(block
@@ -508,7 +580,10 @@
 		)
 		(block
 			(class $FullsizeAbsolute)
-			(style (left = 6px) (backgroundImage = 'url:../ship_mastery/league_bg.png'))
+			(style
+				(left = 6px)
+				(backgroundImage = 'url:../ship_mastery/league_bg.png')
+			)
 		)
 		(block
 			(style
@@ -528,13 +603,15 @@
 				(style
 					(marginBottom = "S")
 					(marginTop = "SXS")
+					(width = 100%)
 				)
-				(controller $Instance renderer='DefaultProgressBar'
+				(controller $Instance renderer='MasteryProgressBar'
 					(bind enabled "!isTopRank")
 					(args
-						_progress = "progress"
-						_height = 8px
-						_width = 256px
+						_progress = "currentValue.progress"
+						_prevProgress = "previousValue.progress"
+						_rank = "rank"
+						_prevRank = "prevRank"
 					)
 				)
 			)
@@ -555,47 +632,260 @@
 			(height = 256px)
 			(align = "center")
 		)
+		
+		(block
+			(alpha = 0)
+			(visible = false)
+			(colorTransform = "CT_NONE")
+			(class $FullsizeAbsolute)
+			(block
+				(class $Fullsize)
+				(style
+					(align = "center")
+					(bind backgroundImage "leagueSaved < TOP_LEAGUE ? 'url:../ship_mastery/league/level_' + leagueSaved + '.png' : ''")
+				)
+				(tf
+					(bind visible "prevRank != SC.Common.SHIP_MASTERY_CONSTANTS.MAX_RANK")
+					(class $TextDefaultBold40NM)
+					(style
+						(marginLeft = "-XXS")
+						(marginTop = 106px)
+						(alpha = "TA")
+					)
+					(bind text "prevRank")
+				)
+			)
+			(controller $Animation
+				(bindcall play
+					keyframes="[
+						{time: 0,	to: {	alpha: 1,
+											visible: true,
+											colorTransform: CT_NONE}},
+						{time: 0.5,	to: {	alpha: 1,
+											visible: true,
+											colorTransform: CT_NONE}},
+						{time: 0.9,	to: {	alpha: 0,
+											visible: false,
+											colorTransform: MASTERY_EMBLEM_CT_WHITE}}]"
+						(event "evLeagueChanged")
+				)
+			)
+		)
+		(block
+			(class $MasteryAnimationStyle)
+			(controller $FxInstance renderer='LeagueChangedAnimation' lifetime=3
+				(bindcall create (event "evLeagueChanged"))
+			)
+		)
 		(block
 			(class $FullsizeAbsolute)
-			(style (bind backgroundImage "bgImage"))
+			(element LeagueIconAnimated
+				_league = "league.value"
+				_rank = "rank"
+			)
 		)
-		(tf
-			(bind visible "!isTopRank")
-			(class $TextDefaultBold40NM)
+		(block
 			(style
-				(marginLeft = "-XXS")
-				(marginTop = 106px)
-				(alpha = "TA")
+				(position = "absolute")
+				(left = "LM")
+				(top = 50px)
+				(width = 160px)
+				(height = 146px)
+				(backgroundColor = "NO_COLOR")
 			)
-			(bind text "rank")
+			(controller $Tooltip
+				(renderer='ShipMasteryLeagueTooltip')
+				(args
+					_points = "points"
+					_currentRank = "rank"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
 		)
-		(controller $Tooltip
-			(renderer='ShipMasteryLeagueTooltip')
-			(args
-				_points = "points"
+	)
+	(block
+		(class $MasteryAnimationStyle)
+		(style (backgroundImage = 'url:../animations/spine/mastery/icon_league.skel'))
+		(controller $Spine
+			(bindcall play sequence="{name: iconName}")
+			(bindcall play sequence="{name: iconName}" watch=false (event "evMasteryEmblemAnimEnded"))
+			(bindcall pause (event "evLeagueChanged"))
+		)
+		(alpha = "isTrialsButtonEnabled ? 0 : 1")
+		(controller $Animation
+			(bindcall play	duration = 0.3
+							delay = 0.1
+							from="{alpha:1, visible:true}"
+							to="{alpha:0, visible:false}"
+							reverse="!isTrialsButtonEnabled"
+							(bind trigger "isTrialsButtonEnabled")
 			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	(block
+		(class $MasteryAnimationStyle)
+		(controller $Instance renderer='TrialsReadyAnimation'
+			(bind enabled "isTrialsButtonEnabled")
+			(args
+				_iconName = "iconName"
+			)
 		)
 	)
 )
 
-(def element ShipMasteryLeagueTooltip (_points:number = 0)
+(def element TrialsReadyAnimation (_iconName:str='')
+	(scope
+		(event evLeagueChanged)
+	)
+	(class $Fullsize)
+	(style (backgroundImage = 'url:../animations/spine/mastery/trials_ready.skel'))
+	(controller $Spine
+		(bindcall play sequence="{name: _iconName}" init=true (bind trigger "_iconName"))
+		(bindcall pause (event "evLeagueChanged"))
+		(bindcall resume (event "evLeagueChanged"))
+	)
+)
+
+(def element LeagueChangedAnimation ()
+	(class $Fullsize)
+	(style (backgroundImage = 'url:../animations/spine/mastery/league_change.skel'))
+	(controller $Spine)
+)
+
+(def element LeagueIconAnimated (_league:number = 0, _rank:number = 0)
+	(scope
+		(event evLeagueChanged)
+
+		(var iconName:str = "_league == TOP_LEAGUE ? 'top_rank' : 'level_' + _league")
+	)
+	(colorTransform = "CT_NONE")
+	(style
+		(width = 256px)
+		(height = 256px)
+		(align = "center")
+		(pivotX = 50%)
+		(pivotY = 50%)
+	)
+	
+	(controller $Animation
+		(bindcall play
+			easing="Easing.quad_in"
+			keyframes="[
+				{	time: 0,
+					to: {	alpha: 0,
+							scaleX: 0,
+							scaleY: 0,
+							colorTransform: MASTERY_EMBLEM_CT_WHITE}},
+				{	time: 0.2,
+					to: {	alpha: 0,
+							scaleX: 0,
+							scaleY: 0,
+							colorTransform: MASTERY_EMBLEM_CT_WHITE,
+							rotation: -6.5}},
+				{	time: 0.3,
+					to: {	alpha: 0.3,
+							scaleX: 0.5,
+							scaleY: 0.5,
+							colorTransform: MASTERY_EMBLEM_CT_WHITE}},
+				{	time: 0.38,
+					to: {	alpha: 1,
+							scaleX: 1.2,
+							scaleY: 1.2,
+							rotation: 0}},
+				{	time: 1.05,
+					to: {	scaleX: 1,
+							scaleY: 1,
+							colorTransform: CT_NONE}}]"
+				(event "evLeagueChanged")
+		)
+		(dispatch evMasteryEmblemAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style (bind backgroundImage "'url:../ship_mastery/league/' + iconName + '.png'"))
+	)
+	(tf
+		(bind visible "_rank != SC.Common.SHIP_MASTERY_CONSTANTS.MAX_RANK")
+		(class $TextDefaultBold40NM)
+		(style
+			(marginLeft = "-XXS")
+			(marginTop = 106px)
+			(alpha = "TA")
+		)
+		(bind text "_rank")
+	)
+)
+
+(def element MasteryProgressBar (	_progress:number,
+									_prevProgress:number = 0,
+									_rank:number = 0,
+									_prevRank:number = 0)
+	(scope
+		(event evAddedToStage)
+
+		(var progressValue:number = "_progress	?	_progress > 1	? 1
+																	: _progress
+												:	0")
+		(var prevProgressValue:number = "_prevProgress	? _prevProgress > 1	? 1
+																			: _rank != _prevRank ? 0 : _prevProgress
+														: 0")
+		(var animatedProgressWidth:number = "progressValue" watch=false)
+
+		(controller $Animation
+			(bindcall play	from="{animatedProgressWidth: prevProgressValue}"
+							to="{animatedProgressWidth: progressValue}"
+							duration=0.3
+							delay=0.1
+							easing="Easing.line"
+							(bind trigger "_progress")
+							(event "evAddedToStage")
+			)
+			(dispatch evProgressAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+		)
+	)
+	(style
+		(width = 256px)
+		(height = 8px)
+		(padding = 1px)
+		(scale9grid = 2)
+		(backgroundImage = 'url:../service_kit/progress_bars/bar_default_bg.png')
+	)
+	(block
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW")
+			(height = 100%)
+			(bind width "toString(animatedProgressWidth * 100) + '%'")
+		)
+	)
+	(dispatch evAddedToStage on='addedToStage')
+)
+
+(def element ShipMasteryLeagueTooltip (_points:number = 0, _currentRank:number = 0)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 	)
 	(style
 		(hitTest = false)
-		(width = 320px)
+		(width = 400px)
 	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemHeaderSubheaderText
-			_headerText='IDS_SHIP_MASTERY_LEAGUE_TOOLTIP_HEADER'
+		(hblock
+			(style (width = 100%))
+			(element TooltipSystemHeaderSubheaderText
+				_headerText='IDS_SHIP_MASTERY_LEAGUE_TOOLTIP_HEADER'
+			)
+			(element DefaultDividedCounter
+				_curValueTextClass = '$TextDefaultBold19NM'
+				_curValue = "_currentRank"
+				_maxValue = "SC.Common.SHIP_MASTERY_CONSTANTS.MAX_RANK"
+				_doNotAlphaOnZeroCurValue = true
+			)
 		)
 		(element TooltipSystemHorizontalDivider)
 		(element TooltipSystemDescriptionText
-			_descriptionText="subst('IDS_SHIP_MASTERY_LEAGUE_TOOLTIP_POINTS',[], {_points: formatSeparator(_points)}, _points)"
+			_descriptionText = "subst('IDS_SHIP_MASTERY_LEAGUE_TOOLTIP_POINTS',[], {_points: formatSeparator(_points)}, _points)"
 		)
 	)
 )

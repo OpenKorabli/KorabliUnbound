@@ -1,0 +1,1044 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+(def constant CAMPAIGN_TASK_MIN_WIDTH 220px)
+(def constant CAMPAIGN_TASK_MAX_WIDTH 260px)
+(def constant CAMPAIGN_TASK_HEIGHT 72px)
+(def constant CAMPAIGN_TASK_BASKET_HEIGHT 92px)
+
+(def constant CAMPAIGN_TASK_STATE_ALPHA			{	SC.Ui_styles.BUTTON_STATE.DISABLED: 0,
+													SC.Ui_styles.BUTTON_STATE.SELECTED:	0.15,
+													SC.Ui_styles.BUTTON_STATE.OVER:		0.10,
+													SC.Ui_styles.BUTTON_STATE.DOWN:		0.15,
+													SC.Ui_styles.BUTTON_STATE.UP:		0.05
+})
+
+(def constant CAMPAIGN_BORDER_TASK_STATE_ALPHA	{	SC.Ui_styles.BUTTON_STATE.DISABLED: 0.05,
+													SC.Ui_styles.BUTTON_STATE.SELECTED:	0.8,
+													SC.Ui_styles.BUTTON_STATE.OVER:		0.3,
+													SC.Ui_styles.BUTTON_STATE.DOWN:		0.15,
+													SC.Ui_styles.BUTTON_STATE.UP:		0.05
+})
+
+(def element TaskItem (_curCampaignMissionId:number, _taskId:number, _isShipSuitable:bool, _isBattleSuitable:bool, _needMargins:bool, _isUseless:bool, _hasFinalTaskCampaign:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var campaignMissionEntity:dhEntity =		"getPrimaryEntity(CC.campaignMissionParams, _curCampaignMissionId)")
+		(var campaignMissionParams:dhComponent =	"campaignMissionEntity.campaignMissionParams")
+		(var campaignMissionPlayer:dhComponent =	"campaignMissionEntity.campaignMissionPlayer")
+
+		(var campaignTaskEntity:dhEntity =		"getPrimaryEntity(CC.campaignTaskParams, _taskId)")
+		(var campaignTaskParams:dhComponent =	"campaignTaskEntity.campaignTaskParams")
+		(var campaignTaskPlayer:dhComponent =	"campaignTaskEntity.campaignTaskPlayer")
+
+		(var missionState:number =	"campaignMissionPlayer.state"	(event "campaignMissionPlayer.evUpdate"))
+		(var taskState:number =		"campaignTaskPlayer.state"		(event "campaignTaskPlayer.evUpdate"))
+		(var isLooted:bool =		"campaignTaskPlayer.isLooted"	(event "campaignTaskPlayer.evUpdate"))
+		(var isUseless:bool =		"campaignTaskPlayer.isUseless"	(event "campaignTaskPlayer.evUpdate"))
+		
+		(var taskProgress:number =	"campaignTaskEntity.progress.value"	(event "campaignTaskEntity.progress.evChanged"))
+		(var maxProgress:number =	"campaignTaskEntity.progress.max" )
+		(var taskNumber:number =	"campaignTaskParams.taskNumber")
+		(var isMainTask:bool =		"campaignTaskParams.isMainTask")
+		(var lootStars:number =		"campaignTaskParams.lootStars")
+		(var rewards:array =		"campaignTaskParams.rewards")
+		(var rewardCategory:str =	"campaignTaskParams.rewardCategory")
+		(var missionNumber:str =	"campaignMissionParams.uiNumber")
+
+		
+		(var accountResource:dhComponent = "getSingleComponent(CC.accountResource)")
+
+		(var constantsCampaignSlots:dhComponent = "getSingleComponent(CC.constantsCampaignSlots)")
+		(var constantCampaignSlotCommon:number = "constantsCampaignSlots.common")
+
+		(var chosenTasksCollection:dhCollection = "getCollectionByPath(CC.campaignTaskPlayer, 'active')")
+		(var haveFreeSlot:bool = "chosenTasksCollection.length < constantCampaignSlotCommon")
+
+		(var canClaimRewards:bool =			"taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && !isLooted")
+		(var canClaimStars:bool =			"taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && isLooted && missionState != SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS")
+		(var hideClaimStars:bool =			"!isMainTask && taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && isLooted && missionState == SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS")
+		(var canClaimRewardsAndStars:bool =	"canClaimRewards || canClaimStars")
+		(var isTaskLocked:bool =	"taskState == SC.Ui_common.CAMPAIGN_STATE.LOCKED")
+		(var isTaskSelected:bool =	"taskState == SC.Ui_common.CAMPAIGN_STATE.ACTIVATED")
+		(var isTaskCompleted:bool =	"taskState == SC.Ui_common.CAMPAIGN_STATE.COMPLETED || hideClaimStars")
+
+		(var cardStatusText:str = " isMainTask && !canClaimRewardsAndStars	? subst('IDS_CAMPAIGN_MISSION_NUMBER', [], { _missionNumber: missionNumber }) :
+									isTaskLocked							? 'IDS_CAMPAIGN_TASK_LOCKED' :
+									isTaskCompleted							? 'IDS_CAMPAIGN_TASK_COMPLETED'
+																			: ''")
+
+		(var cardHeaderText:str = "_hasFinalTaskCampaign && isMainTask	? 'IDS_FINAL_TASK_CAMPAIGN' :
+									isMainTask							? 'IDS_FINAL_TASK_MISSION'
+																		: subst('IDS_CAMPAIGN_TASK_NUMBER', [], { _taskNumber: taskNumber })")
+
+		(var cardHeaderStatus:str = "isTaskLocked		? SC.Ui_styles.UNIFIED_STATUS.LOCK :
+									isTaskCompleted		? SC.Ui_styles.UNIFIED_STATUS.SELECTED
+														: SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+
+		(var isDisabledState:bool = "isTaskLocked || isTaskCompleted")
+
+		(struct serverTime = SERVER_TIME())
+		(var missionStartTime:number = "campaignMissionParams.startTime")
+		(var missionTimeToStart:number = "missionStartTime - serverTime.value")
+
+		(var hasTaskProgress:bool =			"taskProgress > 0 && taskProgress < maxProgress")
+		(var isProgressBarVisible:bool =	"isTaskSelected && hasTaskProgress")
+
+		(var isStarListVisible:bool = "	missionState == SC.Ui_common.CAMPAIGN_STATE.ACTIVATED &&
+										!isMainTask &&
+										taskState != SC.Ui_common.CAMPAIGN_STATE.DONE")
+
+		(var isUnclickableState:bool =	"isDisabledState || canClaimRewardsAndStars || (!isTaskSelected && !haveFreeSlot)")
+
+		(var cardClickType:str = "	canClaimRewardsAndStars || hideClaimStars		? '' :
+									hasTaskProgress									? 'inputMapping.onRequest'
+																					: 'inputMapping.onAction'")
+
+		(var cardClickActionName:str = "taskState == SC.Ui_common.CAMPAIGN_STATE.OPENED && haveFreeSlot && missionTimeToStart <= 0	? 'CampaignsProxy.activateTask' :
+										taskState == SC.Ui_common.CAMPAIGN_STATE.ACTIVATED											? 'CampaignsProxy.deactivateTask'
+																																	: ''")
+
+		(var btnLabel:str = "	taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && !isLooted	? 'IDS_TAKE_REWARD' :
+								taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && isLooted 	? 'IDS_TAKE_STARS'
+																							: ''")
+
+		(var backgroundAlphaState:number = "isDisabledState 												? SC.Ui_styles.BUTTON_STATE.DISABLED :
+											(!isTaskSelected && !haveFreeSlot) || canClaimRewardsAndStars	? SC.Ui_styles.BUTTON_STATE.UP :
+											mouseDown														? SC.Ui_styles.BUTTON_STATE.DOWN :
+											isTaskSelected													? SC.Ui_styles.BUTTON_STATE.SELECTED :
+											rollOver														? SC.Ui_styles.BUTTON_STATE.OVER
+																											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var borderAlphaState:number = "isUnclickableState		? SC.Ui_styles.BUTTON_STATE.DISABLED :
+										mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
+										isTaskSelected			? SC.Ui_styles.BUTTON_STATE.SELECTED :
+										rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
+																: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var backgroundAlpha:number = "CAMPAIGN_TASK_STATE_ALPHA[backgroundAlphaState]")
+		(var borderAlpha:number = "CAMPAIGN_BORDER_TASK_STATE_ALPHA[borderAlphaState]")
+		
+		(struct stageSize = STAGE_SIZE())
+		(var isSmallScreen:bool = "stageSize.width < CAMPAIGN_STAGE_SMALL_SCREEN_MAX_WIDTH")
+
+		
+		(struct campaignTaskNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_TASK"))
+		(struct campaignTaskRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_TASK_REPEAT"))
+
+		(var tipId:number = "	campaignTaskNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_TASK :
+								campaignTaskRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_TASK_REPEAT
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var tipTargetId:str =	"campaignTaskNewTip.isActive		? campaignTaskNewTip.targetId :
+								campaignTaskRepeatNewTip.isActive	? campaignTaskRepeatNewTip.targetId
+																	: null")
+		(var isTipVisible:bool = "tipId != SC.Context_guiding_tip.TIP_TYPE.NONE && toString(_taskId) == tipTargetId")
+	)
+	(bind name "'TaskItem' + taskNumber")
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "cardClickType && cardClickActionName ? 'default_button' : ''")
+	(bindcall externalCall "cardClickType" "[cardClickActionName, { taskID: campaignTaskParams.id }]" watch=false on='leftClick')
+
+	(style
+		(width = "{ 1280:CAMPAIGN_TASK_MIN_WIDTH, 1920:CAMPAIGN_TASK_MAX_WIDTH }")
+		(height = "CAMPAIGN_TASK_HEIGHT")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		(element TaskCardBackground
+			_bgAlpha = "backgroundAlpha"
+			_borderAlpha = "borderAlpha"
+		)
+
+		(controller $Tooltip
+			(renderer = 'CampaignTaskTooltip')
+			(args
+				_taskId = "_taskId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+	(hblock
+		(class $Fullsize)
+		(style (padding = "SXS"))
+
+		(block
+			(class $Fullsize)
+
+			
+			(hblock
+				(style
+					(width = 100%)
+					(hitTest = false)
+				)
+
+				(block
+					(style (alpha = "TS"))
+
+					(controller $Instance renderer='UnifiedStatusIcon'
+						(bind enabled "isDisabledState")
+						(args
+							_unifiedStatus = "cardHeaderStatus"
+						)
+					)
+				)
+
+				(tf
+					(bind class "isSmallScreen ? '$TextDefaultBoldNM' : '$TextDefaultBold17NM'")
+					(style (bind alpha "isDisabledState ? TS : TA"))
+					(bind text "cardHeaderText")
+				)
+			)
+
+			
+			(block
+				(class $Fullsize)
+				(style (align = "left|bottom"))
+
+				
+				(tf
+					(bind visible "cardStatusText")
+					(bind class "isSmallScreen ? '$TextDefault13NM' : '$TextDefaultNM'")
+					(style
+						(width = 100%)
+						(hitTest = false)
+						(bind alpha "isDisabledState ? TS : TC")
+					)
+					(bind text "cardStatusText")
+				)
+	
+				
+				(block
+					(style
+						(width = 100%)
+						(hitTest = false)
+						(bind marginTop "isProgressBarVisible ? SXS : 0px")
+					)
+					(controller $Instance renderer='DefaultProgressBar'
+						(bind enabled "isProgressBarVisible")
+						(args
+							_width =	140px
+							_progress =	"taskProgress / maxProgress"
+							_color =	"SC.Ui_styles.SERVICE_COLORS.YELLOW"
+						)
+					)
+				)
+
+				
+				(block
+					(hblock
+						(style
+							(hgap = "XXS")
+							(hitTest = false)
+							(bind marginTop "isStarListVisible ? XS : 0px")
+						)
+
+						(controller $Repeat renderer='StarsEarnedEnable'
+							(bind enabled "isStarListVisible")
+							(bind count "lootStars")
+						)
+					)
+					
+					(controller $Instance renderer='GuidingTipHub'
+						(bind enabled "isTipVisible")
+						(args
+							_tipId =			"tipId"
+							_tipPositioning =	"TIP_POSITION_BOTTOM"
+							_offsetY = "CAMPAIGN_TASK_HEIGHT / 2 - 28px"
+							_modalWindowName = 'ModalWindowCampaignsSse'
+						)
+					)
+				)
+
+				
+				(block
+					(controller $Instance renderer='DefaultButton'
+						(bind enabled "canClaimRewards || canClaimStars")
+						(args
+							_label = "btnLabel"
+							_size = "SIZE.SMALL"
+							_width = 136px
+							_methods = "[{ type: 'inputMapping.onAction', name: 'CampaignsProxy.takeReward', args: { taskID: campaignTaskParams.id }}]"
+						)
+					)
+				)
+			)
+		)
+
+		(block
+			(style
+				(height = 100%)
+				(align = "middle")
+			)
+
+			(block
+				(style
+					(width = 48px)
+					(height = 48px)
+				)
+
+				(controller $Tooltip
+					(renderer = 'CampaignRewardTooltip')
+					(args
+						_headerText = 'IDS_REWARDS_CAMPAIGN_TASK'
+						_rewards = "rewards"
+						_isLooted = "isLooted"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(block
+					(class $Fullsize)
+					(style
+						(bind alpha "isTaskLocked || isLooted ? 0.5 : 1")
+						(bind backgroundImage "'url:../reward_categories/' + rewardCategory + '.png'")
+					)
+				)
+
+				(block
+					(bind visible "isLooted")
+					(class $FullsizeAbsolute)
+					(style (backgroundImage = "'url:../reward_categories/icon_check.png'"))
+				)
+			)
+		)
+	)
+)
+
+(def element CampaignsTasksBasket ()
+	(scope
+		(var chosenTasks:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active')")
+		(var chosenTasksLen:number = "chosenTasks.length")
+
+		(var constantsCampaignSlots:dhComponent = "getSingleComponent(CC.constantsCampaignSlots)")
+		(var totalSlots:number = "constantsCampaignSlots.common")
+		(var emptySlotsLen:number = "chosenTasksLen != totalSlots 	? totalSlots - chosenTasksLen
+																	: 0")
+	)
+	(style (align = "center"))
+
+	
+	(hblock
+		(style (marginBottom = "M"))
+		(tf
+			(class $TextDefaultBold23NM)
+			(style
+				(alpha = "TA")
+				(marginRight = "S")
+			)
+			(text = 'IDS_TASK_IN_PROGRESS')
+		)
+
+		(block
+			(style (marginTop = "XXS"))
+		
+			(element DefaultDividedCounter
+				_curValueTextClass = '$TextDefaultBold19NM'
+				_curValue = "chosenTasksLen"
+				_maxValue = "totalSlots"
+				_doNotAlphaOnZeroCurValue = true
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(vgap = "SXS")
+			(marginBottom = "{720:SXS, 1080:LM}")
+		)
+
+		(block
+			(bind visible "chosenTasksLen > 0")
+			(style (vgap = "SXS"))
+
+			(controller $Repeat renderer='CampaignsBasketTaskItem'
+				(bind count "chosenTasksLen")
+				(args
+					_campaignTaskEntity = "chosenTasks[$index]"
+				)
+			)
+		)
+
+		(block
+			(bind visible "emptySlotsLen > 0")
+			(style (vgap = "SXS"))
+
+			(controller $Repeat renderer='CampaignsTasksSlotEmpty'
+				(bind count "emptySlotsLen")
+			)
+		)
+	)
+	(element CampaignBattleTypeChooser)
+)
+
+(def element CampaignBattleTypeChooser ()
+	(scope
+		(var divisionDataEntity:dhEntity = "getSingleEntity(CC.division)")
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+		(var isCommander:bool = "preBattlePlayerSimpleComponent.isCommander" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+
+		(var selectedBattleTypes:dhCollection = "getCollection(CC.battleType).child('selected')")
+		(var selectedBattleTypeEntity:dhEntity = "selectedBattleTypes.getEntityAtIndex(0)")
+		(var selectedBattleTypeEntityId:number = "selectedBattleTypeEntity ? selectedBattleTypeEntity.id : 0")
+		(var battleTypeComponent:dhComponent = "selectedBattleTypeEntity.battleType")
+		(var eventBattleStateComponent:dhComponent = "selectedBattleTypeEntity.eventBattleState")
+
+		(var battleType:str = "battleTypeComponent.type" (event "battleTypeComponent.evStatusChanged"))
+		(var status:number = "battleTypeComponent.status" (event "battleTypeComponent.evStatusChanged"))
+		(var battleTypeGameParamId:number = "battleTypeComponent.battleTypeGameParamId")
+		(var isDisabled:bool = "status == BATTLE_TYPE.DISABLED")
+		(var selectedEventBattleName:str = "eventBattleStateComponent.name" (event "eventBattleStateComponent.evChanged"))
+
+		(var isPVEBattle:bool =			"battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+		(var isEventBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE")
+
+		(macro PULL_TRAINING_ROOM_ENTITY)
+		(var isActiveTrainingBattle:bool = "trainingRoomEntity && battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+
+		(var operationEntity:dhEntity = "getPrimaryEntity(CC.operation, battleTypeGameParamId)")
+		(var operationComponent:dhComponent = "operationEntity.operation")
+		(var operationGPName:str = "operationComponent.gpName")
+		(var pveOperationCustomIconName:str = "operationComponent.customIconName ?: ''" (event "operationComponent.evStatusChanged"))
+		(var battleTypeIcon:str = "	pveOperationCustomIconName	? pveOperationCustomIconName :
+									isEventBattle				? selectedEventBattleName
+																: battleType")
+
+		(var pveBattleButtonText:str = "operationGPName ? 'IDS_' + toUpper(operationGPName) + '_NAME' : ''")
+		(var battleTypeLabel:str = "isPVEBattle									? pveBattleButtonText :
+									isEventBattle && selectedEventBattleName	? tr(toUpper('IDS_' + selectedEventBattleName)) :
+									battleType									? tr(toUpper('IDS_' + battleType))
+																				: ''")
+
+		(var isBtnChooserEnabled:bool = "(isCommander || !divisionDataEntity) && !isActiveTrainingBattle")
+		(var tooltipText:dict = "isActiveTrainingBattle				? {	text: 'IDS_BATTLE_TYPE_CHOOSER_LOCK_REASON_IN_TRAINING_ROOM',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+								!isCommander && divisionDataEntity	? {	text: 'IDS_BATTLE_TYPE_CHOOSER_LOCK_REASON_NOT_COMMANDER_DIVISION',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING }
+																	: null")
+	)
+	(style
+		(width = 100%)
+		(align = "center")
+	)
+
+	(hblock
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(marginBottom = "{720:S, 1080:SXS}")
+		)
+
+		(block
+			(style
+				(width = 23px)
+				(height = 23px)
+				(marginRight = "S")
+				(marginLeft = "-S")
+				(bind backgroundImage "isDisabled	? 'url:../service_kit/battle_types/' + battleTypeIcon + '_disabled_small.png'
+													: 'url:../service_kit/battle_types/' + battleTypeIcon + '_small.png'")
+				(backgroundSize = "fill")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold21NM)
+			(style
+				(wordWrap = false)
+				(alpha = "TA")
+			)
+			(bind text "battleTypeLabel")
+		)
+	)
+
+	(element DefaultButton
+		_enabled = "isBtnChooserEnabled"
+		_width = 100%
+		_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+		_label = 'IDS_CHOOSE_BATTLE_TYPE'
+		_methods = "[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.BATTLE_TYPE_CHOOSER_SHOW } }]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "!isBtnChooserEnabled")
+		(args
+			_text = "tooltipText.text"
+			_unifiedStatus = "tooltipText.unifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element CampaignsBasketTaskItem (_campaignTaskEntity:dhEntity, _isShipSuitable:bool, _isBattleSuitable:bool, _isUseless:bool)
+	(scope
+		(var campaignTaskParams:dhComponent =		"_campaignTaskEntity.campaignTaskParams")
+		(var campaignTaskPlayer:dhComponent =		"_campaignTaskEntity.campaignTaskPlayer")
+		(var campaignTaskRestrictions:dhComponent =	"_campaignTaskEntity.campaignTaskRestrictions")
+
+		(var campaignMissionEntity:dhEntity =		"getPrimaryEntity(CC.campaignMissionParams, campaignTaskParams.missionID)")
+		(var campaignMissionParams:dhComponent =	"campaignMissionEntity.campaignMissionParams")
+		(var campaignMissionPlayer:dhComponent =	"campaignMissionEntity.campaignMissionPlayer")
+
+		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, campaignMissionParams.campaignID)")
+		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
+		(var campaignName:str = "campaignParams.name")
+
+		(var missionState:number =		"campaignMissionPlayer.state"				(event "campaignMissionPlayer.evUpdate"))
+		(var taskState:number =			"campaignTaskPlayer.state"					(event "campaignTaskPlayer.evUpdate"))
+		(var isLooted:bool =			"campaignTaskPlayer.isLooted"				(event "campaignTaskPlayer.evUpdate"))
+		(var isUseless:bool =			"campaignTaskPlayer.isUseless"				(event "campaignTaskPlayer.evUpdate"))
+		(var isShipSuitable:bool =		"campaignTaskPlayer.isShipSuitable"			(event "campaignTaskPlayer.evIsShipSuitableChanged"))
+		(var isBattleSuitable:bool =	"campaignTaskPlayer.isBattleTypeSuitable"	(event "campaignTaskPlayer.evIsBattleTypeSuitableChanged"))
+		
+		(var taskProgress:number =	"_campaignTaskEntity.progress.value"	(event "_campaignTaskEntity.progress.evChanged"))
+		(var maxProgress:number =	"_campaignTaskEntity.progress.max" )
+		(var taskNumber:number =	"campaignTaskParams.taskNumber")
+		(var isMainTask:bool =		"campaignTaskParams.isMainTask")
+		(var lootStars:number =		"campaignTaskParams.lootStars")
+		(var rewards:array =		"campaignTaskParams.rewards")
+		(var rewardCategory:str =	"campaignTaskParams.rewardCategory")
+		(var missionNumber:str =	"campaignMissionParams.uiNumber")
+
+		(var campaignAllMissionsLen:number = "campaignParams.allMissions.length ?: 0")
+		(var isFinalTaskCampaign:bool =		"(toNumber(missionNumber) == campaignAllMissionsLen) && isMainTask")
+
+		(var missionInfoText:str = " subst('IDS_CAMPAIGN_MISSION_NUMBER', [], { _missionNumber: missionNumber })")
+
+		(var cardHeaderText:str = "	isFinalTaskCampaign	? 'IDS_FINAL_TASK_CAMPAIGN' :
+									isMainTask			? 'IDS_FINAL_TASK_MISSION'
+														: subst('IDS_CAMPAIGN_TASK_NUMBER', [], { _taskNumber: taskNumber })")
+
+		(var hasTaskProgress:bool = "taskProgress > 0 && taskProgress < maxProgress")
+
+		(var canClaimRewards:bool = "taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && !isLooted")
+		(var isStarListVisible:bool = "	!isMainTask &&
+										taskState != SC.Ui_common.CAMPAIGN_STATE.DONE &&
+										missionState != SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS &&
+										missionState != SC.Ui_common.CAMPAIGN_STATE.COMPLETED")
+
+		(var canClaimStars:bool = "taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && isLooted && missionState != SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS")
+		(var hideClaimStars:bool = "!isMainTask && taskState == SC.Ui_common.CAMPAIGN_STATE.DONE && isLooted && missionState == SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS")
+		(var btnLabel:str = "	canClaimRewards	? toUpper(tr('IDS_TAKE_REWARD')) :
+								canClaimStars 	? toUpper(tr('IDS_TAKE_STARS'))
+												: ''")
+
+		(var isShowWarningInfo:bool = "((!isShipSuitable || !isBattleSuitable || isUseless) && taskState != SC.Ui_common.CAMPAIGN_STATE.DONE) || (isUseless && !canClaimStars)")
+		(var isUnsuitableShipAndBattle:bool = "!isShipSuitable && !isBattleSuitable")
+	
+		(struct blurOptionPref =		GET_PREF_BOOL(_option = "'graphics.GUI.blur'"))
+		(struct uiContrastOptionPref =	GET_PREF_BOOL(_option = "'graphics.GUI.contrast'"))
+		(var isHighContrast:bool = "uiContrastOptionPref.value || !blurOptionPref.value")
+	)
+	(style
+		(flow = "horizontal")
+		(width = "CAMPAIGN_TASK_MAX_WIDTH")
+		(height = "CAMPAIGN_TASK_BASKET_HEIGHT")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(element TaskCardBackground
+			_bgAlpha = 0.05
+			_borderAlpha = 0.8
+		)
+
+		(controller $Tooltip
+			(renderer = 'CampaignTaskTooltip')
+			(args
+				_taskId = "campaignTaskParams.id"
+				_isCampaignBasket = true
+				_hasMouseInstruction = false
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(style
+			(width = 60px)
+			(height = 100%)
+			(align = "middle")
+			(paddingLeft = 1px)
+			(hitTest = false)
+		)
+
+		(block
+			(style
+				(width = 44px)
+				(height = 80px)
+				(bind backgroundImage "'url:../campaigns/task_item_icons/' + campaignName + '.png'")
+			)
+		)
+	)
+	
+	(hblock
+		(class $Fullsize)
+		(style
+			(paddingTop = "SXS")
+			(paddingBottom = "SXS")
+			(paddingRight = "S")
+		)
+
+		(block
+			(class $Fullsize)
+
+			
+			(block
+				(style
+					(width = 100%)
+					(marginBottom = 10px)
+					(alpha = "TA")
+					(hitTest = false)
+				)
+
+				(element StatusLine
+					_text =				"cardHeaderText"
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+					_textClass =		'$TextDefaultBold17NM'
+				)
+			)
+
+			
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(alpha = "TS")
+					(hitTest = false)
+				)
+				(bind text "missionInfoText")
+			)
+
+			
+			(block
+				(class $Fullsize)
+				(style (align = "left|bottom"))
+
+	
+				
+				(block
+					(style
+						(width = 100%)
+						(hitTest = false)
+					)
+
+					(controller $Instance renderer='DefaultProgressBar'
+						(bind enabled "hasTaskProgress")
+						(args
+							_width =	140px
+							_progress =	"taskProgress / maxProgress"
+							_color =	"SC.Ui_styles.SERVICE_COLORS.YELLOW"
+						)
+					)
+				)
+
+				
+				(hblock
+					(style 
+						(hgap = "XXS")
+						(hitTest = false)
+						(bind marginTop "hasTaskProgress && isStarListVisible ? XS : 0px")
+					)
+					(controller $Repeat renderer='StarsEarnedEnable'
+						(bind enabled "isStarListVisible")
+						(bind count "lootStars")
+					)
+				)
+
+				
+				(block
+					(controller $Instance renderer='DefaultButton'
+						(bind enabled "canClaimRewards || canClaimStars")
+						(args
+							_label = "btnLabel"
+							_size = "SIZE.SMALL"
+							_width = 136px
+							_methods = "[{ type: 'inputMapping.onAction', name: 'CampaignsProxy.takeReward', args: { taskID: campaignTaskParams.id }}]"
+						)
+					)
+				)
+			)
+		)
+
+		(block
+			(style
+				(height = 100%)
+				(align = "bottom")
+			)
+
+			(block
+				(style
+					(bind hitTest "!isShowWarningInfo")
+					(width = 48px)
+					(height = 48px)
+				)
+
+				(controller $Tooltip
+					(renderer = 'CampaignRewardTooltip')
+					(args
+						_headerText = 'IDS_REWARDS_CAMPAIGN_TASK'
+						_rewards = "rewards"
+						_isLooted = "isLooted"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(block
+					(class $Fullsize)
+					(style
+						(bind alpha "isLooted ? 0.5 : 1")
+						(bind backgroundImage "'url:../reward_categories/' + rewardCategory + '.png'")
+					)
+				)
+				(block
+					(bind visible "isLooted")
+					(class $FullsizeAbsolute)
+					(style (backgroundImage = 'url:../reward_categories/icon_check.png'))
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "isShowWarningInfo")
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+
+		(element DeclareBlurLayer)
+	
+		(block
+			(class $FullsizeAbsolute)
+			(controller $Instance renderer='BlurMapModalWindowCustom'
+				(bind enabled "!isHighContrast && isShowWarningInfo")
+				(args
+					_map = 'mc_blurmap_medium'
+					_blurIntencity = 0.7
+					_hideTime = 0.2
+					_hideDelay = 0.25
+				)
+			)
+			(macro CONTRAST_PANEL_NO_BORDER _isHighContrast = "isHighContrast")
+
+			(block
+				(bind visible "!isHighContrast")
+				(class $FullsizeAbsolute)
+				(style
+					(backgroundColor = 0xff000000)
+					(alpha = 0.4)
+				)
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(style
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/attention_frame.png')
+				(scale9grid = 5)
+				(align = "middle")
+				(paddingLeft = "L")
+				(paddingRight = "L")
+			)
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style
+					(width = 100%)
+					(textAlign = "center")
+					(textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE")
+				)
+
+				(bind text "isUseless 						? 'IDS_TASK_IS_USELESS' :
+							isUnsuitableShipAndBattle		? 'IDS_TASK_UNSUITABLE_BATTLE_AND_SHIP' :
+							!isShipSuitable 				? 'IDS_TASK_UNSUITABLE_SHIP' :
+							!isBattleSuitable 				? 'IDS_TASK_UNSUITABLE_BATTLE'
+															: ''")
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = 10px)
+			(right = 10px)
+		)
+		(controller $Instance renderer='CloseButton'
+			(bind enabled "taskState != SC.Ui_common.CAMPAIGN_STATE.DONE || (isUseless && !canClaimStars)")
+			(args
+				_methods = "[
+								{	type: hasTaskProgress ? 'inputMapping.onRequest' : 'inputMapping.onAction',
+									name: hideClaimStars ? 'CampaignsProxy.takeReward' : 'CampaignsProxy.deactivateTask',
+									args: { taskID: _campaignTaskEntity.campaignTaskParams.id }
+								}
+							]"
+				_tooltipText = ''
+			)
+		)
+	)
+)
+
+(def element TaskCardBackground (_bgAlpha:number = 1, _borderAlpha:number = 1)
+	(scope
+		(struct blurOptionPref =		GET_PREF_BOOL(_option = "'graphics.GUI.blur'"))
+		(struct uiContrastOptionPref =	GET_PREF_BOOL(_option = "'graphics.GUI.contrast'"))
+		(var isHighContrast:bool = "uiContrastOptionPref.value || !blurOptionPref.value")
+	)
+	(class $Fullsize)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance renderer='BlurMapModalWindowCustom'
+			(bind enabled "!isHighContrast")
+			(args
+				_map = 'mc_blurmap_medium'
+				_hideTime = 0.2
+				_hideDelay = 0.25
+			)
+		)
+	)
+
+	(block
+		(bind visible "isHighContrast")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_high_contrast.png')
+			(scale9grid = 3)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE"))
+		(alpha = "_bgAlpha")
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger	= "_bgAlpha"
+			_alpha		= "_bgAlpha"
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(alpha = "_borderAlpha")
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger	= "_borderAlpha"
+			_alpha		= "_borderAlpha"
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(scale9grid = 2)
+			)
+		)
+	)
+)
+
+(def element CampaignsTasksSlotEmpty ()
+	(scope
+		(struct blurOptionPref =		GET_PREF_BOOL(_option = "'graphics.GUI.blur'"))
+		(struct uiContrastOptionPref =	GET_PREF_BOOL(_option = "'graphics.GUI.contrast'"))
+		(var isHighContrast:bool = "uiContrastOptionPref.value || !blurOptionPref.value")
+	)
+	(style
+		(width = "CAMPAIGN_TASK_MAX_WIDTH")
+		(height = "CAMPAIGN_TASK_BASKET_HEIGHT")
+		(align = "center|middle")
+	)
+
+	(controller $Tooltip
+		(renderer = 'HeaderDescriptionInstructionTooltip')
+		(args
+			_width = 320px
+			_headerText = 'IDS_EMPTY_SLOT_FOR_TASK'
+			_descriptionText = 'IDS_TASK_EXPLAIN_TOOLTIP'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapModalWindowCustom'
+			(bind enabled "!isHighContrast")
+			(args
+				_map = 'mc_blurmap_medium'
+				_hideTime = 0.2
+				_hideDelay = 0.25
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0.3)
+			(backgroundImage = 'url:../campaigns/task_item_icons/empty_slot_thin.png')
+			(backgroundSize = "fill")
+		)
+	)
+	(tf
+		(class $TextDefaultBold17NM)
+		(style (alpha = 0.65))
+		(text = 'IDS_EMPTY_SLOT_FOR_TASK')
+	)
+)
+
+(def element StarsEarnedEnable ()
+	(style
+		(width = 16px)
+		(height = 16px)
+		(backgroundImage = 'url:../service_kit/campaigns/icon_rank_star_nano.png')
+	)
+)
+
+(def element PostBattleCampaignTasksItem(_campaignTaskId:number, _campaignData:dict)
+	(scope
+		
+		(var isTaskDone:bool =		"_campaignData.isDone")
+		(var taskProgress:number =	"_campaignData.curProgress")
+		(var maxProgress:number =	"_campaignData.totalProgress")
+		
+
+		(var campaignTaskEntity:dhEntity =		"getPrimaryEntity(CC.campaignTaskParams, _campaignTaskId)")
+		(var campaignTaskParams:dhComponent =	"campaignTaskEntity.campaignTaskParams")
+
+		(var campaignMissionEntity:dhEntity =		"getPrimaryEntity(CC.campaignMissionParams, campaignTaskParams.missionID)")
+		(var campaignMissionParams:dhComponent =	"campaignMissionEntity.campaignMissionParams")
+
+		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, campaignMissionParams.campaignID)")
+		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
+
+		(var isMainTask:bool =		"campaignTaskParams.isMainTask")
+		(var missionNumber:str =	"campaignMissionParams.uiNumber")
+		(var taskNumber:number =	"campaignTaskParams.taskNumber")
+
+		(var campaignAllMissionsLen:number = "campaignParams.allMissions.length ?: 0")
+		(var isFinalTaskCampaign:bool =		"(toNumber(missionNumber) == campaignAllMissionsLen) && isMainTask")
+
+		(var taskName:str = "	isFinalTaskCampaign		? 'IDS_FINAL_TASK_CAMPAIGN' :
+								isMainTask				? 'IDS_FINAL_TASK_MISSION'
+														: subst('IDS_CAMPAIGN_TASK_NUMBER', [], { _taskNumber: taskNumber })")
+
+		(var missionInfo:str = "subst('IDS_CAMPAIGN_MISSION_NUMBER', [], { _missionNumber: missionNumber })")
+	)
+	(style
+		(height = 70px)
+		(bind width "isTaskDone ? 150px : 200px")
+		(align = "middle")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer = 'CampaignTaskTooltip')
+		(args
+			_taskId = "_campaignTaskId"
+			_hasMouseInstruction = false
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(hblock
+		(style
+			(height = 60px)
+			(width = 100%)
+			(hgap = "S")
+			(hitTest = false)
+		)
+
+		
+		(block
+			(block
+				(style
+					(width = 60px)
+					(height = 60px)
+					(backgroundSize = "cover")
+					(bind alpha "isTaskDone ? 0.5 : 1")
+					(bind backgroundImage "'url:../campaigns/campaign_logo/' + campaignParams.name + '_logo.png'")
+				)
+			)
+
+			(block
+				(bind visible "isTaskDone")
+				(class $FullsizeAbsolute)
+				(style (align = "center|middle"))
+
+				(block
+					(style
+						(width = 48px)
+						(height = 48px)
+						(backgroundImage = 'url:../reward_categories/icon_check.png')
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(class $Fullsize)
+			(style (align = "middle"))
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style
+					(width = 100%)
+					(bind alpha "isTaskDone	? 1
+											: TA")
+
+					(bind textColor "isTaskDone	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+				)
+				(bind text "taskName")
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(alpha = "TC")
+					(marginTop = "S")
+					(bind textColor "isTaskDone	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+				)
+				(bind text "missionInfo")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(bind marginTop "!isTaskDone ? SXS : 0px")
+				)
+				(controller $Instance renderer='DefaultProgressBar'
+					(bind enabled "!isTaskDone")
+					(args
+						_width =	100%
+						_progress =	"taskProgress / maxProgress"
+						_color =	"SC.Ui_styles.SERVICE_COLORS.YELLOW"
+					)
+				)
+			)
+		)
+	)
+)

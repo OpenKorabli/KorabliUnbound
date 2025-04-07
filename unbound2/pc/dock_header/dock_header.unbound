@@ -123,10 +123,9 @@
 
 		(macro PULL_ROUTE _nodeId = "SC.Ui_windows.ROUTE.CLANS" _fieldIsActive = "'isInClanBase'")
 
-		(var divisionWatcher:gfx = "$datahub.getFirstWatcher(CC.division)")
-		(var divisionDataEntity:gfx = "divisionWatcher.entity" (event "divisionWatcher.event"))
-		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
-		(var preBattlePlayerSimpleComponent:gfx = "selfPlayerEntity.preBattlePlayerSimple" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var isDivision:bool = "getSingleEntity(CC.division) != null")
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
 		(var isSelfPlayerCommander:bool = "preBattlePlayerSimpleComponent.isCommander" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
 
 		(var isHeaderTransparent:bool = "!isInClanBase && !isHighContrast")
@@ -147,21 +146,31 @@
 																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
 		(var hasFinishButton:bool = "isIn(newTipId, [SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FINAL_REPEAT])")
-		(var isUnderStartButtonTips:bool = "isIn(newTipId, [SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FINAL_IN_BATTLE, SC.Context_guiding_tip.TIP_TYPE.CONTINUOUS_BATTLE_ENTER, SC.Context_guiding_tip.TIP_TYPE.FIRST_BATTLE])")
+		(var isUnderStartButtonTips:bool = "isIn(newTipId, [SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FINAL_IN_BATTLE,
+															SC.Context_guiding_tip.TIP_TYPE.CONTINUOUS_BATTLE_ENTER,
+															SC.Context_guiding_tip.TIP_TYPE.FIRST_BATTLE])")
 
-		(var selectedBattleTypes:gfx = "$datahub.getCollection(CC.battleType).child('selected')")
-		(var selectedBattleTypesItems:array = "selectedBattleTypes.items ?: []" (event "selectedBattleTypes.evAdded") (event "selectedBattleTypes.evRemoved"))
-		(var selectedBattleTypeEntity:gfx = "selectedBattleTypesItems.length > 0 ? selectedBattleTypesItems[0] : null")
-		(var battleTypeComponent:gfx = "selectedBattleTypeEntity.battleType")
+		(var battleTypeCollection:dhCollection = "getCollection(CC.battleType).child('selected')")
+		(var battleTypeEntity:dhEntity = "battleTypeCollection.length > 0 ? battleTypeCollection[0] : null")
+		(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
+
 		(var battleType:str = "battleTypeComponent.type ?: ''" (event "battleTypeComponent.evStatusChanged"))
 
-		(macro PULL_TRAINING_ROOM_ENTITY)
-		(var isActiveTrainingBattle:bool = "trainingRoomEntity && battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
-		(var selfTeamId:number = "preBattlePlayerSimpleComponent.teamId ?: 0" (event "preBattlePlayerSimpleComponent.evTeamIdChanged"))
-		(var isSpectatorsTeam:bool = "selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
 
-		(var isStartBattleButtonBigVisible:bool = "isActiveTrainingBattle	? isSpectatorsTeam
-																			: !divisionDataEntity || isSelfPlayerCommander")
+		(var isActiveTrainingBattle:bool = "trainingRoomEntity != null && battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+		(var isActiveTournamentBattle:bool = "battleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
+		(var isActiveRoomBattle:bool = "isActiveTrainingBattle || isActiveTournamentBattle")
+		
+		(var selfTeamId:number = "preBattlePlayerSimpleComponent.teamId ?: 0" (event "preBattlePlayerSimpleComponent.evTeamIdChanged"))
+
+		(var isSpectatorsTeam:bool = 	"selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+		(var isNeutralTeam:bool = 		"selfTeamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM")
+
+		(var isStartBattleButtonBigVisible:bool = "isActiveRoomBattle		? isSpectatorsTeam || (isActiveTournamentBattle && isNeutralTeam)
+																			: !isDivision || isSelfPlayerCommander")
+
+		(var isVisibleTournamentTimer:bool = "isActiveTournamentBattle && stageWidth > 1280")
 	)
 	(bindcall externalCall "'inputMapping.onAction'" "[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.CONTINUOUS_BATTLE_ENTER } ]" init=false watch=false (event "centralBtn_evClicked"))
 
@@ -232,6 +241,8 @@
 			(element ButtonAccount)
 
 			(block
+				(bind visible "!isActiveTournamentBattle")
+
 				(style
 					(maxWidth = "DOCK_HEADER_ELEMS_WIDTH.PORT_LARGEST + S")
 					(marginLeft = "S")
@@ -263,7 +274,7 @@
 			(controller $Instance renderer='BigReadyForFormationBattleButton'
 				(bind enabled "!isStartBattleButtonBigVisible")
 				(args
-					_isTrainingRoom = "isActiveTrainingBattle"
+					_isTrainingRoom = "isActiveRoomBattle"
 				)
 			)
 
@@ -286,18 +297,29 @@
 			)
 		)
 
-		(block
+		(hblock
 			(style
 				(position = "absolute")
 				(marginLeft = -100%)
+				(height = 100%)
+				(align = "left|middle")
 			)
 
-			(controller $Instance renderer='TrainingRoomPlayerState'
-				(bind enabled "isActiveTrainingBattle")
+			(block
+				(bind visible "isVisibleTournamentTimer")
+				(style
+					(marginBottom = "XXS")
+					(marginRight = "{ 1920:LS, 1440:L }")
+				)
+				(controller $Instance renderer='TimerStartTournament'
+					(bind enabled "isVisibleTournamentTimer")
+				)	
 			)
-			
-			(controller $Instance renderer='DivisionButtonPort'
-				(bind enabled "!isActiveTrainingBattle")
+
+			(block
+				(controller $Instance
+					(bind renderer "isActiveRoomBattle ? 'TrainingRoomPlayerState' : 'DivisionButtonPort'")
+				)
 			)
 		)
 

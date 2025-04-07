@@ -18,6 +18,8 @@
 
 	(scope
 		(event scrollToBegin)
+		(event evTabClicked)
+		(event evContentChanged)
 
 		(var selfAvatarEntity:gfx =  "$datahub.getSingleEntity(CC.accountSelf)")
 
@@ -35,7 +37,7 @@
 		(var dogTagSortedSavedCollection:gfx = "dogTagSavedCollection.getChildByPath('sorted')" (event "dogTagSavedCollection.evAdded") (event "dogTagSavedCollection.evRemoved")) 
 		(var dogTagSavedArray:array = "dogTagSortedSavedCollection.items ?: []" (event "dogTagSortedSavedCollection.evAdded")  (event "dogTagSortedSavedCollection.evRemoved")) 
 
-		(var dogTagPreviewComponent:gfx = "$datahub.getSingleComponent(CC.dogTagComponentPreview)")
+		(var dogTagPreviewComponent:gfx = 	"$datahub.getSingleComponent(CC.dogTagComponentPreview)")
 		(var previewSymbolId:number =		"dogTagPreviewComponent.symbol			?: 0" (event "dogTagPreviewComponent.evUpdate"))
 		(var previewBgShapeId:number =		"dogTagPreviewComponent.bgShape			?: 0" (event "dogTagPreviewComponent.evUpdate"))
 		(var previewBgColorId:number =		"dogTagPreviewComponent.bgColor			?: 0" (event "dogTagPreviewComponent.evUpdate"))
@@ -77,6 +79,7 @@
 
 		(var dogTagBackgroundName:str = "dogTagBgShapeComponent.gpName" (event "dogTagBgShapeComponent.evUpdate"))
 		(var isColorizableShape:bool = "dogTagBgShapeComponent.isColorizable"		(event "dogTagBgShapeComponent.evUpdate"))
+		(var hasBorder:bool = "dogTagBorderColorComponent && !isSelectedUnique && isColorizableShape")
 		(var symbolOffsetY:number = "dogTagBgShapeComponent.symbolOffsetY ?: 0" (event "dogTagBgShapeComponent.evUpdate"))
 		(var finalSymbolOffsetY:number = "!isSelectedUnique ? 512 / 100 * symbolOffsetY : 0")
 
@@ -90,7 +93,9 @@
 		(var dogtagBorderColor:number = "dogTagBorderColorComponent ? toNumber(dogTagBorderColorComponent.colorHEX) : 0xbcbcbc")
 		(var dogtagBaseColor:number = "dogTagBgMaterialComponent ? toNumber(dogTagBgMaterialComponent.baseColorHEX) : 0xbcbcbc")
 
-		(var hasBorder:bool = "dogTagBorderColorComponent && !isSelectedUnique")
+		(var dogTagShapePath:str = "dogTagBackgroundName ? dogTagPreviewDir + dogTagBackgroundName + dogTagBgMaterialDir + '.png' : ''" watch=false (event "dogTagPreviewComponent.evUpdate"))
+		(var dogTagBorderPath:str = "hasBorder ? dogTagPreviewDir + dogTagBackgroundName + '/border.png' : ''" watch=false (event "dogTagPreviewComponent.evUpdate"))
+		(var dogTagSymbolPath:str = "dogTagSymbolName ? dogTagPreviewDir + dogTagSymbolName + '.png' : ''")
 
 		(macro COLOR_DIFF_TO_COLOR_TRANSFORM "'bgTransform'" "dogtagBaseColor" "dogtagBgColor")
 		(macro COLOR_DIFF_TO_COLOR_TRANSFORM "'borderTransform'" "dogtagBaseColor" "dogtagBorderColor")
@@ -125,12 +130,13 @@
 										newEmblemCounter.value ]")
 
 		(var selectedTab:number = "dogTagSymbolCategoryId" watch=false)
-		(event evTabClicked)
-		(event evContentChanged)
+		(var isConstructorTabSelected:bool = "selectedTab == SC.Common.DOGTAG_CATEGORIES.CONSTRUCTOR")
+
 		(bind selectedTab "$event.index" init=false (event "evContentChanged"))
 		(bind selectedTab "!hasPatches ? SC.Common.DOGTAG_CATEGORIES.CONSTRUCTOR : selectedTab" init=false watch=false (event "dogTagPatchCollection.evUpdated"))
 
-		(var isConstructorTabSelected:bool =	"selectedTab == SC.Common.DOGTAG_CATEGORIES.CONSTRUCTOR")
+		(var dogTagBgColorName:str = "dogTagBgColorComponent.gpName" (event "dogTagBgColorComponent.evUpdate"))
+		(var dogTagBgBorderColorName:str = "dogTagBorderColorComponent.gpName" (event "dogTagBorderColorComponent.evUpdate"))
 	)
 	(name = 'dogTagModal')
 	(dispatch evContentChanged args="$event" delay=0.1 (event "evTabClicked"))
@@ -211,6 +217,8 @@
 
 				
 				(block
+					(bind name "'current_dogtag_' + dogTagSymbolName + '_' + dogTagBackgroundName + '_' + dogTagBgColorName + '_' + dogTagBgBorderColorName + '_' + dogTagBgMaterialName")
+
 					(style (width=100%) (height=512px) (hitTest = false))
 
 					(block
@@ -218,7 +226,7 @@
 						(class $FullsizeAbsolute)
 						(style
 							(backgroundSize = "cover")
-							(bind backgroundImage "dogTagPreviewDir + dogTagBackgroundName + dogTagBgMaterialDir + '.png'")
+							(bind backgroundImage "dogTagShapePath")
 						)
 						(bind colorTransform "dogTagBgColorComponent && isColorizableShape ? bgTransform : {}")
 					)
@@ -228,7 +236,7 @@
 						(class $FullsizeAbsolute)
 						(style
 							(backgroundSize = "cover")
-							(bind backgroundImage "hasBorder ? dogTagPreviewDir + dogTagBackgroundName + '/border.png' : ''")
+							(bind backgroundImage "dogTagBorderPath")
 						)
 						(bind colorTransform "dogTagBorderColorComponent && isColorizableShape ? borderTransform : {}")
 					)
@@ -238,7 +246,7 @@
 						(class $FullsizeAbsolute)
 						(style
 							(backgroundSize = "cover")
-							(bind backgroundImage "dogTagPreviewDir + dogTagSymbolName + '.png'")
+							(bind backgroundImage "dogTagSymbolPath")
 							(bind top "finalSymbolOffsetY")
 						)
 					)
@@ -335,8 +343,10 @@
 									(width = 100%)
 									(marginBottom = "XS")
 									(alpha = "TA")
+									(multiline = true) (leading = -1)
+									(styleSheet = '.p_spacing { font-size: 8px; }')
 								)
-								(bind text "tr(toUpper('IDS_DOGTAG_' + dogTagSymbolName +'_DESCRIPTION'))")
+								(bind htmlText "tr(toUpper('IDS_DOGTAG_' + dogTagSymbolName +'_DESCRIPTION'))")
 							)
 						)
 						(bindcall scrollToBegin animated=false (bind trigger "dogTagSymbolName"))
@@ -726,11 +736,12 @@
 								dogTagPreviewComponent[elementType] == 0 &&
 								isSaved && !dogTagPreviewComponent.isUnique" (event "dogTagPreviewComponent.evUpdate"))
 
-		(var isFrameVisible:bool = "isSelected || isSaved")
-		(var frameAlpha:number = "isFrameVisible ? 1 : 0")
-		(var gpname:str =			"dogtagComponent.gpName"		(event "dogtagComponent.evUpdate"))
-		(var isEnabled:bool =		"dogtagComponent.enabled"		(event "dogtagComponent.evUpdate"))
-		(var iconPath:str = "'url:../dogTags/' + (dogTagIconPrefix ? 'preview/' + dogTagIconPrefix : 'small/' + gpname) + (isColorizableShape ? '/PCNT001' : '') + '.png'")
+		(var isFrameVisible:bool = 	"isSelected || isSaved")
+		(var frameAlpha:number = 	"isFrameVisible ? 1 : 0")
+		(var gpname:str =			"dogtagComponent.gpName"	(event "dogtagComponent.evUpdate"))
+		(var isEnabled:bool =		"dogtagComponent.enabled"	(event "dogtagComponent.evUpdate"))
+		(var dogTagIconDir:str = 	"dogTagIconPrefix || gpname ? ('url:../dogTags/' + (dogTagIconPrefix ? 'preview/' + dogTagIconPrefix : 'small/' + gpname)) : null")
+		(var iconPath:str = 		"dogTagIconDir ? dogTagIconDir + (isColorizableShape ? '/PCNT001' : '') + '.png' : ''")
 
 		
 		(var baseColor:number = 0xbcbcbc)

@@ -4,14 +4,18 @@
 )
 
 (def css $HintContainer ()
-	(paddingTop = "M") (paddingBottom = "M")
-	(paddingLeft = "M") (paddingRight = "M")
+	(paddingTop = "SXS")
+	(paddingBottom = "SXS")
+	(paddingLeft = "M")
+	(paddingRight = "M")
 	(backgroundSize = "fill")
 	(backgroundImage = "'url:../battle_hud/shared/tips_bg.png'")
 	(scale9grid = 12)
 )
 
 (def constant HOTKEYS_DIVIDER '/')
+(def constant MAX_HINT_WIDTH 432)
+(def constant MAX_SINGLE_LINE_HINT_HEIGHT 48)
 
 (def constant TUTORIAL_HINTS_TYPE_TO_KEYS_RENDERER [
 	'KeysHintBody',
@@ -52,24 +56,36 @@
 	(scope
 		(var tutorialContextHintComponent:dhComponent = "_tutorialContextHintEntity.tutorialContextHint" (event "_tutorialContextHintEntity.evAdded"))
 		(var keys:array = "tutorialContextHintComponent.keys")
-		(var messageIDS:str = "tr(tutorialContextHintComponent.messageIDS)")
+		(var messageIDS:str = "tutorialContextHintComponent.messageIDS")
 		(var sound:str = "tutorialContextHintComponent.sound")
 
 		(var timeToLive:dhComponent = "_tutorialContextHintEntity.timeToLive" autoUpdate=false (event "_tutorialContextHintEntity.evAdded"))
 
 		(var rendererName:str = "TUTORIAL_HINTS_TYPE_TO_KEYS_RENDERER[tutorialContextHintComponent.type ?: 0]")
+
+		(var hintHeight:number = "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))
+		(var areNoKeysAndTwoLinesHint:bool = "keys.length == 0 && hintHeight > MAX_SINGLE_LINE_HINT_HEIGHT")
 	)
 
 	(bindcall externalCall 'direct.action' "['action.onTutorialHintShowed', {sound: sound}]" watch=false (event "tutorialContextHintComponent.evShow") (bind enabled "sound"))
 
-	(class $HintContainer)
-	(alpha = 0)
+	(bind class "messageIDS ? '$HintContainer' : '$None'")
+	(style
+		(bind maxWidth "keys.length == 0 ? MAX_HINT_WIDTH : 9999")
+		(alpha = 0)
+	)
 
-	(controller $Instance
-		(bind renderer "rendererName")
-		(args
-			_keys="keys"
-			_messageIDS="messageIDS"
+	(block
+		(style (bind marginTop "areNoKeysAndTwoLinesHint ? -XS : 0px"))
+
+		(controller $Instance
+			(bind renderer "rendererName")
+			(bind enabled "tr(messageIDS)")
+			(bindcall recreate (bind trigger "messageIDS"))
+			(args
+				_keys =			"keys"
+				_messageIDS =	"messageIDS"
+			)
 		)
 	)
 
@@ -94,32 +110,42 @@
 	(class $HintBody)
 
 	(element KeysHintBody
-		_keys="[_keys[0], _keys[1]]"
-		_messageIDS='IDS_FIRST_BATTLE_PROMPT_FASTER_SLOWER'
+		_keys =			"[_keys[0], _keys[1]]"
+		_messageIDS =	'IDS_FIRST_BATTLE_PROMPT_FASTER_SLOWER'
 	)
+
 	(block
 		(style (marginLeft = "L"))
+
 		(element KeysHintBody
-			_keys="[_keys[2], _keys[3]]"
-			_messageIDS='IDS_FIRST_BATTLE_PROMPT_LEFT_RIGHT'
+			_keys =			"[_keys[2], _keys[3]]"
+			_messageIDS =	'IDS_FIRST_BATTLE_PROMPT_LEFT_RIGHT'
 		)
 	)
 )
 
 (def element KeysHintBody (_keys:array, _messageIDS:str)
+	(scope
+		(var uiStatsIDS:str = "_messageIDS")		
+		(var areNoKeysAndTwoLinesHint:bool = "_keys.length == 0")
+		(var hintText:str = "tr(_messageIDS)")
+	)
+
 	(class $HintBody)
 
 	
 	(hblock
 		(style
 			(align = "middle")
-			(marginTop = -6px)
-			(marginBottom = -6px)
 			(bind marginRight "_keys.length ? S : 0px")
 		)
+
 		(controller $Repeat renderer='TutorialContextHintHotkeyContainer'
 			(bind count "_keys.length")
-			(args _commandId="_keys[$index]" _needDelimiter="$index != 0")
+			(args
+				_commandId =		"_keys[$index]"
+				_needDelimiter =	"$index != 0"
+			)
 		)
 	)
 
@@ -127,10 +153,11 @@
 	(tf
 		(class $TextDefaultBold19NM)
 		(style
+			(bind maxWidth "_keys.length > 0 ? 9999 : MAX_HINT_WIDTH - (M * 2) + (3 * 2)")		
 			(textAlign = "center")
-			(maxWidth = 560px)
+			(leading = -2)
 		)
-		(bindcall substitute imageOffset=6 sourceText="_messageIDS" postfix='' toggle=false init=true)
+		(bindcall substitute imageOffset=6 sourceText="hintText" postfix='' toggle=false init=true)
 	)
 )
 
@@ -142,16 +169,23 @@
 	)
 
 	(class $HintBody)
+
 	(tf
 		(bind visible "_needDelimiter")
+
 		(class $TextHUD24Bold)
-		(style (marginLeft = "XS") (marginRight = "XS"))
+		(style
+			(marginLeft = "XS")
+			(marginRight = "XS")
+		)
+
 		(text = "HOTKEYS_DIVIDER")
 	)
+
 	(element HotkeyIndicator
-			_active = "true"
-			_commandId = "_commandId"
-			_size = "SIZE.LARGE"
-			_toggled = "isHintCompleted"
+		_active =		true
+		_commandId =	"_commandId"
+		_size =			"SIZE.LARGE"
+		_toggled =		"isHintCompleted"
 	)
 )

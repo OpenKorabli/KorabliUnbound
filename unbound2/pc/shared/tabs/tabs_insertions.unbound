@@ -78,6 +78,8 @@
 
 	(style (width = 0px) (align = "center"))
 
+	(name = 'battle_loading_tab_buttons')
+
 	(element MAIN_TAB_BUTTONS_BLOCK
 		
 		(element MainTabButton
@@ -185,7 +187,7 @@
 	)
 )
 
-(def element BattleResultsMainTabButtons (_currentTabIndex:number, _isTeamResultVisible:bool=true, _isDetailedReportVisible:bool=true)
+(def element BattleResultsMainTabButtons (_currentTabIndex:number, _isTeamResultVisible:bool=true, _isDetailedReportVisible:bool=true, _isCreditsAndExpVisible:bool=true)
 	(style (width = 0px) (align = "center"))
 
 	(element MAIN_TAB_BUTTONS_BLOCK
@@ -223,13 +225,18 @@
 			)
 		)
 
-		(element MainTabButton
-			_label = 		"'IDS_BATTLE_STATS_CREDITS_AND_EXP'"
-			_width = 		"MAIN_TAB_BUTTON_WIDTH.LARGE"
-			_isSelected = 	"_currentTabIndex == SC.Common.POST_BATTLE_SCREEN_TAB.CREDITS_AND_EXP"
-			_methods = 		"[{ type: 'direct.action', name: 'setSessionPref', args: { prefName: 'PBSScreenActiveTabIndex', newValue: SC.Common.POST_BATTLE_SCREEN_TAB.CREDITS_AND_EXP } }]"
-			_name = 		'itemTabPBS_3'
-			_isLast = 		true
+		(block
+			(controller $Instance renderer='MainTabButton'
+				(bind enabled "_isCreditsAndExpVisible")
+				(args
+					_label = 		"'IDS_BATTLE_STATS_CREDITS_AND_EXP'"
+					_width = 		"MAIN_TAB_BUTTON_WIDTH.LARGE"
+					_isSelected = 	"_currentTabIndex == SC.Common.POST_BATTLE_SCREEN_TAB.CREDITS_AND_EXP"
+					_methods = 		"[{ type: 'direct.action', name: 'setSessionPref', args: { prefName: 'PBSScreenActiveTabIndex', newValue: SC.Common.POST_BATTLE_SCREEN_TAB.CREDITS_AND_EXP } }]"
+					_name = 		'itemTabPBS_3'
+					_isLast = 		true
+				)
+			)
 		)
 	)
 )
@@ -441,32 +448,6 @@
 	)
 )
 
-(def element ConvertExpTabButtons (_tabIndex:number)
-	(style (width = 492px) (flow = "horizontal"))
-
-	(element TabButton
-		_label = 'IDS_FROM_SHIPS'
-		_isSelected = "_tabIndex == SC.Common.EXCHANGE_EXP_INSET.SHIP_XP"
-		_width = '50%'
-		_methods = "[{ type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'exchangeExpTabIndex', value: SC.Common.EXCHANGE_EXP_INSET.SHIP_XP } }]"
-	)
-
-	(element TabButton
-		_label = 'IDS_FROM_COMMANDERS'
-		_isSelected = "_tabIndex == SC.Common.EXCHANGE_EXP_INSET.ELITE_XP"
-		_width = '50%'
-		_methods = "[{ type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'exchangeExpTabIndex', value: SC.Common.EXCHANGE_EXP_INSET.ELITE_XP } }]"
-	)
-
-	(element HorizontalDividerTwoPx
-		(style
-			(position = "absolute")
-			(width = 100%)
-			(bottom = 0)
-		)
-	)
-)
-
 (def element DivisionEntranceInfotipTabButtons (_validatedTabInset:number, _isChatServerAvailable:bool)
 	(style (flow = "horizontal") (width = "FORMATION_WIDGET_WIDTH"))
 
@@ -591,6 +572,116 @@
 				(top = "-XS")
 				(right = "MS")
 				(backgroundImage = "'url:../service_kit/unified_status_icons/icon_' + SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE + '.png'")
+			)
+		)
+	)
+)
+
+(def element CampaignsTab (_isCampaignsSelected:bool)
+	(scope
+		(struct campaignsFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.CAMPAIGNS"))
+		(var isCampaignUnlocked:bool = "campaignsFeature.state == 'new'")
+
+		(var activeTaskStateDoneCollection:dhCollection = "getCollectionByPath(CC.campaignTaskPlayer, 'active.taskStateDone')")
+		(var hasCampaignReward:bool = "activeTaskStateDoneCollection.length > 0")
+		(var isRewardVisible:bool = "!_isCampaignsSelected && hasCampaignReward")
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountResourceComponent:dhComponent = "resourceEntity.accountResource")
+		(var isPremiumAccount:bool = "accountResourceComponent.activePremiumType != SC.Common.PREMIUM_TYPE.NONE" (event "accountResourceComponent.evActivePremiumTypeChanged"))
+
+		(var chosenTasks:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active')")
+		(var chosenTasksLen:number = "chosenTasks.length")
+
+		(var constantsCampaignSlots:dhComponent = "getSingleComponent(CC.constantsCampaignSlots)")
+		(var totalAvailableTaskCount:number = "constantsCampaignSlots.common")
+		
+		(var inlineLabel:str = "toString(chosenTasksLen) + '/' + toString(totalAvailableTaskCount)")
+		(var labelAlpha:number = "_isCampaignsSelected ? 1 : TC")
+
+		(var labelColor:number = "	_isCampaignsSelected	? SC.Ui_styles.SERVICE_COLORS.MATTE_BLACK 
+															: SC.Ui_styles.SERVICE_COLORS.WHITE")
+	)
+	(class $SSETabWidth)
+	(style (marginBottom = 1px))
+
+	(name = 'buttonCampaigns')
+
+	(element SideTabButton
+		_label = 'IDS_CAMPAIGNS_TITLE'
+		_isSelected = "_isCampaignsSelected"
+		_methods = "[	{
+							type: 'inputMapping.onAction',
+							name: 'navigateTo',
+							args: { route: SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_CAMPAIGN }
+						},
+						{	
+							type: 'inputMapping.onAction',
+							name: isCampaignUnlocked ? 'featureSeen' : '',
+							args: { featureIndex: SC.Common.ACCOUNT_FEATURE.CAMPAIGNS }
+						}]"
+		_isNewMarker = "isCampaignUnlocked"
+		_unifiedStatus = "isRewardVisible	? SC.Ui_styles.UNIFIED_STATUS.CHECK
+											: SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+	)
+
+	
+	(tf
+		(bind visible "!isRewardVisible")
+		(class $TextDefaultBold17NM)
+		(class $DropShadowDisabler)
+
+		(style
+			(position = "absolute")
+			(top = 12px)
+			(right = 20px)
+			(bind alpha "labelAlpha")
+			(bind textColor "labelColor")
+		)
+
+		(bind text "inlineLabel")
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(right = "M")
+			(top = 6px)
+			(alpha = "isRewardVisible ? 1 : 0")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration	= 0.15
+				from		= "{ alpha: 0 }"
+				to			= "{ alpha: 1 }"
+				action		= "kill"
+				easing		= "Easing.quad_in"
+				reverse		= "!isRewardVisible"
+				(bind trigger "isRewardVisible")
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(right = 0)
+				(bottom = "-M")
+			)
+
+			(controller $Instance renderer='RewardsMarkerAnimation'
+				(bind enabled "isRewardVisible")
+			)
+		)
+
+		(block
+			(bind visible "isRewardVisible")
+			(style
+				(position = "absolute")
+				(top = "-XS")
+				(right = "MS")
+				(backgroundImage = 'url:../service_kit/port_banner/icon_banner_star.png')
 			)
 		)
 	)

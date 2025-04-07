@@ -37,12 +37,22 @@
 
 		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
 		(var trainingRoomComponent:dhComponent = "trainingRoomEntity.trainingRoom")
-		(var isSpawnSwapped:bool = "trainingRoomComponent.isSpawnSwapped" (event "trainingRoomComponent.evUpdate"))
-		(var isIconSwappedVisible:bool = "_isShowSpawn && isSpawnSwapped")
 
 		(var allySpawnPosition:number = "trainingRoomComponent.allySpawnPosition" (event "trainingRoomComponent.evSpawnPositionChanged"))
 		(var enemySpawnPosition:number = "trainingRoomComponent.enemySpawnPosition" (event "trainingRoomComponent.evSpawnPositionChanged"))
 
+		
+		(var isSpawnSwapped:bool = "allySpawnPosition != enemySpawnPosition		? trainingRoomComponent.isSpawnSwapped 
+																				: null" (event "trainingRoomComponent.evUpdate"))
+		
+		(var isCorrectlyData:bool = "	trainingRoomComponent &&
+										allySpawnPosition != enemySpawnPosition &&
+										allySpawnPosition != -1 &&
+										enemySpawnPosition != -1 &&
+										isSpawnSwapped != null")
+
+		(var isIconSwappedVisible:bool = "_isShowSpawn && isSpawnSwapped")
+		
 		(var isWaiting:bool = "false")
 		(bind isWaiting "true" init=false watch=false (event "evSpawnSwapAnimated"))
 		(bind isWaiting "false" init=false watch=false (event "trainingRoomComponent.evUpdate"))
@@ -65,7 +75,6 @@
 	)
 
 	(block
-		(bind visible "_isShowSpawn")
 		(class $FullsizeAbsolute)
 
 		(block
@@ -77,19 +86,25 @@
 		(block
 			(class $FullsizeAbsolute)
 			(style (top = 50%) (left = 50%))
-
-			(element MapSpawn
-				_spawnPosition="allySpawnPosition"
-				_reverseSpawnPosition="enemySpawnPosition"
-				_colorTransform="CT_ALPHA_TEAM"
-				_isSpawnSwapped="isSpawnSwapped"
+			
+			(controller $Instance renderer='MapSpawn'
+				(bind enabled "_isShowSpawn && isCorrectlyData")
+				(args
+					_spawnPosition="allySpawnPosition"
+					_reverseSpawnPosition="enemySpawnPosition"
+					_colorTransform="CT_ALPHA_TEAM"
+					_isSpawnSwapped="isSpawnSwapped"
+				)
 			)
 
-			(element MapSpawn
-				_spawnPosition="enemySpawnPosition"
-				_reverseSpawnPosition="allySpawnPosition"
-				_colorTransform="CT_BRAVO_TEAM"
-				_isSpawnSwapped="isSpawnSwapped"
+			(controller $Instance renderer='MapSpawn'
+				(bind enabled "_isShowSpawn && isCorrectlyData")
+				(args
+					_spawnPosition="enemySpawnPosition"
+					_reverseSpawnPosition="allySpawnPosition"
+					_colorTransform="CT_BRAVO_TEAM"
+					_isSpawnSwapped="isSpawnSwapped"
+				)
 			)
 		)
 	)
@@ -141,13 +156,16 @@
 	)
 )
 
-(def element MapSpawn (_spawnPosition:number, _reverseSpawnPosition:number, _colorTransform:dict, _isSpawnSwapped:bool=false)
+(def element MapSpawn (_spawnPosition:number, _reverseSpawnPosition:number, _colorTransform:dict, _isSpawnSwapped:bool)
 	(scope
+		(event evShowAnimation)
+		(event evShowReverseAnimation)
+
 		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
 		(var trainingRoomComponent:dhComponent = "trainingRoomEntity.trainingRoom")
-		(var initSpawnPosition:number = 		"_isSpawnSwapped ? _reverseSpawnPosition : _spawnPosition" watch=false (event "trainingRoomComponent.evSpawnPositionChanged"))
-		(var initReverseSpawnPosition:number = 	"_isSpawnSwapped ? _spawnPosition : _reverseSpawnPosition" watch=false (event "trainingRoomComponent.evSpawnPositionChanged"))
-		(var isAnimated:bool = "!_isSpawnSwapped" watch=false (event "trainingRoomComponent.evSpawnPositionChanged"))
+		(var initSpawnPosition:number = 		"_isSpawnSwapped ? _reverseSpawnPosition : _spawnPosition" watch=false)
+		(var initReverseSpawnPosition:number = 	"_isSpawnSwapped ? _spawnPosition : _reverseSpawnPosition" watch=false)
+		(var isAnimated:bool = "!_isSpawnSwapped" watch=false)
 
 		(var spawnRotation:number = "(initSpawnPosition % CORNERS * 90) ?: 0")
 		(var reverseSpawnRotation:number = "(initReverseSpawnPosition % CORNERS * 90) ?: 0")
@@ -160,6 +178,8 @@
 		(var reverseTopAnimation:number = 	"SPAWN_TOP_ANIMATION[initReverseSpawnPosition] ?: 0")
 		(var reverseLeftAnimation:number = 	"SPAWN_LEFT_ANIMATION[initReverseSpawnPosition] ?: 0")
 	)
+	(dispatch evShowAnimation			(bind enabled "_isSpawnSwapped == isAnimated") (bind trigger "_isSpawnSwapped"))
+	(dispatch evShowReverseAnimation	(bind enabled "!_isSpawnSwapped == isAnimated") (bind trigger "_isSpawnSwapped"))
 
 	(class $FullsizeAbsolute)
 	(style
@@ -171,33 +191,32 @@
 		(bind backgroundImage "spawnImg")
 	)
 	(bind colorTransform "_colorTransform")
-
 	(controller $Animation
 		(bindcall play
 			keyframes =
 			"[
-				{ percent:0,	to:{alpha:1,	rotation: spawnRotation,		top: 0px,					left: 0px} },
-				{ percent:25,	to:{alpha:0,	rotation: spawnRotation,		top: 0px,					left: 0px} },
-				{ percent:50,	to:{alpha:0,	rotation: reverseSpawnRotation,	top: reverseTopAnimation,	left: reverseLeftAnimation} },
-				{ percent:75,	to:{alpha:0.5,	rotation: reverseSpawnRotation,	top: reverseTopAnimation,	left: reverseLeftAnimation} },
-				{ percent:100,	to:{alpha:1,	rotation: reverseSpawnRotation,	top: 0px,					left: 0px} }
+				{ percent:0,	to:{alpha:1,			rotation: spawnRotation,		top: 0px,					left: 0px} },
+				{ percent:25,	to:{alpha:0,			rotation: spawnRotation,		top: 0px,					left: 0px} },
+				{ percent:50,	to:{alpha:0,			rotation: reverseSpawnRotation,	top: reverseTopAnimation,	left: reverseLeftAnimation} },
+				{ percent:75,	to:{alpha:0.5,			rotation: reverseSpawnRotation,	top: reverseTopAnimation,	left: reverseLeftAnimation} },
+				{ percent:100,	to:{alpha:1,			rotation: reverseSpawnRotation,	top: 0px,					left: 0px} }
 			]"
 			duration=0.5
-			init=false
-			(bind enabled "_isSpawnSwapped == isAnimated")
+			watch=false
+			(event "evShowAnimation")
 		)
 		(bindcall play
 			keyframes =
 			"[
-				{ percent:0,	to:{alpha:1,	rotation: reverseSpawnRotation,	top: 0px,					left: 0px} },
-				{ percent:25,	to:{alpha:0,	rotation: reverseSpawnRotation,	top: 0px,					left: 0px} },
-				{ percent:50,	to:{alpha:0, 	rotation: spawnRotation,		top: topAnimation,			left: leftAnimation} },
-				{ percent:75,	to:{alpha:0.5,	rotation: spawnRotation,		top: topAnimation,			left: leftAnimation} },
-				{ percent:100,	to:{alpha:1,	rotation: spawnRotation,		top: 0px,					left: 0px} }
+				{ percent:0,	to:{alpha:1,			rotation: reverseSpawnRotation,	top: 0px,					left: 0px} },
+				{ percent:25,	to:{alpha:0,			rotation: reverseSpawnRotation,	top: 0px,					left: 0px} },
+				{ percent:50,	to:{alpha:0, 			rotation: spawnRotation,		top: topAnimation,			left: leftAnimation} },
+				{ percent:75,	to:{alpha:0.5,			rotation: spawnRotation,		top: topAnimation,			left: leftAnimation} },
+				{ percent:100,	to:{alpha:1,			rotation: spawnRotation,		top: 0px,					left: 0px} }
 			]"
 			duration=0.5
-			init=false
-			(bind enabled "!_isSpawnSwapped == isAnimated")
+			watch=false
+			(event "evShowReverseAnimation")
 		)
 	)
 )

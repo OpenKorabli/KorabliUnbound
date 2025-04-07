@@ -6,6 +6,8 @@
 	(marginTextTop = -6px)
 	(marginTextBottom = -6px) 
 
+	(multiline = true)
+
 	(styleSheet ="'
 		body {
 			font-family: $WWSDefaultFont;
@@ -42,6 +44,9 @@
 			font-family: $WWSDefaultFont;
 			color: #FF9900
 		}
+		.p_spacing {
+			font-size: 6.5px;
+		}
 	'")
 )
 
@@ -72,15 +77,6 @@
 		(backgroundColor = 0x01000000)
 	)
 )
-
-(def element TooltipSystemSimpleTooltip (_tooltipText:str='')
-	(style (width = 100%))
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemDescriptionText "_tooltipText")
-	)
-)
-
 
 (def macro INNER_PANEL_BACKGROUND ()
 	(block
@@ -299,7 +295,6 @@
 
 (def element TooltipSystemHtmlDescriptionText (_descriptionText:str)
 	(scope
-		(var descriptionText:str = "_descriptionText")
 		(var substituteMap:dict = "{	'[commander]'		: 'icon_clan_role_commander',
 										'[exec_officer]'	: 'icon_clan_role_executive_officer',
 										'[private]'			: 'icon_clan_role_private',
@@ -313,7 +308,13 @@
 	(tf
 		(class $DescriptionHtmlTextStyleSheet)
 		(style (width = 100%))
-		(bindcall substitute imageOffset="5"  substitutionMap="substituteMap" 	sourceText="'<body>' + descriptionText + '</body>'"  postfix='' init=true)
+
+		(bindcall substitute	imageOffset=5
+								substitutionMap="substituteMap"
+								sourceText="'<body>' + tr(_descriptionText) + '</body>'"
+								postfix=''
+								init=true
+								(bind enabled "!_descriptionText.empty"))
 	)
 )
 
@@ -331,7 +332,7 @@
 	)
 )
 
-(def element TooltipSystemHeaderSubheaderText (_headerText:str, _unifiedStatus:str="SC.Ui_styles.UNIFIED_STATUS.DEFAULT", _subheaderText:str=null)
+(def element TooltipSystemHeaderSubheaderText (_headerText:str, _subheaderText:str='', _unifiedStatus:str="SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
 	(style (width = 100%))
 
 	(macro UNIFIED_STATUS_TO_COLOR_AND_ALPHA "_unifiedStatus" "'textColor'" "'textAlpha'")
@@ -339,18 +340,25 @@
 	(tf
 		(name = 'tooltipSystemHeader')
 		(class $TextDefaultBold19NM)
-		(style (width = "100%") (leading = "-4") (bind textColor "textColor") (bind alpha "textAlpha"))
+		(style
+			(width = 100%)
+			(leading = -4)
+			(bind textColor "textColor")
+			(bind alpha "textAlpha")
+		)
 		(bind text "_headerText")
 	)
 
 	(tf
-		(bind visible "_subheaderText != null")
+		(bind visible "toBool(_subheaderText)")
 		(class $TextDefaultNM)
-		(style	(width = 100%)
-				(marginTop = "S")
-				(leading = -2)
-				(bind alpha "textColor == SC.Ui_styles.SERVICE_COLORS.WHITE ? TC : 1")
-				(bind textColor "textColor"))
+		(style
+			(width = 100%)
+			(marginTop = "S")
+			(leading = -2)
+			(bind textColor "textColor")
+			(bind alpha "textColor == SC.Ui_styles.SERVICE_COLORS.WHITE ? TC : 1")
+		)
 		(bind text "_subheaderText")
 	)
 )
@@ -497,7 +505,7 @@
 	)
 )
 
-(def element ShipTitleWithIconAndLevelPBS (_shipID:number, _isSelf:bool=false, _isEnemy:bool=false, _fontSize:number="SIZE.SMALL", _iconColorTransform:dict={}, _textColor:str="SC.Ui_styles.SERVICE_COLORS.WHITE")
+(def element ShipTitleWithIconAndLevelPBS (_shipID:number, _isSelf:bool=false, _isEnemy:bool=false, _fontSize:number="SIZE.SMALL", _iconColorTransform:dict={}, _textColor:number="SC.Ui_styles.SERVICE_COLORS.WHITE")
 	(scope
 		(var shipEntity:gfx =	"$datahub.getPrimaryEntity(CC.ship, _shipID)")
 		
@@ -562,25 +570,23 @@
 
 (def element TooltipSystemHeaderIconCampaignTask (_entityId:number, _imageWidth:number, _imageHeight:number)
 	(scope
-		(var campaignTaskEntity:gfx = "$datahub.getPrimaryEntity(CC.campaignTaskParams, _entityId)")
-		(var missionEntity:gfx = "$datahub.getPrimaryEntity(CC.campaignMissionParams, campaignTaskEntity.campaignTaskParams.missionID)")
-		(var campaignTaskParams:gfx = "campaignTaskEntity ? campaignTaskEntity.campaignTaskParams : null")
-		(macro PULL_CAMPAIGN_DATA_SCOPE "campaignTaskParams.campaignID")
-		(var campaignMissionParams:gfx = "missionEntity ? missionEntity.campaignMissionParams : null")
+		(var campaignTaskEntity:dhEntity = "getPrimaryEntity(CC.campaignTaskParams, _entityId)")
+		(var campaignTaskParams:dhComponent = "campaignTaskEntity.campaignTaskParams")
+		(var missionEntity:dhEntity = "getPrimaryEntity(CC.campaignMissionParams, campaignTaskParams.missionID)")
+		(var campaignMissionParams:dhComponent = "missionEntity.campaignMissionParams")
 		(var uiNumber:str = "campaignMissionParams.uiNumber")
-		(var imagePath:str = "'url:../campaigns/missions_pin/' + campaignName + '_pin.png'")
 	)
 	(style
 		(bind width "_imageWidth ? _imageWidth : 80")
 		(bind height "_imageHeight ? _imageHeight : 80")
+		(backgroundImage = 'url:../campaigns/missions_pin/campaign_pin.png')
 		(backgroundSize = "fill")
-		(bind backgroundImage "imagePath")
 		(align = "center|middle")
 	)
 
 	(tf
+		(class $TextDefaultBold21NM)
 		(style (alpha = "TA"))
-		(class $TextDefaultBold17NM)
 		(bind text "uiNumber")
 	)
 )
@@ -602,17 +608,28 @@
 
 (def element TooltipSystemHeaderIconCampaignMission (_entityId:number, _imageWidth:number, _imageHeight:number)
 	(scope
-		(var campaignMissionEntity:gfx = "$datahub.getPrimaryEntity(CC.campaignMissionParams, _entityId)")
-		(var campaignMissionParams:gfx = "campaignMissionEntity ? campaignMissionEntity.campaignMissionParams : null")
-		(macro PULL_CAMPAIGN_DATA_SCOPE "campaignMissionParams.campaignID")
+		(var campaignMissionEntity:dhEntity = "getPrimaryEntity(CC.campaignMissionParams, _entityId)")
+		(var campaignMissionParams:dhComponent = "campaignMissionEntity.campaignMissionParams")
+
+		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, campaignMissionParams.campaignID)")
+		(var campaignState:number = "campaignEntity.campaignPlayer.state" (event "campaignEntity.campaignPlayer.evChanged"))
+		(var campaignName:str = "campaignEntity.campaignParams.name")
+
 		(var uiNumber:str = "campaignMissionParams.uiNumber")
-		(var imagePath:str = "'url:../campaigns/campaign_logo/' + campaignName + '_logo.png'")
 	)
+
 	(style
-		(bind width "_imageWidth ? _imageWidth : 80")
-		(bind height "_imageHeight ? _imageHeight : 80")
+		(bind width "_imageWidth ? _imageWidth : 80px")
+		(bind height "_imageHeight ? _imageHeight : 80px")
+		(backgroundImage = 'url:../campaigns/missions_pin/campaign_pin.png')
 		(backgroundSize = "fill")
-		(bind backgroundImage "imagePath")
+		(align = "center|middle")
+	)
+
+	(tf
+		(class $TextDefaultBold21NM)
+		(style (alpha = "TC"))
+		(bind text "uiNumber")
 	)
 )
 
@@ -985,6 +1002,53 @@
 		(style (alpha = "TA"))
 		(bind class "_isCounterBold ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
 		(bind text "formatSeparator(_count) + (_measurement ? ' ' + _measurement : '')")
+	)
+)
+
+(def element TooltipSystemMultiplierLine (_title:str, _multiplier:number, _hasMultiplySymbol:bool=true, _isAutoWidth:bool=false, _isCounterBold:bool=false, _unifiedStatus:str="SC.Ui_styles.UNIFIED_STATUS.DEFAULT", _showStatusIcon:bool=true)
+
+	(macro UNIFIED_STATUS_TO_COLOR_AND_ALPHA "_unifiedStatus" "'textColor'" "'textAlpha'")
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(marginRight = "S")
+			(textColor = "textColor")
+			(leading = -2)
+			(alpha = "textAlpha")
+			(bind width "_isAutoWidth ? auto : 100%")
+		)
+		(bind text "_title")
+	)
+
+	(hblock
+		(tf
+			(bind visible "_hasMultiplySymbol")
+			(bind class "_isCounterBold ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+			(style
+				(leading = -2)
+				(textColor = "textColor")
+				(letterSpacing = -3)
+				(alpha = "textAlpha")
+			)
+			(text = 'IDS_X_MULTIPLIER')
+		)
+
+		(tf
+			(bind class "_isCounterBold ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+			(style
+				(leading = -2)
+				(textColor = "textColor")
+				(marginRight = 6px)
+				(alpha = "textAlpha")
+			)
+			(bind text "_multiplier")
+		)
 	)
 )
 
@@ -1414,7 +1478,8 @@
 	)
 )
 
-(def element TooltipSystemProgressBarBlock (_title:str, _currentValue:number, _maxValue:number, _barColor:number=null, _unifiedStatus:str = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT", _showPercent:bool=false)
+(def element TooltipSystemProgressBarBlock (_title:str, _currentValue:number, _maxValue:number, _barColor:number=null,
+											_unifiedStatus:str = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT", _showPercent:bool=false, _progressIconPath:str='')
 	(style (width = 100%))
 
 	(element ProgressBarBlock
@@ -1424,6 +1489,32 @@
 		_barColor = "_barColor"
 		_unifiedStatus = "_unifiedStatus"
 		_showPercent = "_showPercent"
+		_progressIconPath = "_progressIconPath"
+	)
+)
+
+(def element TooltipSystemProgressDividedCounter (_title:str, _currentValue:number, _maxValue:number)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+	)
+
+	(block
+		(style (width = 100%))
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(alpha = "TC")
+			)
+			(bind text "_title")
+		)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TC"))
+		(bind text "toString(_currentValue) + '/' + toString(_maxValue)")
 	)
 )
 
@@ -1595,9 +1686,13 @@
 	(style (width = 100%))
 
 	(tf
-		(style (width=  100%) (alpha = "TA") (leading = -2))
-		(class $TextDefaultNM)
-		(bindcall substitute imageOffset=5 sourceText="tr(_descriptionText)" postfix='' init=true  (event "keyboardBindingsApplier.evKeyboardBindingsChanged"))
+		(class $DescriptionHtmlTextStyleSheet)
+		(style
+			(width= 100%)
+			(alpha = "TA")
+			(leading = -2)
+		)
+		(bindcall substitute imageOffset=5 sourceText="'<body>' + tr(_descriptionText) + '</body>'" postfix='' init=true  (event "keyboardBindingsApplier.evKeyboardBindingsChanged"))
 	)
 )
 
@@ -1946,6 +2041,34 @@
 		 		_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PVE_MODIFIER"
 				_text = 'IDS_PVE_MODIFIER_TOOLTIP_DESC_TASK'
 		 	)
+		)
+	)
+)
+
+(def element TooltipSystemComplexityLevel (_currentComplexityLevel:number, _maxComplexityLevel:number)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(align = "middle")
+	)
+
+	(block
+		(style (width = 100%))
+		(tf
+			(class $TextDefaultNM)
+			(style (width = 100%) (bind alpha "TA"))
+			(text = 'IDS_COMPLEXITY')
+		)
+	)
+
+	(hblock
+		(style (marginBottom = -2px))
+
+		(controller $Repeat renderer='ComplexityLevelItem'
+			(bind count "_maxComplexityLevel")
+			(args
+				_isFilled = "$index + 1 <= _currentComplexityLevel"
+			)
 		)
 	)
 )

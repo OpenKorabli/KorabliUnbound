@@ -24,8 +24,16 @@
 		(event evSetString)
 
 		(struct crewFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.CREW"))
+		(struct shipMasteryRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SHIP_MASTERY"))
 
-		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
+		(struct campaignChooseRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_CAMPAIGN"))
+		(struct campaignChooseTaskRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_TASK"))
+		(var activeCampaignTasksCollection:dhCollection = "getCollectionByPath(CC.campaignTaskPlayer, 'active')")
+		(var isCampaignsFiltersVisible:bool = "(campaignChooseRoute.isActive || campaignChooseTaskRoute.isActive) && activeCampaignTasksCollection.length > 0")
+
+		(var windowManagerComponent:dhComponent = "getSingleComponent(CC.windowManager)")
+		(var windowQueue:array = "windowManagerComponent.windowQueue ?: []" (event "windowManagerComponent.evWindowQueueChanged"))
+		(var isFilterIconVisible:bool = "!isIn('ModalWindowSse', windowQueue)")
 
 		(var panelEntity:dhEntity = "getSingleEntity(CC.filterPanelComponent)")
 		(var shipListRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.shipListRestrictions, panelEntity.filterPanelComponent.shipRestrictionType)" (event "panelEntity.filterPanelComponent.evShipRestrictionTypeChanged"))
@@ -56,12 +64,18 @@
 		(var isShipFilterRestrictionsVisible:bool = "isAnyShipTypeRestricted && hasForbiddenShipType")
 
 		(var hasTrainingRoomRestrictions:bool = "shipListRestrictions.length > 0 || isShipFilterRestrictionsVisible")
-		(var trainingFilterVisible:bool = "trainingRoomEntity && hasTrainingRoomRestrictions && selectedBattleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+		(var isTrainingBattle:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+		(var isTournamentBattle:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
+		(var isCustomBattle:bool = "isTrainingBattle || isTournamentBattle")
+
+		(var isCustomFilterVisible:bool = "trainingRoomEntity && hasTrainingRoomRestrictions && isCustomBattle")
 		
 
-		(var isBattleTypeFilterVisible:bool = "(isIn(selectedBattleType, SC.Common.BATTLE_TYPES.BATTLE_TYPES_WITH_HARD_FILTER) || trainingFilterVisible) && !isInShipMastery")
-		(var searchStr:str = "panelEntity.filterPanelComponent.searchString" (event "panelEntity.filterPanelComponent.evUpdate"))
+		(var isBattleTypeFilterVisible:bool = "	(isIn(selectedBattleType, SC.Common.BATTLE_TYPES.BATTLE_TYPES_WITH_HARD_FILTER) || isCustomFilterVisible) &&
+												!shipMasteryRoute.isActive &&
+												!isCampaignsFiltersVisible")
 
+		(var searchStr:str = "panelEntity.filterPanelComponent.searchString" (event "panelEntity.filterPanelComponent.evUpdate"))
 		(var isResetButtonVisible:bool = "selectedFilters.length > 0 || searchStr != ''")
 		(var isInfotipVisible:bool = false)
 
@@ -88,14 +102,18 @@
 	(block
 		(name = 'CarouselFiltersButton')
 
-		(element ImageButton
-			_width = 26px
-			_height = 24px
-			_mouseDown = "isInfotipVisible"
-			_backgroundImage = 'url:../service_kit/buttons/context/filter.png'
+		(controller $Instance renderer='ImageButton'
+			(bind enabled "isFilterIconVisible")
+			(args
+				_width = 26px
+				_height = 24px
+				_mouseDown = "isInfotipVisible"
+				_backgroundImage = 'url:../service_kit/buttons/context/filter.png'
+			)
 		)
 
 		(controller $Tooltip
+			(bind enabled "isFilterIconVisible")
 			(renderer='SimpleStatusTooltip')
 			(args
 				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
@@ -136,7 +154,10 @@
 				(bind enabled "isBattleTypeFilterVisible")
 			)
 			(controller $Instance renderer='AppliedShipMasteryFilters'
-				(bind enabled "isInShipMastery")
+				(bind enabled "shipMasteryRoute.isActive")
+			)
+			(controller $Instance renderer='AppliedCampaignsFilters'
+				(bind enabled "isCampaignsFiltersVisible")
 			)
 		)
 
@@ -493,14 +514,16 @@
 		(var operationEntity:dhEntity = "getPrimaryEntity(CC.operation, battleTypeGameParamId)")
 		(var operationCustomIconName:str = "operationEntity.operation.customIconName" (event "operationEntity.operation.evStatusChanged"))
 
-		(var isPveBattle:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+		(var isPveBattle:bool = 				"selectedBattleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+		(var isEventBattle:bool = 				"selectedBattleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE")
+		(var isActiveTournamentBattle:bool = 	"selectedBattleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
+		(var isTrainingBattle:bool = 			"selectedBattleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+		(var isCustomBattle:bool = 				"isActiveTournamentBattle || isTrainingBattle")
+
 		(var operationBattleName:str = "operationEntity.operation.gpName")
 		(var operationBattleNameIDS:str = "tr('IDS_' + toUpper(operationBattleName) + '_NAME')")
 
-		(var isEventBattle:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE")
 		(var eventBattleName:str = "selectedBattleTypesEntity.eventBattleState.name")
-
-		(var isTrainingBattle:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
 
 		(var battleTypeIcon:str = "isEventBattle			? eventBattleName :
 									operationCustomIconName ? operationCustomIconName
@@ -508,10 +531,12 @@
 
 		(var filterText:str = " isPveBattle && operationBattleName		? tr('IDS_' + toUpper(operationBattleName) + '_NAME') :
 								isEventBattle && eventBattleName		? tr('IDS_' + toUpper(eventBattleName)) :
+								isActiveTournamentBattle				? 'IDS_TOURNAMENTBATTLE' :
 								selectedBattleType						? tr('IDS_' + toUpper(selectedBattleType))
 																		: ''")
 
 		(var filterTooltipText:str = "	isEventBattle && eventBattleName	? tr('IDS_CAROUSEL_' + toUpper(eventBattleName) + '_FILTER') :
+										isActiveTournamentBattle			? 'IDS_CAROUSEL_TOURNAMENTBATTLE_FILTER' :
 										isPveBattle && operationBattleName	? subst('IDS_CAROUSEL_FILTER_CONSTRUCTOR', [], { operationBattleNameIDS: operationBattleNameIDS }):
 										selectedBattleType					? tr('IDS_CAROUSEL_' + toUpper(selectedBattleType) + '_FILTER')
 																			: ''")
@@ -564,7 +589,7 @@
 		
 		(element ShipRestrictions
 			_restrictionsEntityId = "restrictionsEntityId"
-			_defaultRestrictionsEntityId = "isTrainingBattle ? defaultRestrictionsEntity.id : null"
+			_defaultRestrictionsEntityId = "isCustomBattle ? defaultRestrictionsEntity.id : null"
 			_isCompactListShips = true
 		)
 	)
@@ -580,10 +605,40 @@
 		(backgroundSize = "fill")
 		(scale9grid = 4)
 		(paddingLeft = "S")
-		(paddingTop = 5px)
+		(paddingTop = "XS")
 	)
 	(element ShipRestrictions
 		_restrictionsEntityId = "masteryRestrictionsEntity.id"
+		_isCompactListShips = true
+	)
+)
+
+(def element AppliedCampaignsFilters ()
+	(scope
+		(var shipListRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.shipListRestrictions, SC.Common.SHIP_RESTRICTION_TYPES.CAMPAIGNS)")
+	)	
+	(style
+		(flow = "horizontal")
+		(height = 29px)
+		(marginLeft = 19px)
+		(paddingLeft = "S")
+		(paddingTop = "XS")
+		(backgroundImage = 'url:../service_kit/buttons/button_dock/down.png')
+		(scale9grid = 4)
+		(hgap = "MS")
+	)
+
+	(tf
+		(class $TextDefault17NM)
+		(style
+			(alpha = "TA")
+			(marginTop = "XS")
+		)
+		(text = 'IDS_CAMPAIGNS_TITLE')
+	)
+
+	(element ShipRestrictions
+		_restrictionsEntityId = "shipListRestrictionsEntity.id"
 		_isCompactListShips = true
 	)
 )

@@ -125,15 +125,18 @@
 		(var isSingleLinePrefRow:bool = "_ownerModal == OWNER_MODAL_TYPE.main")
 
 		(var option:str = "'option' in _data ? _data.option : null")
-		(var valueEntity:gfx = "option ? $datahub.getPrimaryEntity(CC.preference, option) : null")
-		
-		(var value:number = "valueEntity ? toNumber(valueEntity.preference.value) : 0" (event "valueEntity.preference.evValueChanged"))
+
+		(var valueEntity:dhEntity = "getPrimaryEntity(CC.preference, option)")
+		(var componentPrefChoices:dhComponent = "valueEntity.preferenceChoices")
+		(var valueChoices:array = "componentPrefChoices.choices ?: []")
+		(var valueIndex:number = "indexOf(valueEntity.preference.valueLocalization, valueChoices)" (event "valueEntity.preference.evValueLocalizationChanged"))
+
 		(var nestedHeadersAmount:number = "'nestedHeadersAmount' in _data ? _data.nestedHeadersAmount : 0")
 		(var isLastInSection:bool = "'isLastInSection' in _data ? _data.isLastInSection : false")
 		(var isFirstInNestedSection:bool = "'isFirstInNestedSection' in _data ? _data.isFirstInNestedSection : false")
 		(var additionalData:dict = "'data' in _data ? _data.data : {}")
 		(var controlType:str = "'controlType' in _data ? _data.controlType : ''")
-		(var label:str = "'label' in _data ? _data.label : ''")
+		(var labelLocalization:str = "'label' in _data ? _data.label : valueEntity.preference.labelLocalization")
 
 		(var isResetablePref:bool = "valueEntity && valueEntity.hasComponent(CC.resettablePreference)" (event "valueEntity.evAdded") (event "valueEntity.evRemoved"))
 
@@ -144,8 +147,9 @@
 																			: ''")
 
 		
-		(var nestedGroupKey:str = "'nestedGroupsRemap' in _data	&&	toString(value) in _data.nestedGroupsRemap	? _data.nestedGroupsRemap[value]
-																												: toString(value)")
+		(var nestedGroupKey:str = "componentPrefChoices	? 'nestedGroupsRemap' in _data	&&	toString(valueIndex) in _data.nestedGroupsRemap	? _data.nestedGroupsRemap[valueIndex]
+																																			: toString(valueIndex)
+														: toString(toNumber(valueEntity.preference.value))" (event "valueEntity.preference.evValueChanged"))
 		(var areNestedGroupsInData:bool = "'nestedGroups' in _data")
 		(var curGroup:array = "areNestedGroupsInData ? _data.nestedGroups[nestedGroupKey] : []")
 		(var nestedDividersHeight:number = "isLastInSection ? 2 : 0")
@@ -216,7 +220,7 @@
 					(wordWrap = false)
 				)
 
-				(bind text "label")
+				(bind text "labelLocalization")
 			)
 		)
 
@@ -238,7 +242,7 @@
 				(bind renderer "tooltipRenderer")
 				(args
 					_option = "option"
-					_localization = "label"
+					_localization = "labelLocalization"
 					_extraData = "	isCustomTooltip && 'extraData' in additionalData.tooltipInfo	? additionalData.tooltipInfo.extraData :
 									'extraData' in PREF_ROW_TOOLTIP[option] 						? PREF_ROW_TOOLTIP[option].extraData
 																									: null"
@@ -364,13 +368,14 @@
 
 (def element PrefRowControllerSwitcher (_option:str, _data:dict, _isSingleLinePrefRow:bool=true)
 	(scope
-		(struct pref = GET_PREF_BOOL(_option = "_option"))
+		(var valueEntity:dhEntity = "getPrimaryEntity(CC.preference, _option)")
+		(var value:bool = "toBool(valueEntity.preference.value)" (event "valueEntity.preference.evValueChanged"))
 	)
 	(style (marginTop = 19px))
 
 	(element SwitchWithoutLabel
-		_state = "pref.value"
-		_methods = "[ { type: 'direct.action', name: 'option.set', args: [_option, !pref.value] } ]"
+		_state = "value"
+		_methods = "[ { type: 'direct.action', name: 'option.set', args: [_option, !value] } ]"
 	)
 )
 
@@ -381,12 +386,15 @@
 		(var valueEntity:gfx="$datahub.getPrimaryEntity(CC.preference, _option)")
 		(var componentPref:gfx = "valueEntity.preference")
 		(var componentPrefChoices:gfx = "valueEntity.preferenceChoices" (event "valueEntity.evAdded") (event "valueEntity.evRemoved"))
+		(var valueLocalization:str = "valueEntity ? valueEntity.preference.valueLocalization : ''" (event "valueEntity.preference.evValueLocalizationChanged"))
 
-		(var value:number = "toNumber(valueEntity.preference.value)" (event "componentPref.evValueChanged"))
-		(var valueChoices:array = "componentPrefChoices.choices ?: []")
+		(var valueChoices:array="componentPrefChoices.choices ?: []")
+		(var curIndex:number = "componentPref ? indexOf(valueLocalization, valueChoices) : null" (event "componentPref.evValueLocalizationChanged"))
 
-		(var dropdownWidth:number = "'dropdownWidth' in _data ? _data.dropdownWidth : 200")
-		(var maxDropdownHeight:number = "'maxDropdownHeight' in _data ? _data.maxDropdownHeight : 200")
+		(var dropdownWidth:number =				"'dropdownWidth' in _data ? _data.dropdownWidth : 200")
+		(var maxDropdownHeight:number =			"'maxDropdownHeight' in _data ? _data.maxDropdownHeight : 200")
+		(var itemChooserListRenderer:str =		"'itemChooserListRenderer' in _data		? _data.itemChooserListRenderer		: 'TextListItemRenderer'")
+		(var itemChooserSelectedRenderer:str =	"'itemChooserSelectedRenderer' in _data	? _data.itemChooserSelectedRenderer	: 'DefaultItemChooserPickedItemRenderer'")
 	)
 	(bindcall externalCall 'direct.action' "['option.set', [_option, $event.selectedIndex]]" init=false watch=false (event "ItemChooser_PrefSelected"))
 
@@ -397,13 +405,13 @@
 	
 	(element ItemChooser
 		_items = "valueChoices"
-		_listItemRenderer = "'TextListItemRenderer'"
-		_choosedItemRenderer = "'DefaultItemChooserPickedItemRenderer'"
+		_listItemRenderer = "itemChooserListRenderer"
+		_choosedItemRenderer = "itemChooserSelectedRenderer"
 		_onItemSelectedEvent = "'PrefSelected'"
 		_selectedMaxWidth = "dropdownWidth"
 		_dropDownWidth = "dropdownWidth"
 		_maxDropDownHeight = "maxDropdownHeight"
-		_curIndex = "value"
+		_curIndex = "curIndex"
 	)
 )
 
@@ -666,14 +674,19 @@
 
 (def element PrefRowKeyBinding (_commandId:number, _currentlyEditingCommandMappingId:number, _currentlyEditingCommandIndex:number)
 	(scope
-		(var commandEntity:gfx = "$datahub.getPrimaryEntity(CC.commandMappingCommand, _commandId)")
+		(var commandEntity:dhEntity = "getPrimaryEntity(CC.commandMappingCommand, _commandId)")
 		(var commandName:str = "commandEntity ? commandEntity.commandForUI.ids : null")
 		(var commandPrefName:str = "commandEntity ? commandEntity.commandMappingCommandName.commandName : null")
 
 		(var isCommandInEditState:bool = "_commandId == _currentlyEditingCommandMappingId")
 
-		(macro GET_COMMAND 'keyCode1' 'mods1' "commandPrefName" "1")
-		(macro GET_COMMAND 'keyCode2' 'mods2' "commandPrefName" "2")
+		(var preferenceEntity1:dhEntity = "getPrimaryEntity(CC.preference, 'commands.' + commandPrefName + '.value1')")
+		(var keyCode1:number = "preferenceEntity1.preference.value[0]" (event "preferenceEntity1.preference.evValueChanged"))
+		(var mods1:number = "preferenceEntity1.preference.value[1]" (event "preferenceEntity1.preference.evValueChanged"))
+
+		(var preferenceEntity2:dhEntity = "getPrimaryEntity(CC.preference, 'commands.' + commandPrefName + '.value2')")
+		(var keyCode2:number = "preferenceEntity2.preference.value[0]" (event "preferenceEntity2.preference.evValueChanged"))
+		(var mods2:number = "preferenceEntity2.preference.value[1]" (event "preferenceEntity2.preference.evValueChanged"))
 
 		(var isAnyKeybindingsAssigned:bool = "(keyCode1 != 0) || (keyCode2 != 0)")
 		(var rowStatus:str = "isAnyKeybindingsAssigned ? SC.Ui_styles.UNIFIED_STATUS.DEFAULT : SC.Ui_styles.UNIFIED_STATUS.ATTENTION")
@@ -874,4 +887,24 @@
 	)
 
 	(bindcall externalCall "'inputMapping.onAction'" "['endKeyCapture', {}]" init=false watch=false (event "evCloseKeyAssignmentTooltipByScroll"))
+)
+
+(def element UiScaleItemRenderer (_curItemIndex:number=0, _item:gfx='', _listItemRendererData:dict={}, _isInactive:bool=false)
+	(style (width = 100%))
+
+	(element TextListItemRenderer
+	_curItemIndex = "_curItemIndex"
+		_item = "tr(toNumber(_item * 100)) + '%'"
+		_listItemRendererData = "_listItemRendererData"
+		_isInactive = "_isInactive"
+	)
+)
+
+(def element UiScalePickedItemRenderer (_state:number, _item:gfx='', _choosedItemRendererParams:gfx={}, _labelMaxWidth:number=0)
+	(element DefaultItemChooserPickedItemRenderer
+		_state = "_state"
+		_item = "tr(toNumber(_item) * 100) + '%'"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+ 	)
 )

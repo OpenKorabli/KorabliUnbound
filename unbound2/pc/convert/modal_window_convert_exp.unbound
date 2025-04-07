@@ -1,0 +1,960 @@
+(def constant MODAL_WINDOW_EXP_TRANSFER_WIDTH 492px)
+(def constant SNOWFLAKE_SHIP_ROW_HEIGHT 48px)
+
+(def element ModalWindowConvertExp ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evTabSelected)
+		(event evGoldInputChanged)
+		(event evExpInputChanged)
+		(event evInputDelayPassed)
+		(event evDelayedGoldInputChanged)
+		(event evFreeXPInputFocusChanged)
+
+
+		(struct goldExpExchange =		PULL_PRICE(_entityId = "'FREE_XP_RATE_PER_GOLD'"				_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(struct eliteXPToFreeExchange =	PULL_PRICE(_entityId = "'FREE_XP_FOR_ELITE_XP_RATE_PER_GOLD'"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var accountGold:number =		"accountResourceComponent.gold ?: 0"		(event "accountResourceComponent.evChangedGold"))
+		(var accountCredits:number =	"accountResourceComponent.freeXP ?: 0"		(event "accountResourceComponent.evChangedFreeXP"))
+		(var accountEliteXP:number =	"accountResourceComponent.eliteXP ?: 0"		(event "accountResourceComponent.evChangedEliteXP"))
+		(var useEliteXP:bool =			"accountResourceComponent.useEliteXP"		(event "accountResourceComponent.evUseEliteXPChanged"))
+
+		(var ships:dhCollection =	"getCollectionByPath(CC.upgradableShipInfo, 'convertExp')")
+
+		(var convertExpComponent:dhComponent =	"getSingleComponent(CC.convertExp)")
+		(var selectedExp:number =		"convertExpComponent.selectedExp ?: 0"		(event "convertExpComponent.evSelectedExpChanged"))
+		(var totalAvailableExp:number =	"convertExpComponent.availableExp ?: 0"		(event "convertExpComponent.evAvailableExpChanged"))
+		(var allSelected:bool =			"convertExpComponent.allSelected"			(event "convertExpComponent.evAllSelectedChanged"))
+
+		(var inset:number = "$event.value ?: SC.Common.EXCHANGE_EXP_INSET.SHIP_XP" watch=false	(event "evTabSelected"))
+
+		(var isInsetShipExp:bool =	"inset == SC.Common.EXCHANGE_EXP_INSET.SHIP_XP")
+		(var isInsetEliteExp:bool =	"inset == SC.Common.EXCHANGE_EXP_INSET.ELITE_XP")
+
+		(var curExchangeRate:number = "isInsetShipExp ? goldExpExchange.info.finalPrice : eliteXPToFreeExchange.info.finalPrice")
+
+		(var isNotEnoughExp:bool = "totalAvailableExp < goldExpExchange.info.finalPrice")
+		(var totalGoldForAllShipsExp:number = "(totalAvailableExp - (totalAvailableExp % goldExpExchange.info.finalPrice)) / goldExpExchange.info.finalPrice")
+
+
+		(var curSelectedExp:number =		"isInsetShipExp	? min(selectedExp, curExchangeRate * accountGold) : accountEliteXP")
+		(var curTotalAvailableExp:number =	"isInsetShipExp	? totalAvailableExp	: accountEliteXP")
+		(var curGoldForSelectedExp:number =	"accountGold ? floor(curSelectedExp / curExchangeRate) : 0")
+
+		(var maxGold:number =	"min(accountGold, curGoldForSelectedExp)")
+		(var maxExp:number =	"min(maxGold * curExchangeRate, curSelectedExp)")
+
+
+		
+		(var actualFreeExpValue:number =		"curSelectedExp")
+		(var actualGoldValue:number =			"curGoldForSelectedExp")
+		(var nearestGoldToPayForExp:number =	"round(actualFreeExpValue / curExchangeRate)")
+
+		(bind actualFreeExpValue	"toNumber($event.value)"	init=false watch=false		(event "evExpInputChanged"))
+
+		
+		(bind actualFreeExpValue	"accountGold ? curGoldForSelectedExp * curExchangeRate : 0"		init=false watch=false		on='startShow'		(event "convertExpComponent.evSelectedExpChanged"))
+		
+		
+		
+		
+		(bind actualFreeExpValue	"actualFreeExpValue <= curSelectedExp	? nearestGoldToPayForExp * curExchangeRate
+																			: curGoldForSelectedExp * curExchangeRate"	init=false watch=false		(bind trigger "inset")
+																																					(event "evInputDelayPassed")
+																																					(event "accountResourceComponent.evChangedEliteXP"))
+		
+		
+		(bind actualFreeExpValue	"min(actualGoldValue, maxGold) * curExchangeRate"									init=false watch=false		(bind trigger "inset")
+																																					(event "startShow")
+																																					(event "evDelayedGoldInputChanged")
+																																					(event "accountResourceComponent.evChangedGold")
+																																					(event "accountResourceComponent.evChangedEliteXP"))
+
+		(bind actualGoldValue		"toNumber($event.value)"	init=false watch=false		(event "evGoldInputChanged"))
+		
+		(bind actualGoldValue		"actualFreeExpValue > maxExp ? maxGold : nearestGoldToPayForExp"					init=false watch=false		(bind trigger "inset")
+																																					(event "startShow")
+																																					(event "evInputDelayPassed")
+																																					(event "accountResourceComponent.evChangedGold")
+																																					(event "accountResourceComponent.evChangedEliteXP"))
+
+		(var inputFreeExpValue:number =	"actualFreeExpValue")
+		(var inputGoldValue:number =	"actualGoldValue")
+		
+
+
+		(var isFreeXPInputFocused:bool = "$event ?: false"	watch=false		(event "evFreeXPInputFocusChanged"))
+
+		(var areShipsVisible:bool = "isInsetShipExp && accountGold > 0 && ships.length > 0")
+
+		(var currenciesPanelPrices:array = "[	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: -inputGoldValue },
+												{ currency: SC.Common.CURRENCIES.FREE_XP,	finalPrice: accountGold > 0	? isFreeXPInputFocused	? inputGoldValue * curExchangeRate
+																																				: inputFreeExpValue
+																														: 0 } ]")
+
+		(var shipTypes:array = "[ SC.Common.SHIP_SPECIAL_FILTER_TYPE.ELITE, SC.Common.SHIP_SPECIAL_FILTER_TYPE.SPECIAL, SC.Common.SHIP_SPECIAL_FILTER_TYPE.PREMIUM ]")
+
+		(var isNotEnoughExpToConvert:bool =		"curTotalAvailableExp < curExchangeRate")
+		(var isZeroGoldVisible:bool =			"accountGold <= 0 && !isNotEnoughExpToConvert")
+		(var isConversionQuestionVisible:bool =	"!(isNotEnoughExpToConvert || isZeroGoldVisible)")
+
+		(var isOkButtonLocked:bool = false)
+		(bind isOkButtonLocked "true"		init=false watch=false	(event "evExpInputChanged"))
+		(bind isOkButtonLocked "false"		init=false watch=false	(event "evInputDelayPassed"))
+
+		(var isBtnOkEnabled:bool =	"inputGoldValue > 0 && inputFreeExpValue > 0 && curSelectedExp >= curExchangeRate && accountGold > 0 && !isOkButtonLocked")
+
+		(var btnOkRequestParams:dict = "isInsetShipExp	? {	_request:			'changeExpToFreeexp',
+															_requestParams:		{ expToChange: inputFreeExpValue },
+															_firstPriceInfo:	{ finalPrice: inputFreeExpValue, currency: SC.Common.CURRENCIES.FREE_XP },
+															_secondPriceInfo:	{ finalPrice: inputGoldValue, currency: SC.Common.CURRENCIES.GOLD },
+															_type:				SC.Ui_common.CONFIRMATION_WINDOW_TYPE.CONVERT }
+														: {	_action:			'DockProxy.exchangeEliteXP',
+															_actionParams:		{ eliteXP: inputFreeExpValue },
+															_firstPriceInfo:	{ finalPrice: inputFreeExpValue, currency: SC.Common.CURRENCIES.FREE_XP },
+															_secondPriceInfo:	{ finalPrice: inputGoldValue, currency: SC.Common.CURRENCIES.GOLD },
+															_type:				SC.Ui_common.CONFIRMATION_WINDOW_TYPE.CONVERT }")
+
+
+		
+		
+		
+		
+		(var scrollHeight:number =			"150 + ((stageHeight - 720) * (140 / HEIGHT_RATIO))")
+		(var totalShipItemsHeight:number =	"ships.length * SNOWFLAKE_SHIP_ROW_HEIGHT")
+		(var currentScrollHeight:number = 	"totalShipItemsHeight < scrollHeight	? totalShipItemsHeight : scrollHeight")
+		(var contentScrollHeight:number =	0)
+		
+		
+		
+	)
+
+	(dispatch evInputDelayPassed				dir="EventDirection.NONE"	delay=1		reset=true		(event "evExpInputChanged"))
+	(dispatch evDelayedGoldInputChanged			dir="EventDirection.NONE"	delay=0.02	reset=true		(event "evGoldInputChanged"))
+
+
+	(style (align = "center|middle"))
+
+	(block
+		(style
+			(align = "center")
+			(width = "MODAL_WINDOW_EXP_TRANSFER_WIDTH")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element ModalWindowShortHeader
+				_header =		'IDS_FREE_EXP_CONVERSION'
+				_hasDivider =	false
+			)
+
+			(element CurrenciesPanel
+				_priceInfo =	"currenciesPanelPrices"
+				_width =		"MODAL_WINDOW_EXP_TRANSFER_WIDTH"
+			)
+		)
+
+		(hblock
+			(bind visible "useEliteXP")
+
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(width = 100%)
+				(bind marginBottom "isInsetEliteExp ? MS : S")
+			)
+
+			(element TabButton
+				_label =			'IDS_FROM_SHIPS'
+				_isSelected =		"isInsetShipExp"
+				_width =			'50%'
+				_dispatchedEv =		'evTabSelected'
+				_dispatchParams =	"{ value: SC.Common.EXCHANGE_EXP_INSET.SHIP_XP }"
+			)
+
+			(element TabButton
+				_label =			'IDS_FROM_COMMANDERS'
+				_isSelected =		"isInsetEliteExp"
+				_width =			'50%'
+				_dispatchedEv =		'evTabSelected'
+				_dispatchParams =	"{ value: SC.Common.EXCHANGE_EXP_INSET.ELITE_XP }"
+			)
+
+			(block
+				(style
+					(position = "absolute")
+					(width = 100%)
+					(bottom = 0)
+				)
+				
+				(element HorizontalDividerTwoPx)
+			)
+		)
+
+		
+		(block
+			(bind visible "isInsetShipExp")
+
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.25)
+
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(hblock
+				(style
+					(align = "center|middle")
+					(width = 100%)
+					(height = 39px)
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginRight = "XXS")
+						(alpha = "TA")
+					)
+
+					(text = 'IDS_SHIPCLASSES_CONVERT_EXP')
+				)
+
+				(hblock
+					(controller $Repeat renderer='ShipTypeIcon'
+						(bind enabled "isInsetShipExp")
+						(count = "shipTypes.length")
+						(args
+							_shipType = "shipTypes[$index]"
+						)
+					)
+				)
+			)
+		)
+		
+
+		
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+
+			(style
+				(align = "center|middle")
+				(width = 100%)
+				(marginBottom = "M")
+			)
+
+			(tf
+				(class $TextDefault17NM)
+				(style
+					(marginRight = 10px)
+					(alpha = "TA")
+				)
+
+				(text = 'IDS_RATE')
+			)
+
+			(block
+				(style (marginRight = "XXS"))
+
+				(element PriceTag
+					_priceInfo =		"isInsetShipExp ? goldExpExchange.info : eliteXPToFreeExchange.info"
+					_size =				"SIZE.MEDIUM"
+					_showDiscountTag =	true
+				)
+			)
+
+			(tf
+				(class $TextDefault17NM)
+				(style
+					(marginRight = 10px)
+					(alpha = "TA")
+				)
+
+				(text = 'IDS_SIGN_PLUS')
+			)
+
+			(block
+				(style (marginRight = "XXS"))
+
+				(element PriceTag
+					_priceInfo =	"{ finalPrice: 1, currency: SC.Common.CURRENCIES.GOLD }"
+					_size =			"SIZE.MEDIUM"
+				)
+			)
+
+			(tf
+				(class $TextDefault17NM)
+				(style
+					(marginRight = 10px)
+					(alpha = "TA")
+				)
+
+				(text = 'IDS_SIGN_EQUAL')
+			)
+
+			(element PriceTag
+				_priceInfo =	"{ finalPrice: curExchangeRate, currency: SC.Common.CURRENCIES.FREE_XP }"
+				_size =			"SIZE.MEDIUM"
+			)
+		)
+		
+
+		
+		(block
+			(visible = "isInsetEliteExp && accountEliteXP > 0")
+
+			(style
+				(width = 100%)
+				(height = 72px)
+				(bind marginBottom "isNotEnoughExpToConvert ? SXS : 0")
+				(alpha = "isInsetEliteExp && accountEliteXP > 0 ? 1 : 0")
+				(scaleY = "isInsetEliteExp && accountEliteXP > 0 ? 1 : 0")
+			)
+
+			(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
+				_trigger =	"isInsetEliteExp && accountEliteXP > 0"
+				_duration =	"0.15"
+				_easing =	"Easing.quad_out"
+			)
+
+			(element HorizontalDividerTwoPx)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+
+				(class $Fullsize)
+				(style (align = "center|middle"))
+
+				(element InnerPanelFullsizeAbsolute)
+
+				(hblock
+					(tf
+						(class $TextDefaultBold17NM)
+						(style
+							(marginRight = 10px)
+							(alpha = "TA")
+						)
+
+						(text = 'IDS_CURRENCY_ELITE_XP')
+					)
+
+					(element PriceTag
+						_priceInfo =	"{ finalPrice: accountEliteXP, currency: SC.Common.CURRENCIES.ELITE_XP }"
+						_size =			"SIZE.MEDIUM"
+						_name =			'crew_elite_xp'
+					)
+				)
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+		
+
+		
+		(block
+			(visible = "areShipsVisible")
+
+			(style
+				(width = 100%)
+				(alpha = "areShipsVisible ? 1 : 0")
+				(scaleY = "areShipsVisible ? 1 : 0")
+			)
+
+			(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
+				_trigger =	"areShipsVisible"
+				_duration =	"0.15"
+				_easing =	"Easing.quad_out"
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+
+				(style (width = 100%))
+
+				(element HorizontalDividerTwoPx)
+
+				(block
+					(style (width = 100%))
+
+					(element InnerPanelFullsizeAbsolute)
+
+					(scrollArea
+						(style
+							(width = 100%)
+							
+							(bind height "currentScrollHeight")
+							(backgroundColor = "NO_COLOR")
+						)
+					
+						(verticalSlider ScrollBarVLight
+							_singleStep = "SNOWFLAKE_SHIP_ROW_HEIGHT"
+						)
+						(hscrollPolicy = 'off')
+						(vscrollPolicy = 'auto')
+						(scrollPerItem = true)
+
+						(wheelScrollSpeed = 1.0)
+						(wheelScrollAcceleration = 0.8)
+						(maxScrollingAnimatedDistance = 280)
+
+						(activeControlsAlpha = 1)
+						(inactiveControlsAlpha = 1)
+
+						(topShadow = 'ScrollAreaShadowTop')
+						(bottomShadow = 'ScrollAreaShadowBottom')
+
+						(repeatController = 'shipExpConvertItemRenderer')
+
+						(content
+							(style (width = 100%))
+							(bind contentScrollHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))		
+
+							(controller $DynamicRepeat renderer='ShipRowSelectableElement' name='shipExpConvertItemRenderer'
+								(bind count "ships.length")
+								(args
+									_collection =			"ships"
+									_hasPriceTag =			true
+									_hasMouseInstructions =	true
+									_hideLowerDivider =		"$index == ships.length - 1"
+								)
+								(itemHeight =	"SNOWFLAKE_SHIP_ROW_HEIGHT")
+								(itemOffset =	"SNOWFLAKE_SHIP_ROW_HEIGHT")
+							)
+						)
+					)
+
+					(element ShipsSelectElement
+						_isSelected =			"allSelected"
+						_totalAvailableExp =	"totalAvailableExp"
+						_priceInfo =			"{ finalPrice: totalGoldForAllShipsExp, currency: SC.Common.CURRENCIES.GOLD }"
+						_isNotEnoughExp =		"isNotEnoughExp"
+					)
+				)
+
+				(element HorizontalDividerTwoPx)
+			)
+		)
+		
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+
+			(style (width = 100%))
+
+			(block
+				(visible = "isConversionQuestionVisible")
+
+				(style
+					(align = "center")
+					(width = 100%)
+					(height = 72px)
+					(alpha = "isConversionQuestionVisible ? 1 : 0")
+					(scaleY = "isConversionQuestionVisible ? 1 : 0")
+				)
+
+				(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
+					_trigger =	"isConversionQuestionVisible"
+					_duration =	"0.15"
+					_easing =	"Easing.quad_out"
+				)
+
+				(hblock
+					(style
+						(align = "middle")
+						(height = 100%)
+					)
+
+					(tf
+						(class $TextDefault25NM)
+						(style
+							(marginRight = "S")
+							(alpha = "TA")
+						)
+
+						(text = 'IDS_QUESTION_CONVERT')
+					)
+
+					(block
+						(style (marginRight = 5px))
+
+						(element InputTextDefaultNumeric
+							_name =						'ConvertExpInput'
+							_onInputChangedEvent =		'evExpInputChanged'
+							_onInputFocusChangedEvent =	'evFreeXPInputFocusChanged'
+							_defaultText =				"toString(inputFreeExpValue)"
+							_width =					'130px'
+							_maxNumericValue =			"maxExp"
+							_textColor =				"SC.Ui_styles.SERVICE_COLORS.LIGHT_GREEN"
+							_focusIndex =				0
+						)
+					)
+
+					(block
+						(style
+							(marginTop = 6px)
+							(marginRight = 6px)
+						)
+
+						(element Currency
+							_currency =	"SC.Common.CURRENCIES.FREE_XP"
+							_size =		"SIZE.LARGE"
+						)
+					)
+
+					(tf
+						(class $TextDefault25NM)
+						(style
+							(marginRight = 10px)
+							(alpha = "TA")
+						)
+
+						(text = 'IDS_FOR')
+					)
+
+					(block
+						(style (marginRight = "XS"))
+
+						(element InputTextDefaultNumeric
+							_name =						'ConvertExpPrice'
+							_onInputChangedEvent =		'evGoldInputChanged'
+							_defaultText =				"toString(inputGoldValue)"
+							_width =					'110px'
+							_maxNumericValue =			"maxGold"
+							_textColor =				"SC.Ui_styles.SERVICE_COLORS.YELLOW"
+							_focusIndex =				1
+						)
+					)
+
+					(block
+						(style
+							(marginRight = "XXS")
+							(marginTop = 6px)
+						)
+
+						(element Currency
+							_currency =	"SC.Common.CURRENCIES.GOLD"
+							_size =		"SIZE.LARGE"
+						)
+					)
+
+					(tf
+						(class $TextDefault25NM)
+						(style (alpha = "TA"))
+
+						(text = 'IDS_QUESTION')
+					)
+				)
+			)
+
+			(block
+				(visible = "isNotEnoughExpToConvert")
+
+				(style
+					(align = "middle")
+					(width = 100%)
+					(bind height "isInsetEliteExp ? 64px : 60px")
+					(alpha = "isNotEnoughExpToConvert ? 1 : 0")
+					(scaleY = "isNotEnoughExpToConvert ? 1 : 0")
+				)
+
+				(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
+					_trigger =	"isNotEnoughExpToConvert"
+					_duration =	"0.15"
+					_easing =	"Easing.quad_out"
+				)
+
+				(controller $Instance renderer='NotEnoughExpToConvert'
+					(bind enabled "isNotEnoughExpToConvert")
+					(args
+						_isNoExp =		"curTotalAvailableExp == 0"
+						_isEliteXP =	"isInsetEliteExp"
+					)
+				)
+			)
+
+			(block
+				(visible = "isZeroGoldVisible")
+
+				(style
+					(align = "middle")
+					(width = 100%)
+					(height = 72px)
+					(alpha = "isZeroGoldVisible ? 1 : 0")
+					(scaleY = "isZeroGoldVisible ? 1 : 0")
+				)
+
+				(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
+					_trigger =	"isZeroGoldVisible"
+					_duration =	"0.15"
+					_easing =	"Easing.quad_out"
+				)
+				
+				(controller $Instance renderer='ZeroGoldInfoBlock' (bind enabled "isZeroGoldVisible"))
+			)
+		)
+		
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+			(style
+				(width = 100%)
+				(bind marginTop "isNotEnoughExpToConvert && isInsetEliteExp ? SXS : 0")
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "M")
+			)
+
+			(element ModalWindowSystemYesNoButtons
+				_isBtnOkEnabled =			"isBtnOkEnabled"
+				_btnOkName =				'btn_ok'
+				_btnOkLabel =				'IDS_CONVERT_UPPER_CASE'
+				_btnOkMethods =				"[{ type: 'inputMapping.onRequest', name: 'openConfirmationWindow', args: btnOkRequestParams }]"
+				_btnOkFocusIndex =			2
+				_isBtnOkDefaultFocused =	false
+				_btnNoLabel =				'IDS_CLOSE_UPPER_CASE'
+				_btnNoFocusIndex =			3
+			)
+		)
+		
+	)
+)
+
+(def element ShipRowSelectableElement (	_collection:dhCollection, _hasPriceTag:bool, _hasMouseInstructions:bool = false, _hideLowerDivider:bool = false, _isAllSelected:bool = false, _isLocked:bool = false,
+										_isSnowflakesModal:bool = false, _isConfirmedList:bool = false, _needSelectionChange:bool = false)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var shipEntity:dhEntity =				"_collection.getEntityAtIndex($index)")
+		(var upgradableShipInfo:dhComponent =	"shipEntity.upgradableShipInfo")
+		(var upgradableShipInfoExp:number =		"upgradableShipInfo.exp ?: 0"	(event "upgradableShipInfo.evUpdate"))
+
+		(var shipId:number =			"shipEntity.ship.id")
+
+		(var bonusTagIndex:number =		"shipEntity.ship.bonusTags.length == 1 ? 0 : 1")
+		(var bonusTagEntityId:number =	"shipEntity.ship.bonusTags[bonusTagIndex]")
+		(var bonusTagEntity:dhEntity =	"getEntity(bonusTagEntityId)")
+		(var rewards:array =			"bonusTagEntity.bonusTag.rewards")
+
+		(var isSelectedDH:bool =	"shipEntity.selection.value"	(event "shipEntity.selection.evChanged"))
+		
+		(var isSelectedDesignerCollection:bool = false)
+		(var isSelected:bool =		"isSelectedDH || isSelectedDesignerCollection")
+
+		(var isInactive:bool =					"_isAllSelected && !isSelected || _isLocked")
+		(var hasMouseInstructionsTooltip:bool =	"!isInactive && !_isSnowflakesModal")
+		(var hasRewardsTooltip:bool =			"!isInactive && _isSnowflakesModal && _hasMouseInstructions")
+		(var instructionText:str =				"isSelected ? 'IDS_HINT_LEFT_DESELECT_SHIPS' : 'IDS_HINT_LEFT_SELECT_SHIPS'")
+
+		(var state:number = "	_isConfirmedList	? SC.Ui_styles.BUTTON_STATE.UP :
+								isInactive			? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								mouseDown			? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver			? SC.Ui_styles.BUTTON_STATE.OVER :
+								isSelected			? SC.Ui_styles.BUTTON_STATE.SELECTED
+													: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var contentAlpha:number = "isInactive ? 0.2 : 1")
+	)
+
+	(style
+		(width = 100%)
+		(height = "SNOWFLAKE_SHIP_ROW_HEIGHT")
+		(bind hitTest "!(_isSnowflakesModal && isInactive)")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "hasMouseInstructionsTooltip")
+		(args
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =				"instructionText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SnowflakesRewardsTooltip')
+		(bind enabled "hasRewardsTooltip")
+		(args
+			_rewards =		"rewards"
+			_isSelected =	"isSelected"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(bind visible "!_hideLowerDivider")
+
+		(style
+			(position = "absolute")
+			(bottom = 0px)
+			(width = 100%)
+		)
+
+		(element HorizontalDividerTwoPx)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (paddingTop = 1px))
+
+		(element MenuItemBackground
+			_state = "state"
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(paddingLeft = "MS")
+			(paddingRight = "SXS")
+			(alpha = "contentAlpha")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger	= "state"
+			_alpha		= "contentAlpha"
+		)
+
+		(block
+			(style (width = 100%))
+
+			(element ShipLineItemNM
+				_shipId =		"shipId"
+				_withFlag =		true
+				_fontClass =	'$TextDefaultBold17NM'
+			)
+		)
+
+		(block
+			(controller $Instance renderer='PriceTag'
+				(bind enabled "_hasPriceTag")
+				(args
+					_priceInfo =	"{ finalPrice: upgradableShipInfoExp, currency: SC.Common.CURRENCIES.XP }"
+					_size =			"SIZE.MEDIUM"
+				)
+			)
+		)
+	)
+
+	
+	(macro MOUSE_HANDLER
+		_enabled =	"!(_isSnowflakesModal && isInactive)"
+		_soundSet =	"isInactive || _isConfirmedList ? '' : 'button_secondary'"
+		_methods =	"[	{ type: 'inputMapping.onAction',								name: 'selectShipForConvert',	args: { shipId: shipId } },
+						{ type: _needSelectionChange ? 'inputMapping.onAction' : '',	name: 'changeSelection',		args: { shipId: shipId, selectionState: !isSelected } } ]"
+	)
+)
+
+(def element ShipsSelectElement (_isSelected:bool, _totalAvailableExp:number, _priceInfo:dict, _isNotEnoughExp:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var state:number = "	mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER :
+								_isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED
+												: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(style
+		(width = 100%)
+		(height = "SNOWFLAKE_SHIP_ROW_HEIGHT")
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipsSelectTooltip')
+		(args
+			_priceInfo =		"_priceInfo"
+			_showPrice =		"!_isNotEnoughExp"
+			_text =				"_isNotEnoughExp ? 'IDS_NOT_ENOUGH_EXP_TO_CONVERT' : 'IDS_COMMON_PRICE_FOR_ALL_FREE_EXP'"
+			_instructionText =	"_isSelected ? 'IDS_HINT_LEFT_DESELECT_ALL_SHIPS' : 'IDS_HINT_LEFT_SELECT_ALL_SHIPS'"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (paddingTop = 1px))
+
+		(element MenuItemBackground
+			_state = "state"
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style
+			(align = "middle")
+			(paddingLeft = "MS")
+			(paddingRight = "SXS")
+		)
+
+		(block
+			(style (width = 100%))
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_ALL_VEHICLES')
+			)
+		)
+
+		(element PriceTag
+			_priceInfo =	"{ finalPrice: _totalAvailableExp, currency: SC.Common.CURRENCIES.XP }"
+			_size =			"SIZE.MEDIUM"
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+		)
+
+		(element HorizontalDividerTwoPx)
+	)
+
+	(macro MOUSE_HANDLER
+		_soundSet =	"'button_secondary'"
+		_methods =	"[ { type: 'inputMapping.onAction',	name: 'selectAll',	args: {} } ]"
+	)
+)
+
+(def element ShipsSelectTooltip (_priceInfo:dict, _showPrice:bool, _text:str, _instructionText:str)
+	(style (width = 320px))
+	
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemPriceTagLine'
+				(bind enabled "_showPrice")
+				(args
+					_title =		"_text"
+					_priceInfo =	"_priceInfo"
+				)
+			)
+
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "!_showPrice")
+				(args
+					_descriptionText = "_text"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =				"_instructionText"
+		)
+	)
+)
+
+(def element NotEnoughExpToConvert (_isEliteXP:bool = false, _isNoExp:bool = false)
+	(style
+		(align = "center")
+		(width = 100%)
+	)
+
+	(element StatusLine
+		_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+		_text =				"_isNoExp ? 'IDS_NO_EXP_TO_CONVERT' : 'IDS_NOT_ENOUGH_EXP_TO_CONVERT'"
+	)
+
+	(block
+		(bind visible "_isEliteXP")
+
+		(style (marginTop = "S"))
+
+		(controller $Instance renderer='InstructionBigTech'
+			(bind enabled "_isEliteXP")
+			(args
+				_instructionText =	'IDS_ACCUMULATE_ELITE_EXP'
+				_maxWidth =			450px
+				_leading =			-5
+			)
+		)
+	)
+)
+
+(def element ZeroGoldInfoBlock ()
+	(style
+		(align = "center")
+		(width = 100%)
+	)
+
+	(element StatusLine
+		_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+		_text =				'IDS_NO_GOLD_TO_CONVERT'
+	)
+
+	(block
+		(style (marginTop = "S"))
+
+		(element InstructionBigTech
+			_instructionText =	'IDS_BUY_GOLD_TO_COMPLETE'
+			_maxWidth =			450px
+		)
+	)
+)
+
+(def element ShipTypeIcon (_shipType:str)
+	(style
+		(width = 39px)
+		(height = 39px)
+		(bind backgroundImage "'swf:../service_kit/filters_svg/filters_svg.swf:' + _shipType")
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipTypeIconTooltip')
+		(args
+			_shipType = "_shipType"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ShipTypeIconTooltip (_shipType:str)
+	(style (width = 320px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl=			"'url:../reward_icons/ship_' + _shipType + '.png'"
+			_imageWidth =		80px
+			_imageHeight =		80px
+			_headerText =		"'IDS_' + _shipType + '_SHIPS'"
+			_subheaderText =	'IDS_SHIPCLASSES'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = "'IDS_' + _shipType + '_SHIPS_DESCRIPTION'"
+		)
+	)
+)

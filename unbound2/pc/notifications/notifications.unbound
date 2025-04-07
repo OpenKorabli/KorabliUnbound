@@ -249,14 +249,11 @@
 		(var isScrollAreaVisible:bool = "hasSubCollectionItems || isSessionStatisticsGroup && !isSessionStatisticsEmpty")
 		(var isNoSystemMessages:bool = "!hasSubCollectionItems && !isSessionStatisticsGroup")
 
-		(var tabSwitchEventName:str = "SC.Common.SESSION_STATS_STATISTICS.SWITCHED_TO_TAB + toLower(SC.Ui_common.SYSTEM_MESSAGE_GROUP.VALUE_TO_NAME[activeGroup])")
-
 		(var isHitTest:bool = false)
 		(bind isHitTest "true" init=false watch=false (event "evShow"))
 		(bind isHitTest "false" init=false watch=false (event "evStartHide"))
 	)
 	(style (width = "INFOTIP_WIDTH") (bind height "dragInfotip.infotipHeight") (backgroundColor = 0x66000000) (bind hitTest "isHitTest"))
-	(bindcall externalCall 'direct.action' "[SC.Common.STATISTICS_EVENTS.LOG, [tabSwitchEventName]]" init=false watch=false (bind trigger "tabSwitchEventName"))
 	(bindcall externalCall "isPrefGroup ? 'direct.action' : ''" "['option.set', ['ui.notificationsSelectedGroup', activeGroup]]" init=false watch=false (event "evSetActiveGroup"))
 	(dispatch evSetActiveGroup dir="EventDirection.NONE" args="$event" delay=0.01 (event "evGroupClick"))
 
@@ -410,7 +407,6 @@
 		(var sessionEconomicsEfficiency:array = "battleTypeSessionStatsList[selectedBattleTypeIndex].sessionEconomicsEfficiencyAllTypes ?: []")
 		(var isDisabled:bool = "nonzeroBattleTypes.length <= 1")
 	)
-	(bindcall externalCall 'direct.action' "[SC.Common.STATISTICS_EVENTS.LOG, [SC.Common.SESSION_STATS_STATISTICS.SESSION_SCROLLBODY_CLICKED]]" init=false watch=false on='leftClick')
 	(bindcall externalCall 'direct.action' "['sessionStatsBattleTypeChosen', [$event.selectedIndex, nonzeroBattleTypes[$event.selectedIndex]]]" init=false watch=false (event "ItemChooser_evBattleTypeSelected"))
 
 	(style (width = 100%))
@@ -428,8 +424,6 @@
 
 				(block
 					(width = 100%)
-					(bindcall externalCall "isDisabled ? '' : 'direct.action'" "[SC.Common.STATISTICS_EVENTS.LOG, [SC.Common.SESSION_STATS_STATISTICS.SESSION_DROPDOWN_CLICKED]]" init=false watch=false on='leftClick')
-
 					(element ItemChooser
 						_items = "nonzeroBattleTypes"
 						_choosedItemRenderer = 'BattleTypeChosenItemRenderer'
@@ -891,7 +885,7 @@
 			(bind count "contentEntitiesIds.length")
 			(args
 				_entityItemId = "contentEntitiesIds[$index]"
-				_isLastItem = "$index == contentEntitiesIds.length - 1"
+				_isFirstItem = "$index == 0"
 				_isTooltip = "true"
 			)
 		)
@@ -1071,7 +1065,7 @@
 					(bind count "contentEntitiesIds.length")
 					(args
 						_entityItemId = "contentEntitiesIds[$index]"
-						_isLastItem = "$index == contentEntitiesIds.length - 1"
+						_isFirstItem = "$index == 0"
 					)
 				)
 			)
@@ -1090,13 +1084,14 @@
 	)
 )
 
-(def element NotificationItem (_entityItemId:number, _isLastItem:bool=false, _isTooltip:bool=false)
+(def element NotificationItem (_entityItemId:number, _isFirstItem:bool=false, _isTooltip:bool=false)
 	(scope
 		(var notificationItemEntity:gfx = "$datahub.getEntity(_entityItemId)")
 		(var messageContentTypeComponent:gfx = "notificationItemEntity ? notificationItemEntity.sysMessageContentType : null")
 		(var notificationContentType:number = "messageContentTypeComponent ? messageContentTypeComponent.contentType : null")
 		(var notificationContentComponent:gfx = "notificationContentType ? notificationItemEntity.getComponent(notificationContentType) : null")
 
+		(var isTooltipButtons:bool = "notificationContentType == CC.sysMessageButtons && _isTooltip")
 		(var isTooltipEmergencyHeader:bool = "notificationContentType && notificationContentType == CC.sysEmergencyMessageHeader && _isTooltip")
 		(var customRenderElement:str = "isTooltipEmergencyHeader ? NOTIFICATION_RENDER_ITEM_LIST[CC.sysMessageHeader] : null")
 
@@ -1104,22 +1099,24 @@
 									notificationContentType		? NOTIFICATION_RENDER_ITEM_LIST[notificationContentType]
 																: null")
 	)
+
 	(style (width = 100%))
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer = 'TooltipSystemHorizontalDivider' (bind enabled "!_isFirstItem && !isTooltipButtons"))
+	)
 
 	(block
 		(style (width = 100%))
 		(controller $Instance
 			(bind renderer "renderElement")
-			(bind enabled "renderElement")
+			(bind enabled "renderElement && !isTooltipButtons")
 			(args
 				_notificationContentComponent = "notificationContentComponent"
 				_isTooltip = "_isTooltip"
 			)
 		)
-	)
-	(block
-		(style (width = 100%))
-		(controller $Instance renderer = 'TooltipSystemHorizontalDivider' (bind enabled "!_isLastItem"))
 	)
 )
 
@@ -1488,8 +1485,8 @@
 	(style (width = 100%) (hitTest = false))
 
 	(element TooltipSystemHeaderWithIconAndText
-		_imageHeight = 		"80"
-		_imageWidth = 		"80"
+		_imageHeight = 		60px
+		_imageWidth = 		60px
 		_headerText =		"headerText"
 		_subheaderText =	"campaignNameIDS"
 		_headerIconType = 	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CAMPAIGN"
@@ -1506,19 +1503,28 @@
 		(var taskNumber:number = "campaignTaskParams.taskNumber")
 		(var isMainTask:bool = "campaignTaskParams.isMainTask")
 
-		(var headerText:str = "isMainTask 	? tr('IDS_FINAL_TASK')
-											: tr(subst('IDS_CAMPAIGN_TASK_NUMBER', [], { _taskNumber: taskNumber }))")
+		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, campaignTaskParams.campaignID)")
+		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
 
-		(var campaignEntity:gfx = "$datahub.getPrimaryEntity(CC.campaignParams, campaignTaskParams.campaignID)")
-		(var campaignParams:gfx = "campaignEntity ? campaignEntity.campaignParams : null")
+		(var campaignMissionEntity:dhEntity =		"getPrimaryEntity(CC.campaignMissionParams, campaignTaskParams.missionID)")
+		(var campaignMissionParams:dhComponent =	"campaignMissionEntity.campaignMissionParams")
+		(var missionNumber:str =	"campaignMissionParams.uiNumber")
+
+		(var campaignAllMissionsLen:number = "campaignParams.allMissions.length ?: 0")
+		(var isFinalTaskCampaign:bool =		"(toNumber(missionNumber) == campaignAllMissionsLen) && isMainTask")
+
+		(var headerText:str = "	isFinalTaskCampaign	? 'IDS_FINAL_TASK_CAMPAIGN' :
+								isMainTask			? 'IDS_FINAL_TASK_MISSION'
+													: subst('IDS_CAMPAIGN_TASK_NUMBER', [], { _taskNumber: taskNumber })")
+
 		(var campaignName:str = "campaignParams.name")
 		(var campaignNameIDS:str = "'IDS_' + campaignName + '_TITLE'")
 	)
 	(style (width = 100%) (hitTest = false))
 
 	(element TooltipSystemHeaderWithIconAndText
-		_imageHeight = 		"80"
-		_imageWidth = 		"80"
+		_imageHeight = 		60px
+		_imageWidth = 		60px
 		_headerText =		"headerText"
 		_subheaderText =	"campaignNameIDS"
 		_headerIconType = 	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CAMPAIGN"

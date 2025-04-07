@@ -5,23 +5,27 @@
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro MOUSE_HANDLER_SCOPE "'partners_'")
 
-		(var loginEntity:gfx = "$datahub.getSingleEntity(CC.loginData)")
-		(var offlineClientEntity:gfx = "$datahub.getSingleEntity(CC.offlineClient)")
+		(var offlineClientEntity:dhEntity = "getSingleEntity(CC.offlineClient)")
 		(var isOnline:bool = "!offlineClientEntity")
 
-		(var clientBuildInfoEntity:gfx = "$datahub.getSingleEntity(CC.clientBuildInfo)")
-		(var accountLevelEntity:gfx = "$datahub.getSingleEntity(CC.accountLevel)")
-		(var curAccountLevel:number = "accountLevelEntity.accountLevel.level" (event "accountLevelEntity.accountLevel.evLevelChanged"))
+		(var accountLevelComponent:dhComponent = "getSingleComponent(CC.accountLevel)")
+		(var curAccountLevel:number = "accountLevelComponent.level" (event "accountLevelComponent.evLevelChanged"))
 
-		(var gameVersion:str = "loginEntity.loginData.gameVersion" (event "loginEntity.loginData.evUpdate"))
-		(var dockDataEntity:gfx = "$datahub.getSingleEntity(CC.dockData)")
-		(var playersOnCurrentRealm:number = "dockDataEntity.dockData.playersOnCurrentRealm" (event "dockDataEntity.dockData.evPlayersOnCurrentRealmChanged"))
-		(var realmConstantsEntity:gfx = "$datahub.getSingleEntity(CC.realmConstants)")
+		(var loginComponent:dhComponent = "getSingleComponent(CC.loginData)")
 
-		(var isShowPlayersCountOnServer:bool = "realmConstantsEntity.realmConstants.isShowPlayersCountOnServer && isOnline")
-		(var isExternalPlatformClient:bool = "loginEntity.loginData.isExternalPlatformClient" (event "loginEntity.loginData.evUpdate"))
+		(var gameVersion:str = 					"loginComponent.gameVersion" 				(event "loginComponent.evUpdate"))
+		(var isExternalPlatformClient:bool = 	"loginComponent.isExternalPlatformClient" 	(event "loginComponent.evUpdate"))
 
+		(var dockDataComponent:dhComponent = "getSingleComponent(CC.dockData)")
+		(var playersOnCurrentRealm:number = "dockDataComponent.playersOnCurrentRealm" (event "dockDataComponent.evPlayersOnCurrentRealmChanged"))
+		
+		(var realmConstantsComponent:dhComponent = "getSingleEntity(CC.realmConstants).realmConstants")
+		(var isShowPlayersCountOnServer:bool = "realmConstantsComponent.isShowPlayersCountOnServer && isOnline")
+
+		(var clientBuildInfoEntity:dhEntity = "getSingleEntity(CC.clientBuildInfo)")
 		(var isServerDisconnectButtonVisible:bool = "isOnline && !isExternalPlatformClient && clientBuildInfoEntity.clientBuildInfo.buildConfig == 'hybrid'")
+
+		(var isVisibleTutorialButton:bool = "curAccountLevel > TUTORIAL_BANNER_MAX_LEVEL")
 	)
 	(style (align = "center"))
 
@@ -139,14 +143,14 @@
 		)
 		
 		(block
-			(bind visible "curAccountLevel > 4")
+			(bind visible "isVisibleTutorialButton")
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.2)
 			(style (width = 100%) (align = "center"))
 
 			(block
 				(name = 'TutorialBannerLobbyMenuButton')
 				(controller $Instance renderer='BasicTutorial'
-					(bind enabled "curAccountLevel > 4")
+					(bind enabled "isVisibleTutorialButton")
 				)
 			)
 		)
@@ -199,15 +203,23 @@
 
 (def element BasicTutorial ()
 	(scope
-		(var accountLevelEntity:gfx = "$datahub.getSingleEntity(CC.accountLevel)")
-		(var curAccountLevel:number = "accountLevelEntity.accountLevel.level" (event "accountLevelEntity.accountLevel.evLevelChanged"))
-		(var userTaskCollectionCollection:gfx = "$datahub.getCollection(CC.userTask)")
-		(var userTaskCollection:array = "userTaskCollectionCollection.items ?: []" (event "userTaskCollectionCollection.evAdded") (event "userTaskCollectionCollection.evRemoved"))
-		(var userTaskEntity:gfx = "$datahub.getEntity(userTaskCollection[0].id)")
-		(var currentUserTaskFlags:array = "userTaskEntity.userTask.flags" (event "userTaskEntity.userTask.evFlagChanged"))
-		(var userDoNotWatchTutorial:bool = "currentUserTaskFlags[BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_TUTORIAL]] == 0")
-		(var showTutorial:bool = "userDoNotWatchTutorial && curAccountLevel > 4")
+		(struct tutorialMigrationTip =			 PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_MIGRATION_LOBBY_MENU"))
+		(struct tutorialNavigationOldPlayerTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_NAVIGATION_OLD_PLAYER_LOBBY_MENU"))
+
+		(var tutorialMigrationTipId:number = "	tutorialMigrationTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_MIGRATION_LOBBY_MENU : 
+												tutorialNavigationOldPlayerTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_NAVIGATION_OLD_PLAYER_LOBBY_MENU
+																						: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var titorialChainTipId:number = "	tutorialMigrationTip.isActive 				? SC.Context_guiding_tip.TIP_CHAIN_ID.TUTORIAL_MIGRATION :
+											tutorialNavigationOldPlayerTip.isActive 	? SC.Context_guiding_tip.TIP_CHAIN_ID.TUTORIAL_NAVIGATION_OLD_PLAYER
+																						: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE")
+
+		(var isBasicTutorialTipVisible:bool = "tutorialMigrationTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
+	(bindcall externalCall "tutorialMigrationTip.isActive || tutorialNavigationOldPlayerTip.isActive  ? 'inputMapping.onAction' : ''" 
+							"[	'deactivateTipChain', 
+								{ tip_chain_id: titorialChainTipId } ]"
+							watch=false  on='leftClick')
 
 	(style (width = 220px) (marginTop = "S"))
 
@@ -216,25 +228,29 @@
 	(block
 		(style (marginTop = 18px) (width = 100%))
 		(block
+			(name = 'btn_guide')
 			(style (width = 100%))
 			(element DefaultButton
 				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
 				_width = 100%
-				_name = 'btn_guide'
 				_label = 'IDS_DOCK_BANNER_VIDEO_TUTORIALS'
 				_methods = "[	{	type: 'inputMapping.onAction',
-									name: 'ServerUIDataUSS.setUserTaskExecuted',
-									args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_TUTORIAL] } },
+									name: 'show_guide',
+									args: { } },
 								{	type: 'sound.playSetSoundDirect',
 									name: 'window',
 									args: 'open_muted' }]"
 			)
 		)
+	)
 
-		(block
-			(macro DEFAULT_CONTROL_MARKER_ANIMATION "showTutorial")
-			(style (position = "absolute") (right = "-M") (top = "-S") (hitTest = false))
-			(element MarkerNew)
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isBasicTutorialTipVisible")
+		(args
+			_tipId = "tutorialMigrationTipId"
+			_tipPositioning = "TIP_POSITION_BOTTOM"
+			_modalWindowName = 'LobbyMenu'
+			_offsetX = "-XXS"
 		)
 	)
 )

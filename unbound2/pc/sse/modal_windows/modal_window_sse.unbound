@@ -3,7 +3,7 @@
 	(scope
 		(macro SERVER_TIME_SCOPE)
 
-		(var sseWindowState:dhComponent = "getSingleEntity(CC.sseWindowState).sseWindowState")
+		(var sseWindowState:dhComponent = "getSingleComponent(CC.sseWindowState)")
 		(var selectedCategoryId:str = "sseWindowState.selectedTag" (event "sseWindowState.evChanged"))
 		(var isCommonTaskCategory:bool = "selectedCategoryId == SC.Sse.PREDEFINED_SSE_TAGS.COMMON")
 
@@ -16,25 +16,29 @@
 
 		(var shipAcesSeason:dhComponent = "getSingleComponent(CC.shipAcesSeason)")
 		(var shipAcesSeasonType:number = "shipAcesSeason.shipAcesType")
-		(var isShipAcesSeasonNation:bool = "shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.NATION")
-		(var isShipAcesSeasonShipType:bool = "shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.SHIP_TYPE")
 
 		(struct sseShipAcesRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_SHIP_ACES"))
 		(struct sseOpenEndedRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_OPEN_ENDED"))
 		(struct sseNewbieQuestsRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS"))
+		(struct campaignsRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.CAMPAIGNS"))
 		(struct sseRoute =				PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE"))
 
-		(var isCommonSse:bool = "!sseShipAcesRoute.isActive && !sseOpenEndedRoute.isActive && !sseNewbieQuestsRoute.isActive")
+		(var isShipAcesSeasonNation:bool = "shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.NATION && sseShipAcesRoute.isActive")
+		(var isShipAcesSeasonShipType:bool = "shipAcesSeasonType == SC.Common.SHIP_ACES_TYPE.SHIP_TYPE && sseShipAcesRoute.isActive")
+
+		(var isCommonSse:bool = "!sseShipAcesRoute.isActive && !sseOpenEndedRoute.isActive && !sseNewbieQuestsRoute.isActive && !campaignsRoute.isActive")
 
 		(var sseTitle:str = "isCommonSse	? sseTagName						? sseTagName
 																				: 'IDS_BATTLE_TASKS'
 											: sseNewbieQuestsRoute.isActive		? 'IDS_NEWBIE_QUESTS_COMMON_TITLE'
 											: sseOpenEndedRoute.isActive		? 'IDS_PORTAL_SSE_COMMON_TITLE'
-											: isShipAcesSeasonNation			? 'IDS_SHIP_ACES_NATION_TITLE'
+											: isShipAcesSeasonNation 			? 'IDS_SHIP_ACES_NATION_TITLE'
 											: isShipAcesSeasonShipType			? 'IDS_SHIP_ACES_SHIP_TYPE_TITLE'
+											: campaignsRoute.isActive			? 'IDS_CAMPAIGNS_TITLE'
 																				: 'IDS_SHIP_ACES_COMMON_TITLE'")
 
 		(var backgroundSelectedCategory:str = "	sseShipAcesRoute.isActive										? 'ship_aces'	:
+												campaignsRoute.isActive											? 'campaign'	:
 												sseOpenEndedRoute.isActive || sseNewbieQuestsRoute.isActive		? 'default'		:
 												sseEpicBackground												? sseEpicBackground
 																												: 'default'")
@@ -48,7 +52,16 @@
 
 		(var renderStatusItem:str = "sseNewbieQuestsRoute.isActive 												? 'NewbieQuestsCategoryStatus' :
 									isCommonSse || sseShipAcesRoute.isActive || sseOpenEndedRoute.isActive		? 'SseCategoryStatus'
-																												: null")
+																												: ''")
+	
+		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option="'ui.carousel.carouselAreaHeight'"))
+
+		(var activeTasksCollection:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active')")
+		(var activeTasksLen:number = "activeTasksCollection.length")
+
+		(var activeDoneTasksCollection:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active.taskStateDone')")
+		(var activeDoneTasksLen:number = "activeDoneTasksCollection.length")
+		(var hasActiveUnfinishedTasks:bool = "activeTasksLen - activeDoneTasksLen > 0")
 	)
 	(class $Fullsize)
 
@@ -60,12 +73,12 @@
 			_type = "SC.Ui_styles.ANIMATED_BG.SSE"
 			_hideTime = 0.2
 			_hideDelay = 0.25
+			_modalWindowName = 'ModalWindowSse'
 		)
 	)
 
 	(block
 		(class $Fullsize)
-		(style (paddingBottom = "{ 1280:M, 1920:LM }") (paddingTop = "{ 1280:M, 1920:LM }"))
 
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
@@ -138,7 +151,13 @@
 		)
 		(block
 			(class $Fullsize)
-			(style (paddingRight = "M") (paddingLeft = "M") (paddingTop = "{ 720:M, 1080:L }") (paddingBottom = "{ 720:M, 1080:L }"))
+			(style
+				(paddingRight = "M")
+				(paddingLeft = "M")
+				(paddingTop = "{ 720:M, 1080:L }")
+				(bind paddingBottom  "campaignsRoute.isActive && hasActiveUnfinishedTasks	? carouselAreaHeightPref.value
+																							: { 720:M, 1080:LM }")
+			)
 
 			(element ModalWindowSseContent)
 		)
@@ -148,7 +167,8 @@
 (def constant SSE_CONTENT_CHILDREN "{	'sse_common':			'SseCommonChild',
 										'sse_ship_aces':		'SseShipAcesChild',
 										'sse_open_ended':		'SseOpenEndedChild',
-										'sse_newbie_quests':	'SseNewbieQuestsChild'
+										'sse_newbie_quests':	'SseNewbieQuestsChild',
+										'campaigns':			'SseCampaignsChild'
 }")
 
 (def element ModalWindowSseContent ()
@@ -197,8 +217,9 @@
 		(struct sseShipAcesRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_SHIP_ACES"))
 		(struct sseOpenEndedRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_OPEN_ENDED"))
 		(struct sseNewbieQuestsRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS"))
+		(struct sseCampaignsRoute = 	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.CAMPAIGNS"))
 
-		(var isCommonSse:bool = "!sseShipAcesRoute.isActive && !sseOpenEndedRoute.isActive && !sseNewbieQuestsRoute.isActive")
+		(var isCommonSse:bool = "!sseShipAcesRoute.isActive && !sseOpenEndedRoute.isActive && !sseNewbieQuestsRoute.isActive && !sseCampaignsRoute.isActive")
 		(var renderChild:str = "isCommonSse								? SSE_CONTENT_CHILDREN['sse_common'] :
 								activeChild in SSE_CONTENT_CHILDREN		? SSE_CONTENT_CHILDREN[activeChild]
 																		: ''")

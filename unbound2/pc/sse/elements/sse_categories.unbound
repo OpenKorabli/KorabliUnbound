@@ -5,11 +5,16 @@
 		(var sseCategoriesLen:number = "sseCategoriesAllCollection.length")
 
 		
+		(struct featureCampaigns = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.CAMPAIGNS"))
+		(var isCampaignVisible:bool = "featureCampaigns.state != 'locked'")
+
+		
 		(var routeEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.SSE)")
 		(var activeChild:str= "routeEntity.route.activeChild" (event "routeEntity.route.evActiveChildChanged"))
 		
 		(struct sseShipAcesRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_SHIP_ACES"))
 		(struct sseOpenEndedRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_OPEN_ENDED"))
+		(struct sseCampaignsRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_CAMPAIGN"))
 
 		
 		(var shipAcesSeasonEntity:dhEntity = "getSingleEntity(CC.shipAcesSeason)")
@@ -27,19 +32,27 @@
 		(var isSseCategoriesVisible:bool = "actionUseFeature.state != 'locked' && sseCategoriesLen > 0")
 
 		
-		(struct sseBattleNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE"))
-		(struct sseBattleRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE_REPEAT"))
-		(struct sseFinalNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL"))
-		(struct sseFinalRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL_REPEAT"))
+		(struct sseCampaignNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO"))
+		(struct sseCampaignRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO_REPEAT"))
+		(struct sseBattleNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE"))
+		(struct sseBattleRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE_REPEAT"))
+		(struct sseFinalNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL"))
+		(struct sseFinalRepeatNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL_REPEAT"))
 
 		(var currentTipId:number = "sseBattleNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE : 
 									sseBattleRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE_REPEAT :
 									sseFinalNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL :
-									sseFinalRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL_REPEAT
+									sseFinalRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL_REPEAT :
+									sseCampaignNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO :
+									sseCampaignRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO_REPEAT
 																		: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
 		(var isBattleTasksTipVisible:bool = "isIn(currentTipId,	[SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE, SC.Context_guiding_tip.TIP_TYPE.SSE_BATTLE_REPEAT] )")
 		(var isSseFinalTipVisible:bool = "isIn(currentTipId, [SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL, SC.Context_guiding_tip.TIP_TYPE.SSE_FINAL_REPEAT] )")
+		(var isCampaignTipVisible:bool = "isIn(currentTipId,	[SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO, SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_INTRO_REPEAT] )")
+
+		(var activeTaskStateDoneCollection:dhCollection = "getCollectionByPath(CC.campaignTaskPlayer, 'active.taskStateDone')")
+		(var hasCampaignReward:bool = "activeTaskStateDoneCollection.length > 0")
 	)
 	(bind visible "isSseCategoriesVisible")
 	(bindcall externalCall "shipAcesStatsEntity ? 'inputMapping.onRequest' : ''" "['openModalShipAcesResults', { }]" on='addedToStage' (bind trigger "shipAcesStatsEntity"))
@@ -47,7 +60,10 @@
 	(style (width = 100%))
 
 	(block
-		(style (width = 100%) (marginBottom = "L"))
+		(style
+			(width = 100%)
+			(marginBottom = "L")
+		)
 
 		(block
 			(style (width = 100%))
@@ -70,6 +86,27 @@
 				_offsetX = "L"
 				_noArrow = true
 				_noPointer = true
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='CampaignsTab'
+			(bind enabled "isCampaignVisible")
+			(args
+				_isCampaignsSelected = "sseCampaignsRoute.isActive"
+			)
+		)
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "isCampaignVisible && isCampaignTipVisible && !sseCampaignsRoute.isActive")
+			(args
+				_tipId = "currentTipId"
+				_tipPositioning = "TIP_POSITION_RIGHT"
+				_modalWindowName = 'ModalWindowSse'
+				_offsetX = "L"
+				_pointerOffset = "hasCampaignReward ? LS : 45px"
 			)
 		)
 	)
@@ -137,24 +174,32 @@
 )
 
 
-(def element SseCategoryTooltipContent (_entity:dhEntity)
+(def element TooltipSystemSseCategoryContent ()
 	(scope
-		(var sseTag:dhComponent = "_entity.sseTag")
+		(var sseCategoriesCollection:dhCollection = "getCollection(CC.sseTag).getChildByPath('SSETagsVisible.sorted')")
+		(var sseCategoriesCollectionLen:number = "sseCategoriesCollection.length")
+	)
+	(style
+		(width = 100%)
+		(vgap = "SXS")
+	)
+
+	(controller $Repeat renderer='TooltipSystemSseCategoryItem'
+		(bind count "sseCategoriesCollectionLen")
+		(args
+			_sseCategoryEntity = "sseCategoriesCollection[$index]"
+		)
+	)	
+)
+
+(def element TooltipSystemSseCategoryItem (_sseCategoryEntity:dhEntity)
+	(scope
+		(var sseTag:dhComponent = "_sseCategoryEntity.sseTag")
 		(var sseTagName:str = "sseTag.name ?: ''")
 		(var numTasks:number = "sseTag.activeAmount ?: 0" (event "sseTag.evChanged"))
 
-		(var isNew:bool = "_entity.hasComponent(CC.newItem)")
+		(var isNew:bool = "_sseCategoryEntity.hasComponent(CC.newItem)")
 	)
-	(style (width = 100%) (bind marginTop "$index ? SXS : 0"))
-	
-	(element SseCategoryTooltipItem
-		_title = "sseTagName"
-		_value = "numTasks"
-		_isNew = "isNew"
-	)
-)
-
-(def element SseCategoryTooltipItem (_title:str, _value:number, _isNew:bool=false)
 	(style (flow = "horizontal") (width = 100%))
 	
 	(hblock
@@ -163,11 +208,11 @@
 		(tf
 			(class $TextDefaultNM)
 			(style (width = 100%) (alpha = "TC"))
-			(bind text "_title")
+			(bind text "sseTagName")
 		)
 	
 		(block
-			(bind visible "_isNew")
+			(bind visible "isNew")
 			(style (marginLeft = 3px) (marginTop = -9px))
 			(element MarkerNew)
 		)
@@ -176,6 +221,6 @@
 	(tf
 		(class $TextDefaultNM)
 		(style (alpha = "TC"))
-		(bind text "toString(_value)")
+		(bind text "toString(numTasks)")
 	)
 )

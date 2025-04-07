@@ -1,0 +1,643 @@
+(def constant MISSION_ITEM_SIZE 42px)
+
+(def constant MISSION_SELECTED_ITEM_SCALE_VALUE 1.35)
+
+(def constant MISSION_FINAL_TASK_WIDTH 300px)
+
+(def constant CAMPAIGN_STAGE_SMALL_SCREEN_MAX_WIDTH 1560px)
+
+(def constant MISSION_ITEM_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: "TA",
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.5,
+	SC.Ui_styles.BUTTON_STATE.OVER		: "TA",
+	SC.Ui_styles.BUTTON_STATE.UP		: "TC"
+})
+
+(def constant MISSION_ITEM_LOCKED_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: "TA",
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.4,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 0.5,
+	SC.Ui_styles.BUTTON_STATE.UP		: 0.4
+})
+
+
+(def element ModalWindowCampaignsSse (_curCampaignId:number, _curMissionId:number)
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(event evMissionSelectedChanged)
+
+		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, _curCampaignId)")
+		(var campaignPlayer:dhComponent = "campaignEntity.campaignPlayer")
+		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
+
+		(var campaignName:str = "campaignParams.name")
+		(var missionsStates:array = "campaignPlayer.missionsStates" (event "campaignPlayer.evChanged"))
+
+		(var activeTasksCollection:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active')")
+		(var activeTasksLen:number = "activeTasksCollection.length")
+
+		(var activeDoneTasksCollection:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active.taskStateDone')")
+		(var activeDoneTasksLen:number = "activeDoneTasksCollection.length")
+		(var hasActiveUnfinishedTasks:bool = "activeTasksLen > 0")
+
+		(var allMissions:array = "campaignParams.allMissions")
+		(var countMissions:number = "allMissions.length ?: 0")
+
+		(var activeMissionId:number = "campaignPlayer.activeMissionId" (event "campaignPlayer.evUpdate"))
+		(var activeMissionIndex:number = "indexOf(activeMissionId, allMissions) > -1 ? indexOf(activeMissionId, allMissions) : 0")
+
+		(var selectedMissionId:number = "allMissions[activeMissionIndex]")
+		(bind selectedMissionId "$event.curMissionId" init=false (event "evMissionSelectedChanged"))
+
+		(var currentMissionNumber:number = "activeMissionIndex")
+		(bind currentMissionNumber "$event.numberMission" init=false (event "evMissionSelectedChanged"))
+
+		(struct contentWidth = ADAPTIVE_HORIZONTAL_SIZE (	_minStageWidth	= 1280px
+															_minValue		= 963px
+															_maxStageWidth	= 1920px
+															_maxValue		= 1436px
+															_stageWidth		= "stageWidth")) 
+
+		(var hGapSize:number = "(contentWidth.value - (countMissions * (MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE))) / (countMissions - 1)")
+		(var positionCursorX:number = "currentMissionNumber * hGapSize + (MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE) * currentMissionNumber")
+
+		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option="'ui.carousel.carouselAreaHeight'"))
+	)
+	(name = 'ModalWindowCampaignsSse')
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element ModalWindowAnimatedBackground
+			_selectedCategory =	"campaignName"
+			_type = "SC.Ui_styles.ANIMATED_BG.DETAILED_CAMPAIGN"
+			_hideTime = 0.2
+			_hideDelay = 0.25
+		)
+	)
+
+	(element DeclareBlurLayer)
+
+	(block
+		(class $Fullsize)
+		(style (bind paddingBottom "hasActiveUnfinishedTasks ? carouselAreaHeightPref.value : 0"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style (width = 100%))
+
+			(element ModalWindowHeaderFullSize
+				_windowName =		"'IDS_' + campaignName + '_TITLE'"
+				_paddingRight =		"M"
+				_paddingLeft =		"M"
+				_backButtonText =	'IDS_RETURN_TO_CAMPAIGNS'
+			)
+		)
+
+		(hblock
+			(class $Fullsize)
+			(style
+				(paddingTop = "{ 720:MS, 1080:L }")
+				(align = "center")
+			)
+		
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+				(style
+					(marginTop = "{ 720: M, 1080: 72px }")
+					(marginRight = "{ 1280: M, 1920: 56px }")
+				)
+				(element CampaignsTasksBasket)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+				(style
+					(bind width "contentWidth.value")
+					(height = 100%)
+				)
+
+				(block
+					(style
+						(width = 100%)
+						(vgap = "MS")
+					)
+
+					(hblock
+						(style
+							(height = "MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE")
+							(align = "middle")
+						)
+
+						(controller $Repeat renderer='MissionCarouselItem'
+							(bind count "allMissions.length")
+							(args
+								_curCampaignMissionId = "allMissions[$index]"
+								_curCampaignId = "_curCampaignId"
+								_widthLine = "hGapSize"
+								_isSelected = "allMissions[$index] == selectedMissionId"
+								_isActiveMission = "$index < activeMissionIndex"
+								_dispatchedEv = 'evMissionSelectedChanged'
+							)
+						)
+					)
+
+					(element MissionPointerLine
+						_positionX = "positionCursorX"
+					)
+				)
+
+				(hblock
+					(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+					(class $Fullsize)
+					(style
+						(paddingTop = "M")
+						(hgap = "MS")
+					)
+
+					(block
+						(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+						(class $Fullsize)
+
+						(scrollArea
+							(class $Fullsize)
+							(style (backgroundColor = "NO_COLOR"))
+
+							(verticalSlider ScrollBarVLight
+								_singleStep = 80
+							)
+							(hscrollPolicy = 'off')
+							(vscrollPolicy = 'auto')
+
+							(topShadow = 'ScrollAreaShadowTop')
+							(bottomShadow = 'ScrollAreaShadowBottom')
+
+							(wheelScrollSpeed = 1.2)
+							(wheelScrollAcceleration = 1)
+
+							(activeControlsAlpha = 1)
+							(inactiveControlsAlpha = 1)
+							(animationDuration = 0.2)
+							(animationEasing = "Easing.cubic_out")
+
+							(content
+								(style
+									(width = 100%)
+									(paddingBottom = "XS")
+								)
+
+								(element MissionTasksContainer
+									_curCampaignMissionId = "selectedMissionId"
+								)
+							)
+						)
+					)
+	
+					(block
+						(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+						(style (height = 100%))
+
+						(element FinalTaskContainer
+							_curCampaignId = "_curCampaignId"
+							_curCampaignMissionId = "selectedMissionId"
+							_hasFinalTaskCampaign = "currentMissionNumber == countMissions - 1"
+						)
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element MissionPointerLine (_positionX:number)
+	(style
+		(width = 100%)
+		(height = 1px)
+		(backgroundImage = 'url:../accountLevel/progressBarIcons/al_carousel_divider.png')
+		(scale9grid = [37, 0, 37, 0])
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(bottom = 0)
+			(bind left "_positionX")
+			(width = "MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE")
+			(height = 8px)
+			(alpha = "TA")
+			(backgroundImage = 'url:../accountLevel/progressBarIcons/carousel_pointer_toggle.png')
+			(backgroundSize = "fill")
+		)
+	)
+)
+
+(def element MissionTasksContainer (_curCampaignMissionId:number)
+	(scope
+		(var campaignMission:dhEntity = "getPrimaryEntity(CC.campaignMissionParams, _curCampaignMissionId)")
+		(var usualTasks:array = "campaignMission.campaignMissionParams.usualTasks")
+
+		(struct stageSize = STAGE_SIZE())
+		(struct gapSize = ADAPTIVE_HORIZONTAL_SIZE (_minStageWidth	= 1280px
+													_minValue		= "SXS"
+													_maxStageWidth	= 1920px
+													_maxValue		= "M"
+													_stageWidth		= "stageSize.width")) 
+	)
+	(style
+		(width = 100%)
+		(paddingLeft = "{ 1280:SXS, 1920:MS }")
+		(paddingRight = "{ 1280:SXS, 1920:MS }")
+		(align = "center")
+	)
+
+	(block
+		(style
+			(flow = "tile_horizontal")
+			(maxWidth = 100%)
+			(bind gap "gapSize.value")
+		)
+
+		(controller $Repeat renderer='TaskItem'
+			(bind count "usualTasks.length")
+			(args
+				_curCampaignMissionId = "_curCampaignMissionId"
+				_taskId = "usualTasks[$index]"
+				_isShipSuitable = true
+				_isBattleSuitable = true
+				_needMargins = true
+				_isUseless = false
+			)
+		)
+	)
+)
+
+
+
+
+
+
+
+
+
+(def element MissionCarouselItem (_curCampaignMissionId:number, _curCampaignId:number, _isSelected:bool, _dispatchedEv:str, _widthLine:number, _isActiveMission:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, _curCampaignId)")
+		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
+		(var mainTask:number = "campaignParams.mainTask")
+		(var allMissions:array = "campaignParams.allMissions ?: []")
+		(var countMissions:number = "allMissions.length")
+
+		(var campaignMission:dhEntity = "getPrimaryEntity(CC.campaignMissionParams, _curCampaignMissionId)")
+		(var uiNumber:str = "campaignMission.campaignMissionParams.uiNumber")
+		(var missionState:number = "campaignMission.campaignMissionPlayer.state" (event "campaignMission.campaignMissionPlayer.evUpdate"))
+
+		(var missionStartTime:number = "campaignMission.campaignMissionParams.startTime")
+		(var serverTime:number = "currentServerSeconds()" (event "evInfrequent"))
+		(var missionTimeToStart:number = "missionStartTime - serverTime")
+
+		(var missionMainTask:dhEntity = "getPrimaryEntity(CC.campaignTaskParams, mainTask)")
+		(var isMissionLocked:bool = "missionState == SC.Ui_common.CAMPAIGN_STATE.LOCKED")
+
+		(var state:number = "	_isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var alphaMissionItem:number = "isMissionLocked ? MISSION_ITEM_LOCKED_ALPHA[state] : MISSION_ITEM_ALPHA[state]")
+		(var isLastItem:bool = "$index == countMissions - 1")
+
+		
+		(struct campaignMissionTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_MISSION"))
+		(struct campaignMissionRepeatTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_MISSION_REPEAT"))
+
+		(var tipId:number = "	campaignMissionTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_MISSION :
+								campaignMissionRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_MISSION_REPEAT
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isTipVisible:bool = "tipId != SC.Context_guiding_tip.TIP_TYPE.NONE && $index == 0")
+	)
+	(bind name "'MissionItem_' + uiNumber")
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "!_isSelected ? 'default_button' : ''")
+
+	(style
+		(height = "MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE")
+		(flow = "horizontal")
+		(align = "middle")
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(width = "MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE")
+			(height = "MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE")
+			(align = "center|middle")
+			(alpha = "alphaMissionItem")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger	= "state"
+			_alpha		= "alphaMissionItem"
+		)
+
+		(block
+			(style
+				(width = "MISSION_ITEM_SIZE")
+				(height = "MISSION_ITEM_SIZE")
+				(visualScaleX = "_isSelected ? MISSION_SELECTED_ITEM_SCALE_VALUE : 1")
+				(visualScaleY = "_isSelected ? MISSION_SELECTED_ITEM_SCALE_VALUE : 1")
+				(pivotX = 50%)
+				(pivotY = 50%)
+				(align = "center|middle")
+				(backgroundImage = 'url:../campaigns/missions_pin/campaign_pin.png')
+				(backgroundSize = "cover")
+			)
+
+			(controller $Animation
+				(bindcall play	duration = 0.15
+								from = "{ visualScaleX: 1, visualScaleY: 1 }"
+								to = "{ visualScaleX: MISSION_SELECTED_ITEM_SCALE_VALUE, visualScaleY: MISSION_SELECTED_ITEM_SCALE_VALUE }"
+								easing = "Easing.quad_in"
+								reverse = "!_isSelected"
+								action = "kill"
+								(bind trigger "_isSelected")
+				)
+			)
+
+			(block
+				(bind visible "missionState == SC.Ui_common.CAMPAIGN_STATE.ACTIVATED || missionState == SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS")
+				(tf
+					(class $TextDefaultBold21NM)
+					(style (alpha = "TA"))
+					(bind text "uiNumber")
+				)
+			)
+
+			(block
+				(bind visible "missionState == SC.Ui_common.CAMPAIGN_STATE.LOCKED")
+				(style
+					(width = 46px)
+					(height = 46px)
+					(backgroundImage = 'url:../campaigns/missions_pin/campaign_pin_lock.png')
+					(backgroundSize = "cover")
+				)
+			)
+
+			(block
+				(bind visible "missionState == SC.Ui_common.CAMPAIGN_STATE.COMPLETED")
+				(style
+					(width = 42px)
+					(height = 42px)
+					(backgroundImage = 'url:../campaigns/missions_pin/campaign_pin_done.png')
+					(backgroundSize = "cover")
+				)
+			)
+
+			(block
+				(bind visible "missionState == SC.Ui_common.CAMPAIGN_STATE.LOCKED && missionTimeToStart > 0")
+				(style
+					(hitTest = false)
+					(position = absolute)
+					(top = 0)
+					(right = 0)
+					(width = 19px)
+					(height = 19px)
+					(backgroundImage = "'url:../service_kit/unified_status_icons/icon_date.png'")
+				)
+			)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "isTipVisible")
+				(args
+					_tipId =				"tipId"
+					_tipPositioning =		"TIP_POSITION_BOTTOM"
+					_offsetY =				5px
+					_noPointer =			true
+					_hasFinishButton =		true
+					_modalWindowName =		'ModalWindowCampaignsSse'
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isLastItem")
+		(style
+			(hitTest = false)
+			(alpha = 0.5)
+			(height = 1px)
+			(backgroundRepeatX = true)
+			(bind width "isLastItem ? 0 : _widthLine")
+			(bind backgroundImage "_isActiveMission ? '' : 'url:../service_kit/campaigns/campaign_dotted_line.png'")
+		)
+
+		(block
+			(bind visible "_isActiveMission")
+			(class $Fullsize)
+			(style (backgroundColor = 0xffffffff))
+		)
+	)
+
+	
+	(block
+		(style
+			(backgroundColor = "NO_COLOR")
+			(position = "absolute")
+			(width = "MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE + MS")
+			(height = "MISSION_ITEM_SIZE * MISSION_SELECTED_ITEM_SCALE_VALUE + MS")
+			(top = "-MS / 2")
+			(left = "-MS / 2")
+		)
+
+		(controller $Tooltip
+			(renderer = 'MissionTooltip')
+			(args
+				_curCampaignMissionId = "_curCampaignMissionId"
+				_curCampaignId = "_curCampaignId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(macro CLICK_HANDLER
+			_dispatchedEv = "!_isSelected ? _dispatchedEv : ''"
+			_dispatchParams = "{ curMissionId: campaignMission.campaignMissionParams.id, numberMission: uiNumber - 1 }"
+		)
+	)
+)
+
+(def element FinalTaskContainer (_curCampaignId:number, _curCampaignMissionId:number, _hasFinalTaskCampaign:bool)
+	(scope
+		(var campaignEntity:dhEntity =	"getPrimaryEntity(CC.campaignParams, _curCampaignId)")
+		(var isNarrative:bool =			"campaignEntity.campaignParams.isNarrative" (event "campaignEntity.campaignParams.evChanged"))
+		(var campaignState:number =		"campaignEntity.campaignPlayer.state" (event "campaignEntity.campaignPlayer.evChanged"))
+		(var campaignToken:str =		"campaignEntity.campaignParams.token")
+		(var isCampaignNeedToken:bool =	"campaignState == 0 && campaignToken != ''")
+
+		(var campaignMissionEntity:dhEntity =		"getPrimaryEntity(CC.campaignMissionParams, _curCampaignMissionId)")
+		(var campaignMissionParams:dhComponent =	"campaignMissionEntity.campaignMissionParams")
+		(var campaignMissionPlayer:dhComponent =	"campaignMissionEntity.campaignMissionPlayer")
+		(var mainTaskId:number =					"campaignMissionParams.mainTask")
+		(var missionName:str =						"campaignMissionParams.name")
+		(var missionState:number =					"campaignMissionPlayer.state" (event "campaignMissionPlayer.evUpdate"))
+		(var currentStars:number =					"campaignMissionPlayer.stars" (event "campaignMissionPlayer.evUpdate"))
+		(var missionStartTime:number =				"campaignMissionParams.startTime")
+
+		(struct serverTime = SERVER_TIME())
+		(var missionTimeToStart:number =	"(missionStartTime - serverTime.value) ?: 0")
+		(var formatStartTime:str =			"formatTime(missionTimeToStart, 'HIGHEST', '', true)")
+
+		(var missionMainTaskEntity:dhEntity =	"getPrimaryEntity(CC.campaignTaskParams, mainTaskId)")
+		(var mainTaskState:number =				"missionMainTaskEntity.campaignTaskPlayer.state" (event "missionMainTaskEntity.campaignTaskPlayer.evUpdate"))
+		(var costStarsUnlock:number =			"missionMainTaskEntity.campaignTaskParams.costUnlock")
+		(var isMissionActivated:bool =			"missionState == SC.Ui_common.CAMPAIGN_STATE.ACTIVATED")
+
+		(var mainTaskDescription:str = "isMissionActivated												? _hasFinalTaskCampaign ? 'IDS_TAKE_STARS_TO_OPEN_FINAL_TASK_CAMPAIGN'
+																																: 'IDS_TAKE_STARS_TO_OPEN_FINAL_TASK_MISSION' :
+										missionState == SC.Ui_common.CAMPAIGN_STATE.LOCKED				? isCampaignNeedToken 	? 'IDS_TOOLTIP_CAMPAIGN_NEED_TOKEN'
+																																: missionTimeToStart > 0	? subst('IDS_LOCKED_MISSION_TIME_LEFT_TOOLTIP', [], { _timeLeft: formatStartTime })
+																																							: 'IDS_MISSION_STATE_LOCKED' :
+										missionState == SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS &&
+										mainTaskState == SC.Ui_common.CAMPAIGN_STATE.COMPLETED 			? _hasFinalTaskCampaign ? 'IDS_CAMPAIGN_FINAL_TASK_DONE'
+																																: 'IDS_MISSION_FINAL_TASK_DONE' :
+										missionState == SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS			? _hasFinalTaskCampaign ? 'IDS_CAMPAIGN_FINAL_TASK_OPENED_NOT_COMPLETED'
+																																: 'IDS_MISSION_FINAL_TASK_OPENED_NOT_COMPLETED'
+																										: 'IDS_MISSION_COMPLETED'")
+
+		(struct campaignFinalTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_FINAL"))
+		(struct campaignFinalRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_FINAL_REPEAT"))
+
+		(var guidingTipId:number = "campaignFinalTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_FINAL :
+									campaignFinalRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.CAMPAIGN_FINAL_REPEAT
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isNewTipVisible:bool = "guidingTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(struct stageSize = STAGE_SIZE())
+		(var isSmallScreen:bool = "stageSize.width < CAMPAIGN_STAGE_SMALL_SCREEN_MAX_WIDTH")
+	)
+	(style (height = 100%))
+
+	(block
+		(element TaskItem
+			_taskId = "mainTaskId"
+			_curCampaignMissionId = "_curCampaignMissionId"
+			_hasFinalTaskCampaign = "_hasFinalTaskCampaign"
+		)
+
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "isNewTipVisible")
+			(args
+				_tipId = "guidingTipId"
+				_tipPositioning = "TIP_POSITION_LEFT"
+				_hasNextButton = true
+				_modalWindowName = 'ModalWindowCampaignsSse'
+				_offsetX = "SXS"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginTop = "MS")
+				(width = 100%)
+				(alpha = "TC")
+			)
+			(bind text "mainTaskDescription")
+		)
+
+		
+		(block
+			(style
+				(width = 100%)
+				(bind marginTop "isMissionActivated ? SXS : 0px")
+			)
+
+			(controller $Instance renderer='ProgressBarBlock'
+				(bind enabled "isMissionActivated")
+				(args
+					_currentValue = "currentStars"
+					_maxValue = "costStarsUnlock"
+					_progressIconPath = 'url:../service_kit/campaigns/icon_rank_star_nano.png'
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "isNarrative")
+		(class $Fullsize)
+		(style
+			(paddingTop = "{ 720:L, 1080:XL }")
+			(paddingBottom = "{ 720:M, 1080:L }")
+		)
+
+		(tf
+			(class $TextDefaultBold17NM)
+			(style
+				(alpha = "TA")
+				(marginBottom = "MS")
+			)
+			(text = 'IDS_HISTORICAL_INFORMATION')
+		)
+
+		(block
+			(class $Fullsize)
+			(style (padding = "-S"))
+
+			(scrollArea
+				(class $Fullsize)
+				(style (backgroundColor = "NO_COLOR"))
+
+				(verticalSlider ScrollBarVLight
+					_singleStep = 60
+				)
+				(hscrollPolicy = 'off')
+				(vscrollPolicy = 'auto')
+
+				(topShadow = 'ScrollAreaShadowTop')
+				(bottomShadow = 'ScrollAreaShadowBottom')
+
+				(wheelScrollSpeed = 1)
+				(wheelScrollAcceleration = 1)
+				(maxScrollingAnimatedDistance = 280)
+
+				(activeControlsAlpha = 1)
+				(inactiveControlsAlpha = 1)
+				(animationDuration = 0.2)
+				(animationEasing = "Easing.cubic_out")
+
+				(content
+					(style
+						(width = 100%)
+						(padding = "S")
+					)
+
+					(tf
+						(class $TextDefaultNM)
+						(style
+							(width = 100%)
+							(alpha = "TC")
+							(multiline = true)
+							(leading = 1)
+							(styleSheet = '.p_spacing { font-size: 8px; }')
+						)
+						(bind htmlText "isNarrative ? tr('IDS_' + missionName + '_DESCR') : ''")
+					)
+				)
+				(bindcall scrollToBegin animated=false (bind trigger "_curCampaignMissionId"))
+			)
+		)
+	)
+)

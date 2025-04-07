@@ -392,6 +392,7 @@
 		(var isGold:bool = "_currency == SC.Common.CURRENCIES.GOLD")
 		(var isCredits:bool = "_currency == SC.Common.CURRENCIES.CREDITS")
 		(var isFreeXP:bool = "_currency == SC.Common.CURRENCIES.FREE_XP")
+		(var isParagonXP:bool = "_currency == SC.Common.CURRENCIES.PARAGON_XP")
 
 		(var clickAction:str = "isGold		?	'' :
 								isCredits	?	'creditsGoldWindow' :
@@ -405,6 +406,7 @@
 
 		(var resourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
 		(var accountResourceCurrency:gfx = "resourceEntity.accountResource[_currency]"	(event "resourceEntity.accountResource.evChangedEventum_1")
+																						(event "resourceEntity.accountResource.evChangedParagonXP")
 																						(event "resourceEntity.accountResource.evChangedGold")
 																						(event "resourceEntity.accountResource.evChangedCredit")
 																						(event "resourceEntity.accountResource.evChangedFreeXP")
@@ -549,12 +551,13 @@
 )
 
 (def element RepeatParagraphItemNM (_width:number = 0, _maxWidth:number=9999, _size:number = 0, _leading:number = 0,
-									_textAlign:str = 'left', _alpha:number = 1, _imageOffset:number = 0,
+									_textAlign:number = "left", _alpha:number = 1, _imageOffset:number = 0,
 									_substitutionMap:dict={}, _paragraphText:str = '')
 	(scope
-		(var textClass:str = "	_size == SC.Ui_styles.SIZE.MEDIUM	? '$TextDefault17NM' :
-								_size == SC.Ui_styles.SIZE.LARGE	? '$TextDefault19NM'
-																	: '$TextDefaultNM'")
+		(var textClass:str = "	_size == SC.Ui_styles.SIZE.MEDIUM		? '$TextDefault17NM' :
+								_size == SC.Ui_styles.SIZE.LARGE		? '$TextDefault19NM' :
+								_size == SC.Ui_styles.SIZE.EXTRA_LARGE 	? '$TextDefault21NM'
+																		: '$TextDefaultNM'")
 	)
 	(style (bind width "_width" (bind enabled "_width")))
 	(tf
@@ -1070,13 +1073,14 @@
 										_onInputChangedEvent:str='',
 										_onInputFocusChangedEvent:str='',
 										_defaultText:str='',
-										_maxNumericValue :number=999999999999999,
+										_maxNumericValue:number=999999999999999,
 										_width:str='100%',
 										_onWrongSymbolInputedEvent:str='',
 										_focusIndex:number=0,
 										_textClass:str='$TextDefault25NM',
 										_textColor:number="SC.Ui_styles.SERVICE_COLORS.WHITE",
-										_defaultFocused:bool=false )
+										_defaultFocused:bool=false,
+										_name:str='')
 	(scope
 		(event evKeyDown)
 		(event evEnter)
@@ -1091,13 +1095,16 @@
 		(var keyCode:number = 0)
 		(bind keyCode "$event.keyCode" init=false (event "evKeyDown"))
 	)
+
 	(dispatch evEnter dir="EventDirection.NONE" (bind enabled "_onEnterEvent && keyCode == KEY_ENTER") (event "evKeyDown"))
 	(dispatch "_onEnterEvent" args="{value: textInput}" dir="EventDirection.UP" init=false watch=false (event "evEnter"))
 
 	(bindcall externalCall 'sound.playSetSoundDirect' "['hard_textinput', 'change']" init=false watch=false on='change')
 	(bindcall externalCall 'sound.playSetSoundDirect' "['button_default', SoundEvent.CLICK]" init=false watch=false (event "evEnter"))
 
+	(bind name "_name")
 	(style (bind width "_width") (flow = "horizontal") (align = "middle"))
+
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(block
 		(style (width = 100%))
@@ -1142,7 +1149,7 @@
 				(selectable = true)
 				(isNumeric = true)
 
-				(bind maxNumericValue  "_maxNumericValue ")
+				(bind maxNumericValue "_maxNumericValue")
 
 				(bind text "textInput")
 				(sync textInput from='text' on='change')
@@ -1373,7 +1380,8 @@
 	)
 )
 
-(def element ProgressBarBlock (_currentValue:number, _maxValue:number, _title:str='', _curValueTextClass:str='$TextDefaultNM', _barColor:number=null, _unifiedStatus:str = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT", _showPercent:bool=false)
+(def element ProgressBarBlock (	_currentValue:number, _maxValue:number, _title:str='', _curValueTextClass:str='$TextDefaultNM', _barColor:number=null,
+								_unifiedStatus:str = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT", _showPercent:bool=false, _progressIconPath:str='')
 	(scope
 		(var progress:number = "_currentValue && _maxValue ? _currentValue / _maxValue : 0")
 		(var maxValue:number = "_showPercent ? 0 : _maxValue")
@@ -1385,9 +1393,13 @@
 	(style (width = 100%))
 
 	(tf
+		(bind visible "toBool(_title)")
 		(class $TextDefaultNM)
 		(style
-			(width = 100%) (marginBottom = "S") (alpha = "TA") (leading = -2)
+			(width = 100%)
+			(marginBottom = "S")
+			(alpha = "TA")
+			(leading = -2)
 			(bind alpha "textAlpha")
 			(bind textColor "textColor")
 		)
@@ -1395,20 +1407,42 @@
 	)
 
 	(block
-		(style (width = 100%) (marginBottom = "XS") (marginRight = -1px) (marginLeft = -1px))
+		(style
+			(width = 100%)
+			(marginBottom = "XS")
+			(marginRight = -1px)
+			(marginLeft = -1px)
+		
+)
 		(element DefaultProgressBar
 			_progress = "progress"
 			_color = "_barColor"
 		)
 	)
 
-	(element DefaultDividedCounter
-		_curValueTextClass = "_curValueTextClass"
-		_doNotHideOnZeroMaxValue = "true"
-		_curValue = "!_showPercent ? curValue : null"
-		_curValueStr = "_showPercent ? curValueStr : null"
-		_maxValue = "maxValue"
-		_unifiedStatus = "_unifiedStatus"
+	(hblock
+		(style
+			(align = "middle")
+			(hgap = "XS")
+		)
+
+		(element DefaultDividedCounter
+			_curValueTextClass = "_curValueTextClass"
+			_doNotHideOnZeroMaxValue = "true"
+			_curValue = "!_showPercent ? curValue : null"
+			_curValueStr = "_showPercent ? curValueStr : null"
+			_maxValue = "maxValue"
+			_unifiedStatus = "_unifiedStatus"
+		)
+
+		(block
+			(bind visible "_progressIconPath")
+			(style
+				(width = 16px)
+				(height = 16px)
+				(bind backgroundImage "_progressIconPath")
+			)
+		)
 	)
 )
 
@@ -1602,4 +1636,9 @@
 		(height = 16px)
 		(bind backgroundImage "'swf:../service_kit/rarities_svg/rarities_svg.swf:rarity_' + _rarity")
 	)
+)
+
+(def element InnerPanelFullsizeAbsolute ()
+	(class $FullsizeAbsolute)
+	(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
 )
