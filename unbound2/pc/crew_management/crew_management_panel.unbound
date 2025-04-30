@@ -266,8 +266,7 @@
 		(var skillMatrixId:number =		"crew.component.skillMatrixId ?: 0"			(event "crew.component.evChanged"))
 		(var allSkillPoints:number =	"crew.component.allSkillPoints ?: 0"		(event "crew.component.evLevelUp"))
 		(var crewNation:str =			"crew.component.nation ?: ''"				(event "crew.component.evChanged"))
-		(var dismissDelay:number =		"crew.component.dismissDelay ?: 0"			(event "crew.component.evDismissDelayChanged"))
-		(var classificationId:number =	"crew.component.classificationId")
+		(var classificationId:number =	"crew.component.classificationId"			(event "crew.component.evClassificationIdChanged"))
 
 		(var isCurrencyDeficit:bool =	"retrainingComponent.allTypesBlocked"		(event "retrainingComponent.evRetrainingUpdated"))
 
@@ -277,14 +276,13 @@
 		(var isInAdaptation:bool =	"retrainingComponent != null")
 		(var isXpBarVisible:bool =	"crew.component && !isMaxLevel && !isInAdaptation && skillMatrixId")
 
-		(var isInDemobilizationState:bool = "_shipId == 0 && dismissDelay")
-
 		
 		(var isCrewSpecialization:bool = "specializationID > 0")
 		(var isEmptyCrew:bool = "crewNation == SC.Common.NATION.COMMON")
 		(var isCrewNationSpecialization:bool = "!isCrewSpecialization && !isEmptyCrew")
 
-		(var isCrewElite:bool = "classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+		(var isCrewElite:bool =					"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+		(var canCrewBeUpgradedToElite:bool =	"isIn(classificationId, SC.Common.COMMANDER_CLASSIFICATIONS.CAN_LEARN_ELITE_CREW_BOOK)")
 
 		(var hasAnySpecialization:bool = "isCrewSpecialization || isCrewNationSpecialization")
 
@@ -295,14 +293,12 @@
 		(var isShipPreparedBlockVisible:bool =				"!isCrewNationSpecializationBlockVisible && isThisShipSpecDiffersFromCrewShipSpec && specializationID != 0 && !isInAdaptation")
 		(var isCrewPanelAssignedBlockVisible:bool =			"_isCrewInfoModalWindow && (!isInAdaptation || (isInAdaptation && isThisShipSpecDiffersFromCrewShipSpec))")
 
-
-		(var isFastTrainingDisabled:bool = "isInFormation || isLocked || isInAdaptation || isEmptyCrew || isInDemobilizationState")
-		(var fastTrainingDenyReason:str = "	isInFormation				?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
-											isLocked					?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
-											isInAdaptation				?	'IDS_FAST_TRAINING_DISABLE_REASON_IN_ADAPTATION' :
-											isEmptyCrew					?	'IDS_FAST_TRAINING_DISABLE_REASON_NATION_COMMON' :
-											isInDemobilizationState		?	'IDS_FAST_TRAINING_DISABLE_REASON_IN_DEMOBILIZATION'
-																		:	''")
+		(var isFastTrainingDisabled:bool = "isInFormation || isLocked || isInAdaptation || isEmptyCrew")
+		(var fastTrainingDenyReason:str = "	isInFormation			?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
+											isLocked				?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
+											isInAdaptation			?	'IDS_FAST_TRAINING_DISABLE_REASON_IN_ADAPTATION' :
+											isEmptyCrew				?	'IDS_FAST_TRAINING_DISABLE_REASON_NATION_COMMON'
+																	:	''")
 
 		(var finishTrainingDenyReason:str = "	isInFormation		?	'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
 												isLocked			?	'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
@@ -318,8 +314,17 @@
 		(var substituteMap:dict = "{	'[el_left_sm]': 'elite_wreath_left_small',
 										'[el_right_15_sm]':'elite_wreath_right_15_small' }")
 
-		(var isCrewInfoLowerDividerVisible:bool = "_isCrewInfoModalWindow && isCrewElite")
+		(var crewDataEntity:dhEntity =	"getSingleEntity(CC.crewData)")
+		(var crewData:dhComponent =		"crewDataEntity.crewData")
+		(var booksAmount:number =		"crewData.eliteCrewBooksCount ?: 0"		(event "crewData.evEliteCrewBooksCountChanged"))
+		(var doesPlayerHaveBook:bool =	"booksAmount > 0")
+		(var canConvertIntoElite:bool =	"doesPlayerHaveBook && !isRental && canCrewBeUpgradedToElite")
+
+		(var isCrewInfoLowerDividerVisible:bool = "_isCrewInfoModalWindow && (isCrewElite || canConvertIntoElite)")
 		(var isEliteMentorshipNew:bool = "crew.entity.hasComponent(CC.newItem)")
+
+		(var doesPlayerHaveNewEliteBooks:bool =	"crewDataEntity.hasComponent(CC.newItem)")
+		(var isNewEliteBookMarkerShown:bool =	"doesPlayerHaveNewEliteBooks && canCrewBeUpgradedToElite")
 	)
 	(macro UNIFIED_STATUS_TO_COLOR_AND_ALPHA "SC.Ui_styles.UNIFIED_STATUS.ATTENTION" "'attentionTextColor'" "'attentionTextAlpha'")
 
@@ -473,7 +478,7 @@
 			)
 
 			(block
-				(macro DEFAULT_CONTROL_MARKER_ANIMATION "isEliteMentorshipNew")
+				(macro DEFAULT_CONTROL_MARKER_ANIMATION "isEliteMentorshipNew || isNewEliteBookMarkerShown")
 				(style (position = "absolute"))
 
 				(element MarkerNew)
@@ -540,8 +545,10 @@
 
 		(block
 			(bind visible "isShipPreparedBlockVisible")
-			(style (width = 100%) (bind marginBottom "elemSpacing"))
-
+			(style
+				(width = 100%)
+				(bind marginBottom "elemSpacing")
+			)
 			(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "isShipPreparedBlockVisible"))
 		)
 
@@ -569,13 +576,15 @@
 
 	
 	(block
-		(style (width = 100%) (bind marginTop "isCrewPanelAssignedBlockVisible ? elemSpacing : 0"))
+		(style
+			(width = 100%)
+			(bind marginTop "isCrewPanelAssignedBlockVisible ? elemSpacing : 0")
+		)
 
 		(controller $Instance renderer='CrewPanelAssignedBlock'
 			(bind enabled "isCrewPanelAssignedBlockVisible")
 			(args
 				_shipId =		"_shipId"
-				_dismissDelay =	"dismissDelay"
 				_isSmallPanel =	"_isSmallPanel"
 			)
 		)
@@ -592,16 +601,11 @@
 	)
 )
 
-(def element CrewPanelAssignedBlock (_shipId:number = 0, _isSmallPanel:bool = false, _dismissDelay:number = 0)
+(def element CrewPanelAssignedBlock (_shipId:number = 0, _isSmallPanel:bool = false)
 	(scope
 		(macro PULL_SHIP_ID)
-
-		(macro SERVER_TIME_SCOPE)
-		(macro COUNTDOWN_SCOPE "'formattedFinishTime'" "_dismissDelay" "'mm:ss'")
-		(var isFromBarracksStatusVisible:bool = "_shipId == 0 && !_dismissDelay")
-		(var isDemobilizationStatusVisible:bool = "_shipId == 0 && _dismissDelay")
-
-		(var isToProceedToSkillsBtnVisible:bool = "_shipId > 0 && _shipId != playerShipId")
+		(var isFromBarracksStatusVisible:bool =		"_shipId == 0")
+		(var isToProceedToSkillsBtnVisible:bool =	"_shipId > 0 && _shipId != playerShipId")
 	)
 
 	(style (width = 100%))
@@ -658,16 +662,6 @@
 			(args
 				_text = 'IDS_CREW_IN_BARRACKS'
 			)
-		)
-	)
-
-	(block
-		(bind visible "isDemobilizationStatusVisible")
-		(style (width = 100%) (marginTop = "SXS"))
-		(tf
-			(class $TextDefaultNM)
-			(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
-			(bind text "subst('IDS_WAITING_FOR_DEMOBILIZATION_TIMER', [], { _timeLeft: formattedFinishTime }, formattedFinishTime)")
 		)
 	)
 )
@@ -790,6 +784,7 @@
 				_defaultFocused =	false
 				_methods =			"[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: isCrewAbilitiesInset	? SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT
 																																: SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT } }]"
+				_name =				'btn_replace_crew'
 			)
 		)
 	)
@@ -817,7 +812,6 @@
 		(struct crew =		PULL_CREW(_crewId = "lastBoardedCrewId"))
 		(var hasLastBoardedCrew:bool =					"crew.entity != null")
 		(var otherShipId:number =						"crew.component.shipID"					(event "crew.component.evShipChanged"))
-		(var lastBoardedCrewDismissDelay:number =		"crew.component.dismissDelay ?: 0"		(event "crew.component.evDismissDelayChanged"))
 		(var lastBoarderCrewSpecializationId:number =	"crew.component.specializationID ?: 0"	(event "crew.component.evChanged"))
 		(var isReturnLastCrewButtonVisible:bool =		"crewId == 0 && lastBoardedCrewId != 0 && hasLastBoardedCrew")
 
@@ -826,10 +820,8 @@
 		(var isOtherShipLocked:bool =	"otherShipEntity.ownShip.isLocked" (event "otherShipEntity.ownShip.evUpdateLock"))
 
 		(var isLastBoardedCrewLocked:bool =		"isOtherShipExist && isOtherShipLocked")
-		(var isLastBoardedCrewInBasket:bool =	"hasLastBoardedCrew && lastBoardedCrewDismissDelay > 0")
-
 		(var canAssignWithoutRetrain:bool =		"lastBoarderCrewSpecializationId == playerShipId || isWithoutCrewPenalty")
-		(var isReturnButtonDisabled:bool =		"isLocked || isInFormation || isLastBoardedCrewLocked || isLastBoardedCrewInBasket")
+		(var isReturnButtonDisabled:bool =		"isLocked || isInFormation || isLastBoardedCrewLocked")
 
 		(var methodType:str =	"canAssignWithoutRetrain ? 'inputMapping.onAction' : 'inputMapping.onRequest'")
 		(var methodName:str =	"canAssignWithoutRetrain ? CREW_ACTIONS.ASSIGN_TO_SHIP : CREW_ACTIONS.OPEN_CREW_RETRAIN_WINDOW")

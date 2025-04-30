@@ -1,6 +1,8 @@
 (def constant RULES_CARD_HEIGHT 460)
 (def constant RULES_CARD_WIDTH 308)
 
+(def constant ACHIEVEMENTS_CONTAINER_SIZE 864)
+
 (def constant RULES_CARD_BG {
 	'CooperativeBattle':	'url:../animations/spine/modal_battle_type_rules/pve/rules_glow_pve.skel',
 	'RandomPVEBattle': 		'url:../animations/spine/modal_battle_type_rules/pve/rules_glow_pve.skel',
@@ -8,6 +10,7 @@
 	'RandomBattle':			'url:../animations/spine/modal_battle_type_rules/pvp/rules_glow_pvp.skel',
 	'RankedBattle':			'url:../animations/spine/modal_battle_type_rules/pvp/rules_glow_pvp.skel',
 	'ClanBattle':			'url:../animations/spine/modal_battle_type_rules/pvp/rules_glow_pvp.skel',
+	'RatingBattle':			'url:../animations/spine/modal_battle_type_rules/pvp/rules_glow_pvp.skel',
 
 	'EventBattle':			'url:../animations/spine/modal_battle_type_rules/event/rules_glow_event.skel',
 	'BrawlBattle':			'url:../animations/spine/modal_battle_type_rules/event/rules_glow_event.skel',
@@ -508,12 +511,59 @@
 							]
 						}
 					],
+	'RatingBattle': [
+						{	_imagePath: 'url:../modal_battle_rules/rating_battles/features.png',
+							_textTypes: [
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+							]
+						},
+						{	_imagePath: 'url:../modal_battle_rules/rating_battles/rating_player.png',
+							_textTypes: [
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+							]
+						},
+						{	_imagePath: 'url:../modal_battle_rules/rating_battles/rating_division.png',
+							_textTypes: [
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+							]
+						},
+						{	_imagePath: 'url:../modal_battle_rules/rules_condition_of_participation.png',
+							_textTypes: [
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+							]
+						}
+					],
+	'PCVO032':	[
+						{	_imagePath: 'url:../modal_battle_rules/pve/PCVO032_1_card.png',
+							_textTypes: [
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+							]
+						},
+						{	_imagePath: 'url:../modal_battle_rules/pve/PCVO032_2_card.png',
+							_textTypes: [
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+							]
+						},
+						{	_imagePath: 'url:../modal_battle_rules/pve/PCVO032_3_card.png',
+							_textTypes: [
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+								{	_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+							]
+						}
+					],
 })
 
 (def element ModalWindowBattleTypeRules (_entityId:number, _rulesType:str)
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
 	(scope
+		(event evTabClicked)
 		(event evScrollToPrev)
 		(event evScrollToNext)
 		(event CarouselCanScrollChanged)
@@ -524,6 +574,7 @@
 
 		(var isEventBattle:bool = "_rulesType == SC.Common.BATTLE_TYPES.EVENT_BATTLE")
 		(var eventBattleStateComponent:dhComponent = "battleTypeEntity.eventBattleState")
+		(var battleSeasonInfoComponent:dhComponent = "battleTypeEntity.battleSeasonInfo")
 		(var eventBattleName:str = "eventBattleStateComponent.name" (event "eventBattleStateComponent.evChanged"))
 
 		(var isPveBattle:bool = "_rulesType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
@@ -536,6 +587,10 @@
 								isPveBattle 	? operationName in RULES 	? operationName
 																			: 'PVEBattle'
 												: _rulesType")
+
+		(var achievementsIDs:array = "battleSeasonInfoComponent.achievementsUI ?: []")
+		(var hasAchievementsToShow:bool = "achievementsIDs.length > 0")
+
 		(var rulesBgCardIcon:str = "isPveBattle && !customOperationName ? RULES_CARD_BG['RandomPVEBattle'] : RULES_CARD_BG[_rulesType]")
 
 		(var rulesCount:number = "RULES[rulesName].length")
@@ -551,6 +606,10 @@
 
 		(var rulesCanScrollLeft:bool =	"$event ? $event.down 	: false" (event "CarouselCanScrollChanged"))
 		(var rulesCanScrollRight:bool =	"$event ? $event.up		: false" (event "CarouselCanScrollChanged"))
+
+		(var selectedTab:number = "SC.Common.BATTLE_TYPE_VIEW_CATEGORIES.RULES" watch=false)
+		(var isRulesEnabled:bool = "selectedTab == SC.Common.BATTLE_TYPE_VIEW_CATEGORIES.RULES")
+		(bind selectedTab "$event.index" init=false (event "evTabClicked"))
 	)
 
 	(name = 'ModalWindowBattleTypeRules')
@@ -564,20 +623,78 @@
 		(style
 			(height = 690px)
 			(align = "center|middle")
-			(bind width "currentRulesContainerWidth")
+			(bind width "isRulesEnabled ? currentRulesContainerWidth : ACHIEVEMENTS_CONTAINER_SIZE")
 		)
 
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-			(style (width = 100%) (marginBottom = "{720:L, 1080:XL}"))
+
+			(style
+				(width = 100%)
+				(marginBottom = "hasAchievementsToShow ? {720:MS, 1080:LS} : {720:L, 1080:XL}")
+			)
+
 			(element ModalWindowShortHeader
 				_header = "'IDS_MODAL_WINDOW_' + rulesName + '_RULES_HEADER'"
 			)
 		)
 
 		(block
+			(bind visible "hasAchievementsToShow")
+
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
-			(style (flow = "horizontal") (height = "RULES_CARD_HEIGHT"))
+
+			(style
+				(width = 100%)
+				(align = "center")
+				(marginBottom = "{ 720:L, 1000:XL }")
+			)
+
+			(element MAIN_TAB_BUTTONS_BLOCK
+				(controller $Repeat renderer='MainTabButton'
+					(bind enabled "hasAchievementsToShow")
+					(count = "SC.Common.BATTLE_TYPE_VIEW_CATEGORIES.ALL.length")
+					(args
+						_label = "'IDS_MODAL_WINDOW_RULES_TAB_NAME_' + $index"
+						_width = "MAIN_TAB_BUTTON_WIDTH.MEDIUM"
+						_isSelected = "selectedTab == $index"
+						_dispatchedEv = 'evTabClicked'
+						_dispatchParams = "{ index: $index }"
+						_isLast = "$index == SC.Common.BATTLE_TYPE_VIEW_CATEGORIES.ALL.length - 1"
+					)
+				)
+			)
+		)
+
+		(htile
+			(bind visible "!isRulesEnabled")
+
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(align = "center")
+				(height = "RULES_CARD_HEIGHT")
+				(width = 100%)
+				(hgap = "L")
+			)
+
+			(controller $Repeat renderer='AchievementIconItem'
+				(bind enabled "hasAchievementsToShow")
+				(bind count "achievementsIDs.length")
+				(args
+					_achievementId = "achievementsIDs[$index]"
+					_size = 80px
+				)
+			)
+		)
+
+
+		(hblock
+			(bind visible "isRulesEnabled")
+
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style (height = "RULES_CARD_HEIGHT"))
 
 			(block
 				(bind visible "rulesScrollEnabled")

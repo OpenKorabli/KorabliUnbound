@@ -47,6 +47,20 @@
 	SC.Battle.FLY_OFF_DAMAGE_STATE.BARRAGE_HARD: '$TextDefault19NM'
 }")
 
+(def constant FLYOFF_DAMAGE_TEXT_SPECIAL_COLOR_MAP "{
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.OTHER: SC.Ui_styles.SERVICE_COLORS.WHITE,
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.STRAIGHT: SC.Ui_styles.SERVICE_COLORS.YELLOW,
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.PENETRATION: SC.Ui_styles.SERVICE_COLORS.ORANGE,
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.CITADEL: SC.Ui_styles.SERVICE_COLORS.DARK_RED
+}")
+
+(def constant FLYOFF_DAMAGE_TEXT_SPECIAL_CLASS_MAP "{
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.OTHER: '$TextDefaultNM',
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.STRAIGHT: '$TextDefaultNM',
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.PENETRATION: '$TextDefault17NM',
+	SC.Battle.FLY_OFF_DAMAGE_TYPE.CITADEL: '$TextDefault21NM'
+}")
+
 
 (def element FlyOffDamageContainer ()
 	(scope
@@ -80,12 +94,17 @@
 		(var flyOffDamageMessage:gfx = "flyOffDamageMessageEntity.flyOffDamageMessage")
 		(var damage:number = "flyOffDamageMessage.damage")
 		(var damageState:number = "flyOffDamageMessage.damageState")
+		(var damageType:number = "flyOffDamageMessage.damageType")
 		(var modules:array = "flyOffDamageMessage.modules")
 		(var offsetY:number = "flyOffDamageMessage.offsetY")
 
 		(var screenPosition:gfx = "flyOffDamageMessageEntity.screenPosition")
 		(var posY:number = "screenPosition.position.y - offsetY" (event "evMarkerUpdate"))
 		(var posX:number = "screenPosition.position.x" (event "evMarkerUpdate"))
+
+		(var isSpecialDamageType:bool = "damageType != SC.Battle.FLY_OFF_DAMAGE_TYPE.NONE")
+		(var isCitadel:bool = "damageType == SC.Battle.FLY_OFF_DAMAGE_TYPE.CITADEL")
+		(var isShortAnimation:bool = "damageType == SC.Battle.FLY_OFF_DAMAGE_TYPE.OTHER || damageType == SC.Battle.FLY_OFF_DAMAGE_TYPE.STRAIGHT")
 
 		(var updateEnabled:bool = "!(screenPosition.behindCamera)" (event "evEnterFrame"))
 	)
@@ -112,9 +131,34 @@
 				{time:0.3,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 2, scaleY: 2 }, easing:Easing.quad_in_out},
 				{time:0.4,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 1, scaleY: 1 }},
 				{time:0.8,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 1, scaleY: 1 }},
-				{time:1.75,	to:{ alpha:0, visualOffsetY:  -60px, scaleX: 1, scaleY: 1 }, easing:Easing.quad_in_out}
+				{time:1.75,	to:{ alpha:0, visualOffsetY: -60px, scaleX: 1, scaleY: 1 }, easing:Easing.quad_in_out}
 			]"
 			on='addedToStage'
+			(bind enabled "!isCitadel && !isShortAnimation")
+		)
+		(bindcall play
+			keyframes =
+			"[
+				{time:0,	to:{ alpha:0, visualOffsetY: 0px, scaleX: 1, scaleY: 1 }},
+				{time:0.3,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 3.0, scaleY: 3.0 }, easing:Easing.quad_in_out},
+				{time:0.6,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 1, scaleY: 1 }},
+				{time:1.8,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 1, scaleY: 1 }},
+				{time:2.5,	to:{ alpha:0, visualOffsetY: -60px, scaleX: 1, scaleY: 1 }, easing:Easing.quad_in_out}
+			]"
+			on='addedToStage'
+			(bind enabled "isCitadel")
+		)
+		(bindcall play
+			keyframes =
+			"[
+				{time:0,	to:{ alpha:0, visualOffsetY: 0px, scaleX: 1, scaleY: 1 }},
+				{time:0.3,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 2.0, scaleY: 2.0 }, easing:Easing.quad_in_out},
+				{time:0.4,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 1, scaleY: 1 }},
+				{time:0.6,	to:{ alpha:1, visualOffsetY: -24px, scaleX: 1, scaleY: 1 }},
+				{time:1.0,	to:{ alpha:0, visualOffsetY: -60px, scaleX: 1, scaleY: 1 }, easing:Easing.quad_in_out}
+			]"
+			on='addedToStage'
+			(bind enabled "isShortAnimation")
 		)
 		(dispatch evFlyOffDamageEnded dir="EventDirection.UP" on='evAnimEnded')
 	)
@@ -132,13 +176,20 @@
 	)
 
 	(block
-		(visible = "damage > 0")
-		(tf
-			(bind class "FLYOFF_DAMAGE_TEXT_CLASS_MAP[damageState]")
-			(style
-				(bind textColor "FLYOFF_DAMAGE_TEXT_COLOR_MAP[damageState]")
+		(controller $Instance renderer='DamageDefaultText'
+			(bind enabled "damage > 0 && !isSpecialDamageType")
+			(args
+				_damageState = "damageState"
+				_damageValue = "damage"
 			)
-			(bind text "damage")
+		)
+
+		(controller $Instance renderer='DamageSpecialText'
+			(bind enabled "damage > 0 && isSpecialDamageType")
+			(args
+				_damageType = "damageType"
+				_damageValue = "damage"
+			)
 		)
 	)
 )
@@ -164,5 +215,25 @@
 		)
 		(class $TextDefault12NM)
 		(bind text "'x' + count")
+	)
+)
+
+(def element DamageDefaultText (_damageState:number, _damageValue:number)
+	(tf
+		(bind class "FLYOFF_DAMAGE_TEXT_CLASS_MAP[_damageState]")
+		(style
+			(bind textColor "FLYOFF_DAMAGE_TEXT_COLOR_MAP[_damageState]")
+		)
+		(bind text "_damageValue")
+	)
+)
+
+(def element DamageSpecialText (_damageType:number, _damageValue:number)
+	(tf
+		(bind class "FLYOFF_DAMAGE_TEXT_SPECIAL_CLASS_MAP[_damageType]")
+		(style
+			(bind textColor "FLYOFF_DAMAGE_TEXT_SPECIAL_COLOR_MAP[_damageType]")
+		)
+		(bind text "_damageValue")
 	)
 )

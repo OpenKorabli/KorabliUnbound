@@ -38,10 +38,10 @@
 	(scope
 		(struct crew =	PULL_CREW(_crewId = "_crewId"))
 
-		(var classificationId:number =	"crew.component.classificationId")
+		(var classificationId:number =	"crew.component.classificationId ?: 0"	(event "crew.component.evClassificationIdChanged"))
 		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
-		(var isMaxLevel:bool =			"crew.component.isMaxLevel"			(event "crew.component.evLevelUp"))
-		(var isPenaltiesActive:bool =	"crew.component.isPenaltiesActive"	(event "crew.component.evIsPenaltiesActiveChanged"))
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel"				(event "crew.component.evLevelUp"))
+		(var isPenaltiesActive:bool =	"crew.component.isPenaltiesActive"		(event "crew.component.evIsPenaltiesActiveChanged"))
 		(var isMaxLevelEliteCrew:bool =	"isCrewElite && isMaxLevel")
 
 		(var learnedSkillsCollection:dhCollection = "getCollectionByPath(CC.crewSkill, 'byCrewAndShip.' + _crewId + '_' + _selectedShipClass + '.sorted')")
@@ -155,7 +155,7 @@
 	(scope
 		(struct crew =	PULL_CREW(_crewId = "_crewId"))
 
-		(var skillMatrixPK:str =				"_selectedShipClass + '_' + crew.component.skillMatrixId")
+		(var skillMatrixPK:str =				"_selectedShipClass + '_' + crew.component.skillMatrixId" (event "crew.component.evSkillMatrixIdChanged"))
 		(var skillMatrixEntity:dhEntity =		"getPrimaryEntity(CC.skillMatrix, skillMatrixPK)")
 		(var skillMatrixComponent:dhComponent =	"skillMatrixEntity.skillMatrix")
 		(var skillsMatrixDict:dict =			"skillMatrixComponent.matrix" (event "skillMatrixComponent.evChanged"))
@@ -201,6 +201,7 @@
 		(struct crewSkill =			PULL_CREW_SKILL_STATE(	_crewId = "_crewId"
 															_skillId = "skill.entity.id"))
 		(struct crew =				PULL_CREW(_crewId = "_crewId"))
+		(struct permissions =		PULL_CREW_PERMISSIONS(_crew = "crew.component"))
 
 		(var isSelected:bool =		"skill.component.isSelected"		(event "skill.component.evIsSelectedChanged"))
 		(var isRecommended:bool =	"skill.component.isRecommended"		(event "skill.component.evIsRecommendedChanged"))
@@ -230,7 +231,7 @@
 		(var isEnoughPoints:bool =					"crewMaxSkillPoints >= (learnedSkillsPrice + selectedSkillsLearnPrice + tier)")
 		(var isRecommendedSkillIconVisible:bool =	"isRecommended && !isCrewPenaltiesActive")
 
-		(var isClickable:bool =	"!isCrewPenaltiesActive && ((isUnlockedTier && isEnoughPoints && !crewSkill.isLearned) || isSelected)")
+		(var isClickable:bool =	"!permissions.isDisabledLearnSkills && !isCrewPenaltiesActive && ((isUnlockedTier && isEnoughPoints && !crewSkill.isLearned) || isSelected)")
 
 		(var crewSkillRenderer:str = "_entityId == EMPTY_CREW_SKILL_ID ? 'CrewFileSkillEmptyItem' : 'CrewSkillIconView'")
 
@@ -272,6 +273,7 @@
 			_skillKey =				"_entityId"
 			_crewId =				"_crewId"
 			_selectedShipClass =	"_selectedShipClass"
+			_noMouseInstructions =	"permissions.isDisabledLearnSkills"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -390,8 +392,11 @@
 		(var skillSubType:number =	"skill.component.skillSubType")
 		(var isEpic:bool =			"skillSubType == SC.Common.SKILL_SUBTYPE.EPIC")
 
-		(var classificationId:number =	"crew.component.classificationId")
-		(var isMaxLevel:bool =			"crew.component.isMaxLevel" (event "crew.component.evLevelUp"))
+		(var availableSkillComponent:dhComponent =	"skill.entity.availableSkill")
+		(var doesSkillHaveSeveralOwners:bool =		"availableSkillComponent.hasSeveralOwners" (event "availableSkillComponent.evHasSeveralOwnersChanged"))
+
+		(var classificationId:number =	"crew.component.classificationId"	(event "crew.component.evClassificationIdChanged"))
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel"			(event "crew.component.evLevelUp"))
 
 		
 		(var skillsCollection:gfx =							"$datahub.getCollection(CC.skill)")
@@ -421,7 +426,9 @@
 																						:	CREW_SKILL_ICON_ALPHA.UP
 																:	CREW_SKILL_ICON_ALPHA.LOCKED")
 
-		(var contextClickAction:str =	"isClickable && isEpic ? CREW_ACTIONS.OPEN_DENY_SKILL_WINDOW : ''")
+		(var contextClickAction:str =	"isClickable && isEpic	? doesSkillHaveSeveralOwners	? CREW_ACTIONS.OPEN_DENY_SKILL_WINDOW
+																								: CREW_ACTIONS.OPEN_WARNING_LAST_SKILL_WINDOW
+																: ''")
 		(var contextActionObj:dict =	"{ _crewId: _crewId, _crewSkillEntityId: _entityId, _selectedShipClass: _selectedShipClass }")
 	)
 
@@ -612,9 +619,10 @@
 		(var isLearned:bool =		"crewSkill.isLearned")
 		(var isUnlocked:bool =		"_installedSkillEntityId == _crewSkillEntityId")
 
-		(var isSkillAvailableToUnlock:bool = "skill.entity.availableSkill != null"	(event "skill.entity.evAdded") (event "skill.entity.evRemoved"))
+		(var availableSkillComponent:dhComponent =	"skill.entity.availableSkill")
+		(var doesSkillHaveSeveralOwners:bool =		"availableSkillComponent.hasSeveralOwners" (event "availableSkillComponent.evHasSeveralOwnersChanged"))
 
-		(var isUnclickable:bool =	"!isSkillAvailableToUnlock || (isMaxSkillsCountUnlockedForShipClass && !isUnlocked)")
+		(var isUnclickable:bool =		"!availableSkillComponent || (isMaxSkillsCountUnlockedForShipClass && !isUnlocked)")
 
 		(var skillUnlockPKKey:str =		"SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[skillUnlockingCostCategory]")
 		(struct crewSkillUnlockPrice =	PULL_PRICE(_entityId = "skillUnlockPKKey"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
@@ -627,7 +635,8 @@
 														: TA")
 
 		(var clickAction:str = "operationsAccountLocked || isUnclickable	? '' :
-								isUnlocked									? CREW_ACTIONS.OPEN_DENY_SKILL_WINDOW
+								isUnlocked									? doesSkillHaveSeveralOwners	? CREW_ACTIONS.OPEN_DENY_SKILL_WINDOW
+																											: CREW_ACTIONS.OPEN_WARNING_LAST_SKILL_WINDOW
 																			: CREW_ACTIONS.OPEN_UNLOCK_SKILL_WINDOW")
 
 		(var infotipItemBGState:number = "	isUnclickable	? SC.Ui_styles.BUTTON_STATE.DISABLED :

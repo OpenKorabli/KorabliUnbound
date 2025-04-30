@@ -151,9 +151,6 @@
 	
 	(dispatch startShow dir="EventDirection.DOWN" (event "sysStartShow"))
 	(dispatch startHide dir="EventDirection.DOWN" (event "sysStartHide"))
-
-	(dispatch evBlurStartShow dir="EventDirection.DOWN" (event "startShow"))
-	(dispatch evBlurStartHide dir="EventDirection.DOWN" (event "startHide"))
 )
 
 (def macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS ()
@@ -163,7 +160,7 @@
 	)
 )
 
-(def macro MODAL_WINDOW_BG ()
+(def macro MODAL_WINDOW_BG (_hideDuration:number = "SC.Ui_windows.DEFAULT_HIDE_TIME_BG.DURATION")
 	(scope
 		(macro GET_PREF 'isBlurOptionEnabled' "'graphics.GUI.blur'")
 	)
@@ -175,21 +172,21 @@
 		(style
 			(backgroundImage = 'url:../bg/nations_tree_v2.jpg')
 			(backgroundSize = "cover")
-			(alpha = 0)
 		)
+		(alpha = 0)
 
 		(controller $Animation
 			(bindcall play  id = 'modalWindowBgHighContrast'
 							duration = 0.2
 							to = "{ alpha: 1 }"
-							action="kill"
+							action = "kill"
 							(event "startShow")
 			)
 			(bindcall play  id = 'modalWindowBgHighContrast'
-							duration = 0.2
-							delay = 0.2
+							duration = "_hideDuration"
+							delay = "SC.Ui_windows.DEFAULT_HIDE_TIME_BG.DELAY"
 							to = "{ alpha: 0 }"
-							action="kill"
+							action = "kill"
 							(event "startHide")
 			)
 		)
@@ -198,53 +195,38 @@
 	(block
 		(bind visible "isBlurOptionEnabled")
 		(class $FullsizeAbsolute)
-		(element DeclareBlurLayer)
+		(alpha = 0)
 
-		(mc mc_blurmap_medium
+		(controller $Animation
+			(bindcall play  id = 'modalWindowBgBlur'
+							delay = 0.1
+							duration = 0.2
+							to = "{ alpha: 1 }"
+							easing = "Easing.quad_in"
+							action = "kill"
+							(event "startShow")
+			)
+			(bindcall play  id = 'modalWindowBgBlur'
+							delay = "SC.Ui_windows.DEFAULT_HIDE_TIME_BG.DELAY"
+							duration = "_hideDuration"
+							to = "{ alpha: 0 }"
+							easing = "Easing.quad_in"
+							action = "kill"
+							watch = false
+							(event "startHide")
+			)
+		)
+
+		(block
 			(class $FullsizeAbsolute)
-			(rendererString = blurMeBaby)
-			(blurIntensity = 0)
-
-			(controller $Animation
-				(bindcall play  id = 'modalWindowBgWithBlur'
-								duration=0.2
-								to = "{ blurIntensity: 1 }"
-								easing = "Easing.quad_in"
-								action = "kill"
-								(event "startShow")
-				)
-				(bindcall play  id = 'modalWindowBgWithBlur'
-								duration=0.2
-								delay=0.2
-								to = "{ blurIntensity: 0 }"
-								easing = "Easing.quad_in"
-								action = "kill"
-								(event "startHide")
-				)
+			(controller $Instance renderer='BlurMapWithLayerPanel'
+				(bind enabled "isBlurOptionEnabled")
 			)
 		)
 
 		(block
 			(class $FullsizeAbsolute)
 			(style (backgroundColor = "SC.Ui_styles.SHARED_COLOR.MODAL_WINDOW"))
-			(alpha = 0)
-
-			(controller $Animation
-				(bindcall play  id = 'modalWindowBgWithBlur'
-								duration = 0.2
-								delay = 0.1
-								to = "{ alpha: 1 }"
-								action="kill"
-								(event "startShow")
-				)
-				(bindcall play  id = 'modalWindowBgWithBlur'
-								duration = 0.2
-								delay = 0.2
-								to = "{ alpha: 0 }"
-								action="kill"
-								(event "startHide")
-				)
-			)
 		)
 	)
 )
@@ -448,6 +430,23 @@
 	)
 )
 
+(def macro TRANSITION_ANIM_ALPHA (_trigger:expression, _duration:expression=0.15, _delay:expression=0, _easing:expression="Easing.line", _animationFinishedEvent:expression=null, _animationFinishedEventDelay:expression=0)
+	(controller $Animation
+		(bindcall play
+			watch = false
+			delay =			"_delay"
+			from =			"{ alpha: 0 }"
+			to =			"{ alpha: 1 }"
+			reverse =		"!_trigger"
+			duration =		"_duration"
+			easing =		"_easing"
+			action =		"kill"
+			(bind trigger "_trigger")
+		)
+		(dispatch "_animationFinishedEvent ? _animationFinishedEvent : ''" delay="_animationFinishedEventDelay" init=false on=evAnimEnded (bind enabled "_animationFinishedEvent != null"))
+	)
+)
+
 (def macro BIND_FAIR_SCALE (scale:expression)
 	(bind scaleX "scale")
 	(bind scaleY "scale")
@@ -591,12 +590,6 @@
 	(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
 	(var battleState:number = "battleDataEntity.battleState.battleState" (event "battleDataEntity.battleState.evBattleStateChanged"))
 	(var name="scopeFieldName" type=bool value="battleState == SC.Common.CLIENT_BATTLE_STATE.STARTED || battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
-)
-
-(def macro ADAPTIVE_WIDTH (min:expression, stageMin:expression, max:expression, stageMax:expression, stageWidth:expression)
-	(bind width "	stageWidth < stageMin ? min :
-					stageWidth > stageMax ? max :
-					min + (max - min) * ((stageWidth - stageMin) / (stageMax - stageMin))")
 )
 
 (def macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE ()
@@ -935,22 +928,13 @@
 	)
 )
 (def macro PORT_BANNER_BG (_portBannerAlpha:expression, _bgColor:expression = "SC.Ui_styles.SERVICE_COLORS.BANNER_BACKGROUND")
-	(scope
-		(event startShow)
-		(event startHide)
-	)
-	(dispatch evBlurStartShow dir="EventDirection.DOWN" (event "startShow"))
-	(dispatch evBlurStartHide dir="EventDirection.DOWN" (event "startHide"))
-
 	(block
 		(bind visible "!isHighContrast")
 		(class $FullsizeAbsolute)
-		(controller $Instance renderer='BlurMapCustom'
+		(controller $Instance renderer='BlurMap'
 			(bind enabled "!isHighContrast")
-			(args
-				_map = 'mc_blurmap_medium'
-			)
 		)
+
 		(block
 			(class $FullsizeAbsolute)
 			(style (bind backgroundColor "_bgColor"))

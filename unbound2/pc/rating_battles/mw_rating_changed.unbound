@@ -1,0 +1,369 @@
+(def constant RATING_BATTLE_RESULTS {
+	QUALIFICATION_PASSED: 'QUALIFICATION_PASSED',
+	RATING_RAISED: 'RATING_RAISED',
+	RATING_NOT_CHANGED: 'RATING_NOT_CHANGED',
+	RATING_LOSS: 'RATING_LOSS',
+	QUALIFICATION: 'QUALIFICATION',
+})
+
+(def element ModalWindowRatingChanged ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(event evEmblemAnimEnded)
+		(event evContentAnimEnded)
+		(event evResultsAnimEnded)
+
+		(var battleResultEntity:dhEntity = "getSingleEntity(CC.battleResultsStructured)")
+		(var dataComponent:dhComponent = "battleResultEntity.dataComponent")
+		(var battleResult:number = "dataComponent.data.game_data.battle_result ?: 0")
+		(var ratingInfo:dict = "dataComponent.data.personal.ratingInfo ?: {}")
+
+		(var oldLeagueName:str = "ratingInfo.oldLeagueName ?: RATING_LEAGUE_NAME_NONE")
+		(var oldLeague:number = "SC.Common.RATING_BATTLES_LEAGUES[oldLeagueName]")
+		(var oldRating:number = "ratingInfo.oldLeagueProgress ?: 1")
+		(var leagueName:str = "ratingInfo.newLeagueName ?: RATING_LEAGUE_NAME_NONE")
+		(var league:number = "SC.Common.RATING_BATTLES_LEAGUES[leagueName]")
+		(var rating:number = "ratingInfo.newLeagueProgress ?: 1")
+		(var rewards:array = "ratingInfo.initialQualificationRewardEntitiesIDs ?: []")
+		(var battlesCount:number = "ratingInfo.initialQualificationBattlesCount ?: 0")
+
+		(var isQualification:bool = "battlesCount > 0")
+		(var isQualificationPassed:bool = "rewards.length > 0")
+		(var isLeagueRaised:bool = "oldLeagueName != RATING_LEAGUE_NAME_NONE && oldLeague < league")
+		(var isLeagueLoss:bool =  "oldLeagueName != RATING_LEAGUE_NAME_NONE && oldLeague > league")
+		(var isRatingRaised:bool = "isLeagueRaised || rating > oldRating")
+		(var isRatingNotChanged:bool = "rating == oldRating")
+		(var isRatingLoss:bool = "isLeagueLoss || rating < oldRating")
+		(var ratingBattleStatus:str = "
+			isQualification && !isQualificationPassed	? RATING_BATTLE_RESULTS.QUALIFICATION :
+			isQualificationPassed						? RATING_BATTLE_RESULTS.QUALIFICATION_PASSED :
+			isRatingRaised								? RATING_BATTLE_RESULTS.RATING_RAISED :
+			isRatingNotChanged							? RATING_BATTLE_RESULTS.RATING_NOT_CHANGED :
+			isRatingLoss								? RATING_BATTLE_RESULTS.RATING_LOSS
+														: ''")
+
+		(var subtitle:str = "isQualification && !isQualificationPassed	? 'IDS_RATING_BATTLES_QUALIFICATION_RESULTS_TEXT'
+																		: 'IDS_RATING_BATTLES_RESULTS_TEXT'")
+
+		(var isLeaguePlatinum:bool = "leagueName == RATING_LEAGUES.PLATINUM")
+		(var progressPlatinum:number = "rating > PLATINUM_LEAGUE_PROGRESS_MAX ? 1 : rating/PLATINUM_LEAGUE_PROGRESS_MAX")
+		(var progressValue:number = "isLeaguePlatinum ? progressPlatinum : rating/100")
+
+		(var prevProgressPlatinum:number = "rating > PLATINUM_LEAGUE_PROGRESS_MAX ? 1 : oldRating/PLATINUM_LEAGUE_PROGRESS_MAX")
+		(var prevProgress:number = "isQualification		? rating/100 :
+									isLeaguePlatinum	? prevProgressPlatinum :
+									isLeagueRaised		? 0 :
+									isLeagueLoss		? 1
+														: oldRating/100")
+
+		(var ratingText:str = "leagueName != RATING_LEAGUE_NAME_NONE ? subst('IDS_RATING_BATTLES_LEAGUE_' + leagueName + '_FULL', [], {_rating: rating}) : ''")
+	)
+	(bindcall externalCall 'sound.playSetSoundDirect' "['rating_change_window', 'start']" delay=0.02 (event "startShow"))
+	(dispatch evStartAnimation dir="EventDirection.DOWN" delay=0.02 (event "startShow"))
+	(dispatch evStartProgressAnimation dir="EventDirection.DOWN" (event "evResultsAnimEnded"))
+
+	(name = 'ModalWindowRatingChanged')
+	(style (align = "center|middle"))
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 900px)
+			(align = "middle")
+		)
+		(element RatingEmblemAnimated
+			_leagueName = "leagueName"
+			_rating = "rating"
+			_isQualificationEmblemVisible = "isQualification && !isQualificationPassed"
+			_battleResult = "battleResult"
+		)
+		(block
+			(style
+				(width = 100%)
+				(marginLeft = "M")
+			)
+			(block
+				(alpha = 0)
+				(style (visualOffsetY = 20px))
+				(controller $Animation
+					(bindcall play  delay = 0.3
+									duration = 0.2
+									from = "{alpha: 0, visualOffsetY: 20px}"
+									to = "{alpha: 1, visualOffsetY: 0px}"
+									easing = "Easing.quad_in"
+									action = "kill"
+									(event "evEmblemAnimEnded")
+					)
+					(dispatch evContentAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+				)
+				(tf
+					(class $TextDefaultBold30NM)
+					(style
+						(marginBottom = "MS")
+						(alpha = "TA")
+					)
+					(bind text "'IDS_RATING_BATTLES_RESULTS_STATUS_' + ratingBattleStatus")
+				)
+				(hblock
+					(style (marginBottom = "LM"))
+					(tf
+						(class $TextDefaultBold46NM)
+						(style
+							(marginRight = "SXS")
+							(alpha = "TA")
+						)
+						(bind text "subtitle")
+					)
+					(tf
+						(bind visible "!isQualification || isQualificationPassed")
+						(class $TextDefaultBold46NM)
+						(style (alpha = "TA"))
+						(bind text "ratingText")
+					)
+
+					(block
+						(controller $Instance renderer='DefaultDividedCounter'
+							(bind enabled "isQualification && !isQualificationPassed")
+							(args
+								_curValueTextClass = '$TextDefaultBold46NM'
+								_curValue = "battlesCount"
+								_maxValue = "SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH"
+							)
+						)
+					)
+				)
+			)
+			(block
+				(alpha = 0)
+				(style (visualOffsetY = 20px))
+				(controller $Animation
+					(bindcall play  delay = 0.3
+									duration = 0.2
+									from = "{alpha: 0, visualOffsetY: 20px}"
+									to = "{alpha: 1, visualOffsetY: 0px}"
+									easing = "Easing.quad_in"
+									action = "kill"
+									(event "evContentAnimEnded")
+					)
+					(dispatch evResultsAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+				)
+				(hblock
+					(controller $Repeat renderer='DefaultProgressBar'
+						(bind enabled "isQualification && !isQualificationPassed")
+						(count = "SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
+						(args
+							_progress = "toNumber($index < battlesCount)"
+							_width = "600px/SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH"
+							_height = 12px
+						)
+					)
+				)
+				(controller $Instance renderer='RatingQualificationRewards'
+					(bind enabled "isQualification && isQualificationPassed")
+					(args
+						_rewards = "rewards"
+					)
+				)
+				(controller $Instance renderer='RatingProgress'
+					(bind enabled "!isQualification")
+					(args
+						_prevProgress = "prevProgress"
+						_progress = "progressValue"
+					)
+				)
+			)
+		)
+	)
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style (marginTop = "{720: MS, 1080: XLL}"))
+		(block
+			(style
+				(alpha = 0)
+				(visualOffsetY = 20px)
+			)
+			(controller $Animation
+				(bindcall play  delay = "isQualification ? 0.3 : 0.7"
+								duration = 0.2
+								from = "{alpha: 0, visualOffsetY: 20px}"
+								to = "{alpha: 1, visualOffsetY: 0px}"
+								easing = "Easing.quad_in"
+								action = "kill"
+								(event "evResultsAnimEnded")
+				)
+			)
+			(element DefaultButton
+				_width = 154px
+				_size = "SIZE.LARGE"
+				_name = 'btn_cancel'
+				_label = 'IDS_CLOSE_UPPER_CASE'
+				_defaultFocused = true
+				_focusIndex = 0
+			)
+		)
+	)
+)
+
+(def element RatingQualificationRewards (_rewards:array = [])
+	(style (width = 100%))
+	(tf
+		(class $TextDefault21NM)
+		(style
+			(marginBottom = "M")
+			(alpha = "TA")
+		)
+		(text = 'IDS_RATING_BATTLES_RESULTS_QUALIFICATION_REWARDS')
+	)
+	(hblock
+		(controller $Repeat renderer='RewardItemAdapter'
+			(bind count "_rewards.length")
+			(args
+				_entityId = "_rewards[$index]"
+			)
+		)
+	)
+)
+
+(def element RatingProgressBar (_progress:number, _prevProgress:number = 0)
+	(scope
+		(event evStartProgressAnimation)
+
+		(var progressValue:number = "_progress	?	_progress > 1	? 1
+																	: _progress
+												:	0")
+		(var animatedProgress:number = "_prevProgress	? _prevProgress > 1	? 1
+																			: _prevProgress
+														: 0" watch=false)
+
+		(controller $Animation
+			(bindcall play	to="{animatedProgress: progressValue}"
+							duration=0.5
+							delay=0.1
+							easing="Easing.line"
+							(event "evStartProgressAnimation")
+			)
+		)
+	)
+	(element DefaultProgressBar
+		_progress = "animatedProgress"
+		_height = 12px
+		_width = 600px
+	)
+)
+
+(def element RatingProgressThreshold ()
+	(style (width = 20%))
+	(block
+		(style
+			(width = 1px)
+			(height = 12px)
+			(marginTop = "-XXS")
+			(marginBottom = "S")
+			(bind backgroundColor "$index ? 0xFF0C0C0C : NO_COLOR")
+		)
+	)
+)
+
+(def element RatingProgress (	_progress:number,
+								_prevProgress:number = 0)
+	(style (width = 600px))
+
+	(element RatingProgressBar
+		_prevProgress = "_prevProgress"
+		_progress = "_progress"
+	)
+	(hblock
+		(style
+			(width = 100%)
+			(marginTop = -10px)
+		)
+		(controller $Repeat renderer='RatingProgressThreshold'
+			(count = 5)
+		)
+	)
+)
+
+(def element RatingEmblemAnimated (	_leagueName:str,
+									_rating:number,
+									_isQualificationEmblemVisible:bool = false,
+									_battleResult:number = 0)
+	(scope
+		(event evStartAnimation)
+		(event evStartExplosionAnim)
+		(event evEmblemAnimEnded)
+	)
+
+	(visible = false)
+	(alpha = 0)
+	(colorTransform = "RANK_EMBLEM_CT.DEFAULT")
+	(style
+		(marginRight = "LM")
+		(visualOffsetX = 160px)
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(scaleX = 2.5)
+		(scaleY = 2.5)
+		(rotation = -30)
+	)
+	(controller $Animation
+		(bindcall play
+			keyframes="[
+				{ time: 0.7,	to: {	alpha: 1,
+										scaleX: 1,
+										scaleY: 1,
+										rotation: 0,
+										visible: true,
+										visualOffsetX: 160px,
+										colorTransform: RANK_EMBLEM_CT.WHITE}},
+				{ time: 1,		to: { visualOffsetX: 160px }},
+				{ time: 1.3,	to: { colorTransform: RANK_EMBLEM_CT.DEFAULT}},
+				{ time: 1.6,	to: { visualOffsetX: 0px }}]"
+				(event "evStartAnimation")
+		)
+		(dispatch evStartExplosionAnim delay=0.3 on=evAnimStarted)
+		(dispatch evEmblemAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+	)
+	(block
+		(style
+			(position = "absolute")
+			(top = -240px)
+			(left = -240px)
+			(width = 760px)
+			(height = 760px)
+			(backgroundImage = 'url:../animations/spine/account_leveling/fog/fog.skel')
+		)
+		(controller $Spine)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = -155px)
+			(left = -155px)
+		)
+		(controller $FxInstance renderer='ExplosionAnimation' lifetime="2.3"
+			(bindcall create (event "evStartExplosionAnim"))
+		)
+	)
+	(block
+		(controller $Instance renderer='RatingEmblem'
+			(bind enabled "!_isQualificationEmblemVisible")
+			(args
+				_leagueName = "_leagueName"
+				_rating = "_rating"
+				_isRatingVisible = true
+				_isDesaturated = true
+			)
+		)
+		(controller $Instance renderer='RatingBattleQualificationEmblem'
+			(bind enabled "_isQualificationEmblemVisible")
+			(args
+				_size = "SIZE.LARGE"
+				_isVictory = "_battleResult == SC.Battle.BATTLE_RESULT.VICTORY"
+				_isLoss = "_battleResult == SC.Battle.BATTLE_RESULT.DEFEAT"
+				_isDefault = false
+			)
+		)
+	)
+)

@@ -1,80 +1,135 @@
 (def constant RIBBON_TOOLTIP_WIDTH 320)
 
-(def element RibbonTooltip (_ribbonEntityId:number) layout=true
+(def element RibbonTooltip (_ribbonEntityId:number, _showFullList:bool=false)
 	(scope
-		(var ribbonEntity:gfx = "$datahub.getEntity(_ribbonEntityId)")
+		(var ribbonEntity:dhEntity = "getEntity(_ribbonEntityId)")
+		(var ribbonChildrenComponent:dhComponent = "ribbonEntity.ribbonChildren")
+		(var ribbonInfoComponent:dhComponent = "ribbonEntity.ribbonInfo")
+		(var ribbonIds:str = "ribbonInfoComponent.ids")
+		(var ribbonHeader:str = "(_showFullList ? 'IDS_RIBBON_SSE_' : 'IDS_RIBBON_') + ribbonIds")
 		(var count:number = "ribbonEntity.incomeRibbon.count" (event "ribbonEntity.incomeRibbon.evCountChanged"))
-		(var hasSubRibbons:bool = "ribbonEntity.children.showList")
+		(var hasSubRibbons:bool = "ribbonChildrenComponent.showList")
+		(var subRibbonsList:array = "hasSubRibbons	? _showFullList ? ribbonChildrenComponent.list
+																	: ribbonChildrenComponent.receivedList
+													: []" (event "ribbonChildrenComponent.evListUpdated"))
+		(var isHeaderMinimized:bool = "!hasSubRibbons && _showFullList")
 	)
-	
-	(style (width = "RIBBON_TOOLTIP_WIDTH") (hitTest = false))
 
+	(style
+		(hitTest = false)
+		(width = "RIBBON_TOOLTIP_WIDTH")
+	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-
-		(controller $Instance renderer='TooltipSystemHeaderWithIconAndText'
-			(args
-				_headerIconType="SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.RIBBON"
-				_imageUrl="'url:../ribbons/' + ribbonEntity.ribbonInfo.iconName + '.png'"
-				_imageWidth="RIBBON_ICON_WIDTH"
-				_imageHeight="RIBBON_ICON_HEIGHT"
-				_unifiedStatus="SC.Ui_styles.UNIFIED_STATUS.CHECK"
-				_headerText="'IDS_RIBBON_' + ribbonEntity.ribbonInfo.ids"
-				_iconAmount="'x' + count"
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHeaderWithIconAndText'
+				(bind enabled "!isHeaderMinimized")
+				(args
+					_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.RIBBON"
+					_imageUrl =			"'url:../ribbons/' + ribbonInfoComponent.iconName + '.png'"
+					_imageWidth =		"RIBBON_ICON_WIDTH"
+					_imageHeight =		"RIBBON_ICON_HEIGHT"
+					_headerText =		"ribbonHeader"
+					_iconAmount =		"count ? 'x' + count : ''"
+				)
 			)
-		)
-
-		(controller $Instance renderer='TooltipSystemHorizontalDivider')
-		
-		(controller $Instance renderer='TooltipSystemDescriptionText'
-			(args
-				_descriptionText="'IDS_RIBBON_DESCRIPTION_' + ribbonEntity.ribbonInfo.ids"
-			)
-		)
-
-		(controller $Instance renderer='TooltipSystemHorizontalDivider'
-			(bind enabled "hasSubRibbons")
 		)
 
 		(block
 			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHeaderSubheaderText'
+				(bind enabled "isHeaderMinimized")
+				(args
+					_headerText = "ribbonHeader"
+				)
+			)
+		)
 
-			(controller $Repeat renderer='TooltipSystemSubRibbonItem'
-				(bind count "hasSubRibbons ? ribbonEntity.children.list.length : 0")
-				(args "ribbonEntity.children.list[$index]")
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = "'IDS_RIBBON_DESCRIPTION_' + ribbonIds"
+		)
+
+		(block
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "hasSubRibbons")
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "-SXS")
+			)
+
+			(controller $Repeat renderer='TooltipSubRibbonItem'
+				(bind count "subRibbonsList.length")
+				(args
+					_entityId = "subRibbonsList[$index]"
+					_showAllSubRibbons = "_showFullList"
+				)
 			)
 		)
 	)
 )
 
-(def element TooltipSystemSubRibbonItem (_entityId:number) layout=true
+(def element TooltipSubRibbonItem (_entityId:number, _showAllSubRibbons:bool=false)
 	(scope
-		(var subRibbonEntity:gfx = "$datahub.getEntity(_entityId)")
+		(var subRibbonEntity:dhEntity = "getEntity(_entityId)")
+		(var subRibbonInfoComponent:dhComponent = "subRibbonEntity.ribbonInfo")
 
-		(var incomeRibbon:gfx = "subRibbonEntity.incomeRibbon" (event "subRibbonEntity.evAdded") (event "subRibbonEntity.evRemoved"))
-		(var count:number = "incomeRibbon ? incomeRibbon.count : 0" (event "incomeRibbon.evCountChanged"))
+		(var incomeRibbonComponent:dhComponent = "subRibbonEntity.incomeRibbon")
+		(var count:number = "incomeRibbonComponent.count ?: 0" (event "incomeRibbonComponent.evCountChanged"))
 	)
 
-	(style (width = 100%))
+	(style
+		(width = 100%)
+		(marginTop = "SXS")
+	)
 
-	(controller $Instance renderer='TooltipSystemHeaderWithIconAndText'
-		(bind enabled "count > 0")
-		(args
-			_headerIconType="SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.RIBBON"
-			_imageUrl="'url:../ribbons/subribbons/' + subRibbonEntity.ribbonInfo.iconName + '.png'"
-			_imageWidth="SUBRIBBON_ICON_WIDTH"
-			_imageHeight="RIBBON_ICON_HEIGHT"
-			_unifiedStatus="SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-			_subheaderText="'IDS_RIBBON_' + subRibbonEntity.ribbonInfo.ids"
-			_iconAmount="'x' + count"
+	(element TooltipSystemHeaderWithIconAndText
+		_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.RIBBON"
+		_imageUrl =			"'url:../ribbons/subribbons/' + subRibbonInfoComponent.iconName + '.png'"
+		_imageWidth =		"SUBRIBBON_ICON_WIDTH"
+		_imageHeight =		"RIBBON_ICON_HEIGHT"
+		_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+		_subheaderText =	"'IDS_RIBBON_' + subRibbonInfoComponent.ids"
+		_iconAmount =		"count ? 'x' + count : ''"
+	)
+)
+
+(def element SubRibbonTooltip (_subRibbonEntityId:number)
+	(scope
+		(var subRibbonEntity:dhEntity = "getEntity(_subRibbonEntityId)")
+		(var subRibbonIds:str = "subRibbonEntity.ribbonInfo.ids")
+	)
+
+	(style
+		(hitTest = false)
+		(width = "RIBBON_TOOLTIP_WIDTH")
+	)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "'IDS_RIBBON_' + subRibbonIds"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = "'IDS_RIBBON_DESCRIPTION_' + subRibbonIds"
 		)
 	)
 )
 
-(def element AchievementBattleTooltip (_ribbonEntityId:number) layout=true
+(def element AchievementBattleTooltip (_ribbonEntityId:number)
 	(scope
-		(var ribbonEntity:gfx = "$datahub.getEntity(_ribbonEntityId)")
+		(var ribbonEntity:dhEntity = "getEntity(_ribbonEntityId)")
 		(var count:number = "ribbonEntity.incomeRibbon.count" (event "ribbonEntity.incomeRibbon.evCountChanged"))
 	)
 
@@ -98,7 +153,7 @@
 		)
 
 		(controller $Instance renderer='TooltipSystemHorizontalDivider')
-		
+
 		(controller $Instance renderer='TooltipSystemDescriptionText'
 			(args
 				_descriptionText="ribbonEntity.achievement.condition.description"

@@ -1,0 +1,264 @@
+(def element BattleGalleryViewer ()
+	(scope
+		(var battleHintsEntity:dhEntity = 	"getSingleEntity(CC.battleHints)")
+		(var currentImageIdx:number = 		"battleHintsEntity.battleHints.currentImageIdx" (event "battleHintsEntity.battleHints.refreshData"))
+		(var hints:array = 					"battleHintsEntity.battleHints.hints" (event "battleHintsEntity.battleHints.refreshData"))
+	)
+
+	(controller $Instance renderer='GalleryViewer'
+		(bind enabled "hints.length > 0")
+		(args
+			_galleryItemRenderer 			= 'BattleGalleryItem'
+			_galleryItems 					= "hints"
+			_galleryItemIndicatorRenderer 	= 'SelectedImageIndicator'
+			_galleryImageWidth 				= 900
+			_galleryImageHeight 			= 382
+			_autoSwitchDelay 				= 8
+			_initIndex 						= "currentImageIdx"
+			_switchButtonWidth 				= 200
+		)
+	)
+)
+
+(def element GalleryViewer (_galleryItems:array,
+							_galleryImageWidth:number,
+							_galleryImageHeight:number,
+							_switchButtonWidth:number,
+							_galleryItemIndicatorRenderer:str='',
+							_galleryItemRenderer:str='',
+							_isIndicatorDisabled:bool=false,
+							_isArrowsDisabled:bool=false,
+							_autoSwitchDelay:number=0,
+							_initIndex:number=0)
+	(scope
+		(event evChangeCurrentImage)
+		(event evAutoSwitch)
+		(event evScrollToIndex)
+
+		(var currentImageIndex:number = 	"_initIndex")
+		(var galleryItemsLength:number = 	"_galleryItems.length")
+
+		(var isSwitcherEnabled:bool = "galleryItemsLength > 1 && !_isArrowsDisabled")
+
+		(struct serverTime = SERVER_TIME())
+		(var initServerTime:number = 	"serverTime.value" watch=false)
+		(var timePassed:number = 		"floor(serverTime.value - initServerTime)")
+		(var isAutoSwitchStopped:bool = "_autoSwitchDelay <= 0 || galleryItemsLength < 2")
+
+		(bind isAutoSwitchStopped 	"true" 						init=false (event "evChangeCurrentImage"))
+		(bind currentImageIndex 	"$event.currentImageIndex" 	init=false (event "evChangeCurrentImage") (event "evAutoSwitch"))
+	)
+
+	(dispatch evAutoSwitch 	args="{	currentImageIndex: 	currentImageIndex == galleryItemsLength - 1 ? 0 : currentImageIndex + 1,
+									animated: 			currentImageIndex != galleryItemsLength - 1}"
+							(bind enabled "!isAutoSwitchStopped && (timePassed % _autoSwitchDelay == 0)") (bind trigger "timePassed")
+	)
+
+	(dispatch evScrollToIndex args="{value: _initIndex, 				animated: false}" on='addedToStage' (bind trigger "_initIndex"))
+	(dispatch evScrollToIndex args="{value: $event.currentImageIndex, 	animated: $event.animated}" (event "evChangeCurrentImage") (event "evAutoSwitch"))
+
+	(style
+		(flow = "horizontal")
+
+		(bind width "_galleryImageWidth + 2 * _switchButtonWidth")
+	)
+
+	
+	(block
+		(style
+			(bind height "_galleryImageHeight")
+			(bind width "_switchButtonWidth")
+		)
+
+		(controller $Instance renderer='GalleryImageSwitchButton'
+			(bind enabled "isSwitcherEnabled")
+			(args
+				_direction 			= "ScrollDirection.LEFT"
+				_galleryItemsLength = "galleryItemsLength"
+				_currentImageIndex 	= "currentImageIndex"
+			)
+		)
+	)
+
+	
+	(block
+		(style (width = 100%))
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(backgroundColor = "NO_COLOR")
+
+				(bind height "_galleryImageHeight")
+			)
+
+			(horizontalSlider GalleryScrollBar)
+			(hscrollPolicy = 'off')
+			(vscrollPolicy = 'off')
+			(scrollPerItem = true)
+
+			(repeatController = 'galleryCarouselContainer')
+
+			(drag = false)
+
+			(content
+				(name = 'galleryCarouselContainer')
+
+				(style
+					(flow = "horizontal")
+					(height = 100%)
+				)
+
+				(controller $DynamicRepeat name='galleryCarouselContainer'
+					(bind renderer "_galleryItemRenderer")
+					(bind count "galleryItemsLength")
+					(args
+						_galleryItem 		= "_galleryItems[$index]"
+						_galleryImageWidth 	= "_galleryImageWidth"
+						_galleryImageHeight = "_galleryImageHeight"
+					)
+
+					(bind itemWidth 	"_galleryImageWidth")
+					(bind itemHeight 	"_galleryImageHeight")
+					(bind itemOffset 	"_galleryImageWidth")
+				)
+			)
+
+			(bindcall scrollTo index="$event.value" animated="$event.animated" (event "evScrollToIndex"))
+		)
+		
+		(hblock
+			(style (width = 100%))
+
+			(controller $Repeat renderer="_galleryItemIndicatorRenderer"
+				(bind enabled "galleryItemsLength > 1 && !_isIndicatorDisabled")
+				(bind count "galleryItemsLength")
+				(args
+					_currentImageIndex 	= "currentImageIndex"
+					_galleryItemsLength = "galleryItemsLength"
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(bind height "_galleryImageHeight")
+			(bind width "_switchButtonWidth")
+		)
+
+		(controller $Instance renderer='GalleryImageSwitchButton'
+			(bind enabled "isSwitcherEnabled")
+			(args
+				_direction 			= "ScrollDirection.RIGHT"
+				_galleryItemsLength = "galleryItemsLength"
+				_currentImageIndex 	= "currentImageIndex"
+			)
+		)
+	)
+)
+
+(def element SelectedImageIndicator (_currentImageIndex:number, _galleryItemsLength:number)
+	(scope
+		(event evChangeCurrentImage)
+
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "'default_button'")
+	(dispatch evChangeCurrentImage args="{currentImageIndex: $index, animated: false}" dir="EventDirection.UP" on='leftClick')
+
+	(style
+		(height = 10px)
+
+		(bind width "(100 / _galleryItemsLength) + '%'")
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(bind paddingLeft 	"$index == 0 ? 0px : 1px")
+			(bind paddingRight 	"$index == _galleryItemsLength - 1 ? 0px : 1px")
+		)
+
+		(block
+			(style
+				(height = 5px)
+				(width = 100%)
+
+				(bind backgroundColor "_currentImageIndex == $index ? 0xCC4CE8AA : 0x779CBABA")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration 	= 0.05
+					from 		= "{height: 5px}"
+					to			= "{height: 10px}"
+					reverse 	= "!rollOver"
+					(bind trigger "rollOver")
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(paddingTop = "-SXS")
+			(paddingBottom = "-MS")
+		)
+
+		(block
+			(class $Fullsize)
+			(style (backgroundColor = "NO_COLOR"))
+		)
+	)
+)
+
+(def element GalleryImageSwitchButton (	_currentImageIndex:number,
+										_galleryItemsLength:number,
+										_direction:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var isCurrentImageIndexFirst:bool = 	"_currentImageIndex == 0")
+		(var isCurrentImageIndexLast:bool = 	"_currentImageIndex == _galleryItemsLength - 1")
+		(var isToPrev:bool =					"_direction == ScrollDirection.LEFT")
+
+		(var indexValueOnClick:number = "isToPrev 	? (isCurrentImageIndexFirst ? _galleryItemsLength - 1
+																				: _currentImageIndex - 1)
+													: (isCurrentImageIndexLast 	? 0
+																				: _currentImageIndex + 1)")
+		(var shouldBeAnimatedOnClick:bool = "(!isToPrev || !isCurrentImageIndexFirst) && (isToPrev || !isCurrentImageIndexLast)")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "'default_button'")
+	(dispatch evChangeCurrentImage args="{currentImageIndex: indexValueOnClick, animated: shouldBeAnimatedOnClick}" dir="EventDirection.UP" on='leftClick')
+
+	(class $Fullsize)
+	(style
+		(padding = "S")
+		(backgroundColor = "NO_COLOR")
+
+		(bind align "isToPrev ? middle|right : middle|left")
+	)
+
+	(element DefaultScrollButton
+		_canScroll 			= true
+		_direction 			= "_direction"
+		_buttonCarouselName = 'galleryCarouselContainer'
+		_rollOver 			= "rollOver"
+		_mouseDown 			= "mouseDown"
+	)
+)
+
+(def element GalleryScrollBar ()
+	(scroll_bar
+		(orientation = "horizontal")
+		(scrollDuration = 350)
+	)
+)

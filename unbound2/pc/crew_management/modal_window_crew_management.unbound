@@ -11,6 +11,8 @@
 	OPEN_DENY_TALENT_WINDOW:		'openDenyTalentWindow',
 	OPEN_FIRE_CREW_WINDOW:			'openFireCrewWindow',
 	OPEN_FAST_TRAINING_WINDOW:		'crewFastTraining',
+	OPEN_PROMOTE_TO_ELITE_WINDOW:	'openPromoteCrewToEliteWindow',
+	OPEN_WARNING_LAST_SKILL_WINDOW:	'openWarningLastSkillWindow',
 	CLOSE_LEARN_SKILLS_WINDOW:		'closeModalWindowLearnSkills',
 	CLOSE_SKILLS_INFO_WINDOW:		'closeModalWindowCrewInfo',
 	LEARN_SELECTED_SKILLS:			'learnSelectedSkills',
@@ -19,7 +21,6 @@
 	DISASSIGN:						'disassignCrew',
 	HIRE:							'hireCrew',
 	FIRE:							'fireCrew',
-	UNFIRE:							'unfireCrew',
 	ASSIGN_TO_SHIP:					'assignCrewToShip',
 	UNLOCK_SKILL:					'unlockSkill',
 	UNLOCK_TALENT:					'unlockTalent',
@@ -28,18 +29,14 @@
 	FREE_SKILL_POINTS:				'freeSkillPoints',
 	TRAIN_FAST:						'trainFast',
 	RETRAIN:						'retrainCrew',
-	RETRAIN_AND_ASSIGN:				'retrainAndAssignCrew'
+	RETRAIN_AND_ASSIGN:				'retrainAndAssignCrew',
+	LEARN_ELITE_CREW_BOOK:			'learnEliteCrewBook'
 })
 
 (def constant CREW_FILTERS_ACTIONS {
 	SET:			'crewFilters.set',
 	RESET_GROUP:	'crewFilters.resetGroup',
 	RESET_ALL:		'crewFilters.resetAll'
-})
-
-(def constant CREW_SORTING_ACTIONS {
-	SET_INDEX:		'crewSorting.setSelectedSortingOptionIndex',
-	SET_REVERSE:	'crewSorting.setIsSortingReversed'
 })
 
 (def constant CREW_MANAGEMENT_HEADER_SPACING_BOTTOM 12px)
@@ -74,6 +71,7 @@
 		(var shipEntity:dhEntity =			"getPrimaryEntity(CC.ownShip, playerShipId)")
 		(var shipComponent:dhComponent =	"shipEntity.ship")
 		(var ownShipComponent:dhComponent =	"shipEntity.ownShip")
+		(var selectedShipClass:str =		"shipComponent.subtype")
 
 		(var crewId:number =	"ownShipComponent.crewId"	(event "ownShipComponent.evCrewChanged"))
 		(struct crew =			PULL_CREW(_crewId = "crewId"))
@@ -82,7 +80,16 @@
 		(var isShipWithSkills:bool =		"isIn(shipComponent.subtype, SC.Common.SHIP_TYPE.PLAYABLE_SHIP_TYPES)")
 		(var isCrewAbilitiesInset:bool =	"renderedCrewRoute == SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT")
 
-		(var isSkillsAssignBlockVisible:bool = "((isShipWithSkills && crew.component.skillMatrixId && !permissions.isDisabledLearnSkills) || crewId == 0 || !isCrewAbilitiesInset) && playerShipId")
+
+		(var skillTreeEntity:dhEntity =	"getPrimaryEntity(CC.skillTree, toString(crewId + '_' + selectedShipClass))")
+		(var skillTree:dhComponent =	"skillTreeEntity.skillTree")
+		(var usedSkillPoints:number =	"skillTree.usedSkillPoints"	(event "skillTree.evSkillsChanged") (event "skillTree.evFreeSkillPointsChanged"))
+
+		(var uniqueSkillSet:array =	"crew.component.uniqueSkillSet"	(event "crew.component.evUniqueSkillSetChanged"))
+		(var vanitiesSet:array =	"crew.component.vanitiesSet"	(event "crew.component.evVanitiesSetChanged"))
+
+		(var isNothingToDoWithSkills:bool = "permissions.isDisabledLearnSkills && (usedSkillPoints + uniqueSkillSet.length + vanitiesSet.length == 0)")
+		(var isSkillsAssignBlockVisible:bool = "((isShipWithSkills && crew.component.skillMatrixId && !isNothingToDoWithSkills) || crewId == 0 || !isCrewAbilitiesInset) && playerShipId")
 
 		(var windowHeaderText:str = "isCrewAbilitiesInset ? 'IDS_MODAL_WINDOW_CREW_MANAGEMENT_ABILITIES_HEADER' : 'IDS_MODAL_WINDOW_CREW_MANAGEMENT_ASSIGN_HEADER'")
 
@@ -287,9 +294,10 @@
 		(var crewId:number = "_crewId"	watch=false)
 		(bind crewId "_crewId"			init=false		(bind enabled "_crewId != 0"))
 
-		(struct crew =	PULL_CREW(_crewId = "crewId"))
+		(struct crew =			PULL_CREW(_crewId = "crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
 
-		(var classificationId:number = "crew.component.classificationId")
+		(var classificationId:number = "crew.component.classificationId" (event "crew.component.evClassificationIdChanged"))
 		(var isCrewElite:bool =	"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
 
 		(var isMaxLevel:bool =	"crew.component.isMaxLevel" (event "crew.component.evLevelUp"))
@@ -374,20 +382,34 @@
 
 	(block
 		(style
-			(marginTop = "{ 720: S, 1080: L }")
+			(align = "center")
 			(width = 100%)
+			(marginTop = "{ 720: S, 1080: L }")
 		)
 
-		(element CrewAbilitiesManagementButtons
-			_crewId =				"crewId"
-			_selectedShipClass =	"selectedShipClass"
+		(controller $Instance renderer='CrewAbilitiesManagementButtons'
+			(bind enabled "!permissions.isDisabledLearnSkills")
+			(args
+				_crewId =				"crewId"
+				_selectedShipClass =	"selectedShipClass"
+			)
+		)
+
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "permissions.isDisabledLearnSkills")
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_text =				'IDS_SKILLS_LEARNING_UNAVAILABLE'
+				_textClass =		'$TextDefault17NM'
+			)
 		)
 	)
 )
 
 (def element CrewSkillsMatrixHeader (_crewId:number, _selectedShipClass:str)
 	(scope
-		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
 
 		(var skillTreeEntity:dhEntity =	"getPrimaryEntity(CC.skillTree, toString(_crewId + '_' + _selectedShipClass))")
 		(var skillTree:dhComponent =	"skillTreeEntity.skillTree")
@@ -438,6 +460,8 @@
 	)
 
 	(hblock
+		(bind visible "!permissions.isDisabledLearnSkills")
+
 		(style
 			(marginTop = 1px)
 			(marginRight = -6px)

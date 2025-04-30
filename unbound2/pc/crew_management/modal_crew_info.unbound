@@ -10,21 +10,15 @@
 
 		(var isSmallPanel:bool = "stageHeight < 760")
 
-		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
 
-		(var classificationId:number =	"crew.component.classificationId")
-		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
-		(var isMaxLevel:bool =			"crew.component.isMaxLevel"		(event "crew.component.evLevelUp"))
-		(var crewNation:str =			"crew.component.nation ?: ''"	(event "crew.component.evChanged"))
-
-		(var eliteCrewLearning:dhComponent =		"crew.entity.eliteCrewLearning"						(event "crew.entity.evAdded") (event "crew.entity.evRemoved"))
-		(var exploredSkillsTotal:number =			"eliteCrewLearning.exploredSkillsTotal"				(event "eliteCrewLearning.evChanged"))
-		(var skillUnlockingCostCategory:number =	"eliteCrewLearning.skillUnlockingCostCategory"		(event "eliteCrewLearning.evChanged"))
-
-		(var isMaxSkillsCountUnlocked:bool = "exploredSkillsTotal >= SC.Common.ELITE_CREW_LEARNING_LIMITS.TOTAL_SKILLS_TO_UNLOCK")
-
-		(var skillUnlockPKKey:str =		"SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[skillUnlockingCostCategory]")
-		(struct crewSkillUnlockPrice =	PULL_PRICE(_entityId = "skillUnlockPKKey"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(var classificationId:number =			"crew.component.classificationId"	(event "crew.component.evClassificationIdChanged"))
+		(var isCrewElite:bool =					"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+		(var canCrewBeUpgradedToElite:bool =	"isIn(classificationId, SC.Common.COMMANDER_CLASSIFICATIONS.CAN_LEARN_ELITE_CREW_BOOK)")
+		(var isMaxLevel:bool =					"crew.component.isMaxLevel"			(event "crew.component.evLevelUp"))
+		(var crewNation:str =					"crew.component.nation ?: ''"		(event "crew.component.evChanged"))
+		(var timeRent:number =					"crew.component.timeRent ?: 0"		(event "crew.component.evTimeRentChanged") (event "crew.component.evChanged"))
 
 		(var shipId:number = "crew.component.shipID > 0 ? crew.component.shipID : crew.component.specializationID")
 		(macro PULL_SHIP_SCOPE "shipId" "'shipEntity'" "'shipInfo'")
@@ -44,9 +38,22 @@
 
 		(var crewInfoDescription:array = "[{ paragraphText: 'IDS_INSTRUCTION_CREW_PERKS_0' }, { paragraphText: 'IDS_INSTRUCTION_CREW_PERKS_1' }]")
 
+		(var isRental:bool = "timeRent > 0")
+
+		(var crewDataEntity:dhEntity =	"getSingleEntity(CC.crewData)")
+		(var crewData:dhComponent =		"crewDataEntity.crewData")
+		(var booksAmount:number =		"crewData.eliteCrewBooksCount ?: 0"		(event "crewData.evEliteCrewBooksCountChanged"))
+		(var doesPlayerHaveBook:bool =	"booksAmount > 0")
+		(var canConvertIntoElite:bool =	"doesPlayerHaveBook && !isRental && canCrewBeUpgradedToElite")
+
+		(var doesPlayerHaveNewEliteBooks:bool =	"crewDataEntity.hasComponent(CC.newItem)")
+		(var isNewEliteBookMarkerShown:bool =	"doesPlayerHaveNewEliteBooks && canCrewBeUpgradedToElite")
+
 		(var hasCrewEntity:bool = "crew.entity != null")
 
 		(var isEliteMentorshipNew:bool = "crew.entity.hasComponent(CC.newItem)")
+
+		(var animatedBgNation:str = "crewNation == SC.Common.NATION.EVENTS ? shipInfo.nation : crewNation")
 
 		(macro FEATURES "5")
 		(var isFreeExpNew:bool = "feature_5 == 'new'")
@@ -63,7 +70,7 @@
 		(class $FullsizeAbsolute)
 
 		(element ModalWindowAnimatedBackground
-			_selectedCategory =	"crewNation"
+			_selectedCategory =	"animatedBgNation"
 			_type =				"SC.Ui_styles.ANIMATED_BG.DETAILED_SHIP_ACES"
 			_hideTime =			0.3
 			_hideDelay =		0.2
@@ -137,122 +144,48 @@
 				)
 			)
 
+			
 			(block
-				(bind visible "isCrewElite")
-
 				(style
-					(bind marginTop "isSmallPanel ? S : SXS")
 					(width = 100%)
+					(bind marginTop "isCrewElite	? isSmallPanel	? S
+																	: SXS
+													: 0")
 				)
 
-				(block
-					(controller $Instance renderer='StatusLine'
-						(bind enabled "isCrewElite && !isMaxLevel")
-						(args
-							_textClass =		'$TextDefaultBold17NM'
-							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.LOCK"
-							_text =				'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP'
-						)
-					)
-
-					(hblock
-						(bind visible "isMaxLevel")
-
-						(bindcall externalCall "isEliteMentorshipNew ? 'inputMapping.onAction' : ''" "['makeSeen', { entityId: crew.entity.id }]" watch=false on='rollOver')
-
-						(style (backgroundColor = "NO_COLOR"))
-
-						(tf
-							(class $TextDefaultBold17NM)
-							(style
-								(hitTest = false)
-								(alpha = "TA")
-							)
-							(text = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP')
-						)
-
-						(block
-							(style
-								(hitTest = false)
-								(width = 19px)
-								(height = 19px)
-								(marginTop = -3px)
-								(marginLeft = "XS")
-								(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png')
-							)
-						)
-
-						(block
-							(style (position = "absolute") (right = 0px) (top = -9px))
-
-							(block
-								(macro DEFAULT_CONTROL_MARKER_ANIMATION "isEliteMentorshipNew")
-								(style (position = "absolute"))
-								
-								(element MarkerNew)
-							)
-						)
-					)
-
-					(controller $Tooltip
-						(renderer = 'CrewEliteMentorshipTooltipInfo')
-						(args
-							_crewId = "_crewId"
-						)
-						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-					)
-				)
-
-				(hblock
-					(bind visible "isMaxLevel")
-
-					(style
-						(width = 100%)
-						(marginTop = "S")
-					)
-
-					(tf
-						(class $TextDefaultNM)
-						(style
-							(marginTop = 1px)
-							(marginRight = "S")
-							(alpha = "TA")
-						)
-
-						(text = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_SKILLS_UNLOCKED_COUNT')
-					)
-
-					(tf
-						(class $TextDefaultBoldNM)
-						(style
-							(marginTop = 1px)
-							(marginRight = -6px)
-							(alpha = "TA")
-						)
-
-						(bind text "exploredSkillsTotal")
-					)
-				)
-
-				(block
-					(bind visible "isMaxLevel && !isMaxSkillsCountUnlocked")
-
-					(style
-						(width = 100%)
-						(marginTop = "SXS")
-					)
-
-					(controller $Instance renderer='PriceTagWithLabel'
-						(bind enabled "isCrewElite && isMaxLevel && !isMaxSkillsCountUnlocked")
-						(args
-							_priceInfo =	"crewSkillUnlockPrice.info"
-							_label =		'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_NEXT_SKILL_PRICE_LABEL'
-							_size =			"SIZE.SMALL"
-							_labelAlpha =	"TA"
-						)
+				(controller $Instance renderer='CrewEliteMentorshipInfoBlock'
+					(bind enabled "isCrewElite")
+					(args
+						_crewId =					"_crewId"
+						_crewEntity =				"crew.entity"
+						_isMaxLevel =				"isMaxLevel"
+						_isEliteMentorshipNew =		"isEliteMentorshipNew"
 					)
 				)
 			)
+			
+
+			
+			(block
+				(style
+					(width = 100%)
+					(bind marginTop "canConvertIntoElite	? isSmallPanel	? S
+																			: SXS
+															: 0")
+				)
+
+				(controller $Instance renderer='CrewConvertionIntoEliteBlock'
+					(bind enabled "canConvertIntoElite")
+					(args
+						_crewId =			"_crewId"
+						_shipId =			"shipId"
+						_isNoNation =		"crewNation == SC.Common.NATION.COMMON"
+						_booksAmount =		"booksAmount"
+						_isNewMarkerShown =	"isNewEliteBookMarkerShown"
+					)
+				)
+			)
+			
 		)
 
 		(block
@@ -296,6 +229,8 @@
 				)
 
 				(tf
+					(bind visible "!permissions.isDisabledLearnSkills")
+
 					(class $TextDefaultNM)
 					(style
 						(marginTop = 1px)
@@ -329,12 +264,14 @@
 						)
 					)
 
-					(element HorizontalDividerTwoPx
+					(block
 						(style
 							(position = "absolute")
 							(width = 100%)
 							(bottom = 0)
 						)
+
+						(element HorizontalDividerTwoPx)
 					)
 				)
 			)
@@ -352,6 +289,7 @@
 						(width = 100%)
 						(bind alpha "0" init=true watch=false (bind trigger "selectedShipClass"))
 					)
+
 					(element CrewAbilitiesMatrix
 						_crewId =					"_crewId"
 						_selectedShipClass =		"selectedShipClass"
@@ -370,6 +308,7 @@
 						)
 					)
 				)
+
 				(element HorizontalDividerTwoPx)
 			)
 
@@ -380,10 +319,13 @@
 					(width = 100%)
 				)
 
-				(element StatusLine
-					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.INFO"
-					_text =				"shipInfo.subtype == selectedShipClass	? 'IDS_MOUSE_INSTRUCTION_GO_TO_SKILLS_TO_LEARN'
-																				: 'IDS_MOUSE_INSTRUCTION_ASSIGN_TO_THIS_CLASS_TO_LEARN'"
+				(controller $Instance renderer='StatusLine'
+					(bind enabled "!permissions.isDisabledLearnSkills")
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.INFO"
+						_text =				"shipInfo.subtype == selectedShipClass	? 'IDS_MOUSE_INSTRUCTION_GO_TO_SKILLS_TO_LEARN'
+																					: 'IDS_MOUSE_INSTRUCTION_ASSIGN_TO_THIS_CLASS_TO_LEARN'"
+					)
 				)
 			)
 		)
@@ -408,6 +350,219 @@
 	)
 )
 
+(def element CrewEliteMentorshipInfoBlock (_crewId:number, _crewEntity:dhEntity, _isMaxLevel:bool = false, _isEliteMentorshipNew:bool = false)
+	(scope
+		(var eliteCrewLearning:dhComponent =		"_crewEntity.eliteCrewLearning")
+		(var exploredSkillsTotal:number =			"eliteCrewLearning.exploredSkillsTotal"				(event "eliteCrewLearning.evChanged"))
+		(var skillUnlockingCostCategory:number =	"eliteCrewLearning.skillUnlockingCostCategory"		(event "eliteCrewLearning.evChanged"))
+
+		(var isMaxSkillsCountUnlocked:bool = "exploredSkillsTotal >= SC.Common.ELITE_CREW_LEARNING_LIMITS.TOTAL_SKILLS_TO_UNLOCK")
+
+		(var skillUnlockPKKey:str =		"SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[skillUnlockingCostCategory]")
+		(struct crewSkillUnlockPrice =	PULL_PRICE(_entityId = "skillUnlockPKKey"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+	)
+
+	(style (width = 100%))
+
+	(block
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "!_isMaxLevel")
+			(args
+				_textClass =		'$TextDefaultBold17NM'
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.LOCK"
+				_text =				'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP'
+			)
+		)
+
+		(hblock
+			(bind visible "_isMaxLevel")
+
+			(bindcall externalCall "_isEliteMentorshipNew ? 'inputMapping.onAction' : ''" "['makeSeen', { entityId: _crewEntity.id }]" watch=false on='rollOver')
+
+			(style (backgroundColor = "NO_COLOR"))
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style (alpha = "TA"))
+
+				(text = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP')
+			)
+
+			(block
+				(style
+					(width = 19px)
+					(height = 19px)
+					(marginTop = -3px)
+					(marginLeft = "XS")
+					(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png')
+				)
+			)
+
+			(block
+				(macro DEFAULT_CONTROL_MARKER_ANIMATION "_isEliteMentorshipNew")
+
+				(style
+					(position = "absolute")
+					(right = -44px)
+					(top = -9px)
+				)
+
+				(element MarkerNew)
+			)
+		)
+
+		(controller $Tooltip
+			(renderer = 'CrewEliteMentorshipTooltipInfo')
+			(args
+				_crewId = "_crewId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(hblock
+		(bind visible "_isMaxLevel")
+
+		(style
+			(width = 100%)
+			(marginTop = "S")
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginTop = 1px)
+				(marginRight = "S")
+				(alpha = "TA")
+			)
+
+			(text = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_SKILLS_UNLOCKED_COUNT')
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(marginTop = 1px)
+				(alpha = "TA")
+			)
+
+			(bind text "exploredSkillsTotal")
+		)
+	)
+
+	(block
+		(bind visible "_isMaxLevel && !isMaxSkillsCountUnlocked")
+
+		(style
+			(width = 100%)
+			(marginTop = "SXS")
+		)
+
+		(controller $Instance renderer='PriceTagWithLabel'
+			(bind enabled "_isMaxLevel && !isMaxSkillsCountUnlocked")
+			(args
+				_priceInfo =	"crewSkillUnlockPrice.info"
+				_label =		'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_NEXT_SKILL_PRICE_LABEL'
+				_size =			"SIZE.SMALL"
+				_labelAlpha =	"TA"
+			)
+		)
+	)
+)
+
+(def element CrewConvertionIntoEliteBlock (_crewId:number, _shipId:number, _isNoNation:bool, _booksAmount:number, _isNewMarkerShown:bool = false)
+	(scope
+		(var crewDataEntity:dhEntity =	"getSingleEntity(CC.crewData)")
+		(var shipOwnEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, _shipId)")
+
+		(var isInFormation:bool =		"shipOwnEntity.ownShip.isInFormation"	(event "shipOwnEntity.ownShip.evUpdateLock"))
+		(var isLocked:bool =			"shipOwnEntity.ownShip.isLocked"		(event "shipOwnEntity.ownShip.evUpdateLock"))
+	)
+
+	(style (width = 100%))
+
+	(hblock
+		(bindcall externalCall "_isNewMarkerShown ? 'inputMapping.onAction' : ''" "['makeSeen', { entityId: crewDataEntity.id }]" watch=false on='rollOver')
+
+		(style
+			(align = "middle")
+			(width = 100%)
+			(marginBottom = "S")
+			(paddingRight = "S")
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(block
+			(style
+				(marginRight = "XS")
+				(marginLeft = "-S")
+			)
+
+			(element EliteCrewBook
+				_amount = "_booksAmount"
+			)
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 100%)
+				(leading = -3)
+				(alpha = "TA")
+			)
+
+			(text = 'IDS_ELITE_CREW_MANUAL')
+		)
+
+		(block
+			(macro DEFAULT_CONTROL_MARKER_ANIMATION "_isNewMarkerShown")
+
+			(style
+				(position = "absolute")
+				(right = 20px)
+				(top = "S")
+			)
+
+			(element MarkerNew)
+		)
+
+		(controller $Tooltip
+			(renderer = 'EliteCrewBookTooltip')
+			(args
+				_amount = "_booksAmount"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(style (width = 180px))
+
+		(controller $Tooltip
+			(bind enabled "_isNoNation || isLocked || isInFormation")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_text =				"_isNoNation	? 'IDS_HINT_CREW_WITHOUT_NATION' :
+									 isInFormation	? 'IDS_CREW_EPIC_PROMOTE_DENY_REASON_IN_FORMATION'
+													: 'IDS_CREW_EPIC_PROMOTE_DENY_REASON_IS_IN_BATTLE'"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element DefaultButton
+			_type =				"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_enabled =			"!(_isNoNation || isLocked || isInFormation)"
+			_size =				"SIZE.SMALL"
+			_width =			100%
+			_focusIndex =		2
+			_label =			'IDS_ELITE_CREW_MANUAL_BUTTON_GIVE_LABEL'
+			_name =				'give_elite_manual'
+			_methods =			"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_PROMOTE_TO_ELITE_WINDOW, args: { crewId: _crewId } }]"
+		)
+	)
+)
+
 (def element MatrixUpgradedSkillsCounter (_crewId:number, _selectedShipClass:str)
 	(scope
 		(struct crew =	PULL_CREW(_crewId = "_crewId"))
@@ -419,7 +574,6 @@
 
 		(var maxSkillsForShipClassKey:str = "toUpper(_selectedShipClass) + '_EPIC_SKILLS_MAX'")
 		(var maxSkillsForClassCount:number = "SC.Common.ELITE_CREW_LEARNING_LIMITS[maxSkillsForShipClassKey]")
-		(var isMaxSkillsCountUnlockedForShipClass:bool = "unlockedSkillsForShipClassCount >= maxSkillsForClassCount")
 
 		(var upgradedSkillsCountForShipClass:str = "tr('IDS_UPGRADED_SKILLS_COUNT_FOR_' + toUpper(_selectedShipClass))")
 	)
@@ -450,8 +604,6 @@
 
 (def element CrewEliteMentorshipTooltipInfo (_crewId:number)
 	(scope
-		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
-
 		(struct crew =	PULL_CREW(_crewId = "_crewId"))
 
 		(var eliteCrewLearning:dhComponent = "crew.entity.eliteCrewLearning")
@@ -466,9 +618,9 @@
 		(struct crewTalentUnlockPrice =	PULL_PRICE(_entityId = "TALENT_RESEARCH_ENTITY_PK_KEY"						_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
 	)
 
-	(style (width = 320px) (hitTest = false))
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+	(style (width = 320px))
 
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
 			_headerText = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP'
@@ -574,6 +726,83 @@
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemDescriptionText
 					_descriptionText = 'IDS_CREW_INFO_MODAL_ELITE_MENTORSHIP_TOOLTIP_EPIC_SKILLS_DESCRIPTION'
+				)
+			)
+		)
+	)
+)
+
+(def element EliteCrewBook (_amount:number = 1)
+	(name = 'EliteCrewBook')
+
+	(style
+		(width = 80px)
+		(height = 80px)
+		(backgroundImage = 'url:../reward_icons/elite_crew_book.png')
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (align = "bottom|right"))
+
+		(controller $Instance renderer='ImageItemsCounter'
+			(bind enabled "_amount != 0")
+			(args
+				_amount = "_amount"
+			)
+		)
+	)
+)
+
+(def element EliteCrewBookTooltip (_amount:number = 0, _rewardItem:dict = {})
+	(style (width = 320px))
+	
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl=			'url:../reward_icons/elite_crew_book.png'
+			_imageWidth =		80px
+			_imageHeight =		80px
+			_headerText =		'IDS_ELITE_CREW_MANUAL'
+			_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.SIMPLE"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemCounterLine
+			_title =		"_rewardItem ? 'IDS_COUNT' : 'IDS_IN_WAREHOUSE'"
+			_count =		"_amount"
+			_isAutoWidth =	true
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText
+					_headerText = 'IDS_ELITE_CREW_MANUAL_PURPOSE_TOOLTIP_HEADER'
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_ELITE_CREW_MANUAL_PURPOSE_TOOLTIP_DESCRIPTION'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText
+					_headerText = 'IDS_ELITE_CREW_MANUAL_CONDITIONS_TOOLTIP_HEADER'
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = 'IDS_ELITE_CREW_MANUAL_CONDITIONS_TOOLTIP_DESCRIPTION'
 				)
 			)
 		)

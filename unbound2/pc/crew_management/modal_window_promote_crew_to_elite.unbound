@@ -1,0 +1,392 @@
+(def constant PROMOTE_TO_ELITE_ANIM_DURATIONS "{
+	HIDE_INITIAL_INFO:				0.3,
+	NEW_PORTRAIT_LANDING_DELAY:		0.4,
+	HIDE_OLD_PORTRAIT:				0.1,
+	OLD_PORTRAIT_HIDE_DELAY:		0.05,
+	NEW_PORTRAIT_LANDING:			0.5,
+	AFTER_ANIM_DOWNTIME:			0.2,
+	NO_ESC_AFTER_NEW_LAYOUT_APPEAR:	0.65
+}")
+
+(def constant CREW_ELITE_PROMOTION_CT {
+	WHITE: {	redMultiplier:		1,
+				greenMultiplier:	1,
+				blueMultiplier:		1,
+				alphaMultiplier:	1,
+				redOffset:			150,
+				greenOffset:		150,
+				blueOffset:			150,
+				alphaOffset:		0 },
+
+	RED:	{	redMultiplier:		1.8,
+				greenMultiplier:	1,
+				blueMultiplier:		1,
+				alphaMultiplier:	1.3,
+				redOffset:			240,
+				greenOffset:		50,
+				blueOffset:			0,
+				alphaOffset:		0 }
+})
+
+(def element ModalWindowPromoteCrewToElite (crewId: number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evPromoteAnimationInit)
+		(event evNewPortraitLandingStarted)
+		(event evNewPortraitLandingEnded)
+		(event evShowUpdatedLayout)
+		(event evShowUpdatedLayoutFinished)
+		(event evOldPortraitHide)
+		(event evNewPortraitAnimEnded)
+
+		(struct crew =	PULL_CREW(_crewId = "crewId"))
+
+		(var baseUrl:str =						"crew.component.baseUrl ?: ''"				(event "crew.component.evRankChanged"))
+		(var overlayUrl:str =					"crew.component.overlayUrl ?: ''"			(event "crew.component.evRankChanged"))
+		(var initialClassificationId:number =	"crew.component.classificationId"	watch=false)
+		(var isSpineAnimation:bool =			"crew.component.isAnimated")
+
+		(var isInitModalInfoVisible:bool =	true)
+		(var isInitModalInfoEnabled:bool =	true)
+		(var isOldPortraitHidden:bool =		false)
+		(var hasNewPortraitLanded:bool =	false)
+		(var isNewLayoutShown:bool =		false)
+
+		(bind isInitModalInfoVisible		"false"		init=false		(event "evPromoteAnimationInit"))
+		(bind isInitModalInfoEnabled		"false"		init=false		(event "evNewPortraitLandingStarted"))
+		(bind isOldPortraitHidden			"true"		init=false		(event "evOldPortraitHide"))
+		(bind hasNewPortraitLanded			"true"		init=false		(event "evNewPortraitLandingEnded"))
+		(bind isNewLayoutShown				"true"		init=false		(event "evShowUpdatedLayout"))
+	)
+
+	(dispatch evNewPortraitLandingStarted	dir="EventDirection.DOWN"	delay="PROMOTE_TO_ELITE_ANIM_DURATIONS.NEW_PORTRAIT_LANDING_DELAY"		(event "evPromoteAnimationInit"))
+	(dispatch evOldPortraitHide				dir="EventDirection.DOWN"	delay="PROMOTE_TO_ELITE_ANIM_DURATIONS.OLD_PORTRAIT_HIDE_DELAY"			(event "evNewPortraitLandingStarted"))
+	(dispatch evNewPortraitLandingEnded		dir="EventDirection.NONE"	delay="PROMOTE_TO_ELITE_ANIM_DURATIONS.NEW_PORTRAIT_LANDING"			(event "evNewPortraitLandingStarted"))
+	(dispatch evShowUpdatedLayout			dir="EventDirection.NONE"	delay="PROMOTE_TO_ELITE_ANIM_DURATIONS.AFTER_ANIM_DOWNTIME"				(event "evNewPortraitAnimEnded"))
+	(dispatch evShowUpdatedLayoutFinished	dir="EventDirection.NONE"	delay="PROMOTE_TO_ELITE_ANIM_DURATIONS.NO_ESC_AFTER_NEW_LAYOUT_APPEAR"	(event "evShowUpdatedLayout"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['lockESCExit', {}]"											(event "evPromoteAnimationInit"))
+	(bindcall externalCall "'inputMapping.onAction'" "[CREW_ACTIONS.LEARN_ELITE_CREW_BOOK, { crewId: crewId }]"		(event "evPromoteAnimationInit"))
+	(bindcall externalCall "'inputMapping.onAction'" "['unlockESCExit', {}]"										(event "evShowUpdatedLayoutFinished"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['elite_crew_book', 'upgrade_crew']" (event "evNewPortraitLandingStarted"))
+
+	(style (align = "center|middle"))
+
+	(block
+		(style
+			(align = "center")
+			(width = 360px)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(macro TRANSITION_ANIM_ALPHA
+				_trigger =		"isInitModalInfoVisible"
+				_duration =		"PROMOTE_TO_ELITE_ANIM_DURATIONS.HIDE_INITIAL_INFO"
+			)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "M")
+			)
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_CONFIRMATION'
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "M")
+			)
+
+			(block
+				(style
+					(width = 168px)
+					(height = 155px)
+				)
+
+				(block
+					(macro TRANSITION_ANIM_ALPHA
+						_trigger =		"!isOldPortraitHidden"
+						_duration =		"PROMOTE_TO_ELITE_ANIM_DURATIONS.HIDE_OLD_PORTRAIT"
+					)
+
+					(controller $Instance renderer = 'CrewPortraitWithBGR'
+						(bind enabled "!hasNewPortraitLanded")
+						(args
+							_classificationId =		"initialClassificationId"
+							_portraitWidth =		160px
+							_portraitHeight =		147px
+							_isSpineAnimation =		"isSpineAnimation"
+							_borderSize =			"XS"
+							_baseUrl =				"baseUrl"
+							_overlayUrl =			"overlayUrl"
+						)
+					)
+				)
+
+				(block
+					(style (position = "absolute"))
+
+					(controller $Instance renderer='EliteCrewPromotedAnimated'
+						(bind enabled "!isInitModalInfoEnabled")
+						(args
+							_baseUrl =				"baseUrl"
+							_overlayUrl =			"overlayUrl"
+							_isSpineAnimation =		"isSpineAnimation"
+						)
+					)
+				)
+			)
+
+			
+			(block
+				(bind visible "isNewLayoutShown")
+
+				(style
+					(position = "absolute")
+					(align = "center")
+					(width = 100%)
+					(top = "147 + (2 * XS) + M")
+				)
+
+				(block
+					(style
+						(align = "center")
+						(width = 100%)
+						(alpha = 0)
+						(marginBottom = "L")
+						(visualOffsetY = 10px)
+					)
+
+					(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+						_trigger =		"isNewLayoutShown"
+						_delay =		"0"
+						_duration =		"0.15"
+					)
+
+					(element CrewNameWithIcon
+						_crewId =			"crewId"
+						_isBig =			true
+						_isAutoSized =		true
+						_isCenterAligned =	true
+					)
+				)
+
+				(block
+					(style
+						(alpha = 0)
+						(visualOffsetY = 10px)
+					)
+
+					(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+						_trigger =		"isNewLayoutShown"
+						_delay =		"0.5"
+						_duration =		"0.15"
+					)
+
+					(element DefaultButton
+						_focusIndex =		"isNewLayoutShown ? 0 : BUTTON_FOCUS_STATE.UNFOCUSABLE"
+						_defaultFocused =	false
+						_type =				"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_label =			'IDS_CLOSE_UPPER_CASE'
+						_name =				'btn_cancel'
+					)
+				)
+			)
+			
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+			(macro TRANSITION_ANIM_ALPHA
+				_trigger =		"isInitModalInfoVisible"
+				_duration =		"PROMOTE_TO_ELITE_ANIM_DURATIONS.HIDE_INITIAL_INFO"
+			)
+
+			(style
+				(hitTest = false)
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "M")
+			)
+
+			(element CrewNameWithIcon
+				_crewId =				"crewId"
+				_isBig =				true
+				_isAutoSized =			true
+				_isRankShown =			false
+				_isSpecialIconTracked =	false
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginTop = "M")
+				)
+
+				(element HorizontalDividerTwoPx)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+			(macro TRANSITION_ANIM_ALPHA
+				_trigger =		"isInitModalInfoVisible"
+				_duration =		"PROMOTE_TO_ELITE_ANIM_DURATIONS.HIDE_INITIAL_INFO"
+			)
+
+			(block
+				(style
+					(hitTest = false)
+					(align = "center")
+					(width = 100%)
+					(marginBottom = "MS")
+				)
+
+				(block
+					(style (align = "center"))
+
+					(tf
+						(class $TextDefault21NM)
+						(style
+							(alpha = "TA")
+							(marginBottom = "SXS")
+						)
+
+						(text = 'IDS_ELITE_CREW_MANUAL_PROMOTE_CREW_MODAL_QUESTION')
+					)
+
+					(element StatusLine
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.INFO"
+						_text =				'IDS_ELITE_CREW_MANUAL_PROMOTE_CREW_MODAL_EFFECT_DESCRIPTION'
+					)
+
+					(tf
+						(class $TextDefaultNM)
+						(style
+							(marginTop = "S")
+							(alpha = "TA")
+						)
+
+						(text = 'IDS_IMPOSSIBLE_TO_UNDO_ACTION')
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+			(macro TRANSITION_ANIM_ALPHA
+				_trigger =		"isInitModalInfoVisible"
+				_duration =		"PROMOTE_TO_ELITE_ANIM_DURATIONS.HIDE_INITIAL_INFO"
+			)
+
+			(style (bind hitTest "isInitModalInfoVisible"))
+
+			(element ModalWindowSystemYesNoButtons
+				_btnOkDispatchedEv =	'evPromoteAnimationInit'
+				_btnOkFocusIndex =		"isInitModalInfoEnabled ? 0 : BUTTON_FOCUS_STATE.UNFOCUSABLE"
+				_btnNoFocusIndex =		"isInitModalInfoEnabled ? 1 : BUTTON_FOCUS_STATE.UNFOCUSABLE"
+			)
+		)
+	)
+)
+
+(def element EliteCrewPromotedAnimated (_baseUrl:str, _overlayUrl:str, _isSpineAnimation:bool)
+	(scope
+		(event evNewPortraitLandingStarted)
+		(event evStartExplosionAnim)
+		(event evNewPortraitAnimEnded)
+	)
+
+	(visible = false)
+	(colorTransform = "CT_NONE")
+
+	(style
+		(alpha = 0)
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(scaleX = 2.5)
+		(scaleY = 2.5)
+		(rotation = -30)
+	)
+
+	(controller $Animation
+		(bindcall play
+			keyframes = "[
+				{ time: 0.3,	to:	{	alpha: 0.4,
+										scaleX: 1.9,
+										scaleY: 1.9,
+										rotation: -18,
+										visible: true } },
+				{ time: 0.4,	to:	{	alpha: 0.6,
+										scaleX: 1.6,
+										scaleY: 1.6,
+										rotation: -13 } },
+				{ time: 0.5,	to:	{	alpha: 1,
+										scaleX: 1,
+										scaleY: 1,
+										rotation: 0,
+										colorTransform: CREW_ELITE_PROMOTION_CT.WHITE } },
+				{ time: 1.1,		to: { colorTransform: CT_NONE } }]"
+			action = "kill"
+			(event "evNewPortraitLandingStarted")
+		)
+		(dispatch evStartExplosionAnim delay=0.3 on=evAnimStarted)
+		(dispatch evNewPortraitAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = -270px)
+			(left = -270px)
+			(width = 760px)
+			(height = 760px)
+			(backgroundImage = 'url:../animations/spine/account_leveling/fog/fog.skel')
+		)
+
+		(colorTransform = "CREW_ELITE_PROMOTION_CT.RED")
+
+		(controller $Spine)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = -210px)
+			(left = -190px)
+		)
+
+		(controller $FxInstance renderer='ExplosionAnimation' lifetime="2.3"
+			(bindcall create (event "evStartExplosionAnim"))
+			(args
+				_colorTransform = "CREW_ELITE_PROMOTION_CT.RED"
+			)
+		)
+	)
+
+	(element CrewPortraitWithBGR
+		_classificationId =		"SC.Common.COMMANDER_CLASSIFICATIONS.ELITE"
+		_portraitWidth =		160px
+		_portraitHeight =		147px
+		_isSpineAnimation =		"_isSpineAnimation"
+		_borderSize =			"XS"
+		_baseUrl =				"_baseUrl"
+		_overlayUrl =			"_overlayUrl"
+	)
+)

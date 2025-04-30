@@ -1,0 +1,690 @@
+(def constant EVENT_START '2505')
+(def constant RANDOM_CODE {
+	'global_0' : ['0000250500'],
+	'map0': ['0000250501', '0000250502', '0000250503', '0000250504'],
+	'map01': ['0000250505', '0000250506', '0000250507', '0000250508'],
+	'map02': ['0000250509', '0000250510', '0000250511', '0000250512'],
+	'map03': ['0000250513', '0000250514', '0000250515', '0000250516'],
+	'global_1': ['0000250517'],
+})
+(def struct STRATEGIC_ACTIONS_ARCHIVE_DIMENSIONS (_stageWidth:number, _stageHeight:number)
+	(var isLargeScreen:bool = "_stageHeight > 900 && _stageWidth > 1600")
+)
+
+(def element ModalWindowArchive (_territoryName:str, _territoryStage:number = "SC.Common.STRATEGIC_ACTIONS_UI.INVALID_ARCHIVE_CARD")
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(event evTabSelected)
+		(event evCardSelected)
+
+		(var selectedTabFromRequest:str = "_territoryName == GLOBAL_VIEW_NAME	? SC.Common.STRATEGIC_ACTIONS_NAMES.GLOBAL_ARCHIVE_TABS[_territoryStage]
+																				: _territoryName")
+		(var selectedCardFromRequest:number = "_territoryName == GLOBAL_VIEW_NAME	? SC.Common.STRATEGIC_ACTIONS_UI.DEFAULT_ARCHIVE_CARD
+																					: _territoryStage")
+
+		(var strategicActionsEntity:dhEntity = "getSingleEntity(CC.strategicActionsEvent)")
+		(var strategicActionsEvent:dhComponent = "strategicActionsEntity.strategicActionsEvent")
+		(var selectedTabFromComponent:str = "strategicActionsEvent.selectedArchiveTab" (event "strategicActionsEvent.evSelectedArchiveTabChanged"))
+		(var selectedCardFromComponent:number = "strategicActionsEvent.selectedArchiveCard" (event "strategicActionsEvent.evSelectedArchiveCardChanged"))
+		(var doneTerritories:number = "strategicActionsEvent.doneTerritories" (event "strategicActionsEvent.evDoneTerritoriesChanged"))
+
+		(var selectedTab:str = "selectedTabFromRequest ?: selectedTabFromComponent" watch=false)
+		(bind selectedTab "$event.tab" init=false watch=false (event "evTabSelected"))
+
+		(var selectedCard:number = "selectedCardFromRequest != SC.Common.STRATEGIC_ACTIONS_UI.INVALID_ARCHIVE_CARD	? selectedCardFromRequest
+																													: selectedCardFromComponent" watch=false)
+		(bind selectedCard "$event.card" init=false watch=false (event "evCardSelected"))
+		(bind selectedCard "selectedCardFromComponent" init=false)  
+
+		(var territories:dhCollection = "getCollection(CC.strategicActionsTerritory).getChildByPath('sortedByAppearanceInArchive')")
+		(var centeredIndent:number = "((stageWidth - SSE_DEFAULT_CONTENT_WIDTH) / 2) - SSE_NAVIGATION_WIDTH")
+		(var isSmallStageWidth:bool = "centeredIndent <= 0")
+
+		(var mapName:str = "selectedTab + '_' + selectedCard")
+	)
+	(bindcall externalCall 'direct.action' "['strategicActions.selectTabAndCardInArchive', {tab: selectedTab}]"
+		init=true
+		watch=false
+		(bind enabled "selectedTab != selectedTabFromComponent")
+		(bind trigger "selectedTab")
+	)
+	(bindcall externalCall 'direct.action' "['strategicActions.selectTabAndCardInArchive', {tab: selectedTab, card: selectedCard}]"
+		init=true
+		watch=false
+		(bind enabled "selectedCard != selectedCardFromComponent")
+		(bind trigger "selectedCard")
+	)
+	(name = 'ModalWindowArchive')
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../events/strategic_actions/archive/bg/bg.png')
+			(backgroundSize = "cover")
+		)
+		(alpha = 0)
+		(controller $Animation
+			(bindcall play	duration = 0.2
+							to = "{ alpha: 1 }"
+							(event "startShow")
+			)
+			(bindcall play	duration = 0.2
+							delay = 0.25
+							to = "{ alpha: 0 }"
+							action="kill"
+							(event "startHide")
+			)
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:../events/strategic_actions/archive/bg/' + mapName +'.png'")
+		)
+		(controller $Animation
+			(bindcall play	duration = 0.5
+							from = "{ alpha: 0 }"
+							to = "{ alpha: 1 }"
+							(bind trigger "mapName")
+							(event "startShow")
+			)
+			(bindcall play	duration = 0.2
+							delay = 0.1
+							from = "{ alpha: 1 }"
+							to = "{ alpha: 0 }"
+							action = "kill"
+							(event "startHide")
+			)
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(element ModalWindowAnimatedBackground
+			_selectedCategory = 'mist'
+			_type = "SC.Ui_styles.ANIMATED_BG.ARCHIVE"
+			_hideTime = 0.2
+			_hideDelay = 0.3
+		)
+	)
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(marginBottom = "{720:M, 1080:XLM}")
+		)
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_ARCHIVE_TITLE'
+			_backButtonText = 'IDS_RETURN_FROM_MODAL_WINDOW_BUTTON'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_methods = "[{type: 'inputMapping.onRequest', name: 'closeModalWindowArchive', args: {}}]"
+		)
+	)
+	(hblock
+		(class $Fullsize)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(width = "{ 1280:250px, 1920:320px }")
+				(marginRight = "{ 1280:M, 1920:L }")
+			)
+			(element ArchiveSideTabGlobal
+				_selectedTab = "selectedTab"
+				_index = 0
+			)
+			(block
+				(style (vgap = 1px))
+				(controller $Repeat renderer='ArchiveSideTabTerritory'
+					(bind count "territories.length")
+					(args
+						_entityId = "territories[$index].id"
+						_selectedTab = "selectedTab"
+					)
+				)
+			)
+			(element ArchiveSideTabGlobal
+				_selectedTab = "selectedTab"
+				_index = 1
+				_isDisabled = "doneTerritories != territories.length"
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(height = 100%)
+				(bind width "isSmallStageWidth ? 100% : SSE_DEFAULT_CONTENT_WIDTH")
+				(bind marginLeft "isSmallStageWidth ? 0 : centeredIndent")
+			)
+			(element ArchiveTabContent
+				_territoryName = "selectedTab"
+				_territoryStage = "selectedCard"
+			)
+		)
+	)
+)
+
+(def element ArchiveSideTabTerritory (_entityId:number = 0, _selectedTab:str = '')
+	(scope
+		(event evTabSelected)
+
+		(var territoryEntity:dhEntity = "getEntity(_entityId)")
+		(var territory:dhComponent = "territoryEntity.strategicActionsTerritory")
+		(var territoryName:str = "territory.id" (event "territory.evChanged"))
+		(var status:number = "territory.status ?: 0" (event "territory.evChanged"))
+		(var isAvailable:bool = "status != SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.LOCKED")
+		(var isSelected:bool = "territoryName == _selectedTab")
+		(bind isSelected "territoryName == _selectedTab" init=false watch=false (event "evTabSelected"))
+	)
+	(class $SSETabWidth)
+	(element SideTabButton
+		_label = "'IDS_TERRITORY_TITLE_' + territoryName"
+		_isDisabled = "!isAvailable"
+		_isSelected = "isSelected"
+		_dispatchedEv = 'evTabSelected'
+		_dispatchParams = "{ tab: territoryName }"
+	)
+)
+
+(def element ArchiveSideTabGlobal (_selectedTab:str = '', _index:number = 0, _isDisabled:bool = false)
+	(scope
+		(event evTabSelected)
+
+		(var stageTitle:str = "SC.Common.STRATEGIC_ACTIONS_NAMES.GLOBAL_VIEW_NAME + '_' + _index")
+		(var isSelected:bool = "stageTitle == _selectedTab")
+		(bind isSelected "stageTitle == _selectedTab" init=false (event "evTabSelected"))
+	)
+	(class $SSETabWidth)
+	(element SideTabButton
+		_label = "'IDS_TERRITORY_MESSAGE_TITLE_' + stageTitle"
+		_isSelected = "isSelected"
+		_isDisabled = "_isDisabled"
+		_dispatchedEv = 'evTabSelected'
+		_dispatchParams = "{ tab: stageTitle}"
+	)
+)
+
+(def element ArchiveTabContent (_territoryName:str = '', _territoryStage:number = 0)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evCardSelected)
+
+		(var territoryEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTerritory, _territoryName)")
+		(struct territory = THRESHOLDS_POINTS (_entityId = "territoryEntity.id"))
+
+		(var isGlobal:bool = "	_territoryName == SC.Common.STRATEGIC_ACTIONS_NAMES.INTRO_ARCHIVE_TAB ||
+								_territoryName == SC.Common.STRATEGIC_ACTIONS_NAMES.OUTRO_ARCHIVE_TAB")
+	)
+	(class $Fullsize)
+	(style
+		(paddingRight = "M")
+		(flow = "horizontal")
+	)
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style
+			(width = { 1280:380px, 1920:456px })
+			(height = 100%)
+			(marginRight = "{ 1280:M, 1920:L }")
+			(gap = "SXS")
+		)
+		(controller $Animation
+			(bindcall play
+				keyframes = "[
+					{ time:0,		to:{ alpha:0, visualOffsetY: 10px }},
+					{ time:0.1,		to:{ alpha:0, visualOffsetY: 10px }},
+					{ time:0.25,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_out}
+				]"
+				action = "kill"
+				(bind trigger "_territoryName")
+			)
+		)
+		(controller $Repeat renderer='ArchiveCardSimpleWrapper'
+			(bind count "isGlobal ? 1 : (territory.thresholdsCount + 1)") 
+			(args
+				_territoryName = "_territoryName"
+				_territoryStage = "_territoryStage"
+				_isGlobal = "isGlobal"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+		(style (width = 100%))
+		(controller $Animation
+			(bindcall play
+				keyframes = "[
+					{ time:0,		to:{ alpha:0, visualOffsetY: 10px }},
+					{ time:0.2,		to:{ alpha:0, visualOffsetY: 10px }},
+					{ time:0.35,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_out}
+				]"
+				action = "kill"
+				(event "evCardSelected")
+				(bind trigger "_territoryName")
+			)
+		)
+		(element ArchiveCardDetailed
+			_territoryName = "_territoryName"
+			_territoryStage = "_territoryStage"
+		)
+	)
+)
+
+(def element ArchiveCardSimpleWrapper (_territoryName:str='', _territoryStage:number = 0, _isGlobal:bool = false)
+	(scope
+		(event evCardSelected)
+
+		(var territoryEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTerritory, _territoryName)")
+		(struct territory = THRESHOLDS_POINTS (_entityId = "territoryEntity.id"))
+
+		(var isAvailable:bool = "$index <= territory.stage")
+		(var isSelected:bool = "$index == _territoryStage")
+	)
+	(dispatch evCardSelected args="{card: $index}" dir="EventDirection.UP" on='leftClick' (bind enabled "isAvailable && !isSelected"))
+	(style (width = 100%))
+	(element ArchiveCardSimple
+		_territoryName = "_territoryName"
+		_isAvailable = "isAvailable"
+		_isSelected = "isSelected"
+		_isGlobal = "_isGlobal"
+		_step = "$index"
+	)
+)
+
+(def element ArchiveCardSimple (_territoryName:str = '',
+								_isAvailable:bool = false,
+								_isSelected:bool = false,
+								_isGlobal:bool = false,
+								_step:number = 0)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+
+		(macro STAGE_SIZE)
+		(struct strategicActionDimension = STRATEGIC_ACTIONS_ARCHIVE_DIMENSIONS(_stageWidth = "stageWidth" _stageHeight = "stageHeight"))
+
+		(var randomCode:str = "RANDOM_CODE[_territoryName][_step]")
+
+		(var territoryEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTerritory, _territoryName)")
+		(var territory:dhComponent = "territoryEntity.strategicActionsTerritory")
+		(var territoryStagesCount:number = "territory.stagesCount ?: 1" (event "territory.evChanged"))
+
+		(var archiveItem:str = "_isGlobal	? _territoryName
+											: _territoryName + '_' + $index")
+		(var title:str = "	_isAvailable	? 'IDS_TERRITORY_MESSAGE_TITLE_' + archiveItem
+											: 'IDS_TERRITORY_ARCHIVE_MESSAGE_TITLE_LOCKED'")
+		(var isLastStep:bool = "_step == territoryStagesCount")
+		(var archiveStep:str = "isLastStep ? 'IDS_TERRITORY_ARCHIVE_STEP_LAST' : subst('IDS_TERRITORY_ARCHIVE_STEP', [], {_step: _step+1})")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "!_isAvailable || _isSelected ? '' : 'quest_item'")
+	(style
+		(width = 100%)
+		(height = 100px)
+		(flow = "horizontal")
+		(bind alpha "_isAvailable ? 1 : 0.45")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "crop")
+			(backgroundImage = 'url:../events/strategic_actions/archive/card_simple_bg.png')
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(scale9grid = 2)
+			(backgroundImage = 'url:../panel_background/selection_panel.png')
+		)
+		(alpha = "_isSelected ? 0.9 : 0.2")
+		(controller $Animation
+			(bindcall play
+				from = "{ alpha: 0.2 }"
+				to = "{ alpha: 0.9 }"
+				duration = 0.15
+				reverse = "!_isSelected"
+				(bind trigger "_isSelected")
+			)
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style
+			(padding = "M")
+			(gap = "{1280:SXS, 1920:M}")
+		)
+
+		(block
+			(class $Fullsize)
+			(style (backgroundColor = 0x1AFFFFFF))
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(alpha = 0.1)
+					(scale9grid = 2)
+					(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				)
+			)
+			(block
+				(style
+					(width = 100%)
+					(padding = "SXS")
+				)
+				(tf
+					(bind class "strategicActionDimension.isLargeScreen ? '$TextDefaultBoldNM' : '$TextDefaultBold13NM'")
+					(style
+						(alpha = "TA")
+						(width = 100%)
+						(bind marginBottom "_isAvailable ? S : 10px")
+					)
+					(bind text "title")
+				)
+				(block
+					(style
+						(marginBottom = "S")
+						(bind alpha "_isAvailable ? TC : 1")
+					)
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "!_isAvailable")
+						(args
+							_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.LOCK"
+							_text = 'IDS_TERRITORY_ARCHIVE_MESSAGE_STATUS_LOCKED'
+						)
+					)
+					(tf
+						(bind visible "_isAvailable")
+						(bind class "strategicActionDimension.isLargeScreen ? '$TextDefaultNM' : '$TextDefault13NM'")
+						(style (alpha = "TC"))
+						(bind text "'IDS_TERRITORY_MESSAGE_SUBTITLE_' + archiveItem")
+					)
+				)
+				(hblock
+					(bind visible "_isAvailable")
+					(style
+						(width = 100%)
+						(align = "right")
+					)
+					(tf
+						(class $TextDefault9NM)
+						(style
+							(marginRight = "M")
+							(letterSpacing = 1)
+							(alpha = "TS")
+							(styleSheet = "'h3{font-weight:bold}'")
+						)
+						(bind htmlText "subst('IDS_TERRITORY_ARCHIVE_DOC_NUMBER', [], {_index: randomCode})")
+					)
+					(tf
+						(class $TextDefaultBold9NM)
+						(style
+							(marginRight = "XS")
+							(letterSpacing = 1)
+							(alpha = "TS")
+						)
+						(text = 'IDS_TERRITORY_ARCHIVE_DOC_CODE')
+					)
+					(tf
+						(class $TextDefault9NM)
+						(style
+							(marginRight = "XS")
+							(letterSpacing = 1)
+							(alpha = "TS")
+						)
+						(text = 'IDS_STRATEGIC_ACTIONS_COMMON_EVENT_TITLE_SHORT')
+					)
+					(tf
+						(class $TextDefault9NM)
+						(style
+							(marginRight = "XS")
+							(letterSpacing = 1)
+							(alpha = "TS")
+						)
+						(bind text "'IDS_TERRITORY_TITLE_' + _territoryName + '_SHORT'")
+					)
+					(tf
+						(class $TextDefault9NM)
+						(style
+							(letterSpacing = 1)
+							(alpha = "TS")
+						)
+						(bind text "EVENT_START")
+					)
+				)
+			)
+		)
+		(block
+			(style
+				(width = 68px)
+				(height = 68px)
+				(backgroundColor = 0x1AFFFFFF)
+			)
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(alpha = 0.1)
+					(scale9grid = 2)
+					(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				)
+			)
+			(block
+				(style
+					(position = "absolute")
+					(right = "SXS")
+					(bottom = "SXS")
+					(align= "right")
+				)
+				(tf
+					(class $TextDefaultBold17NM)
+					(style
+						(marginBottom = "S")
+						(alpha = "TC")
+					)
+					(bind text "'IDS_TERRITORY_TITLE_' + _territoryName + '_SHORT'")
+				)
+				(tf
+					(class $TextDefault9NM)
+					(style
+						(letterSpacing = 1)
+						(alpha = "TC")
+					)
+					(bind text "archiveStep")
+				)
+			)
+		)
+	)
+)
+
+(def element ArchiveCardDetailed (_territoryName:str='', _territoryStage:number = 0)
+	(scope
+		(event evPlayVoiceover)
+		(event evStopVoiceover)
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+
+		(var isGlobal:bool = "	_territoryName == SC.Common.STRATEGIC_ACTIONS_NAMES.INTRO_ARCHIVE_TAB ||
+								_territoryName == SC.Common.STRATEGIC_ACTIONS_NAMES.OUTRO_ARCHIVE_TAB")
+
+		(var archiveItem:str = "isGlobal	? _territoryName
+											: _territoryName + '_' + _territoryStage")
+
+		(var strategicActionsEntity:dhEntity = "getSingleEntity(CC.strategicActionsEvent)")
+		(var strategicActionsEvent:dhComponent = "strategicActionsEntity.strategicActionsEvent")
+		(var isVoiceoverPlaying:bool = "strategicActionsEvent.isVoiceoverPlaying ?: false" (event "strategicActionsEvent.evIsVoiceoverPlayingChanged"))
+	)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(bindcall externalCall 'direct.action' "['strategicActions.playVoiceover', []]" (event "evPlayVoiceover"))
+	(bindcall externalCall 'direct.action' "['strategicActions.stopVoiceover', []]" (event "evStopVoiceover") (event "startHide") (bind trigger "archiveItem"))
+
+	(style
+		(width = 100%)
+		(height = 400px)
+		(flow = "horizontal")
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "crop")
+			(backgroundImage = 'url:../events/strategic_actions/archive/card_detailed_bg.png')
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0.2)
+			(scale9grid = 2)
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+		)
+	)
+
+	(block
+		(style
+			(width = 249px)
+			(align = "center")
+		)
+		(block
+			(style
+				(width = 210px)
+				(height = 210px)
+				(marginTop = "-XS")
+				(backgroundImage = 'url:../events/strategic_actions/messages/bg_archive_image.png')
+			)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(left = 25px)
+				(width = 200px)
+				(height = 200px)
+				(bind backgroundImage "'url:../events/strategic_actions/messages/' + archiveItem + '.png'")
+				(backgroundSize = "cover")
+			)
+		)
+		(block
+			(style
+				(position = "absolute")
+				(top = "-S")
+				(right = 44px)
+				(width = 28px)
+				(height = 52px)
+				(backgroundImage = 'url:../events/strategic_actions/archive/paperclip.png')
+			)
+		)
+		(block
+			(style
+				(width = 210px)
+				(marginTop = "MS")
+			)
+			(element VoicePlayer
+				_isVoiceoverPlaying = "isVoiceoverPlaying"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 1px)
+			(height = 100%)
+			(backgroundColor = 0x4DFFFFFF)
+		)
+	)
+
+	(scrollArea
+		(class $Fullsize)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(verticalSlider ScrollBarVLight)
+		(hscrollPolicy = 'off')
+		(vscrollPolicy = 'on')
+
+		(wheelScrollSpeed = 1.0)
+		(wheelScrollAcceleration = 1.9)
+
+		(activeControlsAlpha = 1)
+		(inactiveControlsAlpha = 0.5)
+
+		(topShadow = 'ArchiveShadowTop')
+		(bottomShadow = 'ArchiveShadowBottom')
+		(content
+			(style
+				(width = 100%)
+				(padding = "MS")
+				(align = "center")
+			)
+			(tf
+				(class $TextDefaultBold19NM)
+				(style
+					(marginBottom = "SXS")
+					(letterSpacing = 4)
+					(alpha = "TA")
+				)
+				(bind text "toUpper(tr('IDS_TERRITORY_ARCHIVE_ITEM_TITLE'))")
+			)
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(marginBottom = "MS")
+					(letterSpacing = 1.5)
+					(alpha = "TS")
+				)
+				(bind text "'IDS_TERRITORY_MESSAGE_SUBTITLE_' + archiveItem")
+			)
+			(block
+				(style
+					(width = 123px)
+					(height = 3px)
+					(marginBottom = "MS")
+					(backgroundImage = 'url:../events/strategic_actions/archive/divider.png')
+				)
+			)
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+					(multiline = true)
+					(leading = -2px)
+					(styleSheet = "'p { text-indent: 24px;} .p_spacing {font-size: 10px}'")
+				)
+				(bind htmlText "tr('IDS_TERRITORY_ARCHIVE_TEXT_' + archiveItem)")
+			)
+			(block
+				(style
+					(position = "absolute")
+					(right = "-M")
+					(top = "-M")
+					(width = "208px/1.5")
+					(height = "104px/1.5")
+					(backgroundSize = "contain")
+					(backgroundImage = 'url:../events/strategic_actions/archive/security_mark.png')
+				)
+			)
+		)
+	)
+)
+
+(def element ArchiveShadowTop ()
+	(style
+		(height = 50px)
+		(width = 100%)
+		(marginTop = "XXS")
+		(backgroundImage = 'url:../events/strategic_actions/archive/shadow_top.png')
+		(scale9grid = 2)
+	)
+)
+
+(def element ArchiveShadowBottom ()
+	(style
+		(height = 50px)
+		(width = 100%)
+		(marginBottom = "XXS")
+		(backgroundImage = 'url:../events/strategic_actions/archive/shadow_bottom.png')
+		(scale9grid = 2)
+	)
+)

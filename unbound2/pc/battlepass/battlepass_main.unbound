@@ -11,6 +11,7 @@
 (def constant BP_PROGRESSBAR_NUMBERS_OFFSET 28)
 (def constant BP_WINDOW_HORIZONTAL_MARGINS "{1280:16, 1920:64}")
 (def constant BP_WINDOW_VERTICAL_MARGINS "{720:40, 1080:80}")
+(def constant BP_LEVELS_TO_SHOW_BEFORE_CURRENT_LEVEL 4)
 
 (def css $BPCarouselVertBorder ()
 	(position = "absolute")
@@ -125,7 +126,7 @@
 		(event CarouselBoundsChanged)
 		(event evTakeRewardsButtonClicked)
 		(event evTakeRewardClicked)
-		(event evForceScrollToLevel)
+		(event evForceScrollToIndex)
 		(event evOpenModal)
 
 		(struct levelDimensions = BP_LEVEL_SIZE(_stageWidth = "stageWidth"))
@@ -346,8 +347,8 @@
 		)
 
 		(block
-			(dispatch evForceScrollToLevel dir="EventDirection.DOWN" (event "evTakeRewardsButtonClicked"))
-			(dispatch evTakeRewardClicked dir="EventDirection.DOWN" delay=0.5 (event "evForceScrollToLevel"))
+			(dispatch evForceScrollToIndex dir="EventDirection.DOWN" (event "evTakeRewardsButtonClicked"))
+			(dispatch evTakeRewardClicked dir="EventDirection.DOWN" delay=0.5 (event "evForceScrollToIndex"))
 			(dispatch evOpenModal delay="REWARD_PROGRESS_ANIMATION_TIME" (event "evTakeRewardClicked"))
 			(bindcall externalCall "'inputMapping.onRequest'" "['openRewardsModal', {	rewardsEntityId: claimRewardsStackId,
 																						header: 'IDS_RECEIVED_LOOTBOXES_REWARDS' }]" watch=false (event "evOpenModal"))
@@ -644,7 +645,7 @@
 (def element BattlePassProgressWithRewards (_carouselWidth:number)
 	(scope
 		(event evScrollToIndex)
-		(event evForceScrollToLevel)
+		(event evForceScrollToIndex)
 
 		(macro STAGE_SIZE)
 
@@ -662,22 +663,25 @@
 		(var type:number =				"battlePassComponent.type"				(event "battlePassComponent.evChanged"))
 		(var totalPoints:number =		"battlePassComponent.totalPoints"		(event "battlePassComponent.evChanged"))
 		(var maxTotalPoints:number =	"battlePassComponent.maxTotalPoints"	(event "battlePassComponent.evChanged"))
+		(var observableReward:number =	"battlePassComponent.observableReward"	(event "battlePassComponent.evObservableRewardChanged"))
 		(var progress:number = "100% * totalPoints/maxTotalPoints")
+
+		(var observableBattlePassRewardEntity:dhEntity = "getEntity(observableReward)")
+		(var observableBattlePassRewardComponent:dhComponent = "observableBattlePassRewardEntity.battlePassReward")
+		(var observableRewardLevel:number = "observableBattlePassRewardComponent.level ?: 1" (event "observableBattlePassRewardComponent.evRewardStateChanged"))
 
 		(var isBattlePassFree:bool = "type == SC.Common.BATTLEPASS_TYPES.FREE")
 
 		
-		(var scrollingLevel:number = " totalPoints/pointsPerLevel - 4")
-		(var levelToScrollTo:number = " totalPoints >= maxTotalPoints	? maxTotalPoints/pointsPerLevel - 1 :
-										scrollingLevel < 0				? 0
-																		: scrollingLevel")
+		(var levelToScrollTo:number = "max(1, min(mainProgressionLen, observableRewardLevel - BP_LEVELS_TO_SHOW_BEFORE_CURRENT_LEVEL))")
+		(var indexToScrollTo:number = "levelToScrollTo - 1")
 
 		(var progressBarWidth:number = "mainProgressionLen * levelDimensions.levelSize + 1")
 	)
 
-	(dispatch evScrollToIndex args="{value: levelToScrollTo}" init=false watch=false on='addedToStage')
-	(dispatch evScrollToIndex args="{value: levelToScrollTo}" (bind trigger "totalPoints"))
-	(dispatch evScrollToIndex args="{value: levelToScrollTo}" init=false watch=false (event "evForceScrollToLevel"))
+	(dispatch evScrollToIndex args="{value: indexToScrollTo}" on='addedToStage')
+	(dispatch evScrollToIndex args="{value: indexToScrollTo}" (bind trigger "totalPoints"))
+	(dispatch evScrollToIndex args="{value: indexToScrollTo}" (event "evForceScrollToIndex"))
 	(dispatch 'CarouselBoundsChanged' dir="EventDirection.UP" args="{bounds: $globalLayoutBounds}" (event "$evLayoutBoundsChanged"))
 	(bindcall externalCall 'sound.playSetSoundDirect' "['battlepass_progressbar', 'start']" (bind trigger "progress"))
 

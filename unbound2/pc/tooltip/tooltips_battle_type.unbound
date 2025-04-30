@@ -1,8 +1,10 @@
 (def constant WAIT_FOR_ANNOUNCEMENT "'WAIT_FOR_ANNOUNCEMENT'")
 (def constant SEASON_ANNOUNCEMENT "'SEASON_ANNOUNCEMENT'")
 (def constant SPRINT_ANNOUNCEMENT "'SPRINT_ANNOUNCEMENT'")
+(def constant SEASON_ACTIVE "'SEASON_ACTIVE'")
 (def constant PRIME_TIME_ACTIVE "'PRIME_TIME_ACTIVE'")
 (def constant PRIME_TIME_INACTIVE "'PRIME_TIME_INACTIVE'")
+(def constant END_OF_EVENT "'END_OF_EVENT'")
 
 (def macro DIVISION_RESTRICTIONS_SCOPE (_restrictionEntity:expression)
 	(var divisionRestrictions:gfx = "_restrictionEntity && !!_restrictionEntity.divisionRestrictions ? _restrictionEntity.divisionRestrictions : null" (event "_restrictionEntity.evAdded") (event "_restrictionEntity.evRemoved"))
@@ -62,6 +64,51 @@
 	(var hasBattleModifiers:bool = "battleTypeEntity && battleTypeEntity.battleSeasonInfo.battleItemTreeGpId > 0")
 )
 
+(def macro PULL_RATING_BATTLE_TIME (_battleTypeEntityId:expression, _isFromPort:expression=false, _isFromProfile:expression=false)
+	(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
+	(macro PRIME_TIME_DATA_SCOPE "battleTypeEntity")
+	(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
+	(macro DIVISION_RESTRICTIONS_SCOPE "restrictionEntity")
+	(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime")
+	(macro TIME_OF_BATTLE_EVENT "battleTypeEntity")
+
+	(var isRatingSeasonInactive:bool = "serverTime < startTime")
+	(var isRatingSeasonActive:bool = "serverTime > startTime && serverTime < finishTime")
+	(var isPrimeTimeActive:bool = "primeTimeFinishTime - daylightshift - serverTime > 0")
+	(var isPrimeTimeInactive:bool = "primeTimeStartTime - daylightshift - serverTime > 0")
+
+	(var seasonTimeStamp:dict = "{
+		SEASON_ANNOUNCEMENT: startTime,
+		SEASON_ACTIVE: finishTime
+	}")
+	(var seasonStatus:str = "isRatingSeasonActive ? SEASON_ACTIVE : SEASON_ANNOUNCEMENT")
+	(macro COUNTDOWN_SCOPE "'formattedSeasonTimeStamp'" "seasonTimeStamp[seasonStatus]" "'HIGHESTDAYS'" "''" "true")
+	(var unifiedStatusSeason:str = "seasonTimeStamp[seasonStatus] - serverTime < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
+																							: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
+	(var substSeasonIDS:str = "_isFromProfile ? 'IDS_RANKED_SEASON_TIME' : 'IDS_SUBST_RANKED_SEASON_ENDS_IN'")
+	(var statusLineSeasonData:dict = "	seasonStatus == SEASON_ANNOUNCEMENT	? {	unifiedStatus:	unifiedStatusSeason,
+																				text:			subst('IDS_SUBST_RATING_SEASON_STARTS_IN', [], { _timeTillStart: formattedSeasonTimeStamp })} :
+										seasonStatus == SEASON_ACTIVE		? {	unifiedStatus:	unifiedStatusSeason,
+																				text:			subst(substSeasonIDS, [], { _timeLeft: formattedSeasonTimeStamp })}
+																			: null")
+
+	(var primeTimeStamp:dict = "{
+		PRIME_TIME_ACTIVE: primeTimeFinishTime,
+		PRIME_TIME_INACTIVE: primeTimeStartTime,
+		END_OF_EVENT: 0
+	}")
+	(var primeStatus:str = "isPrimeTimeInactive ? PRIME_TIME_INACTIVE : PRIME_TIME_ACTIVE")
+	(macro COUNTDOWN_SCOPE "'formattedCountDownPrime'" "primeTimeStamp[primeStatus]" "'HIGHESTDAYS'" "''")
+	(var unifiedStatusPrime:str = "primeTimeStamp[primeStatus] - serverTime < HOUR_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION
+																							: SC.Ui_styles.UNIFIED_STATUS.DATE")
+	(var substPrimeIDS:str = "_isFromProfile ? 'IDS_RANKED_PRIME_TIME' : 'IDS_RANKED_PRIME_TIME_ENDS_IN'")
+	(var statusLinePrimeData:dict = "	primeStatus == PRIME_TIME_ACTIVE	? {	unifiedStatus:	unifiedStatusPrime,
+																				text:			subst(substPrimeIDS, [], { _timeLeft: formattedCountDownPrime })} :
+										primeStatus == PRIME_TIME_INACTIVE	? {	unifiedStatus:	unifiedStatusPrime,
+																				text:			subst('IDS_RANKED_PRIME_TIME_STARTS_IN', [], { _timeLeft: formattedCountDownPrime })}
+																			: null")
+)
+
 (def element CommonBattleTypeTooltip (_battleTypeEntityId:number, _isFromPort:bool=false) layout=true
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
@@ -70,7 +117,7 @@
 		(var descriptionText:str = "battleType 	? 'IDS_' + battleType + '_DESCRIPTION'
 												: ''")
 	)
-	(style (width = 320px) (hitTest = false))
+	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
@@ -490,7 +537,7 @@
 
 		(var currentMatchingLeague:number = "rankStateComponent ? rankStateComponent.matchingLeague : null" (event "rankStateComponent.evMatchingLeagueChanged"))
 	)
-	(style (width = 320px) (hitTest = false))
+	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -658,7 +705,7 @@
 		(macro COUNTDOWN_SCOPE "'seasonFinishTimeText'" "finishTime" "'HIGHESTDAYS'" "''" "true")
 		(var battleSeasonEnd:str = "tr('IDS_TILL_CLAN_BATTLE_SEASON_END') + ' ' + seasonFinishTimeText")
 	)
-	(style (width = 320px) (hitTest = false))
+	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -757,7 +804,7 @@
 		(macro COUNTDOWN_SCOPE "'formattedSeasonTimeStamp'" "finishTime" "'HIGHESTDAYS'" "''" "true")
 		(var timeSeasonLeft:str = "subst('IDS_SUBST_EVENT_SEASON_ENDS_IN', [], {_timeLeft: formattedSeasonTimeStamp })")
 	)
-	(style (width = 320px) (hitTest = false))
+	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -804,6 +851,7 @@
 				(args
 					_restrictionsEntityId = "restrictionEntity.id"
 					_isFromTooltip = true
+					_height = "auto"
 				)
 			)
 		)
@@ -845,6 +893,122 @@
 		(element TooltipSystemStatusLine
 			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 			_text = "'IDS_CHOOSE_' + battleType"
+		)
+	)
+)
+
+(def element RatingBattleTypeTooltip (_battleTypeEntityId:number, _isFromPort:bool=false)
+	(scope
+		(macro PULL_RATING_BATTLE_TIME
+			_battleTypeEntityId =	"_battleTypeEntityId"
+			_isFromPort =			"_isFromPort"
+		)
+
+		(var isTimeVisible:bool = "isRatingSeasonActive || isRatingSeasonInactive")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageWidth = 80
+			_imageHeight = 80
+			_imageUrl = 'url:../service_kit/battle_types/RatingBattle.png'
+			_headerText = 'IDS_RATINGBATTLE'
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isTimeVisible")
+			)
+		)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="isTimeVisible"
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(controller $Instance renderer='TooltipSystemStatusLine'
+					(bind enabled "isTimeVisible && isRatingSeasonActive && statusLinePrimeData")
+					(args
+						_unifiedStatus =	"statusLinePrimeData.unifiedStatus"
+						_text =				"statusLinePrimeData.text"
+					)
+				)
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(controller $Instance renderer='TooltipSystemStatusLine'
+					(bind enabled "isTimeVisible && statusLineSeasonData")
+					(args
+						_unifiedStatus =	"statusLineSeasonData.unifiedStatus"
+						_text =				"statusLineSeasonData.text"
+					)
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRatingSeasonActive"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "isRatingSeasonActive")
+				(args
+					_descriptionText = "subst('IDS_STATUS_TEAM_AMOUNT', [], { _maxPlayers: toString(maxPlayers)})"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isFogOfWar"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isFogOfWar")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
+					_text = 'IDS_FOG_OF_WAR_RULES'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "hasRestrictions")
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='ShipRestrictions'
+				(bind enabled "hasRestrictions")
+				(args
+					_restrictionsEntityId = "restrictionEntity.id"
+					_isFromTooltip = true
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_RATINGBATTLE_DESCRIPTION'
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isFooterVisible")
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isFooterVisible")
+				(args
+					_unifiedStatus = "mouseInstructionsParams._unifiedStatus"
+					_text = "mouseInstructionsParams._text"
+				)
+			)
 		)
 	)
 )

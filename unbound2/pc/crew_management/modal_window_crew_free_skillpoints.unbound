@@ -4,6 +4,7 @@
 
 	(scope
 		(event evSetPrefByAvailabilityChange)
+		(event evUpdateSelectedPrefWithAutoChanged)
 
 		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
 		(var accountGold:number =		"accountResourceComponent.gold		?: 0"	(event "accountResourceComponent.evChangedGold"))
@@ -36,14 +37,20 @@
 
 		(struct selectedFreeSkillPointsTypePref = GET_PREF_NUMBER(_option="'ui.crew.skillResetType'"))
 		(var selectedFreeSkillPointsType:number = "selectedFreeSkillPointsTypePref.value")
+		(bind selectedFreeSkillPointsType "crewResetSkillTypePrefByAutochange" init=false)
 
 		(var isSelectedFreeSkillPointsEliteXP:bool =	"selectedFreeSkillPointsType == SC.Common.CREW_RESET_SKILL_TYPE.XPReset")
 		(var isSelectedFreeSkillPointsGold:bool =		"selectedFreeSkillPointsType == SC.Common.CREW_RESET_SKILL_TYPE.GoldReset")
 
-		(var priceInfo:dict =			"isSelectedFreeSkillPointsEliteXP	? { finalPrice: eliteXPPrice, currency: SC.Common.CURRENCIES.ELITE_XP }
+		(var priceInfo:dict =			"isSelectedFreeSkillPointsEliteXP	? freeXPPrice != 0	? { finalPrice: eliteXPPrice, currency: SC.Common.CURRENCIES.ELITE_XP }
+																								: resetSkillsForEliteXP.info
 																			: resetSkillsForGold.info")
-		(var optionalPriceInfo:dict =	"isSelectedFreeSkillPointsEliteXP && freeXPPrice != 0	? {	finalPrice:	accountFreeXP >= freeXPPrice ? freeXPPrice : 0,
-																									currency:	SC.Common.CURRENCIES.FREE_XP }
+		(var optionalPriceInfo:dict =	"isSelectedFreeSkillPointsEliteXP && freeXPPrice != 0	? eliteXPPrice > 0	? {	finalPrice:	accountFreeXP >= freeXPPrice ? freeXPPrice : 0,
+																														currency:	SC.Common.CURRENCIES.FREE_XP }
+																													: {	basePrice:	resetSkillsForEliteXP.info.basePrice,
+																														finalPrice:	accountFreeXP >= freeXPPrice ? freeXPPrice : 0,
+																														currency:	SC.Common.CURRENCIES.FREE_XP,
+																														till:		resetSkillsForEliteXP.info.till }
 																								: {}")
 
 		(var hideFreeXP:bool = "eliteXPPrice >= resetSkillsForEliteXP.info.finalPrice")
@@ -54,10 +61,11 @@
 															{ currency: SC.Common.CURRENCIES.ELITE_XP,	finalPrice: isSelectedFreeSkillPointsEliteXP	? -priceInfo.finalPrice			: 0 },
 															{ currency: SC.Common.CURRENCIES.FREE_XP,	finalPrice: -optionalPriceInfo.finalPrice		? -optionalPriceInfo.finalPrice	: 0 } ]")
 
-		(var crewResetSkillTypePrefByAutochange:number = "isSelectedFreeSkillPointsGold		? isEnoughGold	? SC.Common.CREW_RESET_SKILL_TYPE.GoldReset
-																											: SC.Common.CREW_RESET_SKILL_TYPE.XPReset
-																							: isEnoughEXP	? SC.Common.CREW_RESET_SKILL_TYPE.XPReset
-																											: SC.Common.CREW_RESET_SKILL_TYPE.GoldReset"	init=false watch=false		(event "evSetPrefByAvailabilityChange"))
+		(var crewResetSkillTypePrefByAutochange:number = "isSelectedFreeSkillPointsGold		? isEnoughEXP	? SC.Common.CREW_RESET_SKILL_TYPE.XPReset
+																											: SC.Common.CREW_RESET_SKILL_TYPE.GoldReset
+																							: isEnoughGold	? SC.Common.CREW_RESET_SKILL_TYPE.GoldReset
+																											: SC.Common.CREW_RESET_SKILL_TYPE.XPReset"		init=false watch=false		(event "evSetPrefByAvailabilityChange"))
+		(var isSummaryDiscountDisplayed:bool = "isSelectedFreeSkillPointsEliteXP && freeXPPrice != 0 && resetSkillsForEliteXP.info.till")
 
 		(var resetSkillsArgs:dict = "{ crewID: crewId, shipType: selectedShipClass, resetType: selectedFreeSkillPointsType }")
 
@@ -65,7 +73,9 @@
 	)
 
 	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'openYesNoConfirmation']"	watch=false on='addedToStage')
-	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.crew.skillResetType', crewResetSkillTypePrefByAutochange ]]")
+
+	(dispatch evUpdateSelectedPrefWithAutoChanged	args={}		dir="EventDirection.NONE"	delay=0.01	(event "evSetPrefByAvailabilityChange"))
+	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.crew.skillResetType', crewResetSkillTypePrefByAutochange ]]" watch=false (event "evUpdateSelectedPrefWithAutoChanged"))
 
 	(style (align = "center|middle"))
 
@@ -133,6 +143,7 @@
 				(element ModalWindowSystemPurchaseItemPriceAndInfo
 					_priceInfo =			"priceInfo"
 					_optionalPriceInfo =	"optionalPriceInfo"
+					_summaryPriceInfo =		"isSummaryDiscountDisplayed ? resetSkillsForEliteXP.info : {}"
 					_questionString =		"'IDS_QUESTION_RESET_SKILLPOINTS_FOR_' + toUpper(selectedShipClass)"
 					_isWarningText =		"!isAvailableResetFreeSkillPoints"
 				)
@@ -156,6 +167,9 @@
 (def element CrewFreeSkillPointsItem (_selectedFreeSkillPointsType:number, _priceInfo:dict={}, _isDeficit:bool=false)
 	(scope
 		(event evSetPrefByAvailabilityChange)
+		(event evEmitPrefAutochange)
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
 
 		(var isOptionGold:bool =	"$index == SC.Common.CREW_RESET_SKILL_TYPE.GoldReset")
 		(var isOptionEliteXp:bool =	"$index == SC.Common.CREW_RESET_SKILL_TYPE.XPReset")
@@ -169,8 +183,11 @@
 													: ''")
 	)
 
-	(dispatch evSetPrefByAvailabilityChange		args={}		dir="EventDirection.UP"		(bind trigger "isAvailable"))
-	(dispatch "!isAvailable && isSelected ? 'evSetPrefByAvailabilityChange' : ''"	args={}		dir="EventDirection.UP"		on='addedToStage')
+	(dispatch evSetPrefByAvailabilityChange									args={}		dir="EventDirection.UP"	delay=0.05 reset=true	(event "evEmitPrefAutochange"))
+	(dispatch "!isAvailable && isSelected ? 'evEmitPrefAutochange' : ''"	args={}		dir="EventDirection.NONE"	on='addedToStage'	(event "accountResourceComponent.evChangedGold")
+																																		(event "accountResourceComponent.evChangedEliteXP")
+																																		(event "accountResourceComponent.evChangedFreeXP"))
+	(dispatch "isSelected ? 'evEmitPrefAutochange' : ''"					args={}		dir="EventDirection.NONE"	(bind trigger "isAvailable"))
 
 	(style (width = 100%))
 
