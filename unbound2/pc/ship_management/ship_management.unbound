@@ -1,9 +1,44 @@
-
 (def css $ModulesLink ()
 	(width = 1px)
 	(height = 1px)
 	(hitTest = false)
 	(backgroundColor = 0xFFFFFFFF)
+)
+
+(def css $ManagementBlockHeader ()
+	(extends $TextDefaultBold17NM)
+	(marginBottom = "S")
+	(marginLeft = "XXS")
+	(alpha = "TA")
+)
+
+(def css $ManagementBlockCommon ()
+	(width = 100%)
+	(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	(align = "center")
+)
+
+(def css $ManagementBlock ()
+	(extends $ManagementBlockCommon)
+	(paddingTop = "MS")
+	(paddingBottom = "L")
+)
+
+(def css $ManagementModulesTreeBlock ()
+	(extends $ManagementBlockCommon)
+	(paddingTop = "MS")
+	(paddingBottom = "MS")
+)
+
+(def css $ManagementSubBlock ()
+	(width = 100%)
+	(align = "center")
+	(paddingTop = "L")
+	(paddingBottom = "-L")
+)
+
+(def css $ManagementBlockBottomMargin ()
+	(marginBottom = "{ 720:SXS, 1080:L}")
 )
 
 (def css $ShipFeatureItemPaddings ()
@@ -12,6 +47,8 @@
 	(paddingTop = "{ 1280:XS, 1920:S }")
 	(paddingBottom = "{ 1280:XS, 1920:S }")
 )
+
+(def constant WEAPON_AND_CONSUMABLES_ITEM_HGAP "{ 1280:S, 1920:LM }")
 
 (def constant FRAME_SLOT_STATE_ALPHA {	SC.Ui_styles.BUTTON_STATE.DISABLED:	0.5,
 										SC.Ui_styles.BUTTON_STATE.SELECTED:	0.6,
@@ -22,6 +59,615 @@
 
 (def macro MODULES_ALPHA_STATE (_isAvailable:expression=false)
 	(bind alpha	"_isAvailable ? 0.7 : 0.3")
+)
+
+(def element ShipManagementMainInset()
+	(scope
+		(event evShipManagementInsetLostTop)
+		(macro PULL_SHIP_ID)
+		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option = "'ui.carousel.carouselAreaHeight'"))
+
+		(var shipUniqueFeatures:dhComponent = "getSingleComponent(CC.shipUniqueFeatures)")
+		(var featuresList:array = "shipUniqueFeatures.featuresList ?: []" (event "shipUniqueFeatures.evChanged"))
+		(var isSpecialPointsVisible:bool = "featuresList.length > 0")
+
+		(macro USER_PREF_DATA)
+		(var previewModuleId:number = "userPrefs.previewModuleId")
+		(struct blurEnabledPref = GET_PREF_BOOL(_option="'graphics.GUI.blur'"))
+
+		(macro PULL_CURRENT_TOP_WINDOW_NAME)
+		(var isOnTop:bool = "currentTopWindowName == 'Dock'")
+	)
+	
+	
+	(bindcall externalCall 'inputMapping.onAction' "['setCompareData', { moduleId: previewModuleId ? previewModuleId : null }]" watch=false (bind trigger "previewModuleId"))
+
+	
+	(dispatch evShipManagementInsetLostTop dir="EventDirection.NONE" (bind enabled "!isOnTop") (bind trigger "isOnTop"))
+	(bindcall externalCall "previewModuleId ? 'inputMapping.onAction' : ''" "['setUserPref', {	name: 'previewModuleId',
+																								value: 0 }]" watch=false	on='removedFromStage'
+																															(bind trigger "viewedShipId")
+																															(event "evShipManagementInsetLostTop"))
+
+	
+	(class $Fullsize)
+	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'management']" on='addedToStage')
+
+	(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (paddingTop = -60px))
+
+		(block
+			(bind visible "!blurEnabledPref.value")
+			(class $FullsizeAbsolute)
+			(style (backgroundImage = 'url:../bg/nations_tree_v2.jpg'))
+		)
+		
+		(block
+			(class $FullsizeAbsolute)
+
+			(controller $Instance renderer='BlurMap'
+				(bind enabled "blurEnabledPref.value")
+			)
+
+			(block
+				(bind visible "blurEnabledPref.value")
+				(class $FullsizeAbsolute)
+				(style (backgroundColor = "SC.Ui_styles.SHARED_COLOR.MODAL_WINDOW"))
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 22px)
+			(height = 22px)
+			(position = "absolute")
+			(top = "S")
+			(left = "S")
+			(backgroundImage = 'url:../service_kit/icons/icon_question_mark_grey.png')
+		)
+
+		(controller $Tooltip
+			(renderer = 'QuestionMarkIconOnShipManagmentScreenTooltip')
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(paddingTop = "{ 720:38px, 1080:62px }")
+			(paddingRight = 332px)
+			(bind paddingBottom "carouselAreaHeightPref.value")
+		)
+
+		(scrollArea
+			(class $Fullsize)
+			(style (backgroundColor = "NO_COLOR"))
+
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_singleStep = "100px"
+				_wheelScrollAcceleration = "0.8"
+				_isDrag = "false"
+			)
+
+			(content
+				(style
+					(width = 100%)
+					(flow = "horizontal")
+				)
+
+				(controller $Animation
+					(bindcall play
+						keyframes = "[
+							{ time:0,	to:{ alpha:0, visualOffsetY: 10px, hitTest:false }},
+							{ time:0.2,	to:{ alpha:0, visualOffsetY: 10px, hitTest:false }},
+							{ time:0.5,	to:{ alpha:1, visualOffsetY: 0px, hitTest:true }, easing:Easing.sine_in_out}
+						]"
+						action = "kill"
+						on='addedToStage'
+						(bind trigger "viewedShipId")
+					)
+				)
+
+				(block
+					(style
+						(width = 50%)
+						(paddingLeft = "{ 1280:SXS, 1920:LM }")
+						(paddingRight = "{ 1280:XS, 1920:MS }")
+					)
+
+					(block
+						(style
+							(width = 100%)
+							(bind marginBottom "isSpecialPointsVisible ? MS : 0px")
+						)
+						(element ShipModulesLayout)
+					)
+
+					(block
+						(style (width = 100%))
+						(controller $Instance renderer='ShipSpecialPointsLayout'
+							(bind enabled "isSpecialPointsVisible")
+						)
+					)
+				)
+
+				(block
+					(style
+						(width = 50%)
+						(paddingLeft = "{ 1280:XS, 1920:MS }")
+						(paddingRight = "{ 1280:SXS, 1920:LM }")
+					)
+
+					(element CommonMiscLayout)
+				)
+			)
+			(bindcall scrollToBegin animated=false (bind trigger "viewedShipId"))
+		)
+	)
+)
+
+(def element CommonMiscLayout ()
+	(scope
+		(event evWeaponItemClicked)
+		(macro PULL_SHIP_ID)
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var isCustomConsumablesOrder:bool = "shipInfo.hasCustomConsOrder" (event "shipInfo.consOrderChanged"))
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(struct signalsFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.EXT_SIGNALS"))
+		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
+		(var isHideSignalsTag:bool = "(shipInfo.tagsMask & (1 << SC.Ships.SHIP_TAG.HIDE_SIGNALS)) != 0 && playerShipsCollection.length > 0 && viewedShipId > 0")
+
+		(var consumablesSlotCustomization:dhComponent = "getSingleComponent(CC.consumablesSlotCustomization)")
+		(var isOrderCustomizationActive:bool = "consumablesSlotCustomization.isActive" (event "consumablesSlotCustomization.evIsActiveChanged"))
+
+		(var isOrderCustomizationVisible:bool = "isOwned && shipInfo.subtype != ShipTypes.AIRCARRIER")
+
+		(var weaponCollection:dhCollection =	"getCollectionByPath(CC.visualSlotData, 'byAvatarId.' + DEFAULT_AVATAR_ID)")
+		(var weaponCollectionLen:number =		"weaponCollection.length")
+
+		(var airCarrierWeaponsCollection:dhCollection =	"getCollectionByPath(CC.visualSlotData, 'myAirCarrierWeapons')")
+		(var selectedSquadronEntity:dhEntity = "airCarrierWeaponsCollection.getEntityAtIndex(0)")
+
+		(var selectedWeaponId:number =	"$event.selectedWeaponId	?: 0" watch=false (event "evWeaponItemClicked"))
+		(bind selectedWeaponId			"selectedSquadronEntity.id	?: 0" init=true watch=false (bind trigger "selectedSquadronEntity"))
+
+		(var sortedConsumableCollection:dhCollection =	"getCollectionByPath(CC.equipmentSlot, 'bySlotType.' + SC.Ships.SHIP_SLOT_TYPES.ABILITY + '.sortingByCommandId')")
+		(var sortedConsumableCollectionLen:number =		"sortedConsumableCollection.length")
+	)
+	(style (width = 100%))
+	(bindcall externalCall 'direct.action' "['setConsumablesOrderCustomizationActivity', { isActive: false }]" on='removedFromStage')
+
+	
+	(tf
+		(class $ManagementBlockHeader)
+		(text = 'IDS_SHIP_MANAGEMENT_WEAPONS_BLOCK_HEADER')
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(class $ManagementBlock)
+
+		(hblock
+			(style (hgap = "WEAPON_AND_CONSUMABLES_ITEM_HGAP"))
+
+			(controller $Repeat renderer='WeaponSlotItem'
+				(bind count "weaponCollectionLen")
+				(args
+					_weaponCollection = "weaponCollection"
+					_selectedWeaponId = "selectedWeaponId"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='SelectedSquadronWeaponContainer'
+				(bind enabled "toBool(selectedSquadronEntity)")
+				(args
+					_weaponCollection = "weaponCollection"
+					_selectedWeaponId = "selectedWeaponId"
+				)
+			)
+		)
+	)
+
+
+	(block
+		(class $ManagementBlockBottomMargin)
+		(style
+			(width = 100%)
+			(marginTop = -1px)
+		)
+		(element HorizontalDividerTwoPx)
+	)
+	
+
+	
+	(hblock
+		(style (width = 100%))
+
+		(block
+			(style (width = 100%))
+
+			(tf
+				(class $ManagementBlockHeader)
+				(text = 'IDS_SHIP_MANAGEMENT_CONSUMABLES_BLOCK_HEADER')
+			)
+		)
+
+		(block
+			(style (paddingRight = "XXS"))
+
+			(controller $Instance renderer='SwitchWithLeftLabel'
+				(bind enabled "isOrderCustomizationVisible")
+				(args
+					_label = 'IDS_CONSUMABLES_ORDER_SWITCH_LABEL'
+					_state = "isOrderCustomizationActive"
+					_methods = "[	{	type: 'direct.action',
+										name: 'setConsumablesOrderCustomizationActivity',
+										args: { isActive: !isOrderCustomizationActive }
+									}]"
+				)
+			)
+
+			(controller $Tooltip
+				(bind enabled "isOrderCustomizationVisible")
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = "isOrderCustomizationActive	? 'IDS_CONSUMABLES_ORDER_SWITCH_OFF_TOOLTIP'
+														: 'IDS_CONSUMABLES_ORDER_SWITCH_ON_TOOLTIP'	"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+	
+	(block
+		(class $ManagementBlock)
+
+		(hblock
+			(style
+				(width = 100%)
+				(align = "center")
+			)
+
+			(controller $Repeat renderer='ConsumableSlotItemAnimWrapper'
+				(bind count "sortedConsumableCollectionLen")
+				(args
+					_consumableCollection = "sortedConsumableCollection"
+					_isOrderCustomizationActive = "isOrderCustomizationActive"
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(paddingRight = "{ 1280:XS, 1920:MS }")
+				(paddingLeft = "{ 1280:XS, 1920:MS }")
+				(align = "middle")
+				(marginBottom = "-XS")
+			)
+
+			(element DEFAULT_EXPAND_CONTAINER "isOrderCustomizationActive"
+				(block
+					(style
+						(width = 100%)
+						(marginTop = "LS")
+						(height = 33px)
+					)
+
+					(block
+						(style
+							(width = 100%)
+							(alpha = "isCustomConsumablesOrder ? 0 : 1")
+						)
+
+						(controller $Animation
+							(bindcall play
+								duration = 0.15
+								from = "{ alpha: 1, visible:true, visualOffsetY: 0px }"
+								to = "{ alpha: 0, visible:false, visualOffsetY: 10px }"
+								easing = "Easing.quad_out"
+								action = "kill"
+								reverse = "!isCustomConsumablesOrder"
+								(bind trigger "isCustomConsumablesOrder")
+							)
+						)
+						(tf
+							(class $TextDefaultNM)
+							(style
+								(width = 100%)
+								(alpha = "TC")
+								(textAlign = "center")
+							)
+							(text = 'IDS_CONSUMABLES_ORDER_CUSTOMIZATION_TIP')
+						)
+					)
+
+					(block
+						(class $FullsizeAbsolute)
+						(style
+							(align = "center|middle")
+							(alpha = "isCustomConsumablesOrder ? 1 : 0")
+						)
+
+						(controller $Animation
+							(bindcall play
+								duration = 0.15
+								from = "{ alpha: 1, visible:true, visualOffsetY: 0px }"
+								to = "{ alpha: 0, visible:false, visualOffsetY: -10px }"
+								easing = "Easing.quad_out"
+								action = "kill"
+								reverse = "isCustomConsumablesOrder"
+								(bind trigger "isCustomConsumablesOrder")
+							)
+						)
+
+						(element DockButton
+							_enabled = "isOrderCustomizationActive && isCustomConsumablesOrder"
+							_label = 'IDS_BUTTON_REVERT_CONSUMABLE_ORDER_CHANGES'
+							_methods = "[	{	type: 'inputMapping.onAction',
+												name: 'resetSlotsKeyBinding',
+												args: {} }]"
+						)
+					)
+				)
+			)
+		)
+
+		
+	)
+
+	(block
+		(class $ManagementBlockBottomMargin)
+		(style
+			(width = 100%)
+			(marginTop = -1px)
+		)
+		(element HorizontalDividerTwoPx)
+	)
+	
+
+	
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='SignalsManagementBlock'
+			(bind enabled "!isHideSignalsTag && signalsFeature.state != 'locked'")
+		)
+	)
+	
+)
+
+(def element SelectedSquadronWeaponContainer (_weaponCollection:dhCollection, _selectedWeaponId:number)
+	(scope
+		(var weaponCollectionLen:number = "_weaponCollection.length")
+ 
+		(var airCarrierWeaponsCollection:dhCollection =	"getCollectionByPath(CC.visualSlotData, 'myAirCarrierWeapons')")
+		(var airCarrierWeaponsCollectionLen:number =	"airCarrierWeaponsCollection.length")
+
+		(var selectedSquadronEntity:dhEntity = "getEntity(_selectedWeaponId)")
+		(var selectedSquadronSlotData:dhComponent = "selectedSquadronEntity.visualSlotData")
+		(var selectedSquadronType:str = "selectedSquadronSlotData.squadType" (event "selectedSquadronSlotData.evSquadTypeChanged"))
+
+		(var selectedSquadronWeaponsCollection:dhCollection =	"getCollectionByPath(CC.visualSlotData, 'byAvatarIdAndSquadType.' + DEFAULT_AVATAR_ID + '_' + selectedSquadronType)")
+		(var selectedSquadronWeaponsCollectionLen:number =		"selectedSquadronWeaponsCollection.length ?: 0")
+
+		(var squadronConsumableCollection:dhCollection =	"getCollectionByPath(CC.equipmentSlot, 'squadronAbilitySlotsBySquadType.' + selectedSquadronType)")
+		(var squadronConsumableCollectionLen:number =		"squadronConsumableCollection.length ?: 0")
+	)
+	(class $ManagementSubBlock)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(style
+			(width = 100%)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		)
+
+		
+		(hblock
+			(style
+				(width = 100%)
+				(align = "center")
+				(marginTop = -1px)
+				(hgap = "WEAPON_AND_CONSUMABLES_ITEM_HGAP")
+			)
+
+			(controller $Repeat renderer='WeaponSlotTabPin'
+				(bind count "weaponCollectionLen")
+				(args
+					_weaponCollection = "_weaponCollection"
+					_selectedWeaponId = "_selectedWeaponId"
+				)
+			)
+		)
+		(block
+			(style
+				(width = 100%)
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+			)
+
+			(block
+				(class $ManagementBlock)
+				(style
+					(vgap = "L")
+					(backgroundColor = "NO_COLOR")
+				)
+
+				(controller $Animation
+					(bindcall play
+						keyframes = "[	{ time:0,	to:{ alpha:0, visualOffsetY: 10px }},
+										{ time:0.2,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_in }]"
+						action = "kill"
+						(bind trigger "_selectedWeaponId")
+					)
+				)
+
+				
+				(hblock
+					(style (hgap = "WEAPON_AND_CONSUMABLES_ITEM_HGAP"))
+
+					(hblock
+						(style (hgap = "WEAPON_AND_CONSUMABLES_ITEM_HGAP"))
+
+						(controller $Repeat renderer='WeaponSlotItem'
+							(bind count "selectedSquadronWeaponsCollectionLen")
+							(args
+								_weaponCollection = "selectedSquadronWeaponsCollection"
+								_selectedWeaponId = "_selectedWeaponId"
+							)
+						)
+					)
+
+					(hblock
+						(style (hgap = "WEAPON_AND_CONSUMABLES_ITEM_HGAP"))
+
+						(controller $Repeat renderer='ConsumableSlotItem'
+							(bind count "squadronConsumableCollectionLen")
+							(args
+								_consumableCollection = "squadronConsumableCollection"
+							)
+						)
+					)
+				)
+
+				
+				(tf
+					(bind visible "airCarrierWeaponsCollectionLen > 0")
+					(class $TextDefaultNM)
+					(style
+						(width = 100%)
+						(textAlign = "center")
+						(alpha = "TC")
+					)
+					(bind text "'IDS_SHIP_MANAGEMENT_' + toUpper(selectedSquadronType) + '_SUBBLOCK_DESCR'")
+				)
+			)
+		)
+	)
+)
+
+(def element WeaponSlotTabPin (_weaponCollection:dhCollection, _selectedWeaponId:number)
+	(scope
+		(var weaponSlotEntity:dhEntity = "_weaponCollection[$index]")
+		(var weaponType:number = "weaponSlotEntity.visualSlotData.weaponType" (event "weaponSlotEntity.visualSlotData.evUpdated"))
+
+		(var isSlotInteractive:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.AIRPLANES")
+		(var isSlotSelected:bool = "_selectedWeaponId == weaponSlotEntity.id")
+	
+		(var fireModeSlotEntity:dhEntity = "getSingleEntity(CC.fireModeSlot)")
+		(var isFireModeSlot:bool = "weaponSlotEntity.id == fireModeSlotEntity.id")
+		(var isSwitchableFireMode:bool = "fireModeSlotEntity.fireModeSlot.isSwitchable")
+		(var isHideFireModeSlot:bool = "isFireModeSlot ? isSwitchableFireMode : true")
+
+		(struct blurOptionPref =		GET_PREF_BOOL(_option = "'graphics.GUI.blur'"))
+		(var isPinActive:bool = "isSlotInteractive && isSlotSelected")
+	)
+	(bind visible "isHideFireModeSlot")
+	(style
+		(width = 64px)
+		(height = 1px)
+		(align = "center|bottom")
+	)
+
+	(block
+		(bind visible "isSlotInteractive")
+		(style
+			(width = 100%)
+			(height = 1px)
+			(backgroundImage = 'url:../service_kit/tabs/tabs_selectable_bar.png')
+			(backgroundSize = "fill")
+			(alpha = "isPinActive ? 0 : 1")
+			(position = "absolute")
+			(bottom = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				keyframes = "[{ time:0.1, to:{ alpha:0 }, easing:Easing.quad_in }]"
+				action = "kill"
+				(bind enabled "isPinActive")
+			)
+
+			(bindcall play
+				delay = 0.15
+				keyframes = "[{ time:0.1, to:{ alpha:1 }, easing:Easing.quad_in }]"
+				action = "kill"
+				(bind enabled "!isPinActive")
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 22px)
+			(height = 12px)
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = 0xFFFFFFFF))
+			(isMask = true)
+		)
+
+		(block
+			(style
+				(visualOffsetY = "isPinActive ? 0 : SXS")
+				(alpha = "isPinActive ? 1 : 0")
+			)
+
+			(controller $Animation
+				(bindcall play
+					delay = 0.15
+					keyframes = "[{ time:0.15, to:{ visualOffsetY: 0, alpha: 1 }, easing:Easing.quad_in }]"
+					action = "kill"
+					(bind enabled "isPinActive")
+				)
+
+				(bindcall play
+					keyframes = "[{ time:0.15, to:{ visualOffsetY: SXS, alpha: 0 }, easing:Easing.quad_in }]"
+					action = "kill"
+					(bind enabled "!isPinActive")
+				)
+			)
+
+			(element DeclareBlurLayer)
+
+			(block
+				(style (position = "absolute"))
+
+				(controller $Instance renderer = 'InfotipPinBlurmap'
+					(bind enabled "blurOptionPref.value")
+				)
+			)
+
+			(block
+				(style
+					(width = 22px)
+					(height = 12px)
+					(bind backgroundImage "'url:../service_kit/tabs/tabs_pin_vert' + (blurOptionPref.value ? '' : '_noblur') + '.png'")
+				)
+			)
+		)
+	)
 )
 
 (def element ShipModulesLayout ()
@@ -45,7 +691,7 @@
 	(element HorizontalDividerTwoPx)
 
 	(block
-		(class $ManagementBlock)
+		(class $ManagementModulesTreeBlock)
 		(element ModulesTree)
 	)
 
@@ -104,16 +750,11 @@
 		)
 
 		
-		(block	
+		(block
 			(style
 				(width = 100%)
-				(bind paddingLeft "	shipInfo.hasControlledSquadrons &&
-									shipInfo.subtype != ShipTypes.AIRCARRIER	? { 1280:34px, 1920:58px }
-																				: { 1568:46px, 1920:58px }")
-
-				(bind paddingRight "shipInfo.hasControlledSquadrons &&
-									shipInfo.subtype != ShipTypes.AIRCARRIER	? { 1280:33px, 1920:57px }
-																				: { 1568:45px, 1920:57px }")
+				(paddingLeft = "{ 1280:38px, 1920:54px }")
+				(paddingRight = "{ 1568:37px, 1920:53px }")
 			)
 			(block
 				(class $ModulesLink)
@@ -600,7 +1241,7 @@
 		(var currentTipId:number = "freeXpShipSuffTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_SUFF :
 									freeXpShipSuffRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_SUFF_REPEAT :
 									freeXpShipInsuffTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF :
-									freeXpShipInsuffRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF_REPEAT 
+									freeXpShipInsuffRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF_REPEAT
 																		: SC.Context_guiding_tip.TIP_TYPE.NONE ")
 		(var isInsufficientExpTip:bool = "isIn(currentTipId, [SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF, SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_INSUFF_REPEAT])")
 		(var isGuidingTipVisible:bool = "currentTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
@@ -907,7 +1548,7 @@
 	)
 )
 
-(def element ShipFeatureTooltip (_feature:number, _isOwn:bool=false, _featureName:str='', _imageUrl:str='', _rentUntil:number=0) 
+(def element ShipFeatureTooltip (_feature:number, _isOwn:bool=false, _featureName:str='', _imageUrl:str='', _rentUntil:number=0)
 	(scope
 		(var featuresEntity:dhEntity = "getSingleEntity(CC.shipUniqueFeatures)")
 		(var expCollectingShip:number = "featuresEntity.shipUniqueFeatures.expCollectingShipID ?: 0" (event "featuresEntity.shipUniqueFeatures.evChanged"))
@@ -1012,7 +1653,7 @@
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "showExpConversion"))
 		)
 
-		(block 
+		(block
 			(bind visible "showExpConversion")
 			(style (width = 100%) (marginBottom = "XS"))
 			(tf
@@ -1043,7 +1684,7 @@
 	)
 )
 
-(def element QuestionMarkIconOnShipManagmentScreenTooltip () 
+(def element QuestionMarkIconOnShipManagmentScreenTooltip ()
 	(style (width = 300px) (hitTest = false))
 	
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
@@ -1148,7 +1789,7 @@
 		)
 
 		(block
-			(class $FullsizeAbsolute)	
+			(class $FullsizeAbsolute)
 			(style (bind backgroundColor "isOwned ? 0x35FFFFFF : NO_COLOR"))
 
 			(block
@@ -1187,12 +1828,19 @@
 
 	(block
 		(bind visible "_isPrevShip || priceInfo")
-		(style (height = "{ 720:MS, 1080:L }") (align = "center"))
+		(style
+			(height = "{ 720:MS, 1080:L }")
+			(align = "center")
+		)
 
 		(block
 			(bind visible "priceInfo")
-			(style (paddingTop = 5px) (paddingBottom = 5px) (bind alpha "isDeficit ? 0.4 : 0.9"))
-			
+			(style
+				(paddingTop = 5px)
+				(paddingBottom = 5px)
+				(bind alpha "isDeficit ? 0.4 : 0.9")
+			)
+
 			(controller $Instance renderer='PriceTag'
 				(bind enabled "priceInfo")
 				(args

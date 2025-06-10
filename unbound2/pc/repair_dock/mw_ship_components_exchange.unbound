@@ -1,0 +1,464 @@
+(def constant LEVEL_CARD_BG_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.SELECTED : 0.05,
+	SC.Ui_styles.BUTTON_STATE.OVER : 0.08,
+	SC.Ui_styles.BUTTON_STATE.UP : 0.04
+})
+
+(def constant LEVEL_CARD_BORDER_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.SELECTED : 0.7,
+	SC.Ui_styles.BUTTON_STATE.OVER : 0.4,
+	SC.Ui_styles.BUTTON_STATE.UP : 0.2
+})
+
+(def constant SHIP_COMPONENT_ITEM_WIDTH 200px)
+(def constant SHIP_COMPONENT_ITEM_HEIGHT 200px)
+
+(def element ModalWindowShipComponentsExchange ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
+		(var selectedLevel:number = "repairDockDataEntity.repairDockData.selectedShipMaterialLevel" (event "repairDockDataEntity.repairDockData.evSelectedShipMaterialLevelChanged"))
+
+		(var exchangeableShips:dhCollection = "getCollectionByPath(CC.exchangeableShip, selectedLevel ? 'availableToExchange.byLevel.' + selectedLevel : 'availableToExchange.sorted')")
+		(var availableToExchangeShips:dhCollection = "getCollectionByPath(CC.exchangeableShip, 'availableToExchange.sorted')")
+		(var isAnyShipAvailableToExchange:bool = "availableToExchangeShips.length != 0")
+
+		(var newExchangeableShipsEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.EXCHANGEABLE_SHIP)")
+		(var newExchangeableShipsCount:number = "newExchangeableShipsEntity.newContent.count ?: 0" (event "newExchangeableShipsEntity.newContent.evCountChanged"))
+		(var isNewExchangeableShipsMarker:bool = "newExchangeableShipsCount > 0")
+
+	)
+
+	(bindcall externalCall
+		"'direct.action'"
+		"['exchangeableShip.selectShipMaterialLevel', {newShipMaterialLevel: 0}]"
+		init=false watch=false
+		on='removedFromStage'
+	)
+
+	(bindcall externalCall
+		"isNewExchangeableShipsMarker ? 'inputMapping.onAction' : ''"
+		"['makeAllAvailableToExchangeShipsSeen', {}]"
+		init=false watch=false
+		on='removedFromStage'
+	)
+
+	(name = 'ModalWindowShipComponents')
+	(style (align = "center"))
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(marginBottom = "{720:M, 1080:XL}")
+		)
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_SHIP_COMPONENTS_GET_TITLE'
+			_backButtonText = 'IDS_SHIP_COMPONENTS_TO_REPAIR_DOCK'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_methods = "[{	type: 'inputMapping.onRequest',
+							name: 'closeShipComponentsModal',
+							args: {}}]"
+		)
+		(block
+			(style
+				(position = "absolute")
+				(right = "XXL")
+				(top = "{720: 10px, 1080: 35px}")
+				(align = "middle")
+			)
+			(element ShipShardsBalance)
+		)
+	)
+	(hblock
+		(style
+			(width = 1116px)
+			(height = 100%)
+			(paddingBottom = "LS")
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(class $Fullsize)
+			(style (marginRight = "M"))
+			(controller $Instance renderer='ShipComponentsList'
+				(bind enabled "isAnyShipAvailableToExchange")
+				(args
+					_collection = "exchangeableShips"
+				)
+			)
+			(controller $Instance renderer='ShipComponentListEmpty'
+				(bind enabled "!isAnyShipAvailableToExchange")
+				(args
+					_isAnyShipAvailableToExchange = "isAnyShipAvailableToExchange"
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(element ShipComponentsManagement
+				_isAnyShipAvailableToExchange = "isAnyShipAvailableToExchange"
+			)
+		)
+	)
+)
+
+(def element ShipComponentsManagement (_isAnyShipAvailableToExchange:bool = true)
+	(scope
+		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
+		(var percentRate:number = "repairDockDataEntity.repairDockData.exchangeProbability" (event "repairDockDataEntity.repairDockData.evExchangeProbabilityChanged"))
+	)
+	(style (width = 420px))
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+			(scale9grid = 2)
+			(alpha = 0.1)
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(backgroundSize = "cover")
+			(backgroundImage = 'url:../repair_dock/bg_components_exchange.png')
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(paddingTop = "{720: M, 1080: L}")
+			(paddingBottom = "{720: M, 1080: L}")
+			(paddingRight = "{1280: M, 1920: L}")
+			(paddingLeft = "{1280: M, 1920: L}")
+		)
+		(tf
+			(class $TextDefaultBold21NM)
+			(style
+				(marginBottom = "SXS")
+				(alpha = "TA")
+			)
+			(text = 'IDS_SHIP_COMPONENTS_EXCHANGE_TITLE')
+		)
+
+		(element ConvertRate
+			_priceInfoLeft = "{finalPrice: SHIP_SHARDS.SHIP_MATERIAL_EXCHANGE_COST, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
+			_priceInfoRight = "{finalPrice: SHIP_SHARDS.SHIP_COMPONENT_EXCHANGE_COST, currency: SC.Common.CURRENCIES.SHIPCOMPONENT}"
+			_title = 'IDS_CONVERT_RATE_COLON'
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "{720: M, 1080: MS}")
+				(bind marginBottom "_isAnyShipAvailableToExchange ? 0 : M")
+			)
+			(controller $Instance renderer='ShipComponentsManagementLevelsContent'
+				(bind enabled "_isAnyShipAvailableToExchange")
+			)
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "!_isAnyShipAvailableToExchange")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_text = 'IDS_SHIP_COMPONENTS_EXCHANGE_WARNING'
+					_width = 100%
+				)
+			)
+		)
+		(element HorizontalDividerTwoPx)
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(marginTop = "{720: M, 1080: MS}")
+				(alpha = "TA")
+				(multiline = true)
+				(leading = -2px)
+				(styleSheet = '.p_spacing {font-size: 8px}')
+			)
+			(bind htmlText "tr('IDS_SHIP_COMPONENTS_EXCHANGE_DESCRIPTION')")
+		)
+		(block
+			(style
+				(marginTop = "M")
+				(marginBottom = "XS")
+			)
+			(element TextButton
+				_label = 'IDS_SHIP_COMPONENTS_LIST_ALL'
+				_name = 'navToAllShardsList'
+				_methods = "[{	type: 'inputMapping.onRequest',
+								name: 'openShipComponentsList',
+								args: {} }]"
+			)
+			(controller $Tooltip
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = 'IDS_SHIP_COMPONENTS_LIST_ALL_TOOLTIP'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+)
+
+(def element ShipComponentsManagementLevelsContent ()
+	(scope
+		(var exchangeableShipMaterialsSorted:dhCollection = "getCollection(CC.shipMaterial).getChildByPath('exchangeable.sorted')")
+
+		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
+		(var percentRate:number = "repairDockDataEntity.repairDockData.exchangeProbability" (event "repairDockDataEntity.repairDockData.evExchangeProbabilityChanged"))
+
+		(var selectedLevel:number = "repairDockDataEntity.repairDockData.selectedShipMaterialLevel ?: 0" (event "repairDockDataEntity.repairDockData.evSelectedShipMaterialLevelChanged"))
+		(var isLevelSelected:bool = "toBool(selectedLevel)")
+	)
+	(style (width = 100%))
+
+	(tf
+		(class $TextDefaultBold17NM)
+		(style
+			(marginBottom = "{720:SXS, 1080:M}")
+			(alpha = "TA")
+		)
+		(text = 'IDS_SHIP_COMPONENTS_EXCHANGE_LEVEL_TITLE')
+	)
+	(htile
+		(style
+			(width = 100%)
+			(marginBottom = "{720:SXS, 1080:M}")
+			(gap = "SXS")
+		)
+		(controller $Repeat renderer='ShipMaterialLevelItem'
+			(bind count "exchangeableShipMaterialsSorted.length")
+			(args
+				_entityId = "exchangeableShipMaterialsSorted[$index].id"
+				_selectedLevel = "selectedLevel"
+			)
+		)
+	)
+
+	(hblock
+		(style
+			(width = 100%)
+			(marginBottom = "{720: M, 1080: MS}")
+			(align = "middle")
+		)
+		(element DefaultButton
+			_width = 120px
+			_label = 'IDS_SHIP_COMPONENTS_EXCHANGE_BUTTON_TEXT'
+			_enabled = "isLevelSelected"
+			_defaultFocused = true
+			_focusIndex = 1
+			_methods = "[	{	type: 'inputMapping.onAction',
+								name: 'ShipShardsProxyUSS.exchangeShipMaterials',
+								args: {shipLevel: selectedLevel} },
+							{	type: 'inputMapping.onRequest',
+								name: 'closeShipComponentsModal',
+								args: {} }]"
+		)
+		(block
+			(style
+				(width = 100%)
+				(marginLeft = "SXS")
+				(visualOffsetY = "isLevelSelected ? 0px : 10px")
+				(alpha = "isLevelSelected ? 1 : 0")
+			)
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+					(multiline = true)
+					(leading = -2px)
+					(styleSheet = "'.percentRate {font-weight: bold}'")
+				)
+				(bind htmlText "subst('IDS_SHIP_COMPONENTS_EXCHANGE_PERCENT_RATE', [], {_percentRate: (percentRate + '%')})")
+			)
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from = "{alpha: 0, visualOffsetY: 10px}"
+					to = "{alpha: 1, visualOffsetY: 0px}"
+					watch = false
+					action = "kill"
+					reverse = "!isLevelSelected"
+					(bind trigger "isLevelSelected")
+				)
+			)
+		)
+	)
+)
+
+(def element ShipComponentListEmpty ()
+	(style (width = 100%))
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(width = 100%)
+			(marginBottom = "M")
+			(alpha = "TA")
+			(multiline = true)
+			(leading = -2px)
+		)
+		(bind htmlText "tr('IDS_SHIP_COMPONENTS_EXCHANGE_EMPTY_LIST')")
+	)
+
+	(element DefaultButton
+		_name = 'nav_to_components_list_button'
+		_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+		_width = 155px
+		_focusIndex = 2
+		_label = 'IDS_SHIP_COMPONENTS_LIST_ALL'
+		_methods = "[{	type: 'inputMapping.onRequest',
+						name: 'openShipComponentsList',
+						args: {} }]"
+	)
+)
+
+(def element ShipMaterialLevelItem (_entityId:number = 0, _selectedLevel:number = -1)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO_BY_ENTITY_INDEX("_entityId"))
+
+		(var exchangeableShips:dhCollection = "getCollectionByPath(CC.exchangeableShip, 'availableToExchange.byLevel.' + shipMaterialInfo.shipLevel)")
+		(var hasExchangeableShips:bool = "exchangeableShips.length > 0")
+
+		(var isLevelSelected:bool = "_selectedLevel == shipMaterialInfo.shipLevel")
+		(var currentAlpha:number = "toBool(shipMaterialInfo.count) ? 1 : 0.2")
+		(var state:number = "	isLevelSelected	?	rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+																: SC.Ui_styles.BUTTON_STATE.SELECTED
+												:	rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+																: SC.Ui_styles.BUTTON_STATE.UP")
+		(var alphaBg:number = "LEVEL_CARD_BG_ALPHA[state]")
+		(var alphaBorder:number = "LEVEL_CARD_BORDER_ALPHA[state]")
+	)
+	(bind visible "hasExchangeableShips")
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(bindcall externalCall
+		"'direct.action'"
+		"['exchangeableShip.selectShipMaterialLevel', {newShipMaterialLevel: shipMaterialInfo.shipLevel}]"
+		init=false watch=false
+		on='leftClick'
+	)
+
+	(style
+		(width = 80px)
+		(height = 80px)
+		(align = "center|middle")
+		(alpha = "currentAlpha")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = "alphaBg")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger="state"
+			_alpha="alphaBg"
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(scale9grid = 2)
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+			(alpha = "alphaBorder")
+		)
+		(bind colorTransform "isLevelSelected ? COLOR_TRANSFORM_WHITE_TO_YELLOW : CT_NONE")
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger="state"
+			_alpha="alphaBorder"
+		)
+	)
+
+	(tf
+		(class $TextDefaultBold36NM)
+		(style (alpha = "TA"))
+		(bind text "shipLevelsToRoman([shipMaterialInfo.shipLevel], true)")
+	)
+
+	(controller $Tooltip
+		(renderer='ShipMaterialLevelItemTooltip')
+		(args
+			_entityId = "_entityId"
+			_isLevelSelected = "isLevelSelected"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(macro SOUND_HANDLER "'button_secondary'")
+)
+
+(def element ShipMaterialLevelItemTooltip (_entityId:number = 0, _isLevelSelected:bool = false)
+	(scope
+		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO_BY_ENTITY_INDEX("_entityId"))
+		(var exchangeCompensationRewardID:number = "shipMaterialInfo.entity.shipMaterial.exchangeCompensationRewardID ?: 0" (event "shipMaterialInfo.entity.shipMaterial.evChanged"))
+		(var headerText:str = "subst('IDS_SHIPMATERIAL_WITH_LEVEL_TITLE', [], {shipLevel: shipLevelsToRoman([shipMaterialInfo.shipLevel], true)})")
+		(var mouseInstructionAction:str = "	_isLevelSelected	? 'IDS_SHIP_MATERIALS_TOOLTIP_MOUSE_CANCEL'
+																: 'IDS_SHIP_MATERIALS_TOOLTIP_MOUSE_SELECT'")
+	)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(style (width = 340px))
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "headerText"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isLevelSelected")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_SHIP_MATERIALS_TOOLTIP_STATUS_SELECTED'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "_isLevelSelected")
+			)
+		)
+
+		(element TooltipSystemPriceTagLine
+			_title = 'IDS_COUNT'
+			_priceInfo = "{finalPrice: shipMaterialInfo.count, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
+			_isAutoWidth = true
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDHRewards'
+				(bind enabled "toBool(exchangeCompensationRewardID)")
+				(args
+					_rewardsTitle = 'IDS_SHIP_MATERIALS_TOOLTIP_REWARDS_TITLE'
+					_rewards = "[exchangeCompensationRewardID]"
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "toBool(exchangeCompensationRewardID)")
+			)
+		)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =	"mouseInstructionAction"
+		)
+	)
+)

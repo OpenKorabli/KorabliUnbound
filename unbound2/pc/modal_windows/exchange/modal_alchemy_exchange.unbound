@@ -1,0 +1,791 @@
+(def constant TILE_ELEMENT_WIDTH 100px)
+
+(def constant EXCHANGE_TAB_CONTENT "[	'EcoBoostExchangeContent',
+										'SignalExchangeContent']")
+
+(def constant ITEMS_IN_ROW "{	SC.Common.ALCHEMY_TYPE.ECOBOOST:	4,
+								SC.Common.ALCHEMY_TYPE.SIGNAL:		6}")
+
+(def element ModalWindowAlchemyExchange (exchangedItem:number="SC.Common.ALCHEMY_TYPE.ECOBOOST")
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(event evTabSelected)
+		(event evItemInputChanged)
+		(event evItemChanged)
+		(event evTargetItemInputChanged)
+		(event evDefaultInputChanged)
+		(event evExchangedItemClicked)
+		(event evInputDelayPassed)
+
+		(var isTinyScreen:bool = "stageHeight < 1018")
+		(var selectedTab:number = "$event ? $event.index : exchangedItem" watch=false (event "evTabSelected"))
+
+		(struct ecoBoostFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ECOBOOSTS"))
+		(var isEcoBoostExchangeAvailable:bool = "ecoBoostFeature.state == 'unlocked'")
+
+		(var isEcoBoost:bool = "selectedTab == SC.Common.ALCHEMY_TYPE.ECOBOOST")
+
+		(var alchemyEntity:dhEntity =		"getSingleEntity(CC.alchemy)")
+		(var alchemyComponent:dhComponent =	"alchemyEntity.alchemy")
+		(var itemId:number =				"alchemyComponent.itemId" (event "alchemyComponent.evChanged"))
+		(var targetItemId:number =			"alchemyComponent.targetItemId" (event "alchemyComponent.evChanged"))
+
+		(var clickedItemId:number = "$event ? $event.id : itemId" watch=false (event "evExchangedItemClicked"))
+
+		(var itemEntity:dhEntity =				"isEcoBoost	? getPrimaryEntity(CC.ecoBoost, itemId)
+															: getPrimaryEntity(CC.signal, itemId)")
+		(var itemComponent:dhComponent =		"isEcoBoost	? itemEntity.ecoBoost
+															: itemEntity.signal")
+		(var targetItemEntity:dhEntity =		"isEcoBoost	? getPrimaryEntity(CC.ecoBoost, targetItemId)
+															: getPrimaryEntity(CC.signal, targetItemId)")
+		(var targetItemComponent:dhComponent =	"isEcoBoost ? targetItemEntity.ecoBoost
+															: targetItemEntity.signal")
+
+		(var itemRarity:number =		"itemComponent.rarity - 1")
+		(var targetItemRarity:number =	"targetItemComponent.rarity - 1")
+
+		(var rateEntityName:str =	"alchemyComponent.rate" (event "alchemyComponent.evChanged"))
+		(struct rate =				PULL_PRICE(_entityId = "rateEntityName"	_actionId = "SC.Common.PRICE_ACTION.INFO"))
+		(var rateInfo:dict =		"rate.info")
+
+		(var itemsInStorage:number =		"itemEntity.countComponent.value" (event "itemEntity.countComponent.evUpdate"))
+		(var maxItemAmount:number =			"rateInfo.finalPrice > 0 ? itemsInStorage - (itemsInStorage % rateInfo.finalPrice) : 0")
+		(var maxTargetItemAmount:number =	"rateInfo.finalPrice > 0 ? maxItemAmount / rateInfo.finalPrice : 0")
+
+		(var itemAmount:number =		"toNumber($event.value) ?: 0" watch=false (event "evItemInputChanged") (event "evItemChanged"))
+		(var targetItemAmount:number =	"toNumber($event.value) ?: 0" watch=false (event "evTargetItemInputChanged"))
+		(bind itemAmount				"rateInfo.finalPrice * targetItemAmount"								init=false watch=false	(event "evInputDelayPassed")
+																																		(event "evTargetItemInputChanged"))
+		(bind targetItemAmount			"rateInfo.finalPrice > 0 ? round(itemAmount / rateInfo.finalPrice) : 0"	init=false watch=false	(event "evInputDelayPassed")
+																																		(event "evItemInputChanged")
+																																		(event "evItemChanged"))
+		(bind itemAmount				"maxItemAmount ?: 0"													init=false watch=false	(event "startShow")
+																																		(event "evDefaultInputChanged"))
+		(bind targetItemAmount			"maxTargetItemAmount ?: 0"												init=false watch=false	(event "startShow")
+																																		(event "evDefaultInputChanged"))
+
+		(var deficit:number =	"rateInfo.finalPrice - itemsInStorage")
+		(var isDeficit:bool =	"deficit > 0")
+
+		(var isButtonLocked:bool = false)
+		(bind isButtonLocked "true"		init=false watch=false (event "evItemInputChanged"))
+		(bind isButtonLocked "false"	init=false watch=false (event "evInputDelayPassed"))
+	)
+	
+	(dispatch evInputDelayPassed delay=1 reset=true (event "evItemInputChanged"))
+	(dispatch evItemChanged args="{value: maxItemAmount}" delay=0.02 reset=true (bind trigger "maxItemAmount"))
+	(dispatch evDefaultInputChanged delay=0.02 reset=true (bind trigger "maxItemAmount") (bind trigger "maxTargetItemAmount"))
+	
+
+	(bindcall externalCall "'direct.action'" "['exchangedTypeChanged', { exchangedItemType: selectedTab }]" init=true watch=false (event "evTabSelected"))
+	(bindcall externalCall "'direct.action'" "['exchangedItemClicked', { itemId: clickedItemId }]" watch=false (event "evExchangedItemClicked"))
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_EXCHANGE_ITEMS_HEADER'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_hideBackButton = true
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style
+			(align = "center")
+			(width = 100%)
+			(marginTop = "{720: SXS, 1080: MS}")
+			(bind marginBottom "isEcoBoostExchangeAvailable ? 0 : MAIN_TAB_BUTTON_DEFAULT_HEIGHT")
+		)
+
+		(element MAIN_TAB_BUTTONS_BLOCK
+			(bind visible "isEcoBoostExchangeAvailable")
+			(element MainTabButton
+				_label = 'IDS_EXCHANGE_ECOBOOSTS_TAB'
+				_width = "MAIN_TAB_BUTTON_WIDTH.LARGE"
+				_isSelected = "isEcoBoost"
+				_dispatchedEv = "'evTabSelected'"
+				_dispatchParams = "{ index: SC.Common.ALCHEMY_TYPE.ECOBOOST }"
+			)
+
+			(element MainTabButton
+				_label = 'IDS_EXCHANGE_SIGNALS_TAB'
+				_width = "MAIN_TAB_BUTTON_WIDTH.LARGE"
+				_isSelected = "!isEcoBoost"
+				_dispatchedEv = "'evTabSelected'"
+				_dispatchParams = "{ index: SC.Common.ALCHEMY_TYPE.SIGNAL }"
+			)
+		)
+	)
+
+	
+	(block
+		(class $Fullsize)
+		(style (bind align "isTinyScreen ? center|middle : center"))
+
+		(controller $Animation
+			(bindcall play
+				keyframes = "[
+					{ time:0,	to:{ alpha: 0 }},
+					{ time:0.2,	to:{ alpha: 0 }},
+					{ time:0.4,	to:{ alpha: 1 }, easing:Easing.line}
+				]"
+				action = "kill"
+				(event "evTabSelected")
+			)
+		)
+
+		
+		(block
+			(style (align = "center"))
+			
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+				(style (bind marginTop "isTinyScreen ? 0px : 120px"))
+
+				(controller $Instance
+					(bind renderer "EXCHANGE_TAB_CONTENT[selectedTab]")
+					(args
+						_isTinyScreen = "isTinyScreen"
+						_clickedItemId = "itemId"
+						_targetItemId = "targetItemId"
+					)
+				)
+			)
+
+
+			
+			(hblock
+				(bind visible "!isDeficit")
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+				(style
+					(align = "center|middle")
+					(paddingTop = "isTinyScreen ? MS : LM")
+					(paddingBottom = "SXS")
+				)
+
+				(tf
+					(class $TextDefault25NM)
+					(style
+						(marginRight = 10px)
+						(alpha = "TA")
+					)
+					(text = 'IDS_FOR_ALCHEMY_EXCHANGE')
+				)
+
+				(block
+					(name = 'ConvertSignalInput')
+					(style (marginRight = 6px))
+					(controller $Instance renderer='InputTextDefaultNumeric'
+						(bind enabled "!isDeficit")
+						(args
+							_onInputChangedEvent = 'evItemInputChanged'
+							_onInputFocusChangedEvent = 'evItemInputFocusChanged'
+							_defaultText = "toString(itemAmount)"
+							_width = '84px'
+							_maxNumericValue = "maxItemAmount"
+							_focusIndex = 0
+						)
+					)
+				)
+
+				(block
+					(controller $Instance renderer='RarityRibbon'
+						(bind enabled "!isDeficit")
+						(args
+							_rarity = "itemRarity"
+						)
+					)
+				)
+
+				(tf
+					(class $TextDefault25NM)
+					(style
+						(marginLeft = "XS")
+						(marginRight = 10px)
+						(marginTop = -1px)
+						(alpha = "TA")
+					)
+					(text = 'IDS_SIGN_EQUAL')
+				)
+
+				(block
+					(name = 'ConvertSignalTarget')
+					(style (marginRight = 6px))
+					(controller $Instance renderer='InputTextDefaultNumeric'
+						(bind enabled "!isDeficit")
+						(args
+							_onInputChangedEvent = 'evTargetItemInputChanged'
+							_defaultText = "toString(targetItemAmount)"
+							_width = '84px'
+							_maxNumericValue = "maxTargetItemAmount"
+							_focusIndex = 1
+						)
+					)
+				)
+
+				(block
+					(controller $Instance renderer='RarityRibbon'
+						(bind enabled "!isDeficit")
+						(args
+							_rarity = "targetItemRarity"
+						)
+					)
+				)
+			)
+
+			(hblock
+				(bind visible "isDeficit")
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+				(style
+					(marginTop = "isTinyScreen ? 33px : 57px")
+					(marginBottom = "MS")
+				)
+
+				(block
+					(style (marginRight = 6px))
+					(controller $Instance renderer='StatusLine'
+						(bind enabled "isDeficit")
+						(args
+							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+							_text =				"subst('IDS_ALCHEMY_DENY_NOT_ENOUGH', [], { _deficit: deficit })"
+							_textClass =		'$TextDefault21NM'
+							_showStatusIcon =	false
+						)
+					)
+				)
+
+				(block
+					(controller $Instance renderer='RarityRibbon'
+						(bind enabled "isDeficit")
+						(args
+							_rarity = "itemRarity"
+						)
+					)
+				)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+				(style (width = 100%))
+				(element HorizontalDividerTwoPx)
+			)
+		
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "M")
+			)
+
+			(element ModalWindowSystemYesNoButtons
+				_isBtnOkEnabled =			"!isDeficit && itemAmount > 0 && !isButtonLocked"
+				_isForceBtnOkVisible =			"!isDeficit && itemAmount > 0"
+				_btnOkName =				'btn_ok'
+				_btnOkLabel =				'IDS_EXCHANGE'
+				_btnOkMethods =				"[{
+												type:	'inputMapping.onRequest',
+												name:	'showAlchemyConfirmation',
+												args:	{	_itemInfo: {id: itemId, rarity: itemRarity, amount: itemAmount},
+															_targetItemInfo: {id: targetItemId, rarity: targetItemRarity, amount: targetItemAmount}}
+											}]"
+				_btnOkFocusIndex =			2
+				_isBtnOkDefaultFocused =	false
+				_btnNoLabel =				'IDS_CLOSE_UPPER_CASE'
+				_btnNoFocusIndex =			3
+			)
+		)
+	)
+)
+
+(def element SignalExchangeContent (_clickedItemId:number, _targetItemId:number, _isTinyScreen:bool=false)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var itemsInRow:number =	"ITEMS_IN_ROW[SC.Common.ALCHEMY_TYPE.SIGNAL]")
+		(var gapSize:number =		"_isTinyScreen ? S : M")
+		(var tileWidth:number =		"round((TILE_ELEMENT_WIDTH * itemsInRow) + (gapSize * (itemsInRow - 1)))")
+
+
+		(var exchangeableSignals:dhCollection =		"getCollectionByPath(CC.signal, 'exchangeable.sortedByRarityAndType')")
+		(var nonExchangeableSignals:dhCollection =	"getCollectionByPath(CC.signal, 'firstNonExchangeable.sortedByRarityAndType')")
+
+		(var itemEntity:dhEntity =				"getPrimaryEntity(CC.signal, _clickedItemId)")
+		(var itemComponent:dhComponent =		"itemEntity.signal")
+		(var targetItemEntity:dhEntity =		"getPrimaryEntity(CC.signal, _targetItemId)")
+		(var targetItemComponent:dhComponent =	"targetItemEntity.signal")
+
+		(var itemType:number =			"itemComponent.type ?: 0")
+		(var itemRarity:number =		"itemComponent.rarity ?: 0")
+		(var targetItemRarity:number =	"targetItemComponent.rarity ?: 0")
+
+		(var isExchangeable:bool = "itemComponent.isExchangeable")
+	)
+	(style
+		(align = "middle")
+		(marginRight = "L")
+		(bind marginTop "_isTinyScreen ? -50px : 0px")
+	)
+	(hblock
+		(style (align = "middle"))
+		(block
+			(style
+				(flow = "tile_horizontal")
+				(bind width "tileWidth")
+				(bind gap "gapSize")
+			)
+			(controller $Repeat renderer='AlchemyItemSlot'
+				(bind count "exchangeableSignals.length")
+				(args
+					_itemEntity =		"exchangeableSignals[$index]"
+					_exchangeableType =	"SC.Common.ALCHEMY_TYPE.SIGNAL"
+					_clickedItemId =	"_clickedItemId"
+				)
+			)
+		)
+	
+		(block
+			(style
+				(marginLeft = "MS")
+				(marginRight = "MS")
+			)
+			(element ExchangeArrow)
+		)
+	
+		(block
+			(element ExchangeTargetSlot
+				_targetSubType =	"toString(itemType)"
+				_exchangeableType =	"SC.Common.ALCHEMY_TYPE.SIGNAL"
+			)
+	
+			(block
+				(bind visible "isExchangeable")
+				(style
+					(position = "absolute")
+					(width = 100%)
+					(height = "M")
+					(bottom = -28px)
+				)
+	
+				(controller $Instance renderer='AlchemyRateElement'
+					(bind enabled "isExchangeable")
+					(args
+						_firstRarity =	"itemRarity"
+						_targetRarity =	"targetItemRarity"
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(style
+			(bind marginTop "_isTinyScreen ? 0px : 20px")
+			(flow = "tile_horizontal")
+			(bind width "tileWidth")
+			(bind gap "gapSize")
+		)
+		(controller $Repeat renderer='AlchemyItemSlot'
+			(bind count "nonExchangeableSignals.length")
+			(args
+				_itemEntity =		"nonExchangeableSignals[$index]"
+				_exchangeableType =	"SC.Common.ALCHEMY_TYPE.SIGNAL"
+			)
+		)
+	)
+)
+
+(def element EcoBoostExchangeContent (_clickedItemId:number, _targetItemId:number, _isTinyScreen:bool=false)
+	(scope
+		(var itemsInRow:number =	"ITEMS_IN_ROW[SC.Common.ALCHEMY_TYPE.ECOBOOST]")
+		(var gapSize:number =		"_isTinyScreen ? S : M")
+		(var tileWidth:number =		"round((TILE_ELEMENT_WIDTH * itemsInRow) + (gapSize * (itemsInRow - 1)))")
+
+		(var exchangeableEcoBoosts:dhCollection =		"getCollectionByPath(CC.ecoBoost, 'availableToUser.byType.' + SC.Common.ECOBOOST_TYPES.COMMON + '.exchangeable.sortedByRarityAndSubType')")
+		(var nonExchangeableEcoBoosts:dhCollection =	"getCollectionByPath(CC.ecoBoost, 'availableToUser.byType.' + SC.Common.ECOBOOST_TYPES.COMMON + '.firstNonExchangeable.sortedByRarityAndSubType')")
+
+		(var itemEntity:dhEntity =				"getPrimaryEntity(CC.ecoBoost, _clickedItemId)")
+		(var itemComponent:dhComponent =		"itemEntity.ecoBoost")
+		(var targetItemEntity:dhEntity =		"getPrimaryEntity(CC.ecoBoost, _targetItemId)")
+		(var targetItemComponent:dhComponent =	"targetItemEntity.ecoBoost")
+
+		(var itemSubType:str =			"itemComponent.subType ?: ''")
+		(var itemRarity:number =		"itemComponent.rarity ?: 0")
+		(var targetItemRarity:number =	"targetItemComponent.rarity ?: 0")
+
+		(var isExchangeable:bool = "itemComponent.isExchangeable")
+	)
+	(hblock
+		(style (align = "middle"))
+		(block
+			(style
+				(flow = "tile_horizontal")
+				(bind width "tileWidth")
+				(bind gap "gapSize")
+			)
+	
+			(controller $Repeat renderer='AlchemyItemSlot'
+				(bind count "exchangeableEcoBoosts.length")
+				(args
+					_itemEntity =		"exchangeableEcoBoosts[$index]"
+					_exchangeableType =	"SC.Common.ALCHEMY_TYPE.ECOBOOST"
+					_clickedItemId =	"_clickedItemId"
+				)
+			)
+		)
+
+		(block
+			(style
+				(marginLeft = "MS")
+				(marginRight = "MS")
+			)
+			(element ExchangeArrow)
+		)
+
+		(block
+			(element ExchangeTargetSlot
+				_targetSubType =	"itemSubType"
+				_exchangeableType =	"SC.Common.ALCHEMY_TYPE.ECOBOOST"
+			)
+
+			(block
+				(bind visible "isExchangeable")
+				(style
+					(position = "absolute")
+					(width = 100%)
+					(height = "M")
+					(bottom = -28px)
+				)
+
+				(controller $Instance renderer='AlchemyRateElement'
+					(bind enabled "isExchangeable")
+					(args
+						_firstRarity =	"itemRarity"
+						_targetRarity =	"targetItemRarity"
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(style
+			(bind marginTop "_isTinyScreen ? 10px : 30px")
+			(flow = "tile_horizontal")
+			(bind width "tileWidth")
+			(bind gap "gapSize")
+		)
+		(controller $Repeat renderer='AlchemyItemSlot'
+			(bind count "nonExchangeableEcoBoosts.length")
+			(args
+				_itemEntity =		"nonExchangeableEcoBoosts[$index]"
+				_exchangeableType =	"SC.Common.ALCHEMY_TYPE.ECOBOOST"
+			)
+		)
+	)
+)
+
+(def element ExchangeArrow ()
+	(style (align = "center"))
+	(block
+		(style
+			(width = 12px)
+			(height = 18px)
+			(marginBottom = 11px)
+			(backgroundImage = "'url:../service_kit/buttons/carousel_arrows/arrow_right.png'")
+		)
+	)
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TC"))
+		(text = 'IDS_EXCHANGE_ARROW_TEXT')
+	)
+)
+
+(def element AlchemyItemSlot (_exchangeableType:number="SC.Common.ALCHEMY_TYPE.ECOBOOST", _itemEntity:dhEntity=null, _clickedItemId:number=-1)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evExchangedItemClicked)
+		(var isEcoBoost:bool =				"_exchangeableType == SC.Common.ALCHEMY_TYPE.ECOBOOST")
+		(var itemComponent:dhComponent =	"isEcoBoost ? _itemEntity.ecoBoost : _itemEntity.signal")
+
+		(var itemId:number =	"itemComponent.id")
+		(var itemName:str =		"itemComponent.name")
+		(var itemType:number =	"itemComponent.type")
+
+		(var amount:number =		"_itemEntity.countComponent.value" (event "_itemEntity.countComponent.evUpdate"))
+		(var isInStorage:bool =		"amount > 0")
+		(var isSelected:bool =		"_clickedItemId == itemComponent.id")
+		(var isExchangeable:bool =	"itemComponent.isExchangeable")
+
+		(var size:number = "isExchangeable ? SIZE.MEDIUM : SIZE.SMALL")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(dispatch evExchangedItemClicked args="{id: itemComponent.id}" dir="EventDirection.UP" on='leftClick' (bind enabled "isExchangeable"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['button_camouflage', SoundEvent.CLICK]" init=false watch=false on='leftClick' (bind enabled "isExchangeable"))
+
+	(style
+		(align = "center|middle")
+		(width = "TILE_ELEMENT_WIDTH")
+		(height = "TILE_ELEMENT_WIDTH")
+	)  
+	
+	(block
+		(bind visible "isExchangeable")
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundColor "isSelected || rollOver ? SC.Ui_styles.SERVICE_COLORS.WHITE : SC.Ui_styles.SERVICE_COLORS.BLACK")
+			(bind alpha "rollOver && !isSelected ? 0.05 : 0.1")
+		)
+	)
+
+	(block
+		(style (bind alpha "isInStorage || isSelected ? 1 : 0.3"))
+
+		(controller $Instance renderer='SignalItemView'
+			(bind enabled "!isEcoBoost")
+			(args
+				_signalName =	"itemName"
+				_amount =		"amount"
+				_size =			"size"
+			)
+		)
+
+		(controller $Instance renderer='EconomicBoostItemView'
+			(bind enabled "isEcoBoost")
+			(args
+				_ecoBoostName =	"itemName"
+				_ecoBoostType =	"itemType"
+				_amount =		"amount"
+				_size =			"size"
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "isExchangeable")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+			(scale9grid = 2)
+			(bind alpha "isSelected ? 0.75 : 0.1")
+		)
+	)
+
+	(controller $Tooltip
+		(bind renderer "isEcoBoost ? 'EconomicBoostHeaderAndAmountTooltip' : 'SignalIconHeaderAndAmountTooltip'")
+		(args
+			_id = "itemId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ExchangeTargetSlot (_targetSubType:str, _exchangeableType:number)
+	(scope
+		(event evHideInfotip)
+		(macro MOUSE_HANDLER_SCOPE)
+		(var isInfotipVisible:bool = false)
+
+		(var alchemyEntity:dhEntity =		"getSingleEntity(CC.alchemy)")
+		(var alchemyComponent:dhComponent =	"alchemyEntity.alchemy")
+
+		(var isClickableSlot:bool =		"alchemyComponent.exchangeOptions.length > 1" (event "alchemyComponent.evChanged"))
+		(var targetItemId:number =		"alchemyComponent.targetItemId" (event "alchemyComponent.evChanged"))
+		(var isExchangeAvailable:bool =	"targetItemId > 0")
+		(var isEcoBoost:bool =			"_exchangeableType == SC.Common.ALCHEMY_TYPE.ECOBOOST")
+
+		(var itemEntity:dhEntity =			"isEcoBoost	? getPrimaryEntity(CC.ecoBoost, targetItemId) : getPrimaryEntity(CC.signal, targetItemId)")
+		(var itemComponent:dhComponent =	"isEcoBoost ? itemEntity.ecoBoost : itemEntity.signal")
+		(var itemName:str =					"itemComponent.name")
+		(var ecoBoostType:number =			"isEcoBoost ? itemComponent.type : 0")
+
+		(var slotAlpha:number = "	isInfotipVisible	? 0.6 :
+									mouseDown			? 0.6 :
+									rollOver			? 0.75
+														: 0.5")
+	)
+
+	(style
+		(width = "TILE_ELEMENT_WIDTH")
+		(height = "TILE_ELEMENT_WIDTH")
+	)
+
+	(block
+		(class $Fullsize)
+		
+		(block
+			(bind visible "!isClickableSlot")
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(scale9grid = 2)
+				(alpha = 0.1)
+			)
+		)
+		(block
+			(bind visible "isClickableSlot")
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/64px_not_empty_field.png')
+				(backgroundSize = "cover")
+				(alpha = "slotAlpha")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotAlpha" _alpha="slotAlpha") 
+			
+		)
+		
+		(block
+			(controller $Instance renderer='SignalItemView'
+				(bind enabled "!isEcoBoost && isExchangeAvailable")
+				(args
+					_signalName =	"itemName"
+					_size =			"SIZE.MEDIUM"
+				)
+			)
+
+			(controller $Instance renderer='EconomicBoostItemView'
+				(bind enabled "isEcoBoost && isExchangeAvailable")
+				(args
+					_ecoBoostName =	"itemName"
+					_ecoBoostType =	"ecoBoostType"
+					_size =			"SIZE.MEDIUM"
+				)
+			)
+		)
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled =	"isClickableSlot"
+		_soundSet =	"'button_flat'"
+	)
+
+	(controller $Tooltip
+		(renderer = 'AlchemySlotInfotip')
+		(bind enabled "isClickableSlot")
+		(args
+			_exchangeableType = "_exchangeableType"
+			_targetItemId = "targetItemId"
+		)
+
+		(macro VERTICAL_INFOTIP_BEHAVIOUR)
+		(macro TOOLTIP_HIDE_ON_EVENT "evHideInfotip")
+
+		(align = "center|bottom")
+
+		(screenBoundsOffset = 10px)
+
+		(bind isInfotipVisible "true" on='evStartShow')
+		(bind isInfotipVisible "false" on='evHide')
+		(pinTop='InfotipPinTop')
+		(pinBottom='InfotipPinBottom')
+	)
+)
+
+(def element AlchemySlotInfotip (_exchangeableType:number=0, _targetItemId:number=0)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(var alchemyEntity:dhEntity = "getSingleEntity(CC.alchemy)")
+		(var alchemyComponent:dhComponent = "alchemyEntity.alchemy")
+		(var isEcoBoost:bool = "_exchangeableType == SC.Common.ALCHEMY_TYPE.ECOBOOST")
+		(var exchangeOptions:array = "alchemyComponent.exchangeOptions" (event "alchemyComponent.evChanged"))
+	)
+
+	(style (width = 360px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+		(controller $Repeat renderer='SignalSlotInfotipItem'
+			(bind enabled "!isEcoBoost")
+			(bind count "exchangeOptions.length")
+			(args
+				_signalEntity =			"getPrimaryEntity(CC.signal, exchangeOptions[$index])"
+				_installedEntityId =	"getPrimaryEntity(CC.signal, _targetItemId).id"
+				_isAlchemy =			true
+			)
+		)
+		(controller $Repeat renderer='EconomicBoostInfotipItem'
+			(bind enabled "isEcoBoost")
+			(bind count "exchangeOptions.length")
+			(args
+				_ecoBoostEntity =	"getPrimaryEntity(CC.ecoBoost, exchangeOptions[$index])"
+				_installedId =		"_targetItemId"
+				_isAlchemy =		true
+			)
+		)
+	)
+)
+
+
+(def element AlchemyRateElement (_firstRarity:number, _targetRarity:number)
+	(scope
+		(var alchemyEntity:dhEntity = "getSingleEntity(CC.alchemy)")
+		(var rateEntityName:str = "alchemyEntity.alchemy.rate" (event "alchemyEntity.alchemy.evChanged"))
+		(struct rate = PULL_PRICE(_entityId = "rateEntityName"	_actionId = "SC.Common.PRICE_ACTION.INFO"))
+	)
+	(style
+		(flow = "horizontal")
+		(align = "center|middle")
+		(width = 100%)
+	)
+
+	(element ExchangeableItemAmount
+		_itemInfo = "{ amount: rate.info.finalPrice, rarity: _firstRarity-1 }"
+	)
+
+	(tf
+		(class $TextDefault17NM)
+		(style
+			(marginLeft = 6px)
+			(marginRight = 10px)
+			(alpha = "TC")
+		)
+		(text = 'IDS_SIGN_EQUAL')
+	)
+
+	(element ExchangeableItemAmount
+		_itemInfo = "{ amount: 1, rarity: _targetRarity-1 }"
+	)
+)
+
+(def element ExchangeableItemAmount (_itemInfo:dict, _size:number = "SIZE.MEDIUM")
+	(style
+		(flow = "horizontal")
+		(align = "right")
+	)
+	(block
+		(tf
+			(bind class "_size == SIZE.LARGE	? '$TextDefaultBold25NM'
+												: '$TextDefaultBoldNM'")
+			(style
+				(marginRight = 3px)
+				(alpha = "TC")
+			)
+
+			(bind text "_itemInfo.amount")
+		)
+	)
+
+	(block
+		(style
+			(align = "middle")
+			(height = 100%)
+		)
+
+		(element RarityRibbon
+			_rarity = "_itemInfo.rarity"
+		)
+	)
+)
+

@@ -29,10 +29,11 @@
 	(height = 64px)
 )
 
-(def element ExteriorInsetContent (_exteriorPage:str)
+(def element ExteriorsMainInset ()
 	(scope
-		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(event evExteriorActiveChildChanged)
 
+		(macro HIGH_CONTRAST_DATA_SCOPE)
 		(macro STAGE_SIZE)
 
 		(macro CAROUSEL_HEIGHT_SCOPE)
@@ -40,6 +41,14 @@
 		(var shipEntity:gfx = "$datahub.getPrimaryEntity(CC.ownShip, playerShipId)")
 		(var ownShipComponent:gfx = "shipEntity.ownShip")
 		(var shipComponent:gfx = "shipEntity.ship")
+		(var canEquipCamouflage:bool = "shipEntity.ownShip.canEquipCamouflage" (event "shipEntity.ownShip.evUpdateConfig"))
+
+		(macro USER_PREF_DATA)
+		(var previewExteriorId:number = "toNumber(userPrefs.previewExteriorId)")
+
+		(struct exteriorRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.EXTERIOR"))
+		(var exteriorActiveChild:str = "exteriorRoute.activeChild" watch=false (event "evExteriorActiveChildChanged"))
+		(var exteriorPage:str = "!canEquipCamouflage ? SC.Ui_windows.ROUTE.ENSIGN : exteriorActiveChild")
 
 		(var playerShips:gfx = "$datahub.getCollection(CC.ownShip)")
 
@@ -62,18 +71,17 @@
 		(var ensignLimit:number = "shipEntity.ownShip.ensignLimit" (event "shipEntity.ownShip.evUpdateConfig"))
 		(var ensignsTabLabel:str = "activeEnsignsItems && ensignLimit > 1	? (tr('IDS_FLAG') + ' ' + toString(installedEnsignsItems.length) + '/' + toString(ensignLimit))
 																			: 'IDS_FLAG'")
-		(var isEnsignPage:bool = "_exteriorPage == SC.Exteriors.EXTERIOR_NAMES.ENSIGN")
+		(var isEnsignPage:bool = "exteriorPage == SC.Exteriors.EXTERIOR_NAMES.ENSIGN")
 
 		(var navalFlags:array = "shipComponent.availableNavalFlags" (event "shipComponent.evCurrentFlagChanged"))
-		(var isNavalFlagsGroupVisible:bool = "navalFlags.length > 1  && _exteriorPage != SC.Exteriors.EXTERIOR_NAMES.CAMOUFLAGE")
-
-		(var canEquipCamouflage:bool = "shipEntity.ownShip.canEquipCamouflage" (event "shipEntity.ownShip.evUpdateConfig"))
+		(var isNavalFlagsGroupVisible:bool = "navalFlags.length > 1  && exteriorPage != SC.Exteriors.EXTERIOR_NAMES.CAMOUFLAGE")
 
 		
-		(var installedCamouflageEntity:gfx = "$datahub.getFirstWatcher(CC.installedCamouflage)")
-		(var exteriorsInStorage:number = "installedCamouflageEntity.countComponent.value" (event "installedCamouflageEntity.countComponent.evUpdate"))
-		(var isCamouflageExpired:bool = "installedCamouflageEntity	? exteriorsInStorage == 0 : false")
-		(var isCamouflagePage:bool = "_exteriorPage == SC.Exteriors.EXTERIOR_NAMES.CAMOUFLAGE")
+		(var installedCamouflageEntity:dhEntity =		"getSingleEntity(CC.installedCamouflage)")
+		(var installedCamoCountComponent:dhComponent =	"installedCamouflageEntity.countComponent")
+		(var exteriorsInStorage:number =				"installedCamoCountComponent.value"		(event "installedCamoCountComponent.evUpdate"))
+		(var isCamouflageExpired:bool =					"installedCamouflageEntity	? exteriorsInStorage == 0 : false")
+		(var isCamouflagePage:bool =					"exteriorPage == SC.Exteriors.EXTERIOR_NAMES.CAMOUFLAGE")
 
 		
 		(struct exteriorChangeTabNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_CHANGE_TAB"))
@@ -120,9 +128,6 @@
 									hideExteriorsTag 			? 'IDS_EXTERIOR_UNAVAILABLE'
 																: null")
 
-		(event evExteriorPageShow)
-		(event evExteriorPageHide)
-		(event evExteriorContentChanged)
 		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.EXTERIOR" "'isActiveExteriorPage'")
 
 		(var contentScrollHeight:number = 0)
@@ -141,9 +146,22 @@
 		(bind paddingTop "DOCK_TAB_BUTTON.HEIGHT + 10")
 		(bind paddingBottom "carouselAreaHeight")
 	)
-	(dispatch evExteriorPageShow on='addedToStage' 			(bind enabled "isActiveExteriorPage") (bind trigger "isActiveExteriorPage"))
-	(dispatch evExteriorPageHide 							(bind enabled "!isActiveExteriorPage") (bind trigger "isActiveExteriorPage"))
-	(dispatch evExteriorContentChanged						(bind trigger "_exteriorPage"))
+	(dispatch evExteriorActiveChildChanged dir="EventDirection.NONE" (bind enabled "exteriorRoute.activeChild") (bind trigger "exteriorRoute.activeChild"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['exterior', 'main']" on='addedToStage')
+	(bindcall externalCall "!canEquipCamouflage && exteriorPage == SC.Ui_windows.ROUTE.CAMOUFLAGE ? 'inputMapping.onAction' : ''" "['navigateTo', { route: SC.Ui_windows.ROUTE.ENSIGN }]" watch=false (bind trigger "exteriorPage"))
+
+	
+	(bindcall externalCall "previewExteriorId ? 'inputMapping.onAction' : ''" "['setUserPref', { name: 'previewExteriorId', value: 0 }]" watch=false	on='removedFromStage'
+																																						(bind trigger "exteriorPage")
+																																						(bind trigger "isInFormation")
+																																						(bind trigger "playerShipId"))
+
+	
+	(bindcall externalCall "previewExteriorId ? 'inputMapping.onAction' : ''" "['disableExteriorPreview', { exteriorId: previewExteriorId }]" watch=false	on='removedFromStage'
+																																							(bind trigger "exteriorPage")
+																																							(bind trigger "isInFormation"))
+
 
 	(block
 		(bind visible "hideExteriorsTag")
@@ -190,24 +208,7 @@
 	(block
 		(bind visible "!hideExteriorsTag")
 		(class $Fullsize)
-		(style
-			(bind visualOffsetY "15px"	init=true watch=false (event "evExteriorPageShow") (event "evExteriorPageHide"))
-			(bind alpha "0"				init=true watch=false (event "evExteriorPageShow") (event "evExteriorPageHide"))
-		)
-
-		(controller $Animation
-			(bindcall play
-				duration =	0.2
-				keyframes = "[
-					{ percent:0,	to:{ alpha: 0, visualOffsetY: 15px }},
-					{ percent:10,	to:{ alpha: 0, visualOffsetY: 15px }},
-					{ percent:100,	to:{ alpha: 1, visualOffsetY: 0px }}
-				]"
-				easing = "Easing.quad_out"
-				action = "kill"
-				(event "evExteriorPageShow")
-			)
-		)
+		(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
 
 		(block
 			(style
@@ -232,11 +233,12 @@
 			(class $Fullsize)
 
 			(element ExteriorsTabButtons
-				_exteriorPage = "_exteriorPage"
+				_exteriorPage = "exteriorPage"
 				_canEquipCamouflage = "canEquipCamouflage"
 				_isCamouflageExpired = "isCamouflageExpired"
 				_ensignsTabLabel = "ensignsTabLabel"
 			)
+
 			(block
 				(class $Fullsize)
 				(block
@@ -251,7 +253,7 @@
 						to = "{ alpha: 1, visualOffsetY: 0px }"
 						easing = "Easing.quad_in"
 						action = "kill"
-						(event "evExteriorContentChanged")
+						(bind trigger "exteriorPage")
 					)
 				)
 
@@ -262,21 +264,12 @@
 						(bind height "currentScrollHeight")
 						(backgroundColor = "NO_COLOR")
 					)
-
-					(verticalSlider ScrollBarVLight
-						_singleStep = 150
+					
+					(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+						_singleStep = "150"
+						_wheelScrollAcceleration = "0.8"
+						_isContrastScrollBar = "true"
 					)
-
-					(hscrollPolicy = 'off')
-					(vscrollPolicy = 'auto')
-
-					(topShadow = 'ScrollAreaShadowTop')
-					(bottomShadow = 'ScrollAreaShadowBottom')
-
-					(animationDuration = 0.2)
-					(wheelScrollSpeed = 1.0)
-					(wheelScrollAcceleration = 0.80)
-					(animationEasing = "Easing.cubic_out")
 
 					(content
 						(style (width = 444px) (paddingTop = "MS"))
@@ -294,6 +287,7 @@
 							)
 						)
 					)
+					(bindcall scrollToBegin animated=false on='addedToStage')
 				)
 				(block
 					(bind visible "isCamouflagePage")

@@ -235,24 +235,34 @@
 		(var avatarComponent:dhComponent = "selectedAvatarEntity.avatar")
 		(var subType:str = "avatarComponent.shipType" (event "avatarComponent.evShipTypeChanged"))
 
-		(macro GET_PREF_NUMBER	'prefSelectedGroup'	"'battle.help.helpPanelSelectedGroup'")
-
 		
-		(var isTutorialShownEntity:dhEntity="getPrimaryEntity(CC.preference, 'battle.tutorial.' + toLower(subType) + '.shown')")
-		(var isTutorialShown:bool="toBool(isTutorialShownEntity.preference.value)")
+		(struct isTutorialShownPref = GET_PREF_BOOL(_option="'battle.tutorial.' + toLower(subType) + '.shown'"))
+		(var isTutorialShown:bool = "isTutorialShownPref.value")
 
 		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
 		(var battleTypeGameParamsName:str = "battleInfoComponent.battleTypeGameParamsName")
+
 		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
 		(var isExtendedBattleRules:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.EXTENDED_BATTLE_RULES) > 0 && battleTypeGameParamsName")
 		(var eventTabName:str = "isExtendedBattleRules ? 'IDS_MODAL_WINDOW_' + battleTypeGameParamsName + '_BATTLE_RULES_HEADER' : 'IDS_HELP_TAB_EVENT_INFO'")
 		(var currentTabs:array = "isExtendedBattleRules ? SC.Common.HELP_PANEL_CATEGORIES.EXTENDED : SC.Common.HELP_PANEL_CATEGORIES.DEFAULT")
 
+		(struct helpPanelSelectedGroupPref = GET_PREF_NUMBER(_option="'battle.help.helpPanelSelectedGroup'"))
+		(var helpPanelSelectedGroup:number = "helpPanelSelectedGroupPref.value")
+		(var validHelpPanelSelectedGroup:number = "helpPanelSelectedGroup >= currentTabs.length ? 0 : helpPanelSelectedGroup")
+
 		(var isInstructionVisible:bool = "!isTutorialShown && !isExtendedBattleRules" watch=false)
 	)
 
+	(bindcall externalCall 'direct.action' 	"['option.set', ['battle.help.helpPanelSelectedGroup', 0]]"
+											on='addedToStage'
+											(bind enabled "validHelpPanelSelectedGroup != helpPanelSelectedGroup")
+	)
 	(bindcall externalCall 'direct.action' "['option.set', ['battle.help.helpPanelSelectedGroup', $event.index]]" init=false watch=false (event "evTabClicked"))
-	(bindcall externalCall "!isTutorialShown && subType ? 'direct.action' : ''" "['option.set', ['battle.tutorial.' + toLower(subType) + '.shown', true]]" init=false watch=false (event "startShow"))
+	(bindcall externalCall "!isTutorialShown && subType ? 'direct.action' : ''" "['option.set', ['battle.tutorial.' + toLower(subType) + '.shown', true]]"
+																				init=false watch=false
+																				(event "startShow")
+	)
 
 	(style (align = "center"))
 	
@@ -300,7 +310,7 @@
 					(args
 						_label = "currentTabs[$index] == SC.Common.HELP_PANEL_CATEGORIES.EVENT_INFO ? eventTabName : 'IDS_HELP_TAB_' + currentTabs[$index]"
 						_width = "MAIN_TAB_BUTTON_WIDTH.MEDIUM"
-						_isSelected = "prefSelectedGroup == $index"
+						_isSelected = "validHelpPanelSelectedGroup == $index"
 						_dispatchedEv = 'evTabClicked'
 						_dispatchParams = "{ index: $index }"
 						_isLast = "$index == SC.Common.HELP_PANEL_CATEGORIES.ALL.length - 1"
@@ -313,21 +323,10 @@
 			(class $Fullsize)
 			(style (backgroundColor = "NO_COLOR"))
 
-			(verticalSlider ScrollBarVLight)
-			(hscrollPolicy = 'off')
-			(vscrollPolicy = 'auto')
-
-			(topShadow = 'ScrollAreaShadowTop')
-			(bottomShadow = 'ScrollAreaShadowBottom')
-
-			(wheelScrollSpeed = 1.0)
-			(wheelScrollAcceleration = 1.9)
-			(maxScrollingAnimatedDistance = 280)
-
-			(activeControlsAlpha = 1)
-			(inactiveControlsAlpha = 0.5)
-			(animationDuration = 0.2)
-			(animationEasing = "Easing.cubic_out")
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_singleStep = "150"
+				_wheelScrollAcceleration = "0.8"
+			)
 
 			(content
 				(style (width = 100%) (align = "center")) 
@@ -345,7 +344,7 @@
 				)
 
 				(controller $Instance
-					(bind renderer "HELP_PANEL_TAB_CONTENT[currentTabs[prefSelectedGroup]]")
+					(bind renderer "HELP_PANEL_TAB_CONTENT[currentTabs[validHelpPanelSelectedGroup]]")
 					(args
 						_subType = "subType"
 					)
@@ -508,6 +507,14 @@
 )
 
 (def element HelpCommandItem (_name:str, _commands:array)
+	(scope
+		(var firstCommandName:str = "getPrimaryEntity(CC.commandMappingCommand, _commands[0]).commandMappingCommandName.commandName")
+		(struct mainCommand = GET_COMMAND(_commandName="firstCommandName" _binding="0"))
+		(struct alternativeCommand = GET_COMMAND(_commandName="firstCommandName" _binding="1"))
+		(var mainKeysExists:bool = "_commands.length > 0 && mainCommand.keyCode != 0")
+		(var alternativeKeysExists:bool = "_commands.length > 0 && alternativeCommand.keyCode != 0")
+	)
+
 	(style (flow = "horizontal") (align = "middle") (hgap = "M"))
 
 	(tf
@@ -526,6 +533,7 @@
 			(style (hgap = "XXS"))
 			(controller $Repeat renderer='HotkeyHelpPanel'
 				(bind count "_commands.length")
+				(bind enabled "mainKeysExists")
 				(args
 					_commandId = "_commands[$index]"
 					_index = 0
@@ -533,10 +541,23 @@
 			)
 		)
 
+		(tf
+			(bind visible "mainKeysExists && alternativeKeysExists")
+			(class $TextDefault17NM)
+			(style
+				(marginRight = "S")
+				(marginLeft = "S")
+				(marginTop = "6px")
+				(alpha = "TA")
+			)
+			(text = 'IDS_OR')
+		)
+
 		(hblock
 			(style (hgap = "XXS"))
 			(controller $Repeat renderer='HotkeyHelpPanel'
 				(bind count "_commands.length")
+				(bind enabled "alternativeKeysExists || !mainKeysExists")
 				(args
 					_commandId = "_commands[$index]"
 					_index = 1
@@ -551,23 +572,9 @@
 		(var command:dhEntity = "getPrimaryEntity(CC.commandMappingCommand, _commandId)")
 		(struct preferenceCommand = GET_COMMAND(_commandName="command.commandMappingCommandName.commandName" _binding="_index"))
 	)
-	(bind visible "preferenceCommand.keyCode != 0 || _index == 0")
 	(style (flow = "horizontal"))
 
-	(tf
-		(bind visible "_index == 1 && preferenceCommand.keyCode != 0 && $index == 0")
-		(class $TextDefault17NM)
-		(style
-			(marginRight = "S")
-			(marginLeft = "S")
-			(marginTop = "6px")
-			(alpha = "TA")
-		)
-		(text = 'IDS_OR')
-	)
-
 	(controller $Instance renderer='HotkeyIndicatorStaticLarge'
-		(bind enabled "preferenceCommand.keyCode != 0")
 		(args
 			_commandId = "_commandId"
 			_isForceIndex = true
@@ -974,10 +981,10 @@
 	(scope
 		(var command:dhEntity = "getPrimaryEntity(CC.commandMappingCommand, _commandId)")
 
-		(macro GET_PREF 'commandKeyMain' "'commands.' + command.commandMappingCommandName.commandName + '.value1'")
-		(var cmdMappingKeyIndex:number = "	_isForceIndex	? _forceShownIndex :
-											commandKeyMain	? 0
-															: 1")
+		(struct mainCommand = GET_COMMAND(_commandName="command.commandMappingCommandName.commandName" _binding="0"))
+		(var cmdMappingKeyIndex:number = "	_isForceIndex				? _forceShownIndex :
+											mainCommand.keyCode != 0	? 0
+																		: 1")
 		(struct preferenceCommand = GET_COMMAND(_commandName="command.commandMappingCommandName.commandName" _binding="cmdMappingKeyIndex"))
 	)
 
@@ -1033,6 +1040,11 @@
 (def element HotKeyStatic (_size:number, _keyCode:number)
 	(scope
 		(var inputKeyEntity:dhEntity = "getPrimaryEntity(CC.inputKey, _keyCode)")
+		(var isPureKey:bool = "inputKeyEntity.inputKey.pureName.length == 1 || NOT_LOCALIZE_KEYS[inputKeyEntity.inputKey.pureName]")
+		(var isNullKey:bool = "inputKeyEntity.inputKey.pureName == null")
+		(var inputKeyText:str = "isNullKey	? '' :
+								isPureKey	? toUpper(inputKeyEntity.inputKey.pureName)
+											: toUpper(tr('IDS_' + inputKeyEntity.inputKey.name))")
 	)
 
 	(style
@@ -1050,9 +1062,8 @@
 			(bind marginLeft "_size == SIZE.SMALL ? 4px : 6px")
 			(bind marginRight "_size == SIZE.SMALL ? 4px : 6px")
 		)
-
-		(bind text "inputKeyEntity.inputKey.pureName.length == 1 || NOT_LOCALIZE_KEYS[inputKeyEntity.inputKey.pureName]	? toUpper(inputKeyEntity.inputKey.pureName)
-																														: toUpper(tr('IDS_' + inputKeyEntity.inputKey.name))")
+		
+		(bind text "inputKeyText")
 	)
 )
 
@@ -1130,6 +1141,11 @@
 (def element HotKeyStaticLarge (_keyCode:number)
 	(scope
 		(var inputKeyEntity:dhEntity = "getPrimaryEntity(CC.inputKey, _keyCode)")
+		(var isPureKey:bool = "inputKeyEntity.inputKey.pureName.length == 1 || NOT_LOCALIZE_KEYS[inputKeyEntity.inputKey.pureName]")
+		(var isNullKey:bool = "inputKeyEntity.inputKey.pureName == null")
+		(var inputKeyText:str = "isNullKey	? '' :
+								isPureKey	? toUpper(inputKeyEntity.inputKey.pureName)
+											: toUpper(tr('IDS_' + inputKeyEntity.inputKey.name))")
 	)
 
 	(style
@@ -1148,8 +1164,7 @@
 			(marginRight = 6px)
 		)
 
-		(bind text "inputKeyEntity.inputKey.pureName.length == 1 || NOT_LOCALIZE_KEYS[inputKeyEntity.inputKey.pureName]	? toUpper(inputKeyEntity.inputKey.pureName)
-																														: toUpper(tr('IDS_' + inputKeyEntity.inputKey.name))")
+		(bind text "inputKeyText")
 	)
 )
 
@@ -1221,7 +1236,7 @@
 			_description: 'IDS_MODAL_WINDOW_TRIALS_BATTLE_RULES_PARAGRAPH_3_TEXT_1',
 		},
 	],
-    'PCVT002_CITADEL_PRIME':
+	'PCVT002_CITADEL_PRIME':
 	[
 		{
 			_imagePath: 'url:../modal_battle_rules/trials/TRIALS_BATTLE_1_card.png',
@@ -1255,6 +1270,19 @@
 			_imagePath: 'url:../modal_battle_rules/trials/TRIALS_BATTLE_3_card.png',
 			_header: 'IDS_MODAL_WINDOW_TRIALS_BATTLE_RULES_PARAGRAPH_3_HEADER',
 			_description: 'IDS_MODAL_WINDOW_TRIALS_BATTLE_RULES_PARAGRAPH_3_TEXT_1',
+		},
+	],
+	'PCVT004_MANEUVER_PRIME':
+	[
+		{
+			_imagePath: 'url:../modal_battle_rules/trials/TRIALS_BATTLE_1_card.png',
+			_header: 'IDS_MODAL_WINDOW_TRIALS_BATTLE_RULES_PARAGRAPH_1_HEADER',
+			_description: 'IDS_MODAL_WINDOW_TRIALS_BATTLE_RULES_PARAGRAPH_1_TEXT_1',
+		},
+		{
+			_imagePath: 'url:../modal_battle_rules/trials/TRIALS_BATTLE_5_card.png',
+			_header: 'IDS_MODAL_WINDOW_TRIALS_BATTLE_RULES_PARAGRAPH_5_HEADER',
+			_description: 'IDS_MODAL_WINDOW_TRIALS_BATTLE_RULES_PARAGRAPH_5_TEXT_1',
 		},
 	],
 	'PCVO032':

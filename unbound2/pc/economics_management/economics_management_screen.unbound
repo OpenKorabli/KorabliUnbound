@@ -133,6 +133,8 @@
 										mouseDown							? CT_VOID_MOUSE_DOWN :
 										rollOver							? CT_VOID_ROLL_OVER
 																			: CT_NONE")
+
+		(struct alchemyNewMarker =			GET_PREF_BOOL(_option="'ui.alchemy.isEcoBoostsAlchemyNew'"))
 	)
 	(class $Fullsize)
 
@@ -202,6 +204,27 @@
 
 				(element InstallEconomicBoostsRaritiesButton
 					_isAnyBoostInstalled = "isAnyBoostInstalled"
+				)
+			)
+
+			(block
+				(style
+					(marginTop = "SXS")
+					(width = 100%)
+					(align = "right")
+				)
+				(element ExchangeEconomicBoostsButton)
+
+				(block
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "alchemyNewMarker.value")
+					(style
+						(hitTest = false)
+						(position = "absolute")
+						(right = -10px)
+						(top = "-S")
+					)
+
+					(element MarkerNew)
 				)
 			)
 		)
@@ -948,7 +971,7 @@
 		(controller $Repeat renderer='EconomicBoostInfotipItem'
 			(bind count "purchasableEcoBoostsCollection.length")
 			(args
-				_collection = "purchasableEcoBoostsCollection"
+				_ecoBoostEntity = "purchasableEcoBoostsCollection[$index]"
 				_slotId = "_slotId"
 				_slotType = "_slotType"
 				_installedId = "_installedEcoBoostId"
@@ -982,8 +1005,8 @@
 		(var rarity:number = "ecoBoostEntity.ecoBoost.rarity ?: 0" (event "ecoBoostEntity.ecoBoost.evUpdated"))
 		(var amount:number = "ecoBoostEntity.countComponent.value ?: 0" (event "ecoBoostEntity.countComponent.evUpdate"))
 
-		(var ecoBoostSubheaderText:str = "rarity	? tr('IDS_ECONOMIC_BOOST_TYPE_EXPENDABLE_' + rarity)
-													:''")
+		(var ecoBoostSubheaderText:str = "rarity	? 'IDS_ECONOMIC_BOOST_TYPE_EXPENDABLE_' + rarity
+													: ''")
 
 		(var unvailableForPurchaseHeaderText:str = "canBeBought		?	'' :
 													rarity == 3		?	'IDS_UNAVAILABLE_RARE_ECOBOOST_FOR_PURCHASE'
@@ -1145,7 +1168,7 @@
 			(controller $Repeat renderer='EconomicBoostInfotipItem'
 				(bind count "purchasableEcoBoostsColByAmountLen")
 				(args
-					_collection = "purchasableEcoBoostsColByAmountCollection"
+					_ecoBoostEntity = "purchasableEcoBoostsColByAmountCollection[$index]"
 					_slotId = "_slotId"
 					_slotType = "_slotType"
 				)
@@ -1160,31 +1183,34 @@
 	)
 )
 
-(def element EconomicBoostInfotipItem (_collection:dhCollection, _installedId:number=null)
+(def element EconomicBoostInfotipItem (_ecoBoostEntity:dhEntity, _installedId:number=null, _isAlchemy:bool=false)
 	(scope
 		(macro PULL_SHIP_ID)
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var ecoBoostEntity:dhEntity = "_collection[$index]")
-		(var ecoBoostId:number = "ecoBoostEntity.ecoBoost.id" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var ecoBoostComponent:dhComponent = "_ecoBoostEntity.ecoBoost")
+		(var ecoBoostId:number = "ecoBoostComponent.id" (event "ecoBoostComponent.evUpdated"))
 		(struct ecoBoostPrice = PULL_PRICE(_entityId = "toString(ecoBoostId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
-		
-		(var canBeBought:bool = "ecoBoostEntity.ecoBoost.canBuy" (event "ecoBoostEntity.ecoBoost.evUpdated"))
-		(var name:str = "ecoBoostEntity.ecoBoost.name ?: ''" (event "ecoBoostEntity.ecoBoost.evUpdated"))
-		(var amount:number = "ecoBoostEntity.countComponent.value ?: 0" (event "ecoBoostEntity.countComponent.evUpdate"))
-		(var isPriceTagVisible:bool = "canBeBought && amount == 0 && ecoBoostPrice.info")
+
+		(var canBeBought:bool = "ecoBoostComponent.canBuy" (event "ecoBoostComponent.evUpdated"))
+		(var name:str = "ecoBoostComponent.name ?: ''" (event "ecoBoostComponent.evUpdated"))
+		(var rarity:number = "ecoBoostComponent.rarity ?: ''" (event "ecoBoostComponent.evUpdated"))
+		(var amount:number = "_ecoBoostEntity.countComponent.value ?: 0" (event "_ecoBoostEntity.countComponent.evUpdate"))
+		(var isPriceTagVisible:bool = "!_isAlchemy && canBeBought && amount == 0 && ecoBoostPrice.info")
 
 		(var hasAnyBoosts:bool = "amount > 0")
 
 		(var isInstalled:bool = "_installedId == ecoBoostId")
-		(var isInstalledAndActive:bool = "isInstalled && hasAnyBoosts")
+		(var isInstalledAndActive:bool = "isInstalled && (hasAnyBoosts || _isAlchemy)")
 		(var isExpired:bool = "isInstalled && !hasAnyBoosts")
-		(var isUnclickable:bool = "!canBeBought && !isInstalled && !hasAnyBoosts")
+		(var isUnclickable:bool = "!_isAlchemy && !canBeBought && !isInstalled && !hasAnyBoosts")
 
 		(var boostTitle:str = "'IDS_' + toUpper(name)")
+		(var ecoBoostSubheaderText:str = "rarity	? tr('IDS_ECONOMIC_BOOST_TYPE_EXPENDABLE_' + rarity)
+													:''")
 		(var ecoBoostAlphaParam:number = "isUnclickable ? 0.5 : 1")
 
-		(var attributesPositive:array = "ecoBoostEntity ? ecoBoostEntity.attributes.positive : []" (event "ecoBoostEntity.attributes.evChanged"))
+		(var attributesPositive:array = "_ecoBoostEntity.attributes.positive ?: []" (event "_ecoBoostEntity.attributes.evChanged"))
 		(var boostInfluence:str = "attributesPositive.length ? attributesPositive[0]['measuredValue'] : ''")
 		(var boostMeasure:str = "attributesPositive.length ? attributesPositive[0]['measure'] : ''")
 
@@ -1192,7 +1218,11 @@
 		(var accountResourceComponent:dhComponent = "resourceEntity.accountResource")
 		(var operationsAccountLocked:bool = "accountResourceComponent.operationsLocked"		(event "accountResourceComponent.evOperationsLockChanged"))
 
+		(var headerText:str = "_isAlchemy	? 'IDS_' + name
+											: boostInfluence + boostMeasure")
+
 		(var clickAction:str = "operationsAccountLocked || isUnclickable			? '' :
+								_isAlchemy											? ECOBOOST_ACTION.SET_ALCHEMY_TARGET :
 								!hasAnyBoosts && canBeBought						? ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL :
 								isInstalled											? ECOBOOST_ACTION.UNINSTALL :
 								hasAnyBoosts || (!hasAnyBoosts && !canBeBought)		? ECOBOOST_ACTION.INSTALL
@@ -1220,6 +1250,7 @@
 
 		(controller $Tooltip
 			(renderer = 'EconomicBoostTooltip')
+			(bind enabled "!_isAlchemy")
 			(args
 				_id =					"ecoBoostId"
 				_isInstalled =			"isInstalled"
@@ -1228,15 +1259,27 @@
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 
+		(controller $Tooltip
+			(renderer = 'EconomicBoostHeaderAndAmountTooltip')
+			(bind enabled "_isAlchemy")
+			(args
+				_id =					"ecoBoostId"
+				_showAmountInStorage =	false
+				_showIsExchangeable =	false
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
 		(element MenuItemBackground
 			_state =			"infotipItemBGState"
-			_isAttentionState =	"isExpired"
+			_isAttentionState =	"!_isAlchemy && isExpired"
 		)
 
 		(macro MOUSE_HANDLER
 			_soundSet =	"clickAction ? 'button_card' : ''"
-			_methods =	"[	{ type:	clickAction != ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL ? 'inputMapping.onAction' : '',	name: clickAction,	args: { boostId: ecoBoostId } },
-							{ type:	clickAction == ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL ? 'inputMapping.onRequest' : '',	name: clickAction,	args: { _ecoBoostId: ecoBoostId, _isCommonBoost: true } }]"
+			_methods =	"[	{ type:	clickAction != ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL	? 'inputMapping.onAction'	: '',	name: clickAction,	args: { boostId: ecoBoostId } },
+							{ type:	clickAction == ECOBOOST_ACTION.OPEN_MODAL_BUY_AND_INSTALL	? 'inputMapping.onRequest'	: '',	name: clickAction,	args: { _ecoBoostId: ecoBoostId, _isCommonBoost: true } },
+							{ type:	clickAction == ECOBOOST_ACTION.SET_ALCHEMY_TARGET			? 'direct.action'			: '',	name: clickAction,	args: { targetItemId: ecoBoostId } } ]"
 		)
 	)
 
@@ -1259,13 +1302,13 @@
 				(marginRight = "S")
 				(bind alpha "ecoBoostAlphaParam")
 				(bind backgroundImage "'url:../eco_boosts/common/' + name + '.png'")
-				(macro DESATURATION_DEFAULT "hasAnyBoosts || canBeBought || isInstalled")
+				(macro DESATURATION_DEFAULT "_isAlchemy || hasAnyBoosts || canBeBought || isInstalled")
 			)
 		)
 
 		(block
 			(style
-				(width = 150px)
+				(width = 160px)
 				(bind alpha "ecoBoostAlphaParam")
 			)
 
@@ -1278,11 +1321,12 @@
 					(bind alpha "isInstalledAndActive ? 1 : TA")
 				)
 
-				(bind text "boostInfluence + boostMeasure")
+				(bind text "headerText")
 			)
 
 			
 			(block
+				(bind visible "!_isAlchemy")
 				(bind name "'AmountOfBought_' + name")
 
 				(style (marginTop = "SXS"))
@@ -1302,6 +1346,19 @@
 				)
 			)
 			
+
+			
+			(tf
+				(bind visible "_isAlchemy")
+				(class $TextDefaultNM)
+				(style
+					(marginTop = "SXS")
+					(bind textColor "isInstalledAndActive ?  SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(bind alpha "isInstalledAndActive ? 1 : TC")
+				)
+				(bind text "ecoBoostSubheaderText")
+			)
+			
 		)
 
 		
@@ -1315,7 +1372,7 @@
 			)
 
 			(controller $Instance renderer='PriceTag'
-				(bind enabled "canBeBought && !hasAnyBoosts")
+				(bind enabled "!_isAlchemy && canBeBought && !hasAnyBoosts")
 				(args
 					_priceInfo =		"ecoBoostPrice.info"
 					_showDiscountTag =	true
@@ -1323,14 +1380,14 @@
 			)
 
 			(controller $Instance renderer='CloseButton'
-				(bind enabled "isInstalledAndActive && rollOver")
+				(bind enabled "!_isAlchemy && isInstalledAndActive && rollOver")
 				(args
 					_isDisabled = true
 				)
 			)
 
 			(block
-				(bind visible "isInstalledAndActive && !rollOver")
+				(bind visible "isInstalledAndActive && (!rollOver || _isAlchemy)")
 				(style
 					(marginRight = "-XXS")
 					(width = 19px)
@@ -1448,6 +1505,48 @@
 		(args
 			_text = "mouseInstruction.text"
 			_unifiedStatus = "mouseInstruction.unifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ExchangeEconomicBoostsButton ()
+	(scope
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipInfo:dhComponent = "shipEntity.ownShip")
+
+		(var isLocked:bool =		"ownShipInfo.isLocked"		(event "ownShipInfo.evUpdateLock"))
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimple:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+		(var isReadyInDivision:bool = "preBattlePlayerSimple.isReady" (event "preBattlePlayerSimple.evIsReadyChanged"))
+
+		(var mouseInstruction:dict = "	isReadyInDivision	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' } :
+										isLocked			? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' }
+															: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																text: 'IDS_EXCHANGE_ECOBOOSTS_HINT' }")
+	)
+	(element DefaultButton
+		_width = 142px
+		_enabled = "!isLocked && !isReadyInDivision"
+		_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+		_size = "SIZE.SMALL"
+		_label = 'IDS_EXCHANGE_ECOBOOSTS'
+		_methods = "[	{	type: 'inputMapping.onRequest',
+							name: 'showAlchemyExchangeWindow',
+							args: {exchangedItem: SC.Common.ALCHEMY_TYPE.ECOBOOST} },
+						{	type: 'direct.action',
+							name: 'option.set',
+							args: ['ui.alchemy.isEcoBoostsAlchemyNew', false] }]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text =				"mouseInstruction.text"
+			_unifiedStatus =	"mouseInstruction.unifiedStatus"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)

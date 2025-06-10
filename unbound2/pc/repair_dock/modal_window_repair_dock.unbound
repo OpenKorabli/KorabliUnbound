@@ -1,8 +1,47 @@
-(def macro SHIPCOMPONENT_TITLE_INFO (_shipId:expression)
-	(var shipEntity:gfx = "$datahub.getPrimaryEntity(CC.ship, _shipId)")
-	(var shipNameIDS:str = "shipEntity ? toUpper(tr(shipEntity.ship.nameIDS)) : ''")
-	(var levelRome:str = "shipEntity.ship.levelRome ?: ''")
-	(var shipLevel:number = "shipEntity.ship.level ?: 0")
+(def struct PULL_SHIPMATERIAL_INFO (_shipId:number)
+	(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+	(var ship:dhComponent = "shipEntity.ship")
+	(var shipLevel:number = "ship.level ?: 0")
+
+	(var entity:dhEntity = "getPrimaryEntity(CC.shipMaterial, shipLevel)" )
+	(var count:number = "entity.shipMaterial.count ?: 0" (event "entity.shipMaterial.evChanged"))
+	(var isCraftWithMaterialsAvailable:bool = "count >= SHIP_SHARDS.SHIP_CRAFTING_COST")
+)
+
+(def struct PULL_SHIPMATERIAL_INFO_BY_ENTITY_INDEX (_entityId:number)
+	(var entity:dhEntity = "getEntity(_entityId)")
+	(var shipLevel:number = "entity.shipMaterial.shipLevel ?: 0" (event "entity.shipMaterial.evChanged"))
+	(var count:number = "entity.shipMaterial.count ?: 0" (event "entity.shipMaterial.evChanged"))
+)
+
+(def macro HIDE_REPAIR_DOCK_UI_ANIMATION (_isEnabled:expression)
+	(scope
+		(var dockDataEntity:dhEntity = "getSingleEntity(CC.dockData)")
+		(var dockData:dhComponent = "dockDataEntity.dockData")
+		(var isDockUIHidden:bool = "dockData.isDockUIHidden" (event "dockData.evIsDockUIHiddenChanged"))
+		(var isRepairDockUIHidden:bool = "isDockUIHidden || _isEnabled")
+	)
+	(style (bind hitTest "!isRepairDockUIHidden"))
+	(alpha = "isRepairDockUIHidden ? 0 : 1")
+
+	(controller $Animation
+		(bindcall play
+			to = "{alpha: 0}"
+			easing = "Easing.quad_in"
+			delay= 0.5
+			duration = 0.4
+			action = "kill"
+			(bind enabled "isRepairDockUIHidden")
+		)
+		(bindcall play
+			to = "{alpha: 1}"
+			easing = "Easing.quad_in"
+			delay=0.15
+			duration = 0.25
+			action = "kill"
+			(bind enabled "!isRepairDockUIHidden")
+		)
+	)
 )
 
 (def macro BLURRED_PANEL_DEFAULT_BACKGROUND_MARKUP ()
@@ -44,27 +83,20 @@
 	(macro MODAL_WINDOW_INIT)
 	(scope
 		(macro PULL_SHIP_ID)
-		(macro SHIPCOMPONENT_TITLE_INFO "viewedShipId")
+		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.REPAIR_DOCK" "'isInRepairDock'")
 
-		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
-		(var isOwnShip:bool = "shipEntity.hasComponent(CC.ownShip)")
-		(var timeRent:number = "ownShipEntity.ownShip.timeRent ?: 0" (event "ownShipEntity.ownShip.evUpdateDockState"))
-		(var isRentShip:bool = "isOwnShip && timeRent > 0")
+		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO("viewedShipId"))
 
-		(var shipComponentEntity:dhEntity = "getPrimaryEntity(CC.shipComponent, viewedShipId)" )
-		(var shipComponentsCount:number = "shipComponentEntity.shipComponent.count ?: 0" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var shipComponentTitle:str = "subst('IDS_CURRENCY_SHIPCOMPONENT', [], { _shipName: toString(shipNameIDS) })")
-
-		(var shipMaterialEntity:dhEntity = "getPrimaryEntity(CC.shipMaterial, shipLevel)" )
-		(var shipMaterialsCount:number = "shipMaterialEntity.shipMaterial.count ?: 0" (event "shipMaterialEntity.shipMaterial.evChanged"))
+		(var levelRome:str = "shipMaterialInfo.ship.levelRome ?: ''")
+		(var shipLevel:number = "shipMaterialInfo.shipLevel ?: 0")
 		(var shipMaterialTitle:str = "subst('IDS_CURRENCY_SHIPMATERIAL', [], { _shipLevel: levelRome })")
-		(var shipMaterialIcon:str = "SC.Common.CURRENCIES.SHIPMATERIAL + '_' + shipLevel")
-		(var isAdditionalInfoVisible:bool = "shipComponentsCount > SHIP_SHARDS.COMPONENTS_CRAFTING_COST")
+
+		(var availableToExchangeShips:dhCollection = "getCollectionByPath(CC.exchangeableShip, 'sorted')")
+		(var hasExchangeableShips:bool = "availableToExchangeShips.length > 0")
 
 		(var shipsComponentCollection:dhCollection = "getCollection(CC.shipComponent).getChildByPath('sorted')")
-		(var shipsComponentArray:array = "shipsComponentCollection.items ?: []")
-		(var isShipsCarouselVisible:bool = "shipsComponentArray.length > 0")
-		(var isCurrencyVisible:bool = "isShipsCarouselVisible && viewedShipId > 0 && (!isOwnShip || isRentShip)")
+		(var isShipsCarouselVisible:bool = "shipsComponentCollection.length > 0")
+		(var isCurrencyVisible:bool = "isShipsCarouselVisible && viewedShipId > 0")
 
 		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
 		(var isNewShipAvailableForCrafting:bool = "repairDockDataEntity.hasComponent(CC.newItem)")
@@ -72,26 +104,44 @@
 
 		(var newShipComponentsEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SHIP_COMPONENTS)")
 		(var newShipComponentsCount:number = "newShipComponentsEntity.newContent.count ?: 0" (event "newShipComponentsEntity.newContent.evCountChanged"))
-		(var isNewMarker:bool = "newShipComponentsCount > 0")
+		(var isNewShipsMarker:bool = "newShipComponentsCount > 0")
+
+		(var newExchangeableShipsEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.EXCHANGEABLE_SHIP)")
+		(var newExchangeableShipsCount:number = "newExchangeableShipsEntity.newContent.count ?: 0" (event "newExchangeableShipsEntity.newContent.evCountChanged"))
+		(var isNewExchangeableShipsMarker:bool = "newExchangeableShipsCount > 0")
+
+		(var isShipInfoPanelVisible:bool = "!isShipsCarouselVisible && !isRepairingInProgress")
 
 		(struct shipShardsRepairMaterialsNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_REPAIR_MATERIALS"))
 		(struct shipShardsFinalWithShipMaterialNewTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FINAL_WITH_SHIP_MATERIAL"))
-
+		(struct shipShardsMaterialsExchangeIntroNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_MATERIALS_EXCHANGE_BUTTON"))
 		(var tipId:number = "	shipShardsRepairMaterialsNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_REPAIR_MATERIALS :
 								shipShardsFinalWithShipMaterialNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FINAL_WITH_SHIP_MATERIAL
 																				: SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
+	(bindcall externalCall
+		"isNewShipsMarker || isNewShipAvailableForCrafting ? 'inputMapping.onAction' : ''"
+		"['makeAllShipsAndComponentsSeen', {}]"
+		init=true watch=false
+		(bind trigger "isNewShipsMarker || isNewShipAvailableForCrafting")
+	)
+	(macro HIDE_REPAIR_DOCK_UI_ANIMATION
+		_isEnabled="isRepairingInProgress"
+	)
 
-	(bindcall externalCall "isNewMarker || isNewShipAvailableForCrafting ? 'inputMapping.onAction' : ''" "['makeAllShipsAndComponentsSeen', {}]" init=true watch=false  (bind trigger "isNewMarker || isNewShipAvailableForCrafting"))
-
-	(macro HIDE_REPAIR_DOCK_UI_ANIMATION _isEnabled="isRepairingInProgress")
 	(name = 'window_ModalWindowRepairDock')
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
 		(style (width = 100%))
 		(block
-			(style	(position = "absolute") (width = 100%) (height = 160px) (scale9grid = 3) (hitTest = false)
-					(backgroundImage = 'url:../panel_background/repair_dock_header_bg.png'))
+			(style
+				(hitTest = false)
+				(position = "absolute")
+				(width = 100%)
+				(height = 160px)
+				(scale9grid = 3)
+				(backgroundImage = 'url:../panel_background/repair_dock_header_bg.png')
+			)
 		)
 		(element ModalWindowHeaderFullSize
 			_windowName = 'IDS_REPAIR_DOCK_TITLE'
@@ -103,132 +153,212 @@
 		)
 
 		(hblock
-			(style (position = "absolute") (right = "XXL") (top = "{720: 15, 1080: 45}") (align = "middle"))
+			(style
+				(position = "absolute")
+				(right = "XXL")
+				(top = "{720: 10px, 1080: 35px}")
+				(align = "middle")
+			)
 			(block
+				(bind visible "isCurrencyVisible")
+				(name = 'construction_counter')
 				(style (marginRight = "M"))
-				(controller $Instance renderer='PriceTag'
-					(bind enabled "isCurrencyVisible")
-					(args
-						_priceInfo = "{finalPrice: shipMaterialsCount, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
-						_size = "SIZE.SMALL"
+				(block
+					(controller $Instance renderer='PriceTag'
+						(bind enabled "isCurrencyVisible")
+						(args
+							_priceInfo = "{finalPrice: shipMaterialInfo.count, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
+							_size = "SIZE.SMALL"
+						)
 					)
+				)
+				(tf
+					(class $TextDefault13NM)
+					(style
+						(marginTop = 6px)
+						(alpha = "TA")
+					)
+					(bind text "shipMaterialTitle")
 				)
 				(controller $Tooltip
 					(renderer='CurrencyTooltip')
 					(bind enabled "isCurrencyVisible")
 					(args
 						_currency = "SC.Common.CURRENCIES.SHIPMATERIAL"
-						_iconPath = "shipMaterialIcon"
-						_amount = "shipMaterialsCount"
+						_iconPath = "SC.Common.CURRENCIES.SHIPMATERIAL + '_' + shipLevel"
+						_amount = "shipMaterialInfo.count"
 						_headerText = "shipMaterialTitle"
-						_subheaderText = 'IDS_SHIP_SHARDS_COMMON_TITLE'
-					)
-					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				)
-			)
-			(block
-				(name = 'construction_counter')
-				(style (marginRight = "M"))
-				(controller $Instance renderer='PriceTag'
-					(bind enabled "isCurrencyVisible")
-					(args
-						_priceInfo = "{finalPrice: shipComponentsCount, currency: SC.Common.CURRENCIES.SHIPCOMPONENT}"
-						_size = "SIZE.SMALL"
-					)
-				)
-				(controller $Tooltip
-					(renderer='CurrencyTooltip')
-					(bind enabled "isCurrencyVisible")
-					(args
-						_currency = "SC.Common.CURRENCIES.SHIPCOMPONENT"
-						_amount = "shipComponentsCount"
-						_headerText = "shipComponentTitle"
-						_subheaderText = 'IDS_SHIP_SHARDS_COMMON_TITLE'
-						_hasAdditionalInfo = "isAdditionalInfoVisible"
 					)
 					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 				)
 			)
 			(block
 				(bind visible "isShipsCarouselVisible")
-				(style (height = 24px) (marginRight = "M"))
+				(style
+					(height = 24px)
+					(marginRight = "M")
+				)
 				(element VerticalDivider)
 			)
-			(block
-				(block
-					(name = 'construction_counter')
-					(style (width = 24px) (height = 24px) (backgroundImage = 'url:../repair_dock/icons/ship_shards_storage.png'))
-				)
-				(controller $Tooltip
-					(renderer = 'ShipShardsBalanceTooltip')
-					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				)
-			)
+			(element ShipShardsBalance)
 
 			(controller $Instance renderer='GuidingTipHub'
 				(bind enabled "tipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 				(args
-					_tipId =				"tipId"
-					_tipPositioning =		"TIP_POSITION_BOTTOM"
-					_noPointer =			true
-					_noArrow =				true
-					_hasNextButton =		"tipId == SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_REPAIR_MATERIALS"
-					_screenOffsetRight =	"XS"
-					_modalWindowName =		'ModalWindowRepairDock'
+					_tipId = "tipId"
+					_tipPositioning = "TIP_POSITION_BOTTOM"
+					_hasNextButton = "tipId == SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_REPAIR_MATERIALS"
+					_screenOffsetRight = "XS"
+					_modalWindowName = 'ModalWindowRepairDock'
+					_noPointer = true
+					_noArrow = true
 				)
 			)
 		)
 	)
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-		(style (width = 100%) (position = "absolute") (bind bottom "isShipsCarouselVisible ? 36px : XXL"))
+		(style
+			(position = "absolute")
+			(bottom = 36px)
+			(width = 100%)
+		)
+
 		(controller $Instance renderer='RepairDockShipCarousel'
 			(bind enabled "isShipsCarouselVisible")
 			(args
 				_selectedShipId = "viewedShipId"
 			)
 		)
+	)
+
+	(block
+		(bind visible "hasExchangeableShips")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style
+			(position = "absolute")
+			(bottom = "XXLXL")
+			(width = 100%)
+			(align = "center")
+		)
 		(block
-			(bind visible "!isShipsCarouselVisible && !isRepairingInProgress")
-			(style (width = 100%) (align = "center"))
-			(tf
-				(class $DockShipStatus)
-				(bind text "isShipsCarouselVisible ? '' : toUpper(tr('IDS_NO_SHIPS'))")
+			(controller $Instance renderer='DefaultButton'
+				(bind enabled "hasExchangeableShips")
+				(args
+					_width = 200px
+					_name = 'btn_getComponents'
+					_label = 'IDS_SHIP_SHARDS_COMPONENTS_GET_BUTTON'
+					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_focusIndex = 1
+					_methods = "[{	type: 'inputMapping.onRequest',
+									name: 'showComponentsExchange',
+									args: {} },
+								{	type: 'inputMapping.onAction',
+									name: isNewExchangeableShipsMarker ? 'makeAllAvailableToExchangeShipsSeen' : '',
+									args: {} },
+								{	type: 'inputMapping.onAction',
+									name: shipShardsMaterialsExchangeIntroNewTip.isActive ? 'deactivateTipChain' : '',
+									args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SHIP_SHARDS_MATERIALS_EXCHANGE }}]"
+				)
+			)
+			(block
+				(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNewExchangeableShipsMarker")
+				(style
+					(position = "absolute")
+					(top = -10px)
+					(right = -22px)
+				)
+				(controller $Instance renderer='MarkerNew'
+					(bind enabled "hasExchangeableShips")
+				)
+			)
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "shipShardsMaterialsExchangeIntroNewTip.isActive")
+				(args
+					_tipId =			"SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_MATERIALS_EXCHANGE_BUTTON"
+					_tipPositioning =	"TIP_POSITION_TOP"
+					_modalWindowName =	'ModalWindowRepairDock'
+				)
 			)
 		)
 	)
 	(block
-		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-		(style (position = "absolute") (right = 10px) (top = 98px))
-		(controller $Instance renderer='ShipShardsInfoPanel'
-			(bind enabled "!isShipsCarouselVisible && !isRepairingInProgress")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style
+			(position = "absolute")
+			(bottom = "XLM")
+			(width = 100%)
+			(align = "center")
 		)
+		(controller $Instance renderer='DockTabLockedPlug'
+			(bind enabled "isShipInfoPanelVisible")
+			(args
+				_text = "toUpper(tr('IDS_NO_SHIPS'))"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(position = "absolute")
+			(right = 10px)
+			(top = 98px)
+		)
+		(controller $Instance renderer='ShipShardsInfoPanel'
+			(bind enabled "isShipInfoPanelVisible")
+		)
+	)
+)
+
+(def element ShipShardsBalance ()
+	(block
+		(name = 'construction_counter')
+		(style
+			(width = 16px)
+			(height = 16px)
+			(backgroundImage = 'url:../repair_dock/ship_shards_storage.png')
+		)
+	)
+	(tf
+		(class $TextDefault13NM)
+		(style
+			(marginTop = 6px)
+			(alpha = "TA")
+		)
+		(text = 'IDS_SHIP_SHARDS_ALL_TITLE')
+	)
+	(controller $Tooltip
+		(renderer = 'ShipShardsBalanceTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )
 
 (def element ShipShardsBalanceTooltip ()
 	(scope
-		(var shipMaterialsCollection:gfx = "$datahub.getCollection(CC.shipMaterial).getChildByPath('nonZero').getChildByPath('sorted')")
-		(var shipMaterials:array = "shipMaterialsCollection.items ?: []" (event "shipMaterialsCollection.evAdded") (event "shipMaterialsCollection.evRemoved"))
-		(var hasShipMaterialsCollection:bool = "shipMaterials.length > 0")
-		(var priceInfoLeft:dict = "{finalPrice: SHIP_SHARDS.MATERIAL_COST, currency: SC.Common.CURRENCIES.SHIPCOMPONENT}")
-		(var priceInfoRight:dict = "{finalPrice: SHIP_SHARDS.COMPONENT_COST, currency: SC.Common.CURRENCIES.SHIPMATERIAL}")
+		(var shipMaterialsCollection:dhCollection = "getCollection(CC.shipMaterial).getChildByPath('nonZero').getChildByPath('sorted')")
+		(var hasShipMaterialsCollection:bool = "shipMaterialsCollection.length > 0")
 	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-	(style (width = 370px) (hitTest = false))
+	(style (width = 370px))
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemHeaderSubheaderText _headerText = 'IDS_SHIP_SHARDS_TOOLTIP_TITLE')
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_SHIP_SHARDS_ALL_TITLE'
+		)
 		(element TooltipSystemHorizontalDivider)
 
 		(block
-			(style (width = 100%))
+			(style
+				(width = 100%)
+				(bind vgap "hasShipMaterialsCollection ? M : 0")
+			)
 			(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
 			(controller $Repeat renderer='ShipShardsBalanceTooltipItem'
 				(bind enabled "hasShipMaterialsCollection")
-				(bind count "shipMaterials.length")
+				(bind count "shipMaterialsCollection.length")
 				(args
-					_entityId = "shipMaterials[$index].id"
+					_entityId = "shipMaterialsCollection[$index].id"
 				)
 			)
 			(controller $Instance renderer = 'TooltipSystemDescriptionText'
@@ -238,55 +368,30 @@
 				)
 			)
 		)
-		(element TooltipSystemHorizontalDivider)
-
-		(element ConvertRate
-			_title = 'IDS_SHIP_SHARDS_TOOLTIP_CONVERT_RATE_TEXT'
-			_priceInfoLeft = "priceInfoRight"
-			_priceInfoRight = "priceInfoLeft"
-		)
 	)
 )
 
-(def element ShipShardsBalanceTooltipItem (_entityId:gfx)
+(def element ShipShardsBalanceTooltipItem (_entityId:number)
 	(scope
-		(var shipMaterialEntity:gfx = "$datahub.getEntity(_entityId)")
-		(var shipLevel:number = "shipMaterialEntity.shipMaterial.shipLevel ?: 0" (event "shipMaterialEntity.shipMaterial.evChanged"))
-		(var count:number = "shipMaterialEntity.shipMaterial.count ?: 0" (event "shipMaterialEntity.shipMaterial.evChanged"))
-		(var title:str = "subst('IDS_SHIPMATERIAL_WITH_LEVEL_TITLE', [], {shipLevel: shipLevelsToRoman([shipLevel], true)})")
+		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO_BY_ENTITY_INDEX("_entityId"))
+		(var isSuperShip:bool = "shipMaterialInfo.shipLevel == SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var title:str = "isSuperShip	? 'IDS_SHIPMATERIAL_SUPERSHIP'
+										: subst('IDS_SHIPMATERIAL_WITH_LEVEL_TITLE', [], {shipLevel: shipLevelsToRoman([shipMaterialInfo.shipLevel], true)})")
 	)
-	(style (width = 100%) (bind marginTop "$index ? M : 0"))
+	(style (width = 100%))
 	(element TooltipSystemCounterLine
 		_title = "title"
-		_count = "count"
+		_count = "shipMaterialInfo.count"
 	)
 )
 
 (def element ShipTTXShards (_shipId:number)
 	(scope
-		(macro SHIPCOMPONENT_TITLE_INFO "_shipId")
+		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO("_shipId"))
+		(var shipMaterialsDelta:number = "SHIP_SHARDS.SHIP_CRAFTING_COST - shipMaterialInfo.count")
 
 		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
-		(var isRepairDockShipLoading:bool = "repairDockDataEntity.repairDockData.isRepairDockShipLoading ?: false" (event "repairDockDataEntity.repairDockData.evIsRepairDockShipLoadingChanged"))
-		(var rewardEntityId:number = "repairDockDataEntity.repairDockData.TTXRewardEntityId ?: 0" (event "repairDockDataEntity.repairDockData.evTTXRewardEntityIdChanged"))
-
-		(var shipComponentEntity:dhEntity = "getPrimaryEntity(CC.shipComponent, _shipId)" )
-		(var count:number = "shipComponentEntity.shipComponent.count ?: 0" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var isAvailableForCrafting:bool = "shipComponentEntity.shipComponent.isAvailableForCrafting ?: false" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var isCraftWithShipComponentsAvailable:bool = "count >= SHIP_SHARDS.COMPONENTS_CRAFTING_COST")
-
-		(var rewardEntity:dhEntity = "getEntity(rewardEntityId)")
-		(var rewardComponent:dhComponent = "rewardEntity ? rewardEntity.rewardComponent : null")
-		(var rewardItem:dict = "rewardComponent	?	{	id: rewardComponent.id,
-														amount: rewardComponent.amount,
-														name: rewardComponent.name,
-														type: rewardComponent.type,
-														subtype: rewardComponent.subtype,
-														params: rewardComponent.params,
-														isPRMP: rewardComponent.isPRMP }
-												: null")
-		(var iconPath:str = "rewardComponent ? 'url:../reward_icons/' + rewardItem.type + '.png' : ''")
-		(var shipComponentTitle:str = "subst('IDS_CURRENCY_SHIPCOMPONENT', [], { _shipName: toString(shipNameIDS) })")
+		(var isRepairDockShipLoading:bool = "repairDockDataEntity.repairDockData.isRepairDockShipLoading" (event "repairDockDataEntity.repairDockData.evIsRepairDockShipLoadingChanged"))
 
 		(struct shipShardsShipRepairTTXTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_SHIP_REPAIR_TTX"))
 		(struct shipShardsEnoughShipComponentsTTXTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_ENOUGH_SHIP_COMPONENTS_TTX"))
@@ -300,85 +405,63 @@
 		(var isAvailableForRepairGuidingTipVisible:bool = "isIn(tipId, [ SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_SHIP_REPAIR_TTX,
 																		 SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_ENOUGH_SHIP_COMPONENTS_TTX ])")
 	)
-
 	(style (width = 100%))
-	(hblock
-		(style (marginBottom = "S") (backgroundColor = 0x01000000))
-		(tf
-			(class $TextDefaultBold17NM)
-			(style (alpha = "TA"))
-			(text = 'IDS_SHIP_SHARDS_TTX_INFO_TITLE')
-		)
-		(block
-			(style	(width = 19px) (height = 19px) (marginTop = "-XXS") (marginLeft = 6px)
-					(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png'))
-		)
-		(controller $Tooltip
-			(renderer='ShipTTXInfoTooltip')
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
+
+	(element PriceTagWithLabel
+		_label = "subst('IDS_SUBST_SHIP_SHARDS_TTX_REPAIR_SHIPMATERIAL_LEVEL',[], {_shipLevel: shipLevelsToRoman(shipMaterialInfo.shipLevel)})"
+		_priceInfo = "{finalPrice: SHIP_SHARDS.SHIP_CRAFTING_COST, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
+		_width = 100%
 	)
 
-	(hblock
-		(style (width = 100%) (marginBottom = "S") (align = "middle") (backgroundColor = 0x01000000))
-		(block
-			(style (marginRight = "S"))
-			(element IconWithAmount
-				_width = 80
-				_height = 80
-				_iconPath = "iconPath"
-			)
+	(block
+		(macro DEFAULT_CONTROL_MARKER_ANIMATION "!shipMaterialInfo.isCraftWithMaterialsAvailable")
+		(style
+			(width = 100%)
+			(marginTop = "SXS")
 		)
-		(element ProgressBarBlock
-			_title = "shipComponentTitle"
-			_currentValue = "rewardItem.amount"
-			_maxValue = "SHIP_SHARDS.COMPONENTS_CRAFTING_COST"
-			_curValueTextClass = "'$TextDefaultBoldNM'"
-		)
-		(controller $Tooltip
-			(renderer='RewardShipComponentTooltip')
-			(args
-				_rewardItem = "rewardItem"
-				_imageUrl = "iconPath"
-				_headerText = "subst('IDS_CURRENCY_SHIPCOMPONENT', [], { _shipName: shipNameIDS })"
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(element PriceDeficit
+			_isSingleFullLine = true
+			_hideIcon = true
+			_priceInfo = "{ currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
+			_deficit = "shipMaterialsDelta"
 		)
 	)
 
 	(block
-		(style (width = 100%) (bind marginBottom "isAvailableForCrafting && !isCraftWithShipComponentsAvailable ? SXS : 0"))
-		(controller $Instance renderer='ShipShardsTTXDescriptionBlock'
-			(bind enabled "!isCraftWithShipComponentsAvailable")
-			(args
-				_shipId = "_shipId"
-			)
+		(style
+			(marginTop = "SXS")
+			(marginBottom = "S")
 		)
-	)
-
-	(block
-		(controller $Instance renderer='DefaultButton'
-			(bind enabled "isAvailableForCrafting")
-			(args
-				_name = 'repair_button'
-				_width = 296px
-				_focusIndex = 1
-				_label = 'IDS_SHIP_SHARDS_TTX_BUTTON_REPAIR'
-				_enabled = "!isRepairDockShipLoading"
-				_focusIndex = 0
-				_methods = "[	{	type: 'inputMapping.onRequest', name: 'openShipRepairModal', args: { shipId: _shipId }}]"
-			)
+		(element DefaultButton
+			_name = 'repair_button'
+			_width = 296px
+			_focusIndex = 0
+			_defaultFocused = true
+			_label = 'IDS_SHIP_SHARDS_TTX_BUTTON_REPAIR'
+			_enabled = "!isRepairDockShipLoading && shipMaterialInfo.isCraftWithMaterialsAvailable"
+			_methods = "[{ type: 'inputMapping.onRequest', name: 'openShipRepairModal', args: { shipId: _shipId }}]"
 		)
-
 		(controller $Instance renderer='GuidingTipHub'
-			(bind enabled "isAvailableForRepairGuidingTipVisible && isAvailableForCrafting")
+			(bind enabled "isAvailableForRepairGuidingTipVisible && shipMaterialInfo.isCraftWithMaterialsAvailable")
 			(args
 				_tipId =			"tipId"
 				_tipPositioning =	"TIP_POSITION_LEFT"
-				_pointerOffset = 	132px
+				_pointerOffset =	132px
 				_modalWindowName =	'ModalWindowRepairDock'
 			)
 		)
+	)
+
+	(element DefaultButton
+		_name = 'features_button'
+		_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+		_width = 296px
+		_focusIndex = 2
+		_label = 'IDS_SHIP_SHARDS_TTX_BUTTON_FEATURES'
+		_methods = "[	{	type: 'inputMapping.onRequest',
+							name: 'showModalShipsBranchesFeatures',
+							args: { _branchId: shipMaterialInfo.ship.branchId,
+									_shipId: _shipId }}]"
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
@@ -393,136 +476,114 @@
 	)
 )
 
-(def element ShipTTXInfoTooltip ()
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-	(style (width = 300px) (hitTest = false))
-	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemHeaderSubheaderText _headerText = 'IDS_SHIP_SHARDS_TTX_INFO_TITLE')
-		(element TooltipSystemHorizontalDivider)
-
-		(element TooltipSystemDescriptionText _descriptionText = 'IDS_SHIP_SHARDS_TTX_INFO_TEXT')
-	)
-)
-
-(def element ShipShardsTTXDescriptionBlock (_shipId:number = 0)
+(def element ShipShardsInfoPanel ()
 	(scope
-		(macro SHIPCOMPONENT_TITLE_INFO "_shipId")
-
-		(var shipMaterialEntity:gfx = "$datahub.getPrimaryEntity(CC.shipMaterial, shipLevel)")
-		(var shipMaterialsCount:number = "shipMaterialEntity.shipMaterial.count ?: 0" (event "shipMaterialEntity.shipMaterial.evChanged"))
-
-		(var shipComponentEntity:gfx = "$datahub.getPrimaryEntity(CC.shipComponent, _shipId)")
-		(var shipComponentsCount:number = "shipComponentEntity.shipComponent.count ?: 0" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var isAvailableForCrafting:bool = "shipComponentEntity.shipComponent.isAvailableForCrafting ?: false" (event "shipComponentEntity.shipComponent.evChanged"))
-
-		(var isProgressDescription:bool = "shipComponentsCount >= SHIP_SHARDS.COMPONENTS_COUNT_MIN && !isAvailableForCrafting")
-		(var isFinishDescription:bool = "isAvailableForCrafting")
-
-		(var rendererElement:str = "	isProgressDescription	? 'ShipShardsTTXDescriptionBlockProgress' :
-										isFinishDescription		? 'ShipShardsTTXDescriptionBlockFinish'
-																: 'ShipShardsTTXDescriptionBlockStart'")
+		(macro HIGH_CONTRAST_DATA_SCOPE)
 	)
-	(style (width = 100%))
-	(controller $Instance
-		(bind enabled "rendererElement")
-		(bind renderer "rendererElement")
-		(args
-			_shipLevel = "levelRome"
-			_shipNameIDS = "shipNameIDS"
-			_shipMaterialsCount = "shipMaterialsCount"
-			_shipComponentsCount= "shipComponentsCount"
-		)
-	)
-)
-
-
-(def element ShipShardsTTXDescriptionBlockStart (_shipLevel:str, _shipNameIDS:str = '')
-	(scope
-		(var shipComponentText:str = "subst('IDS_SHIP_SHARDS_TTX_INFO_TEXT_START_1', [], { _shipComponentsCount: SHIP_SHARDS.COMPONENTS_COUNT_MIN, _shipLevel: _shipLevel, _shipName: toString(_shipNameIDS) })")
-		(var shipMaterialText:str = "subst('IDS_SHIP_SHARDS_TTX_INFO_TEXT_START_2_2', [], { _shipLevel: _shipLevel })")
-	)
-	(style (width = 100%))
-	(tf
-		(class $TextDefaultNM)
-		(style (width = 100%) (marginBottom = "S") (alpha = "TC"))
-		(bind text "shipComponentText")
-	)
-	(tf
-		(class $TextDefaultNM)
-		(style (marginBottom = "S") (alpha = "TC"))
-		(text = 'IDS_SHIP_SHARDS_TTX_INFO_TEXT_START_2_1')
-	)
-	(tf
-		(class $TextDefaultNM)
-		(style (width = 100%) (alpha = "TC"))
-		(bind text "shipMaterialText")
-	)
-)
-
-(def element ShipShardsTTXDescriptionBlockProgress (_shipComponentsCount:number = 0, _shipMaterialsCount:number = 0)
-	(scope
-		(var shipComponentsDelta:number = "SHIP_SHARDS.COMPONENTS_CRAFTING_COST - _shipComponentsCount")
-		(var shipMaterialsDelta:number = "shipComponentsDelta * SHIP_SHARDS.COMPONENT_COST")
-	)
-	(style (width = 100%))
-	(tf
-		(class $TextDefaultNM)
-		(style (marginBottom = "S") (alpha = "TC"))
-		(text = 'IDS_SHIP_SHARDS_TTX_INFO_TEXT_PROGRESS_1_1')
-	)
-	(hblock
-		(style (width = 100%))
-		(tf
-			(class $TextDefaultNM)
-			(style (marginRight = "S") (alpha = "TC"))
-			(text = 'IDS_SHIP_SHARDS_TTX_INFO_TEXT_PROGRESS_1_2')
-		)
-		(element PriceTag
-			_priceInfo = "{finalPrice: shipMaterialsDelta, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
-			_size = "SIZE.SMALL"
+	(style (width = 320px))
+	(macro BLURRED_PANEL_DEFAULT_BACKGROUND_MARKUP)
+	(block
+		(style
+			(width = 100%)
+			(padding = "SXS")
 		)
 		(tf
-			(class $TextDefaultNM)
-			(style (marginRight = "S") (marginLeft = "XS") (alpha = "TC"))
-			(text = 'IDS_OR')
+			(class $TextDefaultBold21NM)
+			(style (alpha = "TA"))
+			(text = 'IDS_REPAIR_DOCK_TITLE')
 		)
-		(element PriceTag
-			_priceInfo = "{finalPrice: shipComponentsDelta, currency: SC.Common.CURRENCIES.SHIPCOMPONENT}"
-			_size = "SIZE.SMALL"
+		(block
+			(style
+				(width = 100%)
+				(paddingLeft = "-SXS")
+				(paddingRight = "-SXS")
+				(marginTop = "SXS")
+				(marginBottom = "SXS")
+			)
+			(element HorizontalDividerTwoPx)
+		)
+		(block
+			(style
+				(width = 100%)
+				(vgap = "SXS")
+			)
+			(controller $Repeat renderer='RepeatParagraphItemNM'
+				(bind count "2")
+				(args
+					_paragraphText = "'IDS_SHIP_SHARDS_INFO_TEXT_' + $index"
+					_width = 100%
+					_leading = -2
+					_alpha = "TA"
+				)
+			)
+		)
+		(block
+			(style
+				(width = 100%)
+				(paddingLeft = "-SXS")
+				(paddingRight = "-SXS")
+				(marginTop = "SXS")
+				(marginBottom = "SXS")
+			)
+			(element HorizontalDividerTwoPx)
+		)
+		(tf
+			(class $TextDefaultBold17NM)
+			(style
+				(marginBottom = "S")
+				(alpha = "TA")
+			)
+			(text = 'IDS_SHIPCOMPONENT_INFO_TITLE')
+		)
+		(block
+			(style
+				(width = 100%)
+				(marginBottom = "S")
+			)
+			(element ShipShardIconBlock
+				_iconPath = 'url:../repair_dock/ShipComponent.png'
+				_rewardTitle = 'ShipComponent'
+			)
+		)
+		(element ShipShardIconBlock
+			_iconPath = 'url:../reward_icons/ShipMaterial.png'
+			_rewardTitle = 'ShipMaterial'
 		)
 	)
 )
 
-(def element ShipShardsTTXDescriptionBlockFinish (_shipMaterialsCount:number=0, _shipComponentsCount:number=0)
-	(scope
-		(var shipComponentsDelta:number = "SHIP_SHARDS.COMPONENTS_CRAFTING_COST - _shipComponentsCount")
-		(var shipMaterialsDelta:number = "shipComponentsDelta * SHIP_SHARDS.COMPONENT_COST")
+(def element ShipShardIconBlock (_rewardTitle:str = '', _iconPath:str = '')
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(align = "middle")
 	)
-	(style (width = 100%))
-	(tf
-		(class $TextDefaultNM)
-		(style (marginBottom = "S") (alpha = "TC"))
-		(text = 'IDS_SHIP_SHARDS_TTX_INFO_TEXT_FINISH_1_1')
+	(element IconWithAmount
+		_width = 80
+		_height = 80
+		_iconPath = "_iconPath"
 	)
-	(hblock
-		(style (width = 100%) (marginRight = "S"))
-		(tf
-			(class $TextDefaultNM)
-			(style (marginRight = "S") (alpha = "TC"))
-			(text = 'IDS_SHIP_SHARDS_TTX_INFO_TEXT_FINISH_1_2')
-		)
-		(element PriceTag
-			_priceInfo = "{finalPrice: shipMaterialsDelta, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
-			_size = "SIZE.SMALL"
+	(block
+		(style
+			(width = 100%)
+			(marginLeft = "S")
 		)
 		(tf
-			(class $TextDefaultNM)
-			(style (marginRight = "S") (marginLeft = "XS") (alpha = "TC"))
-			(text = 'IDS_SHIP_SHARDS_TTX_INFO_TEXT_FINISH_1_3')
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 100%)
+				(marginBottom = "S")
+				(alpha = "TA")
+			)
+			(bind text "'IDS_' + _rewardTitle + '_SHORT_TITLE'")
 		)
-		(element PriceTag
-			_priceInfo = "{finalPrice: shipComponentsDelta, currency: SC.Common.CURRENCIES.SHIPCOMPONENT}"
-			_size = "SIZE.SMALL"
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(alpha = "TA")
+			)
+			(bind text "'IDS_' + _rewardTitle + '_INFO_DESCRIPTION'")
 		)
 	)
 )
@@ -535,19 +596,32 @@
 		(event evScrollToBegin)
 		(event evScrollToEnd)
 
-		(event CarouselCanScrollChanged)
+		(event evCarouselCanScrollChanged)
+		(event evCarouselScrollValueChanged)
 
-		(var shipsComponentCollection:gfx = "$datahub.getCollection(CC.shipComponent).getChildByPath('sorted')")
-		(var shipsComponentArray:array = "shipsComponentCollection.items ?: []" (event "shipsComponentCollection.evUpdated"))
+		(var shipsComponentsCollection:dhCollection = "getCollectionByPath(CC.shipComponent, 'sorted')")
+		(var shipsInRepairDockLength:number = "shipsComponentsCollection.length")
 
-		(var repairDockShipCarouselCanScrollLeft:bool = "$event ? $event.down : false" watch=false (event "CarouselCanScrollChanged"))
-		(var repairDockShipCarouselCanScrollRight:bool = "$event ? $event.up : false" watch=false (event "CarouselCanScrollChanged"))
-		(var repairDockShipCarouselScrollEnabled:bool = "$event ? $event.down || $event.up : true" watch=false (event "CarouselCanScrollChanged"))
+		(var repairDockShipCarouselCanScrollLeft:bool = "$event ? $event.down : false" watch=false (event "evCarouselCanScrollChanged"))
+		(var repairDockShipCarouselCanScrollRight:bool = "$event ? $event.up : false" watch=false (event "evCarouselCanScrollChanged"))
+		(var repairDockShipCarouselScrollEnabled:bool = "$event ? $event.down || $event.up : true" watch=false (event "evCarouselCanScrollChanged"))
 		(var arrowAlpha:number = "repairDockShipCarouselScrollEnabled ? 1 : 0")
 	)
-	(style (width = 100%) (flow = "horizontal") (paddingLeft = "XS") (paddingRight = "XS"))
+	(dispatch evCarouselScrollChanged dir="EventDirection.DOWN" (event "evCarouselScrollValueChanged"))
+
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(paddingLeft = "XS")
+		(paddingRight = "XS")
+	)
 	(block
-		(style (width = 28px) (height = 100%) (align = "center|middle") (bind alpha "arrowAlpha"))
+		(style
+			(width = 28px)
+			(height = 100%)
+			(align = "center|middle")
+			(bind alpha "arrowAlpha")
+		)
 		(mc button_slide_left
 			(name = 'buttonRepairDockCarouselLeft')
 			(doubleClickEnabled = true)
@@ -557,35 +631,36 @@
 		)
 	)
 	(scrollArea
-		(style (width = 100%) (height = "CAROUSEL_ITEM_DEFAULT_HEIGHT_WITH_OFFSET") (backgroundColor = "NO_COLOR"))
+		(style
+			(width = 100%)
+			(height = "CAROUSEL_ITEM_DEFAULT_HEIGHT_WITH_OFFSET")
+			(backgroundColor = "NO_COLOR")
+		)
 
-		(horizontalSlider DefaultCarouselScroll)
+		(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+			_singleStep = "CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET"
+			_wheelScrollAcceleration = "0.8"
+			_maxScrollingAnimatedDistance = "280px"
+			_canScrollChangedEvent = "'evCarouselCanScrollChanged'"
+			_valueChangedEvent = "'evCarouselScrollValueChanged'"
+			_isScrollBarVisible = "false"
+		)
 
-		(hscrollPolicy = 'auto')
-		(vscrollPolicy = 'off')
 		(scrollPerItem = true)
-
-		(wheelScrollSpeed = 1.0)
-		(wheelScrollAcceleration = 0.8)
-		(maxScrollingAnimatedDistance = 280)
-
-		(activeControlsAlpha = 1)
-		(inactiveControlsAlpha = 0.5)
-		(animationDuration = 0.2)
-		(animationEasing = "Easing.cubic_out")
-
 		(repeatController = 'repairDockShipCarouselContainer')
 
 		(content
-			(style (height = 100%) (flow = "horizontal"))
-			
+			(style
+				(height = 100%)
+				(flow = "horizontal")
+			)
+
 			(controller $DynamicRepeat renderer='RepairDockShipSlot' name='repairDockShipCarouselContainer'
-				(bind count "shipsComponentArray.length")
+				(bind count "shipsInRepairDockLength")
 				(args
-					_shipsCollection = "shipsComponentCollection"
+					_shipsCollection = "shipsComponentsCollection"
 					_selectedShipId = "_selectedShipId"
 				)
-
 				(itemHeight = 100%)
 				(itemWidth = "CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET")
 				(itemOffset = "CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET")
@@ -599,7 +674,12 @@
 		(bindcall scrollToEnd (event "evScrollToEnd"))
 	)
 	(block
-		(style (width = 28px) (height = 100%) (align = "center|middle") (bind alpha "arrowAlpha"))
+		(style
+			(width = 28px)
+			(height = 100%)
+			(align = "center|middle")
+			(bind alpha "arrowAlpha")
+		)
 		(mc button_slide_right
 			(name = 'buttonRepairDockCarouselRight')
 			(doubleClickEnabled = true)
@@ -610,35 +690,30 @@
 	)
 )
 
-
-(def element RepairDockShipSlot (_shipsCollection:gfx, _selectedShipId:number)
+(def element RepairDockShipSlot (_shipsCollection:dhCollection, _selectedShipId:number)
 	(scope
+		(event evCarouselScrollChanged)
+
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 
-		(struct shipShardsBrokenShipTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_BROKEN_SHIP"))
-		(struct shipShardsShipCraftingTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_READY_SHIP"))
-
-		(var tipId:number = "	shipShardsBrokenShipTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_BROKEN_SHIP :
-								shipShardsShipCraftingTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_READY_SHIP
-																		: SC.Context_guiding_tip.TIP_TYPE.NONE")
-
-		(var shipEntity:gfx = "_shipsCollection.items[$index]" (event "_shipsCollection.evUpdated"))
+		(var shipEntity:dhEntity = "_shipsCollection[$index]")
 		(var shipId:number = "shipEntity.ship.id ?: 0" (event "shipEntity.ship.evUpdate"))
 		(var shipShortName:str = "shipEntity.ship.shortName ?: ''" (event "shipEntity.ship.evUpdate"))
+		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO("shipId"))
 
-		(var shipComponentEntity:gfx = "$datahub.getPrimaryEntity(CC.shipComponent, shipId)")
-		(var shipComponentsCount:number = "shipComponentEntity.shipComponent.count ?: 0" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var isAvailableForCrafting:bool = "shipComponentEntity.shipComponent.isAvailableForCrafting ?: false" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var progressValue:number = "shipComponentsCount/100")
 		(var isSelected:bool = "shipId == _selectedShipId")
-		(var shipImageSource:str = "'url:../ships_silhouettes/repair_dock/' + shipShortName + '.png'")
 
-		(var thumbState:number = "	isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
-									mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
-									rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
-													: SC.Ui_styles.BUTTON_STATE.UP")
+		(struct shipShardsBrokenShipTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_BROKEN_SHIP"))
+		(struct shipShardsShipCraftingTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_READY_SHIP"))
+		(var tipId:number = "	shipShardsBrokenShipTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_BROKEN_SHIP :
+								shipShardsShipCraftingTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_READY_SHIP
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
+		(var thumbState:number = "	isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+									mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+									rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
 		(var thumbAlpha:number = "CAROUSEL_THUMB_STATE_ALPHA.PORT[thumbState]")
 		(var thumbBorderAlpha:number = "CAROUSEL_BORDER_SLOT_STATE_ALPHA[thumbState]")
 	)
@@ -648,68 +723,138 @@
 	(macro SOUND_HANDLER _soundSet = "!isSelected ? 'button_ship' : ''")
 	(macro MOUSE_LMB_EXTERNAL_CALL 'inputMapping.onAction' "['selectShip', { shipId: shipId, state: SC.Common.SHIP_SELECTION_STATES.REPAIR_DOCK }]")
 
-	(style (width = "CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET") (height = "CAROUSEL_ITEM_DEFAULT_HEIGHT_WITH_OFFSET") (padding = "CAROUSEL_ITEM_OFFSET"))
+	(style
+		(width = "CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET")
+		(height = "CAROUSEL_ITEM_DEFAULT_HEIGHT_WITH_OFFSET")
+		(padding = "CAROUSEL_ITEM_OFFSET")
+	)
 
+	
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMap'
+			(bind enabled "!isHighContrast")
+		)
+	)
+
+	
 	(block
 		(class $FullsizeAbsolute)
 		(style (padding = -1px))
 		(block
 			(bind visible "isHighContrast")
 			(class $FullsizeAbsolute)
-			(style (backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_high_contrast.png') (scale9grid = 3) (alpha = 1.3))
-		)
-		(block
-			(class $FullsizeAbsolute)
-			(controller $Instance renderer='BlurMap'
-				(bind enabled "!isHighContrast")
+			(style
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_high_contrast.png')
+				(scale9grid = 3)
+				(alpha = 1.3)
 			)
 		)
 		(block
 			(class $FullsizeAbsolute)
-			(style (backgroundImage = 'url:../service_kit/panel_backgrounds/carousel_slot.png') (scale9grid = 3))
-			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="thumbState" _alpha="thumbBorderAlpha")
+			(style
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/carousel_slot.png')
+				(scale9grid = 3)
+				(bind alpha "thumbBorderAlpha" watch=false)
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger="thumbState"
+				_alpha="thumbBorderAlpha"
+			)
 		)
 		(block
 			(class $FullsizeAbsolute)
-			(style (alpha = "thumbAlpha") (backgroundColor = 0xFFFFFFFF))
+			(style
+				(alpha = "thumbAlpha")
+				(backgroundColor = 0xFFFFFFFF)
+			)
 			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="thumbState" _alpha="thumbAlpha")
 		)
 		(block
-			(bind visible "isAvailableForCrafting")
+			(bind visible "shipMaterialInfo.isCraftWithMaterialsAvailable")
 			(class $FullsizeAbsolute)
 			(style (backgroundColor = 0x662D5B81))
 		)
 	)
+
 	(block
 		(class $FullsizeAbsolute)
-		(style (bind backgroundImage "shipImageSource") (backgroundSize = "contain"))
+		(style
+			(hitTest = false)
+			(backgroundSize = "contain")
+			(bind backgroundImage "'url:../ships_silhouettes/repair_dock/' + shipShortName + '.png'")
+		)
 	)
-	(block
-		(style (position = "absolute") (top = -1px) (width = 100%))
-		(element DefaultProgressBar _progress = "progressValue")
-	)
+
 	(hblock
-		(style (position = "absolute") (bottom = 0) (width = 100%) (height = 31px) (align = "middle"))
-		(block
-			(class $FullsizeAbsolute)
-			(style (backgroundImage = 'url:../service_kit/panel_backgrounds/ship_name_panel.png') (scale9grid = 4) (hitTest = false))
+		(style
+			(position = "absolute")
+			(bottom = 0)
+			(width = 100%)
+			(height = 31px)
+			(align = "middle")
 		)
 		(block
-			(style (width = 100%) (paddingLeft = "S") (hitTest = false))
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(scale9grid = 4)
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/ship_name_panel.png')
+			)
+		)
+		(block
+			(style
+				(hitTest = false)
+				(width = 100%)
+				(paddingLeft = "S")
+			)
 			(element ShipLineItemNM
 				_shipId = "shipId"
 				_withFlag = true
 				_fontClass = '$TextDefaultBoldNM'
 				_width = '100%'
 			)
+			(block
+				(bind visible "shipMaterialInfo.isCraftWithMaterialsAvailable")
+				(style
+					(position = "absolute")
+					(right = "S")
+					(top = "-XS")
+					(width = 19px)
+					(height = 19px)
+					(backgroundImage = 'url:../service_kit/unified_status_icons/icon_ship_craft_available.png')
+				)
+			)
 		)
 	)
-	(controller $Tooltip
-		(renderer = 'ShipExtendedTooltip')
-		(args
-			_shipId = "shipId"
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style (padding = "-CAROUSEL_ITEM_OFFSET"))
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "NO_COLOR"))
+			(controller $Tooltip
+				(renderer = 'ShipExtendedTooltip')
+				(args
+					_shipId = "shipId"
+					_isShipComponent = true
+					_hasShipImage = true
+					_isShipComponentsCarousel = true
+				)
+				(macro SHIP_TREE_TOOLTIP_BEHAVIOUR "0")
+			)
+
+			(controller $Tooltip
+				(renderer = 'ShipContextMenuRepairDock')
+				(args
+					_shipId = "shipId"
+				)
+				(macro DEFAULT_MENU_BEHAVIOUR "1")
+				(macro TOOLTIP_HIDE_ON_EVENT "evCarouselScrollChanged")
+			)
 		)
-		(macro SHIP_TREE_TOOLTIP_BEHAVIOUR)
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
@@ -717,110 +862,10 @@
 		(args
 			_tipId =			"tipId"
 			_tipPositioning =	"TIP_POSITION_TOP"
-			_noPointer =		true
 			_hasNextButton =	"tipId == SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_BROKEN_SHIP"
 			_screenOffsetLeft =	"SXS"
+			_noPointer =		true
 			_modalWindowName =	'ModalWindowRepairDock'
-		)
-	)
-)
-(def element ShipShardsInfoPanel ()
-	(scope
-		(macro HIGH_CONTRAST_DATA_SCOPE)
-	)
-	(style (width = 320px))
-	(macro BLURRED_PANEL_DEFAULT_BACKGROUND_MARKUP)
-	(block
-		(style (width = 100%) (padding = "[M, M, M, SXS]"))
-		(tf
-			(class $TextDefaultBold19NM)
-			(style (alpha = "TA"))
-			(text = 'IDS_REPAIR_DOCK_TITLE')
-		)
-		(element TooltipSystemHorizontalDivider)
-		(block
-			(style (width = 100%) (vgap = "SXS"))
-			(controller $Repeat renderer='RepeatParagraphItemNM'
-				(bind count "4")
-				(args
-					_paragraphText = "'IDS_SHIP_SHARDS_INFO_TEXT_' + $index"
-					_width = "100%"
-					_leading = -2
-					_alpha = "TA"
-				)
-			)
-		)
-		(element TooltipSystemHorizontalDivider)
-		(hblock
-			(style (marginBottom = "S") (backgroundColor = 0x01000000))
-			(tf
-				(class $TextDefaultBold17NM)
-				(style (alpha = "TA"))
-				(text = 'IDS_SHIP_SHARDS_TTX_INFO_TITLE')
-			)
-			(block
-				(style	(width = 19px) (height = 19px) (marginTop = "-XXS") (marginLeft = 6px)
-						(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png'))
-			)
-			(controller $Tooltip
-				(renderer='ShipTTXInfoTooltip')
-				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-			)
-		)
-		(block
-			(style (width = 100%) (marginBottom = "S"))
-			(element ShipShardIconBlock _rewardTitle = 'ShipComponent')
-		)
-		(element ShipShardIconBlock _rewardTitle = 'ShipMaterial')
-	)
-)
-
-(def element ShipShardIconBlock (_rewardTitle:str = '')
-	(scope
-		(var iconPath:str = "'url:../reward_icons/' + _rewardTitle + '.png'")
-		(var title:str = "'IDS_' + toUpper(_rewardTitle) + '_SHORT_TITLE'")
-		(var subtitle:str = "'IDS_' + toUpper(_rewardTitle) + '_INFO_DESCRIPTION'")
-	)
-	(style (width = 100%) (flow = "horizontal") (align = "middle"))
-	(element IconWithAmount
-		_width = 80
-		_height = 80
-		_iconPath = "iconPath"
-	)
-	(block
-		(style (width = 100%) (marginLeft = "S"))
-		(tf
-			(class $TextDefaultBoldNM)
-			(style (width = 100%) (marginBottom = "S") (alpha = "TA"))
-			(bind text "title")
-		)
-		(tf
-			(class $TextDefaultNM)
-			(style (width = 100%) (alpha = "TA"))
-			(bind text "subtitle")
-		)
-	)
-)
-
-(def macro HIDE_REPAIR_DOCK_UI_ANIMATION (_isEnabled:expression)
-	(style (bind hitTest "!_isEnabled"))
-
-	(controller $Animation
-		(bindcall play
-			to = "{alpha: 0}"
-			easing = "Easing.quad_in"
-			delay= 0.5
-			duration = 0.4
-			action = "killAll"
-			(bind enabled "_isEnabled")
-		)
-		(bindcall play
-			to = "{alpha: 1}"
-			easing = "Easing.quad_in"
-			delay=0.15
-			duration = 0.25
-			action = "killAll"
-			(bind enabled "!_isEnabled")
 		)
 	)
 )

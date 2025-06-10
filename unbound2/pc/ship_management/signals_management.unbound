@@ -5,31 +5,13 @@
 	INSTALL:						'installSignal',
 	SET_RARITY_LEVEL:				'installSignalsRarityLevel',
 	UNINSTALL_ALL:					'uninstallAllSignals',
-	GO_TO_METASHOP_PAGE:			'showMetashopItemWindow'
+	GO_TO_METASHOP_PAGE:			'showMetashopItemWindow',
+	SET_ALCHEMY_TARGET:				'setAlchemyTarget'
 })
-
-(def css $ManagementBlockHeader ()
-	(extends $TextDefaultBold17NM)
-	(marginBottom = "S")
-	(marginLeft = "XXS")
-	(alpha = "TA")
-)
-
-(def css $ManagementBlockCommon ()
-	(width = 100%)
-	(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
-	(align = "center")
-)
-
-(def css $ManagementBlock ()
-	(extends $ManagementBlockCommon)
-	(paddingTop = "MS")
-	(paddingBottom = "L")
-)
 
 (def element SignalsManagementBlock ()
 	(scope
-		(macro FEATURES "14")
+		(struct signalFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.EXT_SIGNALS"))
 
 		(var resourceWatcher:gfx = "$datahub.getFirstWatcher(CC.accountResource)")
 		(var resourceEntity:gfx = "resourceWatcher.entity" (event "resourceWatcher.event"))
@@ -60,7 +42,9 @@
 
 		(var isClickableSlot:bool = "isOwned && !(isLocked || isInFormation || isNeedRepair)")
 
-		(var showMarkerNew:bool = "feature_14 == 'new'")
+		(var showMarkerNew:bool = "signalFeature.state == 'new'")
+
+		(struct alchemyNewMarker =			GET_PREF_BOOL(_option="'ui.alchemy.isSignalsAlchemyNew'"))
 
 		(struct signalsFinalTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.BATTLE_BONUS_SIGNALS_FINAL"))
 		(struct signalsFinalRepeatTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.BATTLE_BONUS_SIGNALS_FINAL_REPEAT"))
@@ -140,9 +124,15 @@
 		)
 
 		(hblock
-			(style (width = 100%) (align = "right"))
+			(style 
+				(width = 100%)
+				(align = "right")
+			)
 			(block
-				(style (marginRight = "MS") (paddingTop = "-S"))
+				(style 
+					(marginRight = "M")
+					(paddingTop = "-S")
+				)
 
 				(controller $Instance renderer='InstallSignalsRarities'
 					(bind enabled "isOwned")
@@ -168,6 +158,35 @@
 					)
 				)
 			)
+
+			(block
+				(style
+					(marginRight = "MS")
+					(paddingTop = "-S")
+				)
+
+				(block
+					(controller $Instance renderer='ExchangeSignalsButton'
+						(bind enabled "isOwned")
+						(args
+							_isLocked = "isLocked"
+						)
+					)
+				)
+
+				(block
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "alchemyNewMarker.value && isOwned")
+					(style
+						(hitTest = false)
+						(position = "absolute")
+						(right = -10px)
+						(top = "-S")
+					)
+
+					(element MarkerNew)
+				)
+			)
+
 			(block
 				(style (marginRight = "XXS"))
 				(element SignalsAutopurchaseBlock
@@ -310,6 +329,39 @@
 		(pinBottom='InfotipPinBottom')
 		(bind isInfotipVisible "true" on='evStartShow')
 		(bind isInfotipVisible "false" on='evHide')
+	)
+)
+
+(def element ExchangeSignalsButton (_isLocked:bool)
+	(scope
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimple:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+		(var isReadyInDivision:bool = "preBattlePlayerSimple.isReady" (event "preBattlePlayerSimple.evIsReadyChanged"))
+		(var mouseInstruction:dict = "	isReadyInDivision	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+															text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_SIGNALS' } :
+										_isLocked		? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+															text: 'IDS_LEAVE_BATTLE_FIRST_TO_OPERATE_ECONOMIC_BOOSTS' }
+														: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+															text: 'IDS_EXCHANGE_SIGNALS_HINT' }")
+	)
+	(element DockButton
+		_label = 'IDS_EXCHANGE_SIGNALS'
+		_enabled = "!_isLocked && !isReadyInDivision"
+		_methods = "[	{	type: 'inputMapping.onRequest',
+							name: 'showAlchemyExchangeWindow',
+							args: {exchangedItem: SC.Common.ALCHEMY_TYPE.SIGNAL} },
+						{	type: 'direct.action',
+							name: 'option.set',
+							args: ['ui.alchemy.isSignalsAlchemyNew', false] }]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text =				"mouseInstruction.text"
+			_unifiedStatus =	"mouseInstruction.unifiedStatus"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )
 
@@ -593,8 +645,8 @@
 (def element SignalSlotInfotip (_slotId:number, _installedEntityId:number)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+		(var signalsForSlotTypeCollection:dhCollection = "getCollection(CC.signal).getChildByPath('byType.' + _slotId)")
 
-		(var signalsForSlotTypeCollection:gfx =	"$datahub.getCollection(CC.signal).getChildByPath('byType.' + _slotId)")
 		(var signalsForSlotTypeItems:array =	"signalsForSlotTypeCollection.items ?: []" (event "signalsForSlotTypeCollection.evUpdated"))
 	)
 
@@ -605,9 +657,9 @@
 		(block
 			(style (width = 100%))
 			(controller $Repeat renderer='SignalSlotInfotipItem'
-				(bind count "signalsForSlotTypeItems.length")
+				(bind count "signalsForSlotTypeCollection.length")
 				(args
-					_signalEntity =			"signalsForSlotTypeItems[$index]"
+					_signalEntity =			"signalsForSlotTypeCollection[$index]"
 					_installedEntityId =	"_installedEntityId"
 				)
 			)
@@ -615,7 +667,7 @@
 	)
 )
 
-(def element SignalSlotInfotipItem (_signalEntity:gfx, _installedEntityId:number=0)
+(def element SignalSlotInfotipItem (_signalEntity:dhEntity, _installedEntityId:number=0, _isAlchemy:bool=false)
 	(scope
 		(event evHideInfotip)
 		(event evFireInfotipHiding)
@@ -627,12 +679,11 @@
 
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var resourceWatcher:gfx = "$datahub.getFirstWatcher(CC.accountResource)")
-		(var resourceEntity:gfx = "resourceWatcher.entity" (event "resourceWatcher.event"))
+		(var resourceEntity:dhEntity =		"getSingleEntity(CC.accountResource)")
 		(var operationsAccountLocked:bool = "resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
 
 		(var signalEntityId:number =	"_signalEntity.id")
-		(var signalItemComponent:gfx =	"_signalEntity.signal")
+		(var signalItemComponent:dhComponent =	"_signalEntity.signal")
 		(var signalItemId:number =		"signalItemComponent.id")
 		(var name:str =					"signalItemComponent.name")
 		(var canBeBought:bool =			"signalItemComponent.canBuy ?: false"	(event "signalItemComponent.evUpdated"))
@@ -644,24 +695,24 @@
 		(var amount:number =			"_signalEntity ? _signalEntity.countComponent.value : 0" (event "_signalEntity.countComponent.evUpdate"))
 		(var hasAnySignals:bool =		"amount > 0")
 
-		(var signalPriceEntity:gfx =	"$datahub.getPrimaryEntity(CC.priceComponent, toString(signalItemId) + '_' + toString(SC.Common.PRICE_ACTION.BUY))")
-		(var signalPrice:gfx =			"signalPriceEntity ? signalPriceEntity.priceComponent : null" (event "signalPriceEntity.priceComponent.evChanged"))
-		(var hasPrice:bool =			"signalPrice != null")
+		(struct signalPrice =	PULL_PRICE(_entityId = "toString(signalItemId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(var hasPrice:bool =	"signalPrice.priceComponent != null")
 
-		(var isPriceTagVisible:bool =	"canBeBought && !hasAnySignals && hasPrice")
+		(var isPriceTagVisible:bool =	"!_isAlchemy && canBeBought && !hasAnySignals && hasPrice")
 
 		(var isInstalled:bool =				"signalEntityId == _installedEntityId")
-		(var isInstalledAndActive:bool =	"isInstalled && hasAnySignals")
+		(var isInstalledAndActive:bool =	"isInstalled && (hasAnySignals || _isAlchemy)")
 		(var isExpired:bool =				"isInstalled && !hasAnySignals")
-		(var isUnclickable:bool =			"!canBeBought && !isInstalled && !hasAnySignals && !isAvailableThroughMetashop")
-
+		(var isUnclickable:bool =			"!_isAlchemy && !canBeBought && !isInstalled && !hasAnySignals && !isAvailableThroughMetashop")
 		(var signalTitle:str =				"tr('IDS_' + toUpper(name) + '_' + rarity)")
+		(var signalSubheaderText:str = 		"rarity ? tr('IDS_BATTLE_SIGNAL_RARITY_' + rarity) : ''")
 		(var signalAlphaParam:number =		"isUnclickable ? 0.5 : 1")
 
 		(var clickAction:str = "operationsAccountLocked || isUnclickable			? '' :
+								_isAlchemy											? SIGNALS_ACTION.SET_ALCHEMY_TARGET :
 								!hasAnySignals && canBeBought						? SIGNALS_ACTION.OPEN_MODAL_BUY_AND_INSTALL :
 								!hasAnySignals && isAvailableThroughMetashop		? SIGNALS_ACTION.GO_TO_METASHOP_PAGE :
-								isInstalled											? SIGNALS_ACTION.UNINSTALL :
+								isInstalled && !_isAlchemy							? SIGNALS_ACTION.UNINSTALL :
 								hasAnySignals || (!hasAnySignals && !canBeBought)	? SIGNALS_ACTION.INSTALL
 																					: ''")
 
@@ -690,6 +741,7 @@
 
 		(controller $Tooltip
 			(renderer = 'SignalTooltip')
+			(bind enabled "!_isAlchemy")
 			(args
 				_id =					"signalItemId"
 				_isInstalled =			"isInstalled"
@@ -698,9 +750,20 @@
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 
+		(controller $Tooltip
+			(renderer = 'SignalIconHeaderAndAmountTooltip')
+			(bind enabled "_isAlchemy")
+			(args
+				_id =					"signalItemId"
+				_showAmountInStorage =	false
+				_showIsExchangeable =	false
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
 		(element MenuItemBackground
 			_state =			"infotipItemBGState"
-			_isAttentionState =	"isExpired"
+			_isAttentionState =	"!_isAlchemy && isExpired"
 		)
 
 		(macro MOUSE_HANDLER
@@ -708,7 +771,8 @@
 			_methods =	"[	{ type:	clickAction != SIGNALS_ACTION.OPEN_MODAL_BUY_AND_INSTALL &&
 									clickAction != SIGNALS_ACTION.GO_TO_METASHOP_PAGE			? 'inputMapping.onAction' : '',		name: clickAction,	args: { signalId: signalItemId } },
 							{ type:	clickAction == SIGNALS_ACTION.OPEN_MODAL_BUY_AND_INSTALL	? 'inputMapping.onRequest' : '',	name: clickAction,	args: { signalId: signalItemId } },
-							{ type:	clickAction == SIGNALS_ACTION.GO_TO_METASHOP_PAGE			? 'inputMapping.onRequest' : '',	name: clickAction,	args: { itemId: signalItemId } } ]"
+							{ type:	clickAction == SIGNALS_ACTION.GO_TO_METASHOP_PAGE			? 'inputMapping.onRequest' : '',	name: clickAction,	args: { itemId: signalItemId } },
+							{ type:	clickAction == SIGNALS_ACTION.SET_ALCHEMY_TARGET			? 'direct.action' : '',				name: clickAction,	args: { targetItemId: signalItemId } } ]"
 		)
 	)
 
@@ -731,7 +795,7 @@
 				(marginRight = "S")
 				(bind alpha "signalAlphaParam")
 				(bind backgroundImage "'url:../signal_flags/' + name + '.png'")
-				(macro DESATURATION_DEFAULT "(hasAnySignals || canBeBought || isInstalled) || isAvailableThroughMetashop")
+				(macro DESATURATION_DEFAULT "(_isAlchemy || hasAnySignals || canBeBought || isInstalled) || isAvailableThroughMetashop")
 			)
 		)
 
@@ -755,6 +819,7 @@
 
 			
 			(block
+				(bind visible "!_isAlchemy")
 				(bind name "'AmountOfBought_' + name")
 
 				(style (marginTop = "SXS"))
@@ -774,6 +839,19 @@
 				)
 			)
 			
+
+			
+			(tf
+				(bind visible "_isAlchemy")
+				(class $TextDefaultNM)
+				(style
+					(marginTop = "SXS")
+					(bind textColor "isInstalledAndActive ?  SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(bind alpha "isInstalledAndActive ? 1 : TC")
+				)
+				(bind text "signalSubheaderText")
+			)
+			
 		)
 
 		
@@ -787,22 +865,22 @@
 			)
 
 			(controller $Instance renderer='PriceTag'
-				(bind enabled "canBeBought && !hasAnySignals")
+				(bind enabled "!_isAlchemy && canBeBought && !hasAnySignals")
 				(args
-					_priceInfo =		"signalPrice"
+					_priceInfo =		"signalPrice.info"
 					_showDiscountTag =	true
 				)
 			)
 
 			(controller $Instance renderer='CloseButton'
-				(bind enabled "isInstalledAndActive && rollOver")
+				(bind enabled "!_isAlchemy && isInstalledAndActive && rollOver")
 				(args
 					_isDisabled = true
 				)
 			)
 
 			(block
-				(bind visible "!hasAnySignals && isAvailableThroughMetashop")
+				(bind visible "!_isAlchemy && !hasAnySignals && isAvailableThroughMetashop")
 
 				(style
 					(hitTest = false)
@@ -813,7 +891,7 @@
 			)
 
 			(block
-				(bind visible "isInstalledAndActive && !rollOver")
+				(bind visible "isInstalledAndActive && (!rollOver || _isAlchemy)")
 				(style
 					(marginRight = "-XXS")
 					(width = 19px)
@@ -829,9 +907,8 @@
 
 (def element EmptySignalSlotTooltip (_slotId:number)
 	(scope
-		(var signalsCollection:gfx =			"$datahub.getCollection(CC.signal)")
-		(var signalsForSlotTypeCollection:gfx =	"signalsCollection.getChildByPath('byType.' + _slotId)")
-		(var signalsForSlotTypeItems:array =	"signalsForSlotTypeCollection.items ?: []" (event "signalsForSlotTypeCollection.evUpdated"))
+		(var signalsCollection:dhCollection =				"getCollection(CC.signal)")
+		(var signalsForSlotTypeCollection:dhCollection =	"getCollectionByPath(CC.signal, 'byType.' + _slotId)")
 
 		(macro PULL_SHIP_ID)
 		(var shipEntity:dhEntity =			"getPrimaryEntity(CC.ownShip, viewedShipId)")
@@ -869,9 +946,9 @@
 			)
 
 			(controller $Repeat renderer='SignalSlotInfotipItem'
-				(bind count "signalsForSlotTypeItems.length")
+				(bind count "signalsForSlotTypeCollection.length")
 				(args
-					_signalEntity = "signalsForSlotTypeItems[$index]"
+					_signalEntity = "signalsForSlotTypeCollection[$index]"
 				)
 			)
 		)

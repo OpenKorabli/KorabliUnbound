@@ -1,91 +1,154 @@
 (def element TrialOwnProgressTaskItem (_trialComponent:dhComponent)
 	(scope
 		(event evShowTask)
-		(event evShowTaskAndScore)
 		(event evPlayTimerSound)
+		(event evShowBonusScore)
+		(event evHideBonusScore)
+		(event evStartBonusScoresSubtraction)
+		(event evEndBonusScoresSubtraction)
+		(event evStartAddingLastBonusToBonus)
+		(event evStartBonusToScoresAdding)
+		(event evBonusToScoresAddingEnded)
+		(event evBonusAnimationEnded)
+		(event evAddedToStage)
 
 		(macro BATTLE_TIMER_SCOPE)
 
 		(var battleDataEntity:dhEntity = "getSingleEntity(CC.battleData)")
 		(var battleState:number = "battleDataEntity.battleState.battleState" (event "battleDataEntity.battleState.evBattleStateChanged"))
 
-		(var trialType:number = "_trialComponent.trialType")
+		(var trialComponent:dhComponent = "_trialComponent")
+		(var trialType:number = "trialComponent.trialType")
 		(var trialTypeName:str = "SC.Battle.DISCIPLINE_TYPES.VALUE_TO_NAME[trialType]")
-		(var trialRound:number = "_trialComponent.trialRound ?: 0" (event "_trialComponent.evTrialInfoChanged"))
-		(var trialRoundsCount:number = "_trialComponent.trialsCount ?: 0" (event "_trialComponent.evTrialInfoChanged"))
-		(var phase:number = "_trialComponent.phase" (event "_trialComponent.evPhaseInfoChanged"))
-		(var isExecutionPhase:bool = "phase == SC.Battle.ROUND_STAGE.EXECUTION")
+		(var trialRound:number = "trialComponent.trialRound ?: 0" (event "trialComponent.evTrialInfoChanged"))
+		(var trialRoundsCount:number = "trialComponent.trialsCount ?: 0" (event "trialComponent.evTrialInfoChanged"))
+		(var phase:number = "trialComponent.phase" (event "trialComponent.evPhaseInfoChanged"))
+		(var isCreatedPhase:bool = "phase == SC.Battle.ROUND_STAGE.CREATED")
 		(var isActivationPhase:bool = "phase == SC.Battle.ROUND_STAGE.ACTIVATION")
+		(var isExecutionPhase:bool = "phase == SC.Battle.ROUND_STAGE.EXECUTION")
+		(var isDeactivationPhase:bool = "phase == SC.Battle.ROUND_STAGE.DEACTIVATION")
 
-		(var targetScores:number = "_trialComponent.targetScore" (event "_trialComponent.evTrialInfoChanged"))
-		(var playerScores:number = "min(_trialComponent.scores, targetScores)" (event "_trialComponent.evScoresChanged"))
+		(var targetScores:number = "trialComponent.targetScore ?: 0" (event "trialComponent.evTrialInfoChanged"))
+		(var playerScores:number = "min(trialComponent.scores, targetScores)" (event "trialComponent.evScoresChanged"))
 		(var playerAnimatedScores:number = "0")
-		(var playerBonusScores:number = "_trialComponent.bonusScores" (event "_trialComponent.evBonusScoresChanged"))
+		(var playerBonusScores:number = "trialComponent.bonusScores ?: 0" (event "trialComponent.evBonusScoresChanged"))
 		(var playerBonusAnimatedScores:number = "0")
 		(var progressbarCoef:number = "targetScores !=0 ? min(round(playerAnimatedScores) / targetScores, 1) : 0")
 
-		(var timeToNextPhase:number = 	"_trialComponent.timeToNextPhase ?: 0" (event "_trialComponent.evPhaseInfoChanged"))
-		(var timeLeft:number = "round(timeToNextPhase - currentTime)" (event "_trialComponent.evPhaseInfoChanged"))
+		(var timeToNextPhase:number = 	"trialComponent.timeToNextPhase ?: 0" (event "trialComponent.evPhaseInfoChanged"))
+		(var timeLeft:number = "round(timeToNextPhase - currentTime)" (event "trialComponent.evPhaseInfoChanged"))
 		(var isTimerRed:bool = "timeLeft < 10 && isExecutionPhase && playerScores < targetScores")
 
-		(var isAddingBonusOnStartInProgress:bool = "isExecutionPhase && timeLeft < 1 && timeLeft != 0")
-		(var isBonusScoresSubtractionInProgress:bool = "isActivationPhase && timeLeft < 2 && timeLeft != 0")
-		(var isTimerVisible:bool = "phase == SC.Battle.ROUND_STAGE.EXECUTION && timeLeft > 1 && battleState == SC.Common.CLIENT_BATTLE_STATE.STARTED")
+		(var isTimerVisible:bool = "isExecutionPhase && timeLeft > 1 && battleState == SC.Common.CLIENT_BATTLE_STATE.STARTED")
 
-		(var isBonusScoreVisible:bool = "isExecutionPhase	? playerBonusScores > 0 && round(playerAnimatedScores) == targetScores
-															: round(playerBonusAnimatedScores) > 0")
+		(var isBonusScoreVisible:bool = "false" watch=false)
+		(bind isBonusScoreVisible "true"	init=false (event "evShowBonusScore"))
+		(bind isBonusScoreVisible "false"	init=false (event "evHideBonusScore"))
+
+		(var canStartBonusScoresSubtraction:bool = "isActivationPhase && timeLeft < 4 && timeLeft > 1")
+		(var isBonusScoresSubtractionInProgress:bool = "false" watch=false)
+		(bind isBonusScoresSubtractionInProgress "true"		init=false (event "evStartBonusScoresSubtraction"))
+		(bind isBonusScoresSubtractionInProgress "false"	init=false (event "evEndBonusScoresSubtraction"))
+
+		(var isScoresSubstraction:bool = "isExecutionPhase && (playerScores < playerAnimatedScores || playerBonusScores < playerBonusAnimatedScores)")
+		(var scoresSubstractionCoef:number = "isScoresSubstraction ? (round(playerAnimatedScores) - playerScores) / targetScores : 0")
+
+		(var isManeuverType:bool = "trialType == SC.Battle.DISCIPLINE_TYPES.MANEUVER")
+
+		(var isBonusScoreDispatchEnabled:bool = "((isExecutionPhase || isDeactivationPhase) && toBool(round(playerAnimatedScores) == targetScores)) && !isBonusScoresSubtractionInProgress")
+
+
 
 		(controller $Animation
-			(bindcall play
-				duration = "0.15 + (playerScores-playerAnimatedScores)/30000"
-				id='scoresAnimation'
-				action="kill"
+			(controllerEvents evOnBonusAnimationEnded)
+			(controllerEvents evOnBonusAnimationStarted)
+			(controllerEvents evOnBonusToScoresAddingEnded)
+			(controllerEvents evLastBonusToBonusAddingEnded)
+
+			(bindcall play 
+				duration = "max(0.5, 0.03 * sqrt(abs(playerScores-playerAnimatedScores))) * 0.15"
+				delay = "isScoresSubstraction ? 0.03 : 0"
+				id =' scoresAnimation'
+				action = "kill"
 				watch = false
 				from = "{ playerAnimatedScores: playerAnimatedScores }"
 				to = "{ playerAnimatedScores: playerScores }"
-				(bind enabled "isExecutionPhase && !isAddingBonusOnStartInProgress")
-				(event "_trialComponent.evScoresChanged")
+				(bind enabled "isExecutionPhase && !isBonusScoresSubtractionInProgress")
+				(event "trialComponent.evScoresChanged")
+				(event "evAddedToStage")
 			)
-			(bindcall play
-				duration = "0.15 + (playerBonusScores-playerBonusAnimatedScores)/30000"
-				id='bonusAnimation'
-				action="kill"
+
+			(bindcall play 
+				duration = "max(0.5, 0.03 * sqrt(abs(playerBonusScores-playerBonusAnimatedScores))) * 0.15"
+				id = 'bonusAnimation'
+				action = "kill"
 				watch = false
 				from = "{ playerBonusAnimatedScores: playerBonusAnimatedScores }"
 				to = "{ playerBonusAnimatedScores: playerBonusScores }"
-				(bind enabled "isExecutionPhase && !isAddingBonusOnStartInProgress && isBonusScoreVisible")
-				(bind trigger "isBonusScoreVisible")
-				(event "_trialComponent.evBonusScoresChanged")
+				(bind enabled "isExecutionPhase && !isBonusScoresSubtractionInProgress")
+				(event "trialComponent.evBonusScoresChanged")
+				(event "evAddedToStage")
 			)
-			(bindcall play
-				duration = 0.15
-				id='endRoundBonusScoresSubtraction'
-				action="kill"
+
+			(bindcall play 
+				duration = "max(0.5, 0.03 * sqrt(playerBonusAnimatedScores)) * 0.15"
+				id = 'endRoundBonusScoresSubtraction'
+				onStartedEvent = 'evOnBonusAnimationStarted'
+				onEndedEvent = 'evOnBonusAnimationEnded'
+				action = "kill"
 				watch = false
 				from = "{ playerBonusAnimatedScores: playerBonusAnimatedScores}"
 				to = "{ playerBonusAnimatedScores: 0, playerAnimatedScores: 0}"
-				(bind enabled "isBonusScoresSubtractionInProgress")
-				(bind trigger "isBonusScoresSubtractionInProgress")
+				(bind enabled "canStartBonusScoresSubtraction")
+				(bind trigger "canStartBonusScoresSubtraction")
 			)
-			(bindcall play
-				duration = 0.15
-				id='startRoundBonusScoresAdding'
-				action="kill"
+			(dispatch evStartBonusScoresSubtraction init=false watch=false on='evOnBonusAnimationStarted') 
+			(dispatch evBonusAnimationEnded init=false watch=false on='evOnBonusAnimationEnded')
+			(dispatch evHideBonusScore init=false watch=false (bind enabled "isBonusScoreVisible") (event "evBonusAnimationEnded")) 
+			(dispatch evStartBonusToScoresAdding init=false watch=false (event "evBonusAnimationEnded")) 
+
+			(bindcall play 
+				duration = "max(0.5, 0.03 * sqrt(playerScores)) * 0.15"
+				delay=0.15
+				id = 'bonusScoresAdding'
+				onEndedEvent = 'evOnBonusToScoresAddingEnded'
+				action = "kill"
 				watch = false
 				from = "{ playerAnimatedScores: 0, playerBonusAnimatedScores: 0}"
 				to = "{ playerAnimatedScores: playerScores, playerBonusAnimatedScores: 0}"
-				(bind enabled "isAddingBonusOnStartInProgress")
-				(bind trigger "isAddingBonusOnStartInProgress")
+				(event "evStartBonusToScoresAdding")
 			)
+			(dispatch evBonusToScoresAddingEnded init=false watch=false on='evOnBonusToScoresAddingEnded')
+			(dispatch evShowBonusScore init=false watch=false (bind enabled "toBool(round(playerAnimatedScores) == targetScores) && !isBonusScoreVisible") (event "evBonusToScoresAddingEnded")) 
+			(dispatch evEndBonusScoresSubtraction init=false watch=false (bind enabled "toBool(playerBonusScores == 0) && isBonusScoresSubtractionInProgress") (event "evBonusToScoresAddingEnded")) 
+			(dispatch evStartAddingLastBonusToBonus init=false watch=false (bind enabled "toBool(playerBonusScores > 0)") (event "evBonusToScoresAddingEnded")) 
+
+			(bindcall play 
+				duration = "max(0.5, 0.03 * sqrt(abs(playerBonusScores-playerBonusAnimatedScores))) * 0.15"
+				delay=0.15
+				id = 'bonusToBonusAnimation'
+				onEndedEvent = 'evLastBonusToBonusAddingEnded'
+				action = "kill"
+				watch = false
+				from = "{ playerBonusAnimatedScores: playerBonusAnimatedScores }"
+				to = "{ playerBonusAnimatedScores: playerBonusScores }"
+				(event "evStartAddingLastBonusToBonus")
+			)
+			(dispatch "isBonusScoresSubtractionInProgress ? 'evEndBonusScoresSubtraction' : ''" init=false watch=false on='evLastBonusToBonusAddingEnded')
 		)
 	)
 
 	(style (width = 316px))
 
+	(dispatch evAddedToStage on='addedToStage')
+
+	(dispatch "isBonusScoreVisible ? '' : evShowBonusScore" watch=false (bind enabled "isBonusScoreDispatchEnabled") (bind trigger "playerAnimatedScores"))
+
 	(dispatch evPlayTimerSound init=false (bind enabled "timeLeft >= 0 && timeLeft < 10 && isExecutionPhase") (bind trigger "timeLeft"))
 	(bindcall externalCall 'sound.playSetSoundDirect' "['cosmoapril_Timer', 'regular']" (event "evPlayTimerSound"))
 
 	(bindcall externalCall 'sound.playSetSoundDirect' "['trials_bonus', 'regular']" (bind trigger "isBonusScoreVisible"))
+
 
 	(hblock 
 		(style
@@ -95,7 +158,7 @@
 			(paddingLeft = "SXS")
 			(paddingRight = "SXS")
 			(marginBottom = 1px)
-			(backgroundColor = 0x4d000000)
+			(backgroundColor = 0x73000000)
 		)
 
 		(tf 
@@ -140,10 +203,7 @@
 	(block 
 		(style
 			(width = 100%)
-			(height = 51px)
-			(align = "middle")
-			(paddingLeft = "SXS")
-			(paddingRight = "SXS")
+			(padding = "SXS")
 			(backgroundColor = 0x4d000000)
 			(scaleY = 0)
 			(alpha = 0)
@@ -165,7 +225,8 @@
 				(style
 					(width = 186px)
 				)
-				(bind text "tr('IDS_DISCIPLINE_' + trialTypeName + '_DESCRIPTION')")
+				(bind text "isManeuverType	? tr('IDS_DISCIPLINE_MANEUVER_DESCRIPTION_' + trialRound)
+											: tr('IDS_DISCIPLINE_' + trialTypeName + '_DESCRIPTION')")
 			)
 
 			(block
@@ -190,6 +251,7 @@
 
 		(element TrialOwnProgressbar
 			_progressbarCoef="progressbarCoef"
+			_scoresSubstractionCoef="scoresSubstractionCoef"
 		)
 	)
 
@@ -231,28 +293,97 @@
 			(tf
 				(class $TextDefaultBoldNM)
 				(style
-					(textColor = "C_POSITIVE")
+					(bind textColor "playerBonusAnimatedScores > 0	? C_POSITIVE
+																	: SC.Ui_styles.SERVICE_COLORS.WHITE")
 				)
-				(bind text "'+ ' + formatSeparator(round(playerBonusAnimatedScores))")
+				(bind text "playerBonusAnimatedScores > 0	? '+ ' + formatSeparator(round(playerBonusAnimatedScores))
+															: formatSeparator(round(playerBonusAnimatedScores))")
+			)
+		)
+	)
+
+	(hblock 
+		(bind visible "isManeuverType && trialRound > 1")
+		(style
+			(width = 100%)
+			(minHeight = 35px)
+			(align = "middle")
+			(marginTop = 1px)
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+			(paddingTop = "S")
+			(paddingBottom = "S")
+			(backgroundColor = 0x4d000000)
+		)
+
+		(block
+			(style
+				(backgroundImage = 'url:../service_kit/icons/icon_condition.png')
+				(backgroundSize = "autosize")
+				(alpha = 0.75)
+			)
+		)
+
+		(tf
+			(class $TextDefault13NM)
+			(style
+				(width = 100%)
+				(marginLeft = "S")
+				(alpha = "TC")
+				(leading = -1)
+			)
+			(text = 'IDS_SCORES_CAN_BE_SUBSTRUCTED')
+		)
+	)
+)
+
+(def element TrialOwnProgressbar (_progressbarCoef:number, _scoresSubstractionCoef:number)
+	(scope
+		(var scoresSubstractionCoefMax:number = "_scoresSubstractionCoef + _progressbarCoef > 1 ? 1 - _progressbarCoef : _scoresSubstractionCoef")
+	)
+	(style
+		(width = 100%)
+		(height = 6px)
+		(marginTop = "SXS")
+		(flow = "horizontal")
+		(backgroundImage = "'url:../battle_hud/markers/convoy_airships/progressbar_frame.png'")
+		(scale9grid = 3)
+		(padding = 1px)
+	)
+
+	(block
+		(style
+			(bind width "(_progressbarCoef * 100) + '%'")
+			(height = 100%)
+			(backgroundColor = 0xFFFFC658)
+		)
+	)
+	
+	(hblock
+		(class $Fullsize)
+		(controller $FxInstance lifetime=1
+			(renderer = 'ScoresSubstractionIndication')
+			(bindcall create init=false (bind trigger "_progressbarCoef") (bind enabled "_scoresSubstractionCoef > 0"))
+			(args
+				_scoresSubstractionCoef="scoresSubstractionCoefMax"
 			)
 		)
 	)
 )
 
-(def element TrialOwnProgressbar (_progressbarCoef:number)
+(def element ScoresSubstractionIndication (_scoresSubstractionCoef:number) 
+	(class $FullsizeAbsolute)
 	(style
-		(width = 100%)
-		(height = 4px)
-		(marginTop = "SXS")
-		(backgroundColor = "0x4d000000")
+		(width = "(_scoresSubstractionCoef * 100) + '%'")
+		(backgroundColor = 0xFFFFFFFF)
 	)
-
-	(block
-		(class $FullsizeAbsolute)
-		(style
-			(position = "absolute")
-			(bind scaleX "_progressbarCoef")
-			(backgroundColor = 0xFFFFC658)
+	(controller $Animation
+		(bindcall play
+			duration=0.85
+			delay= 0.05
+			from="{alpha: 1, scaleX: 1}"
+			to="{alpha: 0, scaleX: 0}"
+			on='addedToStage'
 		)
 	)
 )

@@ -1,0 +1,1314 @@
+(def element PlayerProfileCollectionPage ()
+	(scope
+		(var collectionsRouteEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.COLLECTIONS)")
+		 
+		(var dataComponent:dhComponent = "collectionsRouteEntity.dataComponent")
+		(var pageData:dict = "dataComponent.data" (event "dataComponent.evDataChanged"))
+
+		(var collectionPageDataEntity:dhEntity = "getPrimaryEntity(CC.collectionAlbum, pageData.collectionId)")
+		(var albumCollection:dhCollection = "getCollectionByPath(CC.collectionAlbum, 'validAlbums.sortedAlbums')")
+
+		(var newCollectionId:number = "collectionPageDataEntity.id	? collectionPageDataEntity.id
+																	: albumCollection[0].id")
+
+		(var newCollectionEntity:dhEntity = "getEntity(newCollectionId)")
+		(var currentCollectionId:number = "newCollectionEntity.collectionAlbum.id")
+
+		(var collectionEntity:dhEntity = "getPrimaryEntity(CC.collectionAlbum, currentCollectionId)")
+		(var collectionAlbum:dhComponent = "collectionEntity.collectionAlbum")
+		
+		(var cardsLst:array =			"collectionAlbum.cards"				(event "collectionAlbum.evUpdate"))
+		(var subAlbums:array =			"collectionAlbum.subAlbums"			(event "collectionAlbum.evUpdate"))
+		(var isPuzzle:bool =			"collectionAlbum.isPuzzle"			(event "collectionAlbum.evUpdate"))
+
+		(var collectionPageId:number = "pageData.subAlbum	? subAlbums[pageData.subAlbum]
+															: subAlbums[0]")
+
+		(var subCollectionEntity:dhEntity =		"getEntity(collectionPageId)")
+		(var subCardList:array =				"subCollectionEntity.collectionSubAlbum.cards" (event "subCollectionEntity.collectionSubAlbum.evUpdate"))
+
+		(var currentCardList:array = "	isPuzzle				? [] :
+										subAlbums.length > 0	? subCardList
+																: cardsLst")
+	)
+	(name = 'PlayerProfileCollections')
+
+	(class $Fullsize)
+	(style
+		(align = "center")
+		(paddingLeft = 200px)
+		(paddingTop = 6%)
+	)
+
+	(block
+		(style (width = "{ 1280:930px, 1920:1430px }"))
+		
+		(block
+			(macro DEFAULT_CACHED_SHOW_ANIMATION 0)
+			(style (width = 100%))
+
+			(element CollectionCarousel
+				_selectedAlbumID = "currentCollectionId"
+			)
+		)
+
+		
+		(hblock
+			(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
+
+			(style
+				(width = 100%)
+				(height = "{ 720:400px, 1080:700px }")
+				(marginTop = "{ 1280:SXS, 1920:M }")
+				(paddingRight = "SXS")
+			)
+
+			(block
+				(macro DEFAULT_CACHED_SHOW_ANIMATION 2)
+				(class $Fullsize)
+
+				(block
+					(class $FullsizeAbsolute)
+					(style
+						(bind paddingTop "isPuzzle ? { 720:0px, 1080:M } : 0px")
+						(bind align "isPuzzle ? center|top : center|middle")
+					)
+
+					(controller $Animation
+						(bindcall play
+							keyframes = "[
+								{ time:0, 		to:{ alpha: 0,	visualOffsetY: 15px }},
+								{ time:0.2, 	to:{ alpha: 0,	visualOffsetY: 15px }},
+								{ time:0.3, 	to:{ alpha: 1,	visualOffsetY: 0px }, easing: Easing.quad_out}
+							]"
+							action = "kill"
+							(bind trigger "currentCollectionId")
+							(bind trigger "collectionPageId")
+						)
+					)
+
+					(controller $Instance
+						(bind renderer "isPuzzle ? 'PuzzleCollectionContainer' : 'CardsCollectionContainer'")
+						(args
+							_cardList = "currentCardList"
+							_collectionId = "currentCollectionId"
+							_collectionPageId = "collectionPageId"
+						)
+					)
+				)
+
+				
+				(hblock
+					(style
+						(width = 100%)
+						(align = "center")
+						(position = "absolute")
+						(bottom = -30px)
+						(hgap = "SXS")
+					)
+
+					(controller $Repeat renderer='CollectionRadioButtonWrapper'
+						(bind count "subAlbums.length")
+						(args
+							_collectionPageButtonID = "subAlbums[$index]"
+							_collectionPageId = "collectionPageId"
+						)
+					)
+				)
+			)
+
+			
+			(block
+				(macro DEFAULT_CACHED_SHOW_ANIMATION 3)
+				(style
+					(width = "{ 1280:250px, 1920:340px }")
+					(height = 100%)
+				)
+
+				(element CollectionDescription
+					_collectionId = "currentCollectionId"
+					_collectionPageId = "collectionPageId"
+				)
+			)
+		)
+	)
+)
+
+(def element CollectionRadioButtonWrapper (_collectionPageButtonID:number, _collectionPageId:number)
+	(scope
+		(var subCollectionEntity:dhEntity = "getEntity(_collectionPageButtonID)")
+		(var albumId:number = "subCollectionEntity.collectionSubAlbum.albumID" (event "subCollectionEntity.collectionSubAlbum.evUpdate"))
+
+		(var collectionEntity:dhEntity = "getPrimaryEntity(CC.collectionAlbum, albumId)")
+		(var albumName:str = "collectionEntity.collectionAlbum.name" (event "collectionEntity.collectionAlbum.evUpdate"))
+
+		(var newCardsCounter:number = "subCollectionEntity.newItem.count ?: 0" (event "subCollectionEntity.newItem.evCountChanged"))
+	)
+
+	(element RadioButton
+		_isSelected = "_collectionPageButtonID == _collectionPageId"
+		_methods = "[{
+						type: 'inputMapping.onAction',
+						name: 'goToReward',
+						args: { type: 'Lootbox', subtype: albumName, subAlbum: $index }
+					}]"
+	)
+
+	(block
+		(macro DEFAULT_CONTROL_MARKER_ANIMATION "newCardsCounter > 0")
+		(style
+			(position = "absolute")
+			(right = "-SXS")
+			(top = "-S")
+		)
+		
+		(element MarkerNew
+			_newContentCounter = "newCardsCounter"
+		)
+	)
+)
+
+(def element CollectionCarousel (_selectedAlbumID:number)
+	(scope
+		(event evCarouselCanScrollChanged)
+		(event evScrollToPrev)
+		(event evScrollToNext)
+
+		(var carouselCanScrollLeft:bool =	"$event ? $event.down	: false"	(event "evCarouselCanScrollChanged"))
+		(var carouselCanScrollRight:bool =	"$event ? $event.up		: false"	(event "evCarouselCanScrollChanged"))
+
+		(var albumCollection:dhCollection = "getCollectionByPath(CC.collectionAlbum, 'validAlbums.sortedAlbums')")
+		(var albumCollectionLen:number = "albumCollection.length")
+	)
+	(style (width = 100%))
+
+	
+	(block
+		(style
+			(width = 100%)
+			(align = "middle")
+			(position = "absolute")
+			(bottom = 0)
+			(hitTest = false)
+		)
+
+		(element CarouselDivider)
+
+		(block
+			(style
+				(width = 100%)
+				(height = 300px)
+				(alpha = 1.2)
+				(hitTest = false)
+				(position = "absolute")
+				(top = 1px)
+				(backgroundImage = 'url:../accountLevel/progressBarIcons/AL_bg_info.png')
+				(backgroundSize = "fill")
+			)
+		)
+	)
+
+	
+	(hblock
+		(style
+			(width = 100%)
+			(hgap = "MS")
+		)
+
+		(name = 'PlayerProfileAccount')
+
+		(block
+			(style (marginTop = 46px))
+
+			(element DefaultScrollButton
+				_buttonCarouselName = 'buttonCarouselLeft'
+				_canScroll = "carouselCanScrollLeft"
+				_clickDispatchedEv = 'evScrollToPrev'
+				_direction = "ScrollDirection.LEFT"
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(paddingLeft = "XS")
+				(paddingRight = "XS")
+			)
+
+			(scrollArea
+				(style
+					(width = 100%)
+					(height = 144px)
+					(backgroundColor = "NO_COLOR")
+				)
+
+				(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+					_singleStep = "120px"
+					_wheelScrollAcceleration = "0.8"
+					_canScrollChangedEvent = "'evCarouselCanScrollChanged'"
+					_isScrollBarVisible = "false"
+				)
+
+				(repeatController = 'CollectionCarousel')
+				(scrollPerItem = true)
+
+				(content
+					(style
+						(flow = "horizontal")
+						(height = 100%)
+					)
+
+					(controller $DynamicRepeat renderer='CollectionCarouselItem' name='CollectionCarousel'
+						(bind count "albumCollectionLen")
+						(args
+							_collection = "albumCollection"
+							_selectedAlbumID = "_selectedAlbumID"
+						)
+
+						(itemWidth = 120px)
+						(itemHeight = 120px)
+						(itemOffset = 360px)
+					)
+				)
+
+				(bindcall scrollLeft	(event "evScrollToPrev"))
+				(bindcall scrollRight	(event "evScrollToNext"))
+			)
+		)
+
+		(block
+			(style (marginTop = 46px))
+
+			(element DefaultScrollButton
+				_buttonCarouselName = 'buttonCarouselRight'
+				_canScroll = "carouselCanScrollRight"
+				_clickDispatchedEv = 'evScrollToNext'
+				_direction = "ScrollDirection.RIGHT"
+			)
+		)
+	)
+)
+
+(def element CollectionCarouselItem (_collection:dhCollection, _selectedAlbumID:number)
+	(scope
+		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+		(var collectionEntity:dhEntity =	"_collection[$index]")
+		(var collectionAlbum:dhComponent =	"collectionEntity.collectionAlbum")
+		(var id:number =					"collectionAlbum.id"					(event "collectionAlbum.evUpdate"))
+		(var name:str =						"collectionAlbum.name"					(event "collectionAlbum.evUpdate"))
+		(var isComingSoon:bool =			"collectionAlbum.comingSoon"			(event "collectionAlbum.evUpdate"))
+		(var inSubscription:bool =			"collectionAlbum.inSubscription"		(event "collectionAlbum.evUpdate"))
+		(var isSubscriptionEnable:bool =	"collectionAlbum.subscriptionEnable"	(event "collectionAlbum.evUpdate"))
+		(var isFull:bool =					"collectionAlbum.isFull"				(event "collectionAlbum.evUpdate"))
+
+		(var isActive:bool = "((isSubscriptionEnable && inSubscription) || !isSubscriptionEnable || isFull) && !isComingSoon")
+		(var isSelected:bool = "id == _selectedAlbumID")
+		(var isCollected:bool = "isFull && isActive")
+
+		(var newCardsCounter:number = "collectionEntity.newItem.count ?: 0" (event "collectionEntity.newItem.evCountChanged"))
+
+		(var collectionNameQuotes:str = "isComingSoon ? '' : (tr('IDS_' +  toUpper(name) + '_QUOTES'))")
+		(var tooltipText:str = "isComingSoon ? 'IDS_TOOLTIP_LEVEL_COMING_SOON' : subst('IDS_COLLECTION_NAME_NO_ENTER', [], { _collectionName: collectionNameQuotes })")
+
+		(var baseAlpha:number = 0.7)
+		(var alphaModifier:number = 0.3)
+		(var activeState:number = 		"rollOver ? baseAlpha + alphaModifier : baseAlpha")
+		(var inactiveState:number = 	"rollOver ? baseAlpha : baseAlpha - alphaModifier")
+		(var collectedState:number = 	"rollOver ? activeState + alphaModifier : baseAlpha + alphaModifier")
+		(var pointerAlpha:number =		"isSelected ? 1 : 0")
+		(var activeAlpha:number =		"isSelected || isComingSoon		? 1 :
+										isActive && !isFull				? activeState :
+										!isActive						? inactiveState :
+										isCollected						? collectedState
+																		: activeState")
+	)
+	(style
+		(width = 120px)
+		(height = 120px)
+		(backgroundColor = "NO_COLOR")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isComingSoon || isSelected ? '' : 'button_collection_key'")
+
+	(bindcall externalCall "!isComingSoon && !isSelected ? 'inputMapping.onAction' : ''" "['goToReward', {	type: 'Lootbox',
+																											subtype: name,
+																											subAlbum: -1 }]" watch=false on='leftClick')
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "tooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	
+	(block
+		(class $Fullsize)
+		(style
+			(backgroundColor = "NO_COLOR")
+			(align = "center|middle")
+			(bind alpha "activeAlpha")
+			(hitTest = false)
+		)
+
+
+		(block
+			(bind visible "!isComingSoon")
+			(class $Fullsize)
+			(macro MOUSE_OVER_DOWN_COLORTRANSFORM _isActive="isActive" _isSelected="isSelected")
+
+			(block
+				(class $Fullsize)
+				(bind colorTransform "isFull ? COLOR_TRANSFORM_WHITE_TO_YELLOW : CT_NONE")
+				(style
+					(bind backgroundImage "'url:../collections/collection_icons/medium/' + name + '.png'")
+				)
+			)
+		)
+
+		(block
+			(bind visible "isComingSoon")
+			(class $FullsizeAbsolute)
+
+			(style
+				(backgroundColor = "NO_COLOR")
+				(align = "center|middle")
+			)
+
+			(block
+				(style
+					(width = 48px)
+					(height = 48px)
+					(alpha = 0.4)
+					(backgroundImage = 'url:../service_kit/icons/icon_lock.png')
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_CONTROL_MARKER_ANIMATION "!isComingSoon && newCardsCounter > 0")
+		(style
+			(position = "absolute")
+			(right = 0px)
+			(top = 0px)
+		)
+		
+		(controller $Instance renderer='MarkerNew'
+			(bind enabled "!isComingSoon")
+			(args
+				_newContentCounter = "newCardsCounter"
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(bottom = "-MS")
+			(left = 9px)
+			(width = 102px)
+			(height = 11px)
+			(backgroundImage = 'url:../accountLevel/progressBarIcons/carousel_pointer_toggle.png')
+			(backgroundSize = "fill")
+			(alpha = "pointerAlpha")
+			(hitTest = false)
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "pointerAlpha"
+			_alpha = "pointerAlpha"
+		)
+	)
+)
+
+
+(def element PuzzleCollectionContainer (_collectionId:number, _collectionPageId:number)
+	(scope
+		(event evUnPastedCardIndexChanged)
+		(event evStartCompleteAnimation)
+		(event evFinishCompleteAnimation)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var collectionEntity:dhEntity =	"getPrimaryEntity(CC.collectionAlbum, _collectionId)")
+		(var collectionAlbum:dhComponent =	"collectionEntity.collectionAlbum")
+		(var cardsLst:array =				"collectionEntity.collectionAlbum.cards"				(event "collectionAlbum.evUpdate"))
+		(var isFull:bool =					"collectionEntity.collectionAlbum.isFull"				(event "collectionAlbum.evUpdate"))
+		(var name:str =						"collectionEntity.collectionAlbum.name"					(event "collectionAlbum.evUpdate"))
+		(var unPastedCardIndex:number =		"collectionEntity.collectionAlbum.unPastedCardIndex"	(event "collectionAlbum.evUnPastedCardIndexChanged"))
+
+		(macro STAGE_SIZE)
+		(var isMinimalResolution:bool =		"stageWidth < 1400")
+		(var isSmallResolution:bool =		"stageWidth < 1500 || stageHeight < 750")
+		(var isOriginalResolution:bool =	"stageWidth < 1650 || stageHeight < 800")
+		(var scales:number = "	isMinimalResolution		? 0.78 :
+								isSmallResolution		? 0.9 :
+								isOriginalResolution	? 1
+														: 1.1")
+		
+		(var isCompleteAnimation:bool = false)
+		(bind isCompleteAnimation "true" init=false (event "evStartCompleteAnimation"))
+		(bind isCompleteAnimation "false" init=false (event "evFinishCompleteAnimation"))
+
+		(var isFullPuzzleVisible:bool = "isFull && unPastedCardIndex == 0 && !isCompleteAnimation")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(bindcall externalCall "'sound.playSetSoundDirect'" "['collection_item_complete', 'puzzle_complete']" (event "evStartCompleteAnimation"))
+
+	(dispatch evUnPastedCardIndexChanged	dir="EventDirection.NONE" (event "collectionAlbum.evUnPastedCardIndexChanged"))
+	(dispatch evStartCompleteAnimation		dir="EventDirection.NONE" (bind enabled "isFullPuzzleVisible") (event "evUnPastedCardIndexChanged"))
+
+	(block
+		(style
+			(width = 824px)
+			(height = 504px)
+			(bind scaleX "scales")
+			(bind scaleY "scales")
+		)
+	
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(bind backgroundImage "'url:../bg/puzzle_collection/' + name + '_bg.jpg'")
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+
+			(block
+				(bind visible "!isFullPuzzleVisible")
+				(class $FullsizeAbsolute)
+				(style
+					(flow = "tile_horizontal")
+					(gap = -22px)
+					(marginLeft = 1px)
+					(marginTop = 1px)
+				)
+
+				(controller $Repeat renderer='PuzzleItem'
+					(bind enabled "!isFullPuzzleVisible")
+					(bind count "cardsLst.length")
+					(args
+						_puzzleEntityId = "cardsLst[$index]"
+						_collectionPageId = "_collectionPageId"
+					)
+				)
+			)
+		)
+	
+		(block
+			(bind visible "isFullPuzzleVisible")
+			(class $FullsizeAbsolute)
+			(style (padding = "SXS"))
+
+			(block
+				(class $Fullsize)
+				(style
+					(bind backgroundImage "'url:../bg/puzzle_collection/' + name + '_full.jpg'")
+				)
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(alpha = 0)
+				(hitTest = false)
+			)
+
+			(controller $Animation
+				(controllerEvents evShowAnimEnded)
+			
+				(bindcall play
+					delay = 0.1
+					duration = 0.15
+					from = "{ alpha: 0 }"
+					to = "{ alpha: 0.9 }"
+					easing = "Easing.quad_out"
+					action = "kill"
+					onEndedEvent = 'evShowAnimEnded'
+					(event "evStartCompleteAnimation")
+				)
+
+				(bindcall play
+					delay = 0.1
+					duration = 0.15
+					to = "{ alpha: 0 }"
+					easing = "Easing.quad_out"
+					action = "kill"
+					on = 'evShowAnimEnded'
+				)
+
+				(dispatch evFinishCompleteAnimation dir="EventDirection.NONE" on='evShowAnimEnded')
+			)
+		)
+	)
+)
+
+(def constant CT_PUZZLE_ITEM_OVER	"{	redMultiplier: 1,
+										greenMultiplier: 1,
+										blueMultiplier: 1,
+										alphaMultiplier: 0.5,
+										redOffset: 255,
+										greenOffset: 255,
+										blueOffset: 255,
+										alphaOffset: 1 }")
+
+(def constant CT_PUZZLE_ITEM_EMPTY	"{	redMultiplier: 1,
+										greenMultiplier: 1,
+										blueMultiplier: 1,
+										alphaMultiplier: 0,
+										redOffset: 0,
+										greenOffset: 0,
+										blueOffset: 0,
+										alphaOffset: 0 }")
+
+
+(def element PuzzleItem (_puzzleEntityId:number)
+	(scope
+		(event evStartReceivingAnimation)
+		(macro MOUSE_HANDLER_SCOPE)
+		(var collectionCardEntity:dhEntity =	"getPrimaryEntity(CC.collectionCard, _puzzleEntityId)")
+		(var collectionCard:dhComponent =		"collectionCardEntity.collectionCard")
+
+		(var isOwned:bool =			"collectionCard.isOwned" (event "collectionCard.evOwn"))
+		(var name:str =				"collectionCard.name" (event "collectionCard.evUpdate"))
+		(var collectionId:number =	"collectionCard.collectionId" (event "collectionCard.evUpdate"))
+
+		(var collectionEntity:dhEntity  =	"getPrimaryEntity(CC.collectionAlbum, collectionId)")
+		(var collectionAlbum:dhComponent =	"collectionEntity.collectionAlbum")
+		(var unPastedCardIndex:number =		"collectionAlbum.unPastedCardIndex" (event "collectionAlbum.evUnPastedCardIndexChanged"))
+		(var isPuzzle:bool =				"collectionAlbum.isPuzzle"			(event "collectionAlbum.evUpdate")) 
+
+		(var isCurrentAnimateCard:bool = "isPuzzle && unPastedCardIndex == _puzzleEntityId")
+	)
+	(dispatch evStartReceivingAnimation dir="EventDirection.NONE" on='addedToStage' (bind enabled "isCurrentAnimateCard"))
+	(dispatch evStartReceivingAnimation dir="EventDirection.NONE" delay=0.1 reset=true dir="EventDirection.NONE" (bind enabled "isCurrentAnimateCard") (bind trigger "isCurrentAnimateCard"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['makeSeen', { entityId: collectionCardEntity.id }]" watch=false (event "evStartReceivingAnimation"))
+	(bindcall externalCall "'sound.playSetSoundDirect'" "['collection_item_paste', 'puzzle_paste']" (event "evStartReceivingAnimation"))
+
+	(style
+		(width = 102px)
+		(height = 102px)
+		(align = "center|middle")
+	)
+
+	(block
+		(style
+			(width = 1px)
+			(height = 1px)
+			(align = "center|middle")
+		)
+
+		(block
+			(style
+				(width = 102px)
+				(height = 102px)
+				(pivotX = 50%)
+				(pivotY = 50%)
+				(hitTest = false)
+				(bind backgroundImage "'url:../collections/object_icons/small/' + name + '.png'")
+				(backgroundSize = "cover")
+			)
+			(bind colorTransform "	isOwned		? CT_NONE :
+									rollOver	? CT_PUZZLE_ITEM_OVER
+												: CT_PUZZLE_ITEM_EMPTY")
+
+			(controller $Animation
+				(bindcall play
+					keyframes = "[
+						{ time:0, 		to:{ alpha: 0,	visualScaleX: 1.3,	visualScaleY: 1.3 }},
+						{ time:0.2, 	to:{ alpha: 0,	visualScaleX: 1.3,	visualScaleY: 1.3 }},
+						{ time:0.5, 	to:{ alpha: 1,	visualScaleX: 1,	visualScaleY: 1 }, easing: Easing.quad_out}
+					]"
+					action = "kill"
+					(event "evStartReceivingAnimation")
+				)
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (align = "center|middle"))
+
+		(block
+			(macro MOUSE_EVENTS_DISPATCHER)
+			(macro SOUND_HANDLER "isOwned ? '' : 'button_collection_item'")
+			(style
+				(width = 80px)
+				(height = 80px)
+				(backgroundColor = "NO_COLOR")
+			)
+			(bindcall externalCall "!isOwned ? 'inputMapping.onRequest' : ''" "['buyObjectWindow', { objID: _puzzleEntityId }]" watch=false on='leftClick')
+
+			(controller $Tooltip
+				(renderer = 'CollectionCardItemTooltip')
+				(args
+					_objID = "_puzzleEntityId"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+)
+
+(def element CardsCollectionContainer (_cardList:array, _collectionPageId:number)
+	(scope
+		(macro STAGE_SIZE)
+		(var isSmallResolution:bool = "stageWidth <= 1300 || stageHeight < 960")
+		(var isMediumResolution:bool = "stageWidth > 1300 && stageWidth < 1700 && stageHeight >= 960")
+		(var isNormalResolution:bool = "stageWidth > 1700 && stageHeight >= 960")
+		
+		(var isBigCards:bool = "_cardList.length <= 6")
+		
+		(var cardGap:number = "	isSmallResolution		? isBigCards 	? SXS
+																		: 10px :
+								isMediumResolution 		? isBigCards 	? M
+																		: SXS :
+								isNormalResolution 		? isBigCards 	? 20px
+																		: M
+														: 20px")
+
+		(var cardSize:number = "isSmallResolution	? isBigCards	? 170px : 80px :
+								isMediumResolution 	? isBigCards	? 180px : 90px :
+								isNormalResolution 	? isBigCards	? 220px : 100px
+													: isBigCards	? 220px
+																	: 120px")
+	)
+	(style
+		(flow = "tile_horizontal")
+		(align = "center")
+		(bind width "_cardList.length <= 4	?	isSmallResolution		?	388px :
+												isMediumResolution		?	440px 
+																		:	560px :
+					_cardList.length <= 6	?	isSmallResolution		? 582px :
+												isMediumResolution		? 660px 
+																		: 840px
+											:	{ 1280:650px, 1920:1060px }")
+		(bind gap "cardGap")
+	)
+
+	(controller $Repeat renderer='CollectionCardItem'
+		(bind count "_cardList.length")
+		(args
+			_cardEntityId = "_cardList[$index]"
+			_collectionPageId = "_collectionPageId"
+			_cardSize = "cardSize"
+		)
+	)
+)
+
+(def element CollectionCardItem (_cardEntityId:number, _collectionPageId:number, _cardSize:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evStartReceivingAnimation)
+
+		(var collectionCardEntity:dhEntity = "getPrimaryEntity(CC.collectionCard, _cardEntityId)")
+		(var collectionCard:dhComponent = "collectionCardEntity.collectionCard")
+		(var isNew:bool = "collectionCardEntity.hasComponent(CC.newItem)")
+
+		(var name:str =				"collectionCard.name"			(event "collectionCard.evUpdate"))
+		(var collectionId:number =	"collectionCard.collectionId"	(event "collectionCard.evUpdate"))
+		(var isOwned:bool =			"collectionCard.isOwned"		(event "collectionCard.evOwn"))
+
+		(var subCollectionEntity:dhEntity =		"getEntity(_collectionPageId)")
+		(var collectionSubAlbum:dhComponent =	"subCollectionEntity.collectionSubAlbum")
+		(var unPastedCardIndexSubColl:number =	"collectionSubAlbum.unPastedCardIndex"	(event "collectionSubAlbum.evUnPastedCardIndexChanged"))
+	
+		(var collectionEntity:dhEntity =	"getPrimaryEntity(CC.collectionAlbum, collectionId)")
+		(var collectionAlbum:dhComponent =	"collectionEntity.collectionAlbum")
+		(var unPastedCardIndex:number =		"collectionAlbum.unPastedCardIndex"		(event "collectionAlbum.evUnPastedCardIndexChanged"))
+		(var isPuzzle:bool =				"collectionAlbum.isPuzzle"				(event "collectionAlbum.evUpdate")) 
+		(var isCurrentAnimateCard:bool = "!isPuzzle && unPastedCardIndex != 0 && (unPastedCardIndex == _cardEntityId || unPastedCardIndexSubColl == _cardEntityId)")
+	)
+	(bind name "!isNew ? 'card_pasted_' + name : 'card_' + name")
+
+	(dispatch evStartReceivingAnimation dir="EventDirection.NONE" on='addedToStage' (bind enabled "isCurrentAnimateCard"))
+	(dispatch evStartReceivingAnimation dir="EventDirection.NONE" delay=0.1 dir="EventDirection.NONE" (bind enabled "isCurrentAnimateCard") (bind trigger "isCurrentAnimateCard"))
+	
+	(bindcall externalCall "'inputMapping.onAction'" "['makeSeen', { entityId: collectionCardEntity.id }]" watch=false (event "evStartReceivingAnimation"))
+	(bindcall externalCall "isOwned && !isNew ? 'inputMapping.onRequest' : ''" "['showPreviewWindow', { objID: _cardEntityId }]" watch=false on='leftClick')
+	(bindcall externalCall "!isOwned ? 'inputMapping.onRequest' : ''" "['buyObjectWindow', { objID: _cardEntityId }]" watch=false on='leftClick')
+	
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "'button_collection_item'")
+	(bindcall externalCall "'sound.playSetSoundDirect'" "['collection_item_paste', 'item_paste']" (event "evStartReceivingAnimation"))
+
+	(style
+		(bind width "_cardSize")
+		(bind height "_cardSize")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer = 'CollectionCardItemTooltip')
+		(args
+			_objID = "_cardEntityId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:../collections/object_icons/small/' + name + '_des.png'")
+			(align = "center|middle")
+		)
+
+		(block
+			(bind visible "isOwned")
+			(style
+				(width = 1px)
+				(height = 1px)
+				(align = "center|middle")
+			)
+
+			(block
+				(bind visible "isOwned")
+				(style
+					(bind width "_cardSize")
+					(bind height "_cardSize")
+					(backgroundSize = "cover")
+					(bind backgroundImage "'url:../collections/object_icons/small/' + name + '.png'")
+					(pivotX = 50%)
+					(pivotY = 50%)
+					(bind alpha "isNew ? 0 : 1" watch=false (bind trigger "_collectionPageId"))
+				)
+
+				(controller $Animation
+					(bindcall play
+						keyframes = "[
+							{ time:0, 		to:{ alpha: 0,	visualScaleX: 1.3,	visualScaleY: 1.3 }},
+							{ time:0.2, 	to:{ alpha: 0,	visualScaleX: 1.3,	visualScaleY: 1.3 }},
+							{ time:0.5, 	to:{ alpha: 1,	visualScaleX: 1,	visualScaleY: 1 }, easing: Easing.quad_out}
+						]"
+						action = "kill"
+						(event "evStartReceivingAnimation")
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:../collections/object_icons/small/' + name + '_over.png'")
+			(alpha = 0)
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "rollOver"
+			_alpha = "rollOver ? 0.1 : 0"
+			_duration = "0.1"
+		)
+	)
+)
+
+(def element CollectionDescription (_collectionId:number, _collectionPageId:number)
+	(scope
+		(var accountResource:dhComponent = "getSingleComponent(CC.accountResource)")
+		(var isOperationsAccountLocked:bool = "accountResource.operationsLocked" (event "accountResource.evOperationsLockChanged"))
+
+		(var collectionEntity:dhEntity = "getPrimaryEntity(CC.collectionAlbum, _collectionId)")
+		(var collectionAlbum:dhComponent = "collectionEntity.collectionAlbum")
+
+		(var subAlbums:array =				"collectionAlbum.subAlbums")
+		(var name:str =						"collectionAlbum.name")
+		(var isFull:bool =					"collectionAlbum.isFull"				(event "collectionAlbum.evUpdate"))
+		(var isSubscriptionEnable:bool =	"collectionAlbum.subscriptionEnable"	(event "collectionAlbum.evUpdate"))
+		(var inSubscription:bool =			"collectionAlbum.inSubscription"		(event "collectionAlbum.evUpdate"))
+		(var isInArmory:bool =				"collectionAlbum.isInArmory"			(event "collectionAlbum.evUpdate"))
+
+		(var collectionName:str = "tr('IDS_' + toUpper(name))")
+
+		(var switchTooltipDescription:str = "inSubscription ? 'IDS_COLLECTION_COLLECTING_TOOLTIP_DESCRIPTION' 
+															: 'IDS_COLLECTION_NOT_COLLECTING_TOOLTIP_DESCRIPTION'")
+
+		(var switchAction:str = "inSubscription ? 'CollectionProxy.stopAlbumSubscription' : 'CollectionProxy.changeAlbumSubscription'")
+		(var switchActionParams:dict = "inSubscription ? {} : { albumID: _collectionId }")
+
+		(var receiveCollectionDescription:str = "	isSubscriptionEnable	? 'IDS_COLLECTION_RECEIVE_IN_DAILY_REWARDS' :
+													isInArmory				? 'IDS_COLLECTION_RECEIVE_IN_ARMORY_BUNDLES'
+																			: 'IDS_COLLECTION_DISCONTINUED_CANNOT_RECEIVE'")
+	)
+	(class $Fullsize)
+
+	
+	(tf
+		(class $TextDefaultBold25NM)
+		(style
+			(maxWidth = 320px)
+			(leading = -4)
+			(marginBottom = "M")
+			(marginTop = "{ 720:0px,1080:LM }")
+			(alpha = "TA")
+		)
+		(bind text "collectionName")
+	)
+
+	(hblock
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+			(align = "middle")
+		)
+
+		(tf
+			(class $TextDefault17NM)
+			(style
+				(leading = -4)
+				(alpha = "TA")
+			)
+			(text = 'IDS_COLLECTION_DESCRIPRION_BUTTON')
+		)
+	
+		(block
+			(style (marginLeft = "S"))
+
+			(element ImageButton
+				_backgroundImage = 'url:../service_kit/buttons/info_tab_new.png'
+				_width = 22px
+				_height = 22px
+				_methods = "[{
+						type: 'inputMapping.onRequest',
+						name: 'openCollectionDescriptionWindow',
+						args: {collectionID: _collectionId, isComplete: false}
+					}]"
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_COLLECTION_DESCRIPRION_BUTTON_TOOLTIP'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+	(tf
+		(bind visible "!isFull")
+		(class $TextDefault17NM)
+		(style
+			(width = 100%)
+			(maxWidth = 320px)
+			(leading = -4)
+			(marginBottom = "MS")
+			(alpha = "TC")
+		)
+		(bind text "receiveCollectionDescription")
+	)
+
+	
+	(block
+		(bind visible "!isFull && (isSubscriptionEnable || isInArmory)")
+		(style (marginBottom = "MS"))
+
+		(controller $Tooltip
+			(bind enabled "isSubscriptionEnable")
+			(renderer = 'HeaderDescriptionInstructionTooltip')
+			(args
+				_headerText =			'IDS_COLLECTION_COLLECTING_TOOLTIP_HEADER'
+				_descriptionText =		"switchTooltipDescription"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Instance renderer='SwitchWithLeftLabel'
+			(bind enabled "isSubscriptionEnable")
+			(args
+				_label = 'IDS_COLLECTION_START_COLLECTING_SWITCH'
+				_textClass = '$TextDefault17NM'
+				_state = "inSubscription"
+				_enabled = "!isOperationsAccountLocked"
+				_labelWidth = 150px
+				_methods = "[{
+					type: 'inputMapping.onAction',
+					name: switchAction,
+					args: switchActionParams
+				}]"
+			)
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "!isSubscriptionEnable && isInArmory")
+			(args
+				_label = 'IDS_COLLECTION_TOP_UP_COLLECTION_UPPER'
+				_width = 210px
+				_name= 'buttonArmoryLink'
+				_enabled = "isInArmory"
+				_methods = "[{
+					type: 'inputMapping.onRequest',
+					name: 'showMetashopCollectionWindow',
+					args: { collectionId: _collectionId }
+				}]"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+		(element HorizontalDividerTwoPx)
+	)
+
+	
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+
+		(element CollectionRewardAndProgress
+			_collectionId = "_collectionId"
+		)
+	)
+
+	
+	(block
+		(bind visible "subAlbums.length > 0")
+		(style
+			(width = 100%)
+			(vgap = "M")
+		)
+
+		(element HorizontalDividerTwoPx)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Animation
+				(bindcall play
+					keyframes = "[
+						{ time:0, 		to:{ alpha: 0,	visualOffsetY: 10px }},
+						{ time:0.15, 	to:{ alpha: 0,	visualOffsetY: 10px }},
+						{ time:0.5, 	to:{ alpha: 1,	visualOffsetY: 0px }, easing: Easing.quad_out}
+					]"
+					action = "kill"
+					(bind trigger "_collectionPageId")
+				)
+			)
+
+			(controller $Instance renderer='SubCollectionReward'
+				(bind enabled "subAlbums.length > 0")
+				(args
+					_collectionId = "_collectionId"
+					_collectionPageId = "_collectionPageId"
+				)
+			)
+		)
+	)
+)
+
+(def element CollectionRewardAndProgress (_collectionId:number)
+	(scope
+		(var collectionEntity:dhEntity = "getPrimaryEntity(CC.collectionAlbum, _collectionId)")
+		(var collectionAlbum:dhComponent = "collectionEntity.collectionAlbum")
+
+		(var rewards:array =		"collectionAlbum.rewards"			(event "collectionAlbum.evUpdate"))
+		(var rewardCategory:str =	"collectionAlbum.rewardCategory"	(event "collectionAlbum.evUpdate"))
+		(var duplicates:number =	"collectionAlbum.duplicates"		(event "collectionAlbum.evUpdate"))
+		(var ownCards:array =		"collectionAlbum.ownCards"			(event "collectionAlbum.evUpdate"))
+		(var cards:array =			"collectionAlbum.cards"				(event "collectionAlbum.evUpdate"))
+		(var isFull:bool =			"collectionAlbum.isFull"			(event "collectionAlbum.evUpdate"))
+
+		(var actualRewardCategory:str = "rewardCategory != SC.Sse.SSE_REWARD_CATEGORY.NONE	? rewardCategory 
+																							: SC.Sse.SSE_REWARD_CATEGORY.OTHER")
+	)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(align = "middle")
+		(hgap = "S")
+		(paddingRight = "S")
+	)
+
+	
+	(block
+		(style (width = 100%))
+
+		(hblock
+			(style
+				(width = 100%)
+				(marginBottom = "SXS")
+			)
+	
+			(tf
+				(class $TextDefault17NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_COLLECTION_CARDS_AMOUNT_COLON')
+			)
+		
+			(block
+				(style (marginLeft = "XS"))
+				
+				(element DefaultDividedCounter
+					_curValueTextClass = '$TextDefaultBold17NM'
+					_curValue = "ownCards.length"
+					_curValueTooltipText = 'IDS_COLLECTION_PLAYER_POINTS_COUNTER'
+					_maxValue = "cards.length"
+					_maxValueTooltipText = 'IDS_COLLECTION_TOTAL_POINTS_COUNTER'
+				)
+			)
+		)
+
+		
+		(hblock
+			(style
+				(width = 100%)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(controller $Tooltip
+				(renderer = 'HeaderDescriptionInstructionTooltip')
+				(args
+					_headerText =		'IDS_COLLECTION_DUPLICATES_TOOLTIP_HEADER'
+					_descriptionText =	'IDS_COLLECTION_DUPLICATES_TOOLTIP_DESCRIPTION'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(tf
+				(class $TextDefault17NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_COLLECTION_DUPLICATES_IN_COLLECTION_COLON')
+			)
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style
+					(marginLeft = "XS")
+					(alpha = "TA")
+				)
+				(bind text "duplicates")
+			)
+		)
+	)
+
+	
+	(block
+		(controller $Tooltip
+			(bind enabled "rewardCategory")
+			(renderer = 'CollectionRewardTooltip')
+			(args
+				_isRewardClaimed = "isFull"
+				_rewards = "rewards"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Instance renderer='RewardCategory'
+			(bind enabled "rewardCategory")
+			(args
+				_rewardCategory = "actualRewardCategory"
+				_isReceived = "isFull"
+				_isRewardActive = false
+			)
+		)
+	)
+)
+
+(def element SubCollectionReward (_collectionId:number, _collectionPageId:number)
+	(scope
+		(var collectionEntity:dhEntity = "getPrimaryEntity(CC.collectionAlbum, _collectionId)")
+		(var collectionAlbum:dhComponent = "collectionEntity.collectionAlbum")
+		(var cards:array =		"collectionAlbum.cards" (event "collectionAlbum.evUpdate"))
+		(var ownCards:array =	"collectionAlbum.ownCards" (event "collectionAlbum.evUpdate"))
+
+		(var subCollectionEntity:dhEntity = "getEntity(_collectionPageId)")
+		(var collectionSubAlbum:dhComponent = "subCollectionEntity.collectionSubAlbum")
+		(var name:str =				"collectionSubAlbum.name")
+		(var rewardCategory:str =	"collectionSubAlbum.rewardCategory")
+		(var rewards:array =		"collectionSubAlbum.rewards")
+
+		(var actualRewardCategory:str = "rewardCategory != SC.Sse.SSE_REWARD_CATEGORY.NONE	? rewardCategory 
+																							: SC.Sse.SSE_REWARD_CATEGORY.OTHER")
+		(var isFull:bool = "ownCards.length == cards.length")
+	)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(align = "middle")
+		(hgap = "S")
+		(paddingRight = "S")
+	)
+
+	
+
+	(block
+		(style (width = 100%))
+
+		(tf
+			(class $TextDefaultBold17NM)
+			(style
+				(width = 100%)
+				(alpha = "TA")
+			)
+			(bind text "name")
+		)
+	)
+
+	
+	(block
+		(element RewardCategory
+			_rewardCategory = "actualRewardCategory"
+			_isReceived = "isFull"
+			_isRewardActive = false
+		)
+
+		(controller $Tooltip
+			(renderer = 'CollectionRewardTooltip')
+			(args
+				_isSubCollection = true
+				_isRewardClaimed = "isFull"
+				_rewards = "rewards"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element CollectionCardItemTooltip (_objID:number)
+	(scope
+		(var collectionCardEntity:dhEntity = "getPrimaryEntity(CC.collectionCard, _objID)")
+		(var collectionCard:dhComponent = "collectionCardEntity.collectionCard")
+
+		(var name:str =				"collectionCard.name")
+		(var collectionId:number =	"collectionCard.collectionId")
+		(var collectionName:str =	"collectionCard.collectionName")
+		(var isOwned:bool =			"collectionCard.isOwned" (event "collectionCard.evOwn"))
+
+		(var collectionEntity:dhEntity =	"getPrimaryEntity(CC.collectionAlbum, collectionId)")
+		(var collectionAlbum:dhComponent =	"collectionEntity.collectionAlbum")
+
+		(var isPuzzle:bool =	"collectionAlbum.isPuzzle" (event "collectionAlbum.evUpdate"))
+		(var cardCost:number =	"collectionAlbum.cardCost")
+
+		(var headerText:str = "isPuzzle	?	'IDS_PUZZLE_COLLECTION_OWNED_TOOLTIP_HEADER'
+										:	tr('IDS_' + toUpper(name))")
+
+		(var cardCostText:str = "subst('IDS_COLLECTION_ITEM_TOOLTIP_DUPLICATE_PRICE_COLON', [], { amount: cardCost } )")
+		(var subheaderText:str = "subst('IDS_COLLECTION_NAME', [], { _collectionName: tr('IDS_' + toUpper(collectionName) + '_QUOTES' ) } )")
+
+		(var imagePath:str = "!isOwned && isPuzzle	? 'url:../bg/puzzle_collection/default_puzzle_card.png'
+													: 'url:../collections/object_icons/small/' + name + '.png'")
+
+		(var statusLineData:dict = "isOwned 	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
+													text: 'IDS_COLLECTION_ITEM_TOOLTIP_ACHIEVED' }
+												: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,
+													text: 'IDS_COLLECTION_ITEM_TOOLTIP_NOT_ACHIEVED' }")
+		(var mouseInstructionData:dict = "	!isOwned	? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT, text: 'IDS_BUY_COLLECTION_FOR_DUPLICATE' } :
+											!isPuzzle	? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT, text: 'IDS_GO_TO_OBJECT_SCREEN' }
+														: null")
+	)
+	(style (width = 380px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemHeaderWithIconAndText
+			_headerText = "headerText"
+			_subheaderText = "subheaderText"
+			_unifiedStatus = "isOwned ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_imageWidth = 120px
+			_imageHeight = 120px
+			_imageUrl = "imagePath"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!isOwned"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!isOwned")
+				(args
+					_text = "cardCostText"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemStatusLine
+			_text = "statusLineData.text"
+			_unifiedStatus = "statusLineData.unifiedStatus"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "mouseInstructionData"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "mouseInstructionData")
+				(args
+					_text = "mouseInstructionData.text"
+					_unifiedStatus = "mouseInstructionData.unifiedStatus"
+				)
+			)
+		)
+	)
+)
+
+(def element CollectionRewardTooltip (_isSubCollection:bool, _isRewardClaimed:bool, _rewards:array)
+	(scope
+		(var headerText:str = "_isSubCollection ? 'IDS_REWARD_FOR_SUBCOLLECTION' : 'IDS_REWARD_FOR_COLLECTION'")
+		(var headerUnifiedStatus:str = "_isRewardClaimed ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+	)
+	(style (width = 320px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "headerText"
+			_unifiedStatus = "headerUnifiedStatus"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isRewardClaimed"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isRewardClaimed")
+				(args
+					_text = 'IDS_TOOLTIP_REWARD_TAKEN'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_rewards.length > 0"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDHRewards'
+				(bind enabled "_rewards.length > 0")
+				(args
+					_rewards = "_rewards"
+				)
+			)
+		)
+	)
+)

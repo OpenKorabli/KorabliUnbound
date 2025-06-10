@@ -1,86 +1,342 @@
-(def css SBButtonUpStyle() (backgroundColor = 0xFF000000) )
-(def css SBButtonHoverStyle() (backgroundColor = 0xFFFFFFFF) )
-(def css SBButtonPressStyle() (backgroundColor = 0xFF888888) )
-(def css SBButtonDisabledStyle() (backgroundColor = 0xFF111111) )
+(def constant DEFAULT_SCROLL_TRACK_SIZE	10px) 
 
-(def constant SB_BUTTON {
-		up : 'SBButtonUpStyle',
-		over : 'SBButtonHoverStyle',
-		down : 'SBButtonPressStyle',
-		disabled : 'SBButtonDisabledStyle' }
+(def constant SCROLL_THUMB_ALPHA	{	DEFAULT: {	'up':		0.4,
+													'over':		0.6,
+													'down':		0.4,
+													'inactive':	0.3 },
+										CONTRAST: {	'up':		0.7,
+													'over':		0.8,
+													'down':		0.6,
+													'inactive':	0.6 }})
+
+(def constant SCROLL_SHADOW_ALPHA {	'active':	0.6,
+									'inactive':	0.3 })
+
+(def struct SCROLL_THUMB_ALPHA_INFO (_isContrastScrollBar:bool = false)
+	(var isActive:bool =			"$event.state" watch=false on='scrollActiveChanged')			
+	(var scrollBarState:str =		"$event.state" watch=false on='stateChanged')					
+
+	(var isThumbActive:bool =		"scrollBarState == 'over' || scrollBarState == 'down'")			
+	(var size:number =				"isThumbActive	? 7px
+													: 4px")
+	(var alpha:number =				"_isContrastScrollBar	?	isActive		?	SCROLL_THUMB_ALPHA.CONTRAST[scrollBarState]
+																				:	SCROLL_THUMB_ALPHA.CONTRAST['inactive']
+															:	isActive		?	SCROLL_THUMB_ALPHA.DEFAULT[scrollBarState]
+																				:	SCROLL_THUMB_ALPHA.DEFAULT['inactive']")
 )
 
-(def css SBTrackUpStyle() (backgroundColor = 0xFFD0D0D0) )
-(def css SBTrackHoverStyle() )
-(def css SBTrackPressStyle() )
-(def css SBTrackDisabledStyle() )
-
-(def constant SB_TRACK {
-		up : 'SBTrackUpStyle',
-		over : 'SBTrackHoverStyle',
-		down : 'SBTrackPressStyle',
-		disabled : 'SBTrackDisabledStyle' }
-)
-
-(def css SBTrackLightUpStyle() (backgroundColor = 0x01000000) )
-(def css SBTrackLightHoverStyle() )
-(def css SBTrackLightPressStyle() )
-(def css SBTrackLightDisabledStyle() )
-
-(def constant SB_TRACK_LIGHT {
-		up : 'SBTrackLightUpStyle',
-		over : 'SBTrackLightHoverStyle',
-		down : 'SBTrackLightPressStyle',
-		disabled : 'SBTrackLightDisabledStyle' }
+(def struct SCROLL_SHADOW_ALPHA_INFO ()
+	(var isActiveScroll:bool = "$event.state" watch=false on='scrollActiveChanged')			
+	(var isActiveShadow:bool = "$event.state" watch=false on='scrollShadowActiveChanged')	
+	(var alpha:number = "isActiveShadow ? SCROLL_SHADOW_ALPHA[isActiveScroll ? 'active' : 'inactive'] : 0")
 )
 
 
-(def element SBVThumbLight ()
-	(bind class "SB_BUTTON[$event.state]" init=false on='stateChanged')
+
+
+
+
+
+
+(def macro DEFAULT_VERTICAL_SCROLL_PARAMS (	_singleStep:expression = 50px,
+											_wheelScrollSpeed:expression = 1.0,
+											_wheelScrollAcceleration:expression = 0.9,
+											_maxScrollingAnimatedDistance:expression = 150,
+											_canScrollChangedEvent:expression = '',
+											_valueChangedEvent:expression = '',
+											_scrollAreaShadowTop:expression = 'ScrollAreaShadowTop',
+											_scrollAreaShadowBottom:expression = 'ScrollAreaShadowBottom',
+											_isContrastScrollBar:expression = false,
+											_isDrag:expression = true)
+	(hscrollPolicy = 'off')
+	(vscrollPolicy = 'auto')
+
+	(verticalSlider DefaultVerticalSlider
+		_isContrastScrollBar =		"_isContrastScrollBar"
+		_singleStep =				"_singleStep"
+		_canScrollChangedEvent =	"_canScrollChangedEvent"
+		_valueChangedEvent =		"_valueChangedEvent"
+	)
+
+	(bind topShadow		"_scrollAreaShadowTop")
+	(bind bottomShadow	"_scrollAreaShadowBottom")
+
+	(wheelScrollSpeed =				"_wheelScrollSpeed")
+	(wheelScrollAcceleration =		"_wheelScrollAcceleration")
+	(maxScrollingAnimatedDistance =	"_maxScrollingAnimatedDistance")
+
+	(bind drag "_isDrag")
+)
+
+(def macro DEFAULT_HORIZONTAL_SCROLL_PARAMS	(	_singleStep:expression = 50px,
+												_wheelScrollSpeed:expression = 1.0,
+												_wheelScrollAcceleration:expression = 0.9,
+												_maxScrollingAnimatedDistance:expression = 450,
+												_canScrollChangedEvent:expression = '',
+												_valueChangedEvent:expression = '',
+												_isContrastScrollBar:expression = false,
+												_isScrollBarVisible:expression = true, 
+												_hasShadow:expression = false, 
+												_isDrag:expression = true)
+	(hscrollPolicy = 'auto')
+	(vscrollPolicy = 'off')
+
+	(horizontalSlider "_isScrollBarVisible ? 'DefaultHorizontalSlider' : 'DefaultHorizontalInvisibleSlider'"
+		_isContrastScrollBar =		"_isContrastScrollBar"
+		_singleStep =				"_singleStep"
+		_canScrollChangedEvent =	"_canScrollChangedEvent"
+		_valueChangedEvent =		"_valueChangedEvent"
+	)
+
+	(bind leftShadow	"_hasShadow ? 'ScrollAreaShadowLeft' : 'ScrollAreaEmptyShadow'")
+	(bind rightShadow	"_hasShadow ? 'ScrollAreaShadowRight' : 'ScrollAreaEmptyShadow'")
+
+	(wheelScrollSpeed =				"_wheelScrollSpeed")
+	(wheelScrollAcceleration =		"_wheelScrollAcceleration")
+	(maxScrollingAnimatedDistance =	"_maxScrollingAnimatedDistance")
+
+	(bind drag "_isDrag")
+)
+
+(def element DefaultVerticalThumb (_isContrastScrollBar:bool = false)
+	(scope
+		(struct thumbData = SCROLL_THUMB_ALPHA_INFO( _isContrastScrollBar = "_isContrastScrollBar"))
+	)
 	(style
-		(width = 6)
-		(padding = 1)
-		(height = 80)
-		(minHeight = 40)
-		(backgroundColor = 0x10FFFFFF)
+		(width = "DEFAULT_SCROLL_TRACK_SIZE")
+		(minHeight = 40px)
+		(align = "right")
+		(backgroundColor = "NO_COLOR")
+	)
+	(alpha = "thumbData.alpha")
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_duration = "0.15"
+		_trigger = "thumbData.alpha"
+		_alpha = "thumbData.alpha"
 	)
 
 	(block
-		(class $Fullsize)
-		(style (backgroundColor = 0x66000000))
+		(style
+			(width = "thumbData.size")
+			(height = 100%)
+			(backgroundImage = 'url:../service_kit/slider/scroll_thumb.png')
+			(scale9grid = 2)
+			(pivotX = 50%)
+		)
+		(controller $Animation
+			(bindcall play
+				delay = "!thumbData.isThumbActive ? 0.2 : 0.07"
+				duration = 0.15
+				action = "kill"
+				to = "{width: thumbData.size}"
+				easing = "!thumbData.isThumbActive ? Easing.quad_in : Easing.quad_out"
+				(bind trigger "thumbData.size")
+			)
+		)
 	)
 )
 
-(def element SBVTrackLight ()
+(def element DefaultVerticalTrack ()
 	(style
-		(width = 7)
+		(width = "DEFAULT_SCROLL_TRACK_SIZE")
 		(height = 100%)
+		(backgroundColor = "NO_COLOR")
 	)
-	(bind class "SB_TRACK_LIGHT[$event.state]" init=false on='stateChanged')
 )
 
-(def element ScrollBarVLightWithValueChangedEvent (_singleStep:number = 50)
+(def element DefaultHorizontalThumb (_isContrastScrollBar:bool = false)
 	(scope
-		(event evScrollAreaValueChanged)
+		(struct thumbData = SCROLL_THUMB_ALPHA_INFO( _isContrastScrollBar = "_isContrastScrollBar"))
+	)
+	(style
+		(height = "DEFAULT_SCROLL_TRACK_SIZE")
+		(minWidth = 40px)
+		(align = "bottom")
+		(backgroundColor = "NO_COLOR")
+	)
+	(alpha = "thumbData.alpha")
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger = "thumbData.alpha"
+		_alpha = "thumbData.alpha"
 	)
 
+	(block
+		(style
+			(width = 100%)
+			(height = "thumbData.size")
+			(backgroundImage = 'url:../service_kit/slider/scroll_thumb.png')
+			(scale9grid = 2)
+		)
+		(controller $Animation
+			(bindcall play
+				delay = "!thumbData.isThumbActive ? 0.2 : 0.07"
+				duration = 0.15
+				action = "kill"
+				to = "{height: thumbData.size}"
+				easing = "!thumbData.isThumbActive ? Easing.quad_in : Easing.quad_out"
+				(bind trigger "thumbData.size")
+			)
+		)
+	)
+)
+
+(def element DefaultHorizontalTrack ()
+	(style
+		(width = 100%)
+		(height = "DEFAULT_SCROLL_TRACK_SIZE")
+		(backgroundColor = "NO_COLOR")
+		(align = "center")
+	)
+)
+
+(def element DefaultVerticalSlider (_singleStep:number = 50px, _isContrastScrollBar:bool = false, _canScrollChangedEvent:str='evScrollAreaCanScrollChanged', _valueChangedEvent:str='evScrollAreaValueChanged')
 	(scroll_bar
 		(value = 0)
 		(orientation = "vertical")
-		(thumb SBVThumbLight)
-		(track SBVTrackLight)
+		(scrollDuration = 700)
+		(thumb DefaultVerticalThumb
+			_isContrastScrollBar = "_isContrastScrollBar"
+		)
+		(track DefaultVerticalTrack)
 		(bind singleStep "_singleStep")
-
-		(dispatch evScrollAreaValueChanged dir="EventDirection.UP" on='valueChanged')
+		(dispatch "_canScrollChangedEvent"	dir="EventDirection.UP" args="$event" on='canScrollChanged'		(bind enabled "_canScrollChangedEvent"))
+		(dispatch "_valueChangedEvent"		dir="EventDirection.UP" args="$event" on='valueChanged'			(bind enabled "_valueChangedEvent"))
 	)
 )
 
-(def element ScrollBarVLight (_singleStep:number = null)
+(def element DefaultHorizontalSlider (_singleStep:number = 50px, _isContrastScrollBar:bool = false, _canScrollChangedEvent:str='evScrollAreaCanScrollChanged', _valueChangedEvent:str='evScrollAreaValueChanged')
 	(scroll_bar
 		(value = 0)
-		(orientation = "vertical")
-		(thumb SBVThumbLight)
-		(track SBVTrackLight)
-		(bind singleStep "_singleStep" (bind enabled "_singleStep"))
+		(orientation = "horizontal")
+		(scrollDuration = 700)
+		(thumb DefaultHorizontalThumb
+			_isContrastScrollBar = "_isContrastScrollBar"
+		)
+		(track DefaultHorizontalTrack)
+		(bind singleStep "_singleStep")
+		(dispatch "_canScrollChangedEvent"	dir="EventDirection.UP" args="$event" on='canScrollChanged'		(bind enabled "_canScrollChangedEvent"))
+		(dispatch "_valueChangedEvent"		dir="EventDirection.UP" args="$event" on='valueChanged'			(bind enabled "_valueChangedEvent"))
 	)
 )
+
+
+(def element DefaultHorizontalInvisibleSlider (_singleStep:number = 50px, _canScrollChangedEvent:str='evScrollAreaCanScrollChanged', _valueChangedEvent:str='evScrollAreaValueChanged')
+	(scroll_bar
+		(value = 0)
+		(orientation = "horizontal")
+		(scrollDuration = 700)
+		(bind singleStep "_singleStep")
+		(dispatch "_canScrollChangedEvent"	dir="EventDirection.UP" args="$event" on='canScrollChanged'		(bind enabled "_canScrollChangedEvent"))
+		(dispatch "_valueChangedEvent"		dir="EventDirection.UP" args="$event" on='valueChanged'			(bind enabled "_valueChangedEvent"))
+	)
+)
+
+(def element ScrollAreaHorizontalShadow (_isReverse:bool = false)
+	(style
+		(width = 100%)
+		(height = 7px)
+		(backgroundImage = 'url:../service_kit/slider/scroll_horizontal_shadow.png')
+		(scale9grid = [8, 0, 8, 0])
+
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(bind rotation "_isReverse ? 180 : 0")
+	)
+)
+
+(def element ScrollAreaVerticalShadow (_isReverse:bool = false)
+	(style
+		(width = 7px)
+		(height = 100%)
+		(backgroundImage = 'url:../service_kit/slider/scroll_vertical_shadow.png')
+		(scale9grid = [0, 8, 0, 8])
+
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(bind rotation "_isReverse ? 180 : 0")
+	)
+)
+
+(def element ScrollAreaShadowTop ()
+	(scope
+		(struct shadowData = SCROLL_SHADOW_ALPHA_INFO())
+	)
+	(style
+		(width = 100%)
+		(height = 7px)
+		(paddingRight = "-DEFAULT_SCROLL_TRACK_SIZE") 
+	)
+	(alpha = "shadowData.alpha")
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger = "shadowData.alpha"
+		_alpha = "shadowData.alpha"
+	)
+
+	(element ScrollAreaHorizontalShadow
+		_isReverse = true
+	)
+)
+
+(def element ScrollAreaShadowBottom ()
+	(scope
+		(struct shadowData = SCROLL_SHADOW_ALPHA_INFO())
+	)
+	(style
+		(width = 100%)
+		(height = 7px)
+		(paddingRight = "-DEFAULT_SCROLL_TRACK_SIZE") 
+	)
+	(alpha = "shadowData.alpha")
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger = "shadowData.alpha"
+		_alpha = "shadowData.alpha"
+	)
+
+	(element ScrollAreaHorizontalShadow)
+)
+
+(def element ScrollAreaShadowLeft ()
+	(scope
+		(struct shadowData = SCROLL_SHADOW_ALPHA_INFO())
+	)
+	(style
+		(height = 100%)
+		(width = 7px)
+		(paddingBottom = "-DEFAULT_SCROLL_TRACK_SIZE") 
+	)
+	(alpha = "shadowData.alpha")
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger = "shadowData.alpha"
+		_alpha = "shadowData.alpha"
+	)
+
+	(element ScrollAreaVerticalShadow)
+)
+
+(def element ScrollAreaShadowRight ()
+	(scope
+		(struct shadowData = SCROLL_SHADOW_ALPHA_INFO())
+	)
+	(style
+		(height = 100%)
+		(width = 7px)
+		(paddingBottom = "-DEFAULT_SCROLL_TRACK_SIZE") 
+	)
+	(alpha = "shadowData.alpha")
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger = "shadowData.alpha"
+		_alpha = "shadowData.alpha"
+	)
+
+	(element ScrollAreaVerticalShadow
+		_isReverse = true
+	)
+)
+
+(def element ScrollAreaEmptyShadow ())

@@ -61,24 +61,6 @@
 									redOffset: 0,		greenOffset: 0,		blueOffset: 0,		alphaOffset: 0
 })
 
-(def element DefaultCarouselScroll()
-	(scope
-		(event CarouselScrollValueChanged)
-		(event CarouselCanScrollChanged)
-
-		(macro USER_PREF_DATA)
-		(macro GET_PREF_BOOL 'isSmallCarouselView' "'ui.carousel.isSmallView'")
-	)
-
-	(scroll_bar
-		(orientation="horizontal")
-		(bind singleStep "isSmallCarouselView ? CAROUSEL_ITEM_SMALL_WIDTH_WITH_OFFSET : CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET") 
-		(scrollDuration=700)
-		(dispatch 'CarouselScrollValueChanged' dir="EventDirection.UP" args="$event" on='valueChanged')
-		(dispatch 'CarouselCanScrollChanged' dir="EventDirection.UP" args="$event" on='canScrollChanged')
-	)
-)
-
 (def element ScrollButton (_scrollEnabled:bool, _canScroll:bool, _clickDispatchedEv:str,
 										_doubleClickDispatchedEv:str, _buttonCarouselName:str, _direction:str)
 	(scope
@@ -124,8 +106,8 @@
 		(event evScrollToBegin)
 		(event evScrollToEnd)
 
-		(event CarouselScrollValueChanged)
-		(event CarouselCanScrollChanged)
+		(event evCarouselScrollValueChanged)
+		(event evCarouselCanScrollChanged)
 
 		(macro USER_PREF_DATA)
 		(macro PULL_SHIP_ID)
@@ -144,9 +126,9 @@
 		(macro GET_PREF_NUMBER 'prefRowCountIndex' "'ui.carousel.rowCountIndex'")
 		
 
-		(var shipsCarouselCanScrollLeft:bool =	"$event ? $event.down	: false"	(event "CarouselCanScrollChanged"))
-		(var shipsCarouselCanScrollRight:bool =	"$event ? $event.up		: false"	(event "CarouselCanScrollChanged"))
-		(var shipsCarouselScrollEnabled:bool =	"$event ? $event.down || $event.up : true" (event "CarouselCanScrollChanged"))
+		(var shipsCarouselCanScrollLeft:bool =	"$event ? $event.down	: false"	(event "evCarouselCanScrollChanged"))
+		(var shipsCarouselCanScrollRight:bool =	"$event ? $event.up		: false"	(event "evCarouselCanScrollChanged"))
+		(var shipsCarouselScrollEnabled:bool =	"$event ? $event.down || $event.up : true" (event "evCarouselCanScrollChanged"))
 
 		(var shipsCollectionDH:gfx = "$datahub.getCollection(CC.mainShipFilter)")
 		(var shipCollectionName:str = "isFilteredShipsHidden ? 'filtered.sorted' : 'sorted'")
@@ -172,12 +154,9 @@
 	(style (width = 100%) (bind height "carouselHeight") (paddingLeft = 4px) (paddingRight = 4px))
 
 	(dispatch evScrollToIndex args="{value: selectedShipIndex}" (event "shipsCarouselScrollingComponent.evScrollToSelected"))
-	(dispatch evScrollToIndex args="{value: selectedShipIndex}" on='addedToStage')
-	(dispatch evCarouselScrollChanged dir="EventDirection.DOWN" (event "CarouselScrollValueChanged"))
+	(dispatch evCarouselScrollChanged dir="EventDirection.DOWN" (event "evCarouselScrollValueChanged"))
 	
 	(bindcall externalCall "playerShipId ? 'direct.action' : ''" "['make_tooltipShipParams_list', {shipId: playerShipId}]" init=false watch=false on='addedToStage')
-
-
 
 	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.carousel.carouselHeight',		carouselHeight		]]" init=true watch=false (bind trigger "carouselHeight"))
 	(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.carousel.carouselAreaHeight',	carouselAreaHeight	]]" init=true watch=false (bind trigger "carouselAreaHeight"))
@@ -204,20 +183,16 @@
 				(backgroundColor = "NO_COLOR")
 			)
 
-			(horizontalSlider DefaultCarouselScroll)
-			(hscrollPolicy = 'auto')
-			(vscrollPolicy = 'off')
+			(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+				_singleStep = "isSmallCarouselView ? CAROUSEL_ITEM_SMALL_WIDTH_WITH_OFFSET : CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET"
+				_wheelScrollAcceleration = "0.8"
+				_maxScrollingAnimatedDistance = "280px"
+				_canScrollChangedEvent = "'evCarouselCanScrollChanged'"
+				_valueChangedEvent = "'evCarouselScrollValueChanged'"
+				_isScrollBarVisible = "false"
+			)
+
 			(scrollPerItem = true)
-
-			(wheelScrollSpeed = 1.0)
-			(wheelScrollAcceleration = 0.8)
-			(maxScrollingAnimatedDistance = 280) 
-
-			(activeControlsAlpha = 1)
-			(inactiveControlsAlpha = 0.5)
-			(animationDuration = 0.2)
-			(animationEasing = "Easing.cubic_out")
-
 			(repeatController = 'shipCarouselContainer')
 
 			(content
@@ -249,6 +224,7 @@
 				)
 			)
 
+			(bindcall scrollTo		animated=false index="selectedShipIndex" rememberIndex=true watch=false on='addedToStage')
 			(bindcall scrollTo		index="$event.value" rememberIndex=true (event "evScrollToIndex"))
 			(bindcall scrollLeft	(event "evScrollToPrev"))
 			(bindcall scrollRight	(event "evScrollToNext"))
@@ -443,12 +419,16 @@
 	)
 )
 
-(def element NewbieGiftsShipSlot (_shipEntityId:number, _selectedId:number)
+(def element NewbieGiftsShipSlot (_giftShipCollection:dhCollection, _selectedShipId:number)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 
-		(var isSelected:bool = "_selectedId == _shipEntityId")
+		(var shipEntity:dhEntity =	"_giftShipCollection[$index]")
+		(var shipInfo:dhComponent =	"shipEntity.ship")
+		(var shipEntityId:number =	"shipInfo.id")
+
+		(var isSelected:bool = "_selectedShipId == shipEntityId")
 
 		(var thumbState:number = "	isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
 									mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
@@ -459,6 +439,8 @@
 		(var thumbBorderAlpha:number = "CAROUSEL_BORDER_SLOT_STATE_ALPHA[thumbState]")
 	)
 	(macro MOUSE_EVENTS_DISPATCHER)
+	(bindcall externalCall "'inputMapping.onAction'" "['selectShip', { shipId: shipEntityId }]" watch=false on='leftClick')
+
 	(style
 		(width = "CAROUSEL_ITEM_DEFAULT_WIDTH_WITH_OFFSET")
 		(height = "CAROUSEL_ITEM_DEFAULT_HEIGHT_WITH_OFFSET")
@@ -496,7 +478,7 @@
 	)
 
 	(element ShipCarouselDefaultSlot
-		_shipEntityId =	"_shipEntityId"
+		_shipEntityId =	"shipEntityId"
 		_rollOver =		"rollOver"
 		_mouseDown =	"mouseDown"
 		_isSelected =	false
@@ -505,7 +487,7 @@
 	(controller $Tooltip
 		(renderer = 'ShipExtendedTooltip')
 		(args
-			_shipId = "_shipEntityId"
+			_shipId = "shipEntityId"
 		)
 		(macro SHIP_TREE_TOOLTIP_BEHAVIOUR)
 	)

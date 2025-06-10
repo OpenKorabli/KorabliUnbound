@@ -1,0 +1,1302 @@
+(def constant SUMMARY_SHIP_ROW_HEIGHT "36px")
+
+(def css $TableCell ()
+	(width = 100%)
+	(height = 23px)
+	(backgroundColor = "NO_COLOR")
+)
+
+(def element StatColumn (_statList:array)
+	(style
+		(width = 33%)
+		(paddingLeft = "SXS")
+		(paddingRight = "SXS")
+	)
+
+	(controller $Repeat renderer='StatRowProxy'
+		(bind count "_statList.length")
+		(args
+			_rowData =	"_statList[$index]"
+		)
+	)
+)
+
+(def element StatRowProxy (_rowData:dict)
+	(style (width = 100%))
+
+	(controller $Instance
+		(bind renderer "_rowData.isHeader ? 'StatItemHeader' : 'StatRow'")
+		(args
+			_title =			"_rowData.title"
+			_value =			"toString(_rowData.value)"
+			_hintVehicleId =	"_rowData.hintVehicleId"
+		)
+	)
+)
+
+(def element StatItemHeader (_title:str, _value:str)
+	(class $TableCell)
+	(style
+		(flow = "horizontal")
+		(marginBottom = "SXS")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_title + '_TOOLTIP'"
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(tf
+		(class $TextDefaultBold21NM)
+		(style
+			(width = 100%)
+			(alpha = "TA")
+		)
+		(bind text "_title")
+	)
+
+	(tf
+		(class $TextDefaultBold21NM)
+		(style (alpha = "TA"))
+		(bind text "_value >= 0 ? _value : ''")
+	)
+)
+
+(def element StatRow (_title:str, _value:str, _hintVehicleId:number = null)
+	(scope
+		(var value:str = "	!toBool(_title)		? '' :
+							_value[_value.length - 1] == '%'	? _value
+																: formatSeparator(toNumber(_value), 1, false)")
+		
+		(var valueTextAlpha:number = "(_value == '0') || (_value == '0%') ? TS : TA")
+	)
+	(class $TableCell)
+
+	(controller $Tooltip
+		(bind enabled "_title")
+		(renderer = 'StatsRowTooltip')
+		(args
+			_tooltipText = "_title + '_TOOLTIP'"
+			_hintVehicleId = "_hintVehicleId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(hblock
+		(style (width = 100%))
+		(tf
+			(class $TextDefault17NM)
+			(style
+				(width = 100%)
+				(multiline = false)
+				(elideMode = true)
+				(alpha = "TA")
+			)
+			(bind text "tr(_title) ?: ''")
+		)
+
+		(tf
+			(class $TextDefault17NM)
+			(style (bind alpha "valueTextAlpha"))
+			(bind text "value")
+		)
+	)
+	(block
+		(bind visible "_title")
+		(style
+			(width = 100%)
+			(marginTop = "XXS")
+		)
+
+		(element DottedLine
+			_alpha = 0.25
+		)
+	)
+)
+
+(def constant PROFILE_SUMMARY_TYPE "{	COOP: 0,
+										RANDOM: 1,
+										RANKED: 2,
+										RATING: 3,
+										CLUB_OR_OLD_RANKED: 4,
+										CLUB: 5 }")
+
+(def element PlayerProfileSummaryPage ()
+	(scope
+		(event ItemChooser_battleTypeChanged)
+		(event ItemChooser_historySeasonChanged)
+		(event ItemChooser_historyLeagueChanged)
+		(event evResetSeasonData)
+		(event evResetLeagueData)
+
+		(macro USER_PREF_DATA)
+		(struct battleSeniorFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.BATTLE_SENIOR"))
+		(struct rankBattlesFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.RANK_BATTLES"))
+	
+		(var statDataCollection:dhCollection = "getCollectionByPath(CC.rankedSeasonHistory, 'statToShow')")
+		(var statDataEntity:dhEntity = "statDataCollection.getEntityAtIndex(0)" watch=false autoUpdate=false (event "statDataCollection.evAdded"))
+	
+		(var dataComponent:dhComponent = "statDataEntity.dataComponent")
+		(var statData:dict = "dataComponent.data" (event "dataComponent.evDataChanged"))
+
+		
+		(var clubHistoryEntity:dhEntity = "getSingleEntity(CC.rankedSeasonHistory, 'byGameType.' + SC.Common.BATTLE_TYPES.CLUB_BATTLE)")
+		(var hasClubHistoryData:bool = "clubHistoryEntity.rankedSeasonHistory.hasGamesPlayed") 
+
+		(var oldRankedHistoryEntity:dhEntity = "getSingleEntity(CC.rankedSeasonHistory, 'byGameType.' + SC.Common.BATTLE_TYPES.OLD_RANKED_BATTLE)")
+		(var hasOldRankedHistoryData:bool = "oldRankedHistoryEntity.rankedSeasonHistory.hasGamesPlayed")
+
+		(var curBattleTypeItemIndex:number =	"userPrefs.summaryInset == null ||
+												(battleSeniorFeature.state  == 'locked' && userPrefs.summaryInset == 1) ||
+												(rankBattlesFeature.state == 'locked' && userPrefs.summaryInset == 2) ||
+												(!(hasClubHistoryData || hasOldRankedHistoryData) && userPrefs.summaryInset == 4)	? 0
+																																	: userPrefs.summaryInset")
+
+		(var curSeasonIndex:number = "$event.selectedIndex ?: 0" (event "ItemChooser_historySeasonChanged") (event "evResetSeasonData"))
+		(var seasonId:number = "statData.seasonList[curSeasonIndex].id")
+
+		(var curLeagueIndex:number = "$event.selectedIndex ?: 0" (event "ItemChooser_historyLeagueChanged") (event "evResetLeagueData"))
+		(var leagueId:number = "statData.leagueList[curLeagueIndex].id")
+
+		(var battleType:str = "	curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.COOP						? SC.Common.BATTLE_TYPES.COOPERATIVE_BATTLE :
+								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.RANDOM					? SC.Common.BATTLE_TYPES.RANDOM_BATTLE :
+								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.RANKED					? SC.Common.BATTLE_TYPES.RANKED_BATTLE :
+								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.RATING					? SC.Common.BATTLE_TYPES.RATING_BATTLE :
+								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.CLUB_OR_OLD_RANKED		? hasOldRankedHistoryData	? SC.Common.BATTLE_TYPES.OLD_RANKED_BATTLE
+																																	: SC.Common.BATTLE_TYPES.CLUB_BATTLE :
+								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.CLUB						? SC.Common.BATTLE_TYPES.CLUB_BATTLE
+																										: SC.Common.BATTLE_TYPES.COOPERATIVE_BATTLE")
+
+		(var battleTypes:array = "	battleSeniorFeature.state == 'locked' 	?	['IDS_COOPERATIVEBATTLE'] :
+									rankBattlesFeature.state == 'locked'	?	['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE'] :
+									hasOldRankedHistoryData					?	!hasClubHistoryData	? ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_RANKEDBATTLE_OLD']
+																									: ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_RANKEDBATTLE_OLD', 'IDS_CLUBBATTLE']
+																			:	!hasClubHistoryData	? ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE']
+																									: ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_CLUBBATTLE']")
+
+		(var isRankedBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE || battleType == SC.Common.BATTLE_TYPES.OLD_RANKED_BATTLE")
+		(var isNewRankedBattle:bool =	"battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE")
+
+		(var isRankedSeasonDropdownVisible:bool = "isRankedBattle && statData.basicStats.gamesPlayed")
+		(var isRankedLeagueDropdownVisible:bool = "isNewRankedBattle && curSeasonIndex")
+	)
+	(dispatch evResetSeasonData dir="EventDirection.NONE" args="{ selectedIndex: 0 }" (bind trigger "battleType"))
+	(dispatch evResetLeagueData dir="EventDirection.NONE" args="{ selectedIndex: 0 }" (bind trigger "seasonId"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref',			{	name: 'summaryInset',
+																					value: $event.selectedIndex }]"	watch=false (event "ItemChooser_battleTypeChanged"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['battleTypeChanged',		{	battleType: battleType }]"		watch=false on='addedToStage'	(bind trigger "battleType"))
+	(bindcall externalCall "'inputMapping.onAction'" "['rankedSeasonChanged',	{	seasonId: seasonId }]"			watch=false						(bind trigger "seasonId"))
+	(bindcall externalCall "'inputMapping.onAction'" "['rankedLeagueChanged',	{	leagueId: leagueId }]"			watch=false						(bind trigger "leagueId"))
+
+	(name = 'PlayerProfileSummary')
+	(class $Fullsize)
+	(style
+		(flow = "horizontal")
+		(paddingTop =		"{ 720:30px,	1080:80px }")
+		(paddingBottom =	"{ 720:0px,		1080:40px }")
+		(paddingLeft =		"{ 1280:240px,	1920:320px }")
+		(paddingRight =		"{ 1280:0px,	1920:40px }")
+	)
+
+	(block
+		(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
+		(class $Fullsize)
+		(style
+			(align = "center")
+			(vgap = "{ 720:M, 1080:L }")
+		)
+
+		(element PlayerSummaryCommon
+			_battleType = "battleType"
+			_statData = "statData"
+		)
+
+		(block
+			(macro DEFAULT_CACHED_SHOW_ANIMATION 2)
+			(bind visible "statData.diagStats.gamesPlayed > 0 && statData.vehicleId == 0")
+			(style (width = 100%))
+
+			(element PlayerSummaryDiagrams
+				_statData = "statData"
+			)
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_CACHED_SHOW_ANIMATION 4)
+
+		(style
+			(width = "{ 1280:240px, 1920:320px }")
+			(paddingBottom = "M")
+			(height = 100%)
+			(paddingTop = 5px)
+			(align = "center")
+		)
+
+		
+		(element ItemChooser
+			_name = 'dropdown_battle_types'
+			_items = "battleTypes"
+			_curIndex = "curBattleTypeItemIndex"
+			_listItemRenderer = 'TextListItemRenderer'
+			_choosedItemRenderer = 'LargeTextChoosedItemRenderer'
+			_onItemSelectedEvent = 'battleTypeChanged'
+			_dropDownWidth = 160px
+			_itemChooserTooltipText = 'IDS_CHOOSE_BATTLETYPE_STATS'
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(align = "center")
+				(marginTop = "XS")
+			)
+	
+			(block
+				(style
+					(width = 136px)
+					(height = 136px)
+					(backgroundSize = "cover")
+					(bind backgroundImage "'url:../service_kit/battle_types/' + battleType + '_big.png'")
+				)
+				(block
+					(style
+						(position = "absolute")
+						(top = -3px)
+						(left = -18px)
+						(width = 60px)
+						(height = 60px)
+						(bind backgroundImage "curSeasonIndex != 0	? 'url:' + statData.seasonList[curSeasonIndex].iconPath
+																	: ''")
+					)
+				)
+			)
+
+			(block
+				(style (bind marginTop "isRankedSeasonDropdownVisible ? S : 0px"))
+
+				(controller $Instance renderer='ItemChooser'
+					(bind enabled "isRankedSeasonDropdownVisible")
+					(args
+						_name = 'RankedSeason'
+						_items = "statData.seasonList"
+						_curIndex = "curSeasonIndex"
+						_listItemRenderer = 'TextListItemRendererRanked'
+						_listItemRendererData = "{ isSeasonDropdown: true }"
+						_choosedItemRenderer = 'LargeTextChoosedItemRendererRanked'
+						_choosedItemRendererParams = "{ isSeasonDropdown: true }"
+						_onItemSelectedEvent = 'historySeasonChanged'
+						_dropDownWidth = 180px
+						_itemChooserTooltipText = 'IDS_CHOOSE_RANK_SEASON'
+						_itemChooserTooltipUnifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					)
+				)
+			)
+
+			(element DEFAULT_EXPAND_CONTAINER "isRankedLeagueDropdownVisible"
+				(style
+					(width = 100%)
+					(align = "center")
+					(marginTop = "S")
+				)
+
+				(element ItemChooser
+					_name = 'RankedLeague'
+					_items = "statData.leagueList"
+					_curIndex = "curLeagueIndex"
+					_listItemRenderer = 'TextListItemRendererRanked'
+					_listItemRendererData = "{ isSeasonDropdown: false }"
+					_choosedItemRenderer = 'LargeTextChoosedItemRendererRanked'
+					_choosedItemRendererParams = "{ isSeasonDropdown: false }"
+					_onItemSelectedEvent = 'historyLeagueChanged'
+					_dropDownWidth = 180px
+					_itemChooserTooltipText = 'IDS_CHOOSE_RANK_LEAGUE'
+					_itemChooserTooltipUnifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				)
+			)
+		)
+
+		(block
+			(bind visible "statData.shipsList.length == 0")
+			(style
+				(width = 100%)
+				(marginTop = "M")
+				(align = "center")
+			)
+	
+			(element HorizontalDividerTwoPx)
+
+			(block
+				(style
+					(marginTop = "S")
+					(width = 200px)
+				)
+
+				(element EmptyStatusParagraph
+					_text = "'IDS_NO_BATTLES_PLAYED_IN_' + toUpper(battleType)"
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%) 
+				(marginTop = "M")
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_SELECT_ALL_SHIPS_FOR_DETAILED_STAT'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(controller $Instance renderer='AllShipsSelectedItem'
+				(bind enabled "statData.shipsList.length > 0")
+				(args
+					_currentVehicleId =	"statData.vehicleId"
+					_shipListLength =	"statData.shipsList.length"
+					_totalWinRate =		"statData.diagStats.totalWinRate"
+					_gamesPlayed =		"statData.diagStats.gamesPlayed"
+				)
+			)
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(maxHeight = "{720:325px, 1080: 595px}")
+				(backgroundColor = "NO_COLOR")
+			)
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_singleStep = "SUMMARY_SHIP_ROW_HEIGHT"
+				_isContrastScrollBar = "true"
+			)
+
+			(repeatController = 'ShipRowsContainer')
+			(scrollPerItem = true)
+
+			(content
+				(style
+					(width = 100%)
+					(bind flow "userPrefs.shipSortStatsDirection ? vertical : reverse_vertical")
+				)
+
+				(controller $DynamicRepeat renderer='ShipRowItem' name='ShipRowsContainer'
+					(bind count "statData.shipsList.length")
+					(args
+						_currentVehicleId =	"statData.vehicleId"
+						_vehicleId =		"statData.shipsList[$index].vehicleId"
+						_battlesCount =		"statData.shipsList[$index].battlesCount"
+						_winRate =			"statData.shipsList[$index].winRate"
+					)
+
+					(itemHeight = "SUMMARY_SHIP_ROW_HEIGHT")
+					(itemOffset = "SUMMARY_SHIP_ROW_HEIGHT * 2")
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "S")
+			)
+
+			(controller $Instance renderer='ShipSortingDropdown'
+				(bind enabled "statData.shipsList.length >= 2")
+			)
+		)
+	)
+)
+
+(def element LargeTextChoosedItemRenderer (_item:str)
+	(style
+		(height = 35px)
+		(align = "middle")
+		(paddingRight = "S")
+		(paddingLeft = "SXS")
+		(hitTest = false)
+	)
+
+	(tf
+		(class $TextDefaultBold21NM)
+		(style (alpha = "TA"))
+		(bind text "_item")
+	)
+)
+
+(def element ShipStatsTooltip (_vehicleId:number)
+	(style (width = 300px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderShip
+			_shipId = "_vehicleId"
+			_withFlag = true
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemStatusLine
+			_text = 'IDS_SELECT_SHIP_FOR_DETAILED_STAT'
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+		)
+	)
+)
+
+(def element ShipSortingDropdown (_shipsList:array)
+	(scope
+		(event ItemChooser_shipsSortSelected)
+
+		(macro USER_PREF_DATA)
+		(var curItemIndex:number = "userPrefs.shipStatsSortIndex ?: 0")
+		(var isReverseSorting:bool = "userPrefs.shipSortStatsDirection")
+
+		(var items:array = "[	'IDS_SORT_BY_WIN_PERCENT',
+								'IDS_SORT_BY_BATTLES_COUNT',
+								'IDS_SORT_BY_LEVEL',
+								'IDS_SORT_BY_NATION',
+								'IDS_SORT_BY_SHIPTYPE'	]")
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', {	name: 'shipStatsSortIndex', value: $event.selectedIndex }]" watch=false (event "ItemChooser_shipsSortSelected"))
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', {	name: 'shipSortStatsDirection', value: $event.direction }]" watch=false (event "ItemChooser_shipsSortSelected"))
+	(bindcall externalCall "'inputMapping.onRequest'" "['sortShipStats', {	ids: items[$event.selectedIndex] }]" watch=false (event "ItemChooser_shipsSortSelected"))
+
+	(style
+		(width = 100%)
+		(align = "center")
+		(vgap = "S")
+	)
+
+	(tf
+		(class $TextDefaultBold17NM)
+		(style (alpha = "TC"))
+		(text = 'IDS_SORTING_TYPE_COLON')
+	)
+
+	(block
+		(style (paddingLeft = "SXS"))
+
+		(element ItemChooser
+			_name = 'ShipSorting'
+			_items = "items"
+			_curDirection = "isReverseSorting"
+			_curIndex = "curItemIndex"
+			_listItemRenderer = 'TextListItemRenderer'
+			_choosedItemRenderer = 'DefaultItemChooserPickedItemRenderer'
+			_onItemSelectedEvent = 'shipsSortSelected'
+			_dropDownWidth = 160px
+			_itemChooserTooltipText = 'IDS_HINT_SHIP_CAROUSEL_SORT'
+		)
+	)
+
+)
+
+(def element PlayerSummaryCommon (_battleType:str, _statData:dict)
+	(scope
+		(macro STAGE_SIZE)
+		(var isSmallScreen:bool = "stageWidth < 1440")
+		
+		(var isNoShipSelected:bool = "_statData.vehicleId == 0")
+		(var isBattlePlayed:bool = "_statData.basicStats.gamesPlayed > 0")
+		(var isRankStereotypeVisible:bool = "_battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE && isBattlePlayed && _statData.seasonStats.rank && isNoShipSelected")
+	)
+	(class $Fullsize)
+
+	(hblock
+		(style
+			(width = 100%)
+			(align = "center")
+		)
+
+		(hblock
+			(style (paddingTop = "M"))
+
+			(element ProfilePlayerPercentEfficiency
+				_label = 'IDS_GAME_PLAYED'
+				_value = "formatSeparator(_statData.basicStats.gamesPlayed ?: 0)"
+			)
+			(element ProfilePlayerPercentEfficiency
+				_label = 'IDS_VICTORY_PERCENT'
+				_value = "toString(_statData.basicStats.winRate)"
+			)
+			(element ProfilePlayerPercentEfficiency
+				_label = 'IDS_EXPERIENCE_C_AVERAGE'
+				_value = "formatSeparator(_statData.basicStats.averageExp ?: 0)"
+			)
+			(element ProfilePlayerPercentEfficiency
+				_label = 'IDS_MAX_SHIPS_PER_BATTLE'
+				_value = "toString(_statData.basicStats.maxFrags ?: 0)"
+			)
+			(element ProfilePlayerPercentEfficiency
+				_label = 'IDS_DESTROY_RATIO'
+				_value = "toString(_statData.basicStats.killDeath ?: 0)"
+			)
+		)
+	
+		(block
+			(bind visible "isRankStereotypeVisible")
+			(style
+				(bind width		"isSmallScreen	? 152px	: 162px")
+				(bind marginTop "isSmallScreen	? -XXS	: 5px")
+				(align = "center")
+				(vgap = "XS")
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_BEST_RANK_TOOLTIP'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(block
+				(controller $Instance renderer='RankStereotypeImage'
+					(bind enabled "isRankStereotypeVisible")
+					(args
+						_size = "SIZE.SMALL"
+						_league = "_statData.seasonStats.league"
+						_rank = "_statData.seasonStats.rank"
+						_isDesaturated = true
+					)
+				)
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TC"))
+				(text = 'IDS_BEST_RANK')
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(align = "center")
+			(paddingTop = "{ 720:L, 1080:LS }")
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(maxWidth = 1100px)
+				(maxHeight = 100%)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_isContrastScrollBar = "true"
+			)
+
+			(content
+				(style
+					(width = 100%)
+					(flow = "horizontal")
+				)
+				
+				(controller $Repeat renderer='StatColumn'
+					(bind count "_statData.basicStats.colData.length")
+					(args
+						_statList = "_statData.basicStats.colData[$index]"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element PlayerSummaryDiagrams (_statData:dict)
+	(style
+		(width = 100%)
+		(height = 190px)
+		(align = "center|middle")
+		(flow = "horizontal")
+		(hgap = "{ 1280:0px, 1920:90px }")
+		(paddingRight = "{ 1280:70px, 1920:0px }")
+	)
+
+	
+	(block
+		(style
+			(height = 100%)
+			(minWidth = 220px)
+			(align = "center")
+			(vgap = "SXS")
+		)
+	
+		(block
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_STATISTICS_BY_NATIONS_TOOLTIP'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+	
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_NATIONS')
+			)
+		)
+
+		(element SummaryCircleDiagram
+			_renderLegendItem = 'NationFlagsTiny'
+			_gamesPlayed = "_statData.diagStats.gamesPlayed"
+			_battlesByTypeData = "_statData.diagStats.nations"
+		)
+	)
+
+	
+	(block
+		(style
+			(height = 100%)
+			(minWidth = 220px)
+			(align = "center")
+			(vgap = "SXS")
+		)
+
+		(block
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_STATISTICS_BY_SHIP_TYPES_TOOLTIP'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+	
+			(tf
+				(class $TextDefaultBold21NM)
+				(style
+					(alpha = "TA")
+				)
+				(text = 'IDS_SHIP_TYPES')
+			)
+		)
+
+		(element SummaryCircleDiagram
+			_renderLegendItem = 'ShipIcon'
+			_gamesPlayed = "_statData.diagStats.gamesPlayed"
+			_battlesByTypeData = "_statData.diagStats.classes"
+		)
+	)
+
+	
+	(block
+		(style
+			(height = 100%)
+			(align = "center")
+			(vgap = "SXS")
+		)
+
+		(block
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_STATISTICS_BY_SHIP_LEVELS_TOOLTIP'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+	
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_LEVELS')
+			)
+		)
+
+		(hblock
+			(style (height = 140px))
+
+			(controller $Repeat renderer='LineDiagramItem'
+				(bind count "_statData.diagStats.levels.shipLevels.length")
+				(args
+					_label =		"_statData.diagStats.levels.shipLevels[$index].label"
+					_value =		"_statData.diagStats.levels.shipLevels[$index].value"
+					_tooltipText =	"_statData.diagStats.levels.shipLevels[$index].text"
+					_maxValue =		"_statData.diagStats.levels.maxValue"
+				)
+			)
+		)
+	)
+)
+
+(def element SummaryCircleDiagram (_gamesPlayed:number, _battlesByTypeData:dict, _renderLegendItem:str)
+	(scope
+		(event evSectorRollOver)
+		(event evSectorRollOut)
+
+		(var activeItemOverId:str = "'itemId' in $event	? $event.itemId
+														: ''" (event "evSectorRollOver") (event "evSectorRollOut"))
+
+		(var activeGamesPlayedCount:number = "'value' in $event	? $event.value
+																: _gamesPlayed" (event "evSectorRollOver") (event "evSectorRollOut"))
+	)
+	(style (flow = "horizontal"))
+
+	(block		
+		(block
+			(style
+				(width = 140px)
+				(height = 140px)
+				(paddingLeft = 70px)
+				(paddingTop = 70px)
+			)
+
+			(block
+				(alpha = 0)
+
+				(controller $Sector
+					(color = 0xFFFFFF)
+					(arc = 360)
+					(radius = 45)
+					(innerRadius = 0)
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_GAME_PLAYED_TOOLTIP'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(block	
+				(controller $Repeat renderer='CircleDiagramItem'
+					(bind count "_battlesByTypeData.diagram.length")
+					(args
+						_itemId =		"_battlesByTypeData.diagram[$index].itemId"
+						_color =		"_battlesByTypeData.diagram[$index].color"
+						_offset =		"_battlesByTypeData.diagram[$index].offset"
+						_arc =			"_battlesByTypeData.diagram[$index].arc"
+						_value =		"_battlesByTypeData.diagram[$index].value"
+						_tooltipText =	"_battlesByTypeData.diagram[$index].text"
+						_isActive =		"_battlesByTypeData.diagram[$index].itemId == activeItemOverId"
+					)
+				)
+			)
+		)
+	
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(align = "center|middle")
+				(hitTest = false)
+			)
+
+			(controller $Animation
+				(bindcall play
+					keyframes =	"[
+									{ time:0,		to:{ alpha:0 }},
+									{ time:0.1,		to:{ alpha:0 }},
+									{ time:0.3,		to:{ alpha:1 }}
+								]"
+					action = "kill"
+					(bind trigger "activeGamesPlayedCount")
+				)
+			)
+
+			(tf
+				(class $TextDefaultBold21NM)
+				(style (alpha = "TA"))
+				(bind text "activeGamesPlayedCount")
+			)
+		)
+	)
+
+	(block
+		(style
+			(height = 100%)
+			(marginLeft = "XS")
+			(flow = "tile_vertical")
+			(bind align "_battlesByTypeData.legend.length <= 4 ? middle : top")
+		)
+
+		(controller $Repeat renderer='SummaryLegendItem'
+			(bind count "_battlesByTypeData.legend.length")
+			(args
+				_itemRenderer = "_renderLegendItem"
+				_itemId =		"_battlesByTypeData.legend[$index].itemId"
+				_value =		"_battlesByTypeData.legend[$index].value"
+				_color =		"_battlesByTypeData.legend[$index].color"
+				_tooltipText =	"_battlesByTypeData.legend[$index].text"
+				_isActive =		"_battlesByTypeData.legend[$index].itemId == activeItemOverId"
+			)
+		)
+	)
+)
+
+(def element CircleDiagramItem (_itemId:str, _color:number, _offset:number, _arc:number, _value:number, _isActive:bool, _tooltipText:str)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evSectorRollOver)
+		(event evSectorRollOut)
+
+		(event evAddedToStage)
+		(var radius:number = 44)
+
+		(var isActive:bool = "rollOver || _isActive")
+
+		(controller $Animation
+			(bindcall play
+				keyframes =	"[
+								{ time:0,	to:{ radius:44 }},
+								{ time:0.5,	to:{ radius:44 }},
+								{ time:0.8,	to:{ radius:62 }, easing:Easing.back_out}
+							]"
+				(event "evAddedToStage")
+			)
+	
+			(bindcall play
+				duration = 0.15
+				to = "{ radius:65 }"
+				action = "kill"
+				(bind enabled "isActive")
+			)
+
+			(bindcall play
+				duration = 0.15
+				to = "{ radius:62 }"
+				action = "kill"
+				(bind enabled "!isActive")
+			)
+		)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(dispatch evAddedToStage dir="EventDirection.NONE" on='addedToStage')
+
+	(dispatch evSectorRollOver	dir="EventDirection.UP" args="{ itemId: _itemId, value: _value }" (event "evRollOver"))
+	(dispatch evSectorRollOut	dir="EventDirection.UP" (event "evRollOut"))
+
+	(controller $Sector
+		(bind color "_color")
+		(bind arc "_arc")
+		(bind offset "_offset")
+		(bind radius "radius")
+		(innerRadius = 44)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_tooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element LineDiagramItem (_value:number, _maxValue:number, _label:str, _tooltipText:str)
+	(scope
+		(event evValueChanged)
+		(event evStartAnimation)
+		(var animationTime:number = "_maxValue ? 0.1 + 0.5 * (_value / _maxValue) : 0.1")
+		(var valueRation:number = "_maxValue ? _value / _maxValue * 100 : 1px")
+		(var lineHeight:number = "_value && valueRation > 1 ? valueRation : 1px")
+	)
+	(dispatch evValueChanged	dir="EventDirection.NONE" on='addedToStage' on='removedFromStage' (bind trigger "_value") (bind trigger "_maxValue"))
+	(dispatch evStartAnimation	dir="EventDirection.NONE" delay=0.1 reset=true (event "evValueChanged"))
+
+	(style
+		(width = 26px)
+		(height = 100%)
+		(align = "center|bottom")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_tooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(tf
+		(bind class "_maxValue > 999 ? '$TextDefault12NM' : '$TextDefault13NM'")
+		(style
+			(alpha = "TA")
+			(marginBottom = "XS")
+		)
+		(bind text "_value")
+	)
+
+	(block
+		(style
+			(bind height "1px" init=true watch=false (event "evValueChanged"))
+			(width = 18px)
+			(backgroundColor = 0xFF2DF0C9)
+			(align = "center")
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.3
+				duration = "animationTime"
+				to = "{ height: lineHeight}"
+				action = "kill"
+				easing = "Easing.back_out"
+				watch = false
+				(event "evStartAnimation")
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(alpha = "TA")
+			(marginTop = "S")
+		)
+		(bind text "_label")
+	)
+)
+
+(def element SummaryLegendItem (_itemRenderer:str, _itemId:str, _color:number, _tooltipText:str, _isActive:bool, _value:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evSectorRollOver)
+		(event evSectorRollOut)
+
+		(var radius:number = 4)
+		(var isActive:bool = "rollOver || _isActive")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(dispatch evSectorRollOver	dir="EventDirection.UP" args="{ itemId: _itemId, value: _value }" (event "evRollOver"))
+	(dispatch evSectorRollOut	dir="EventDirection.UP" (event "evRollOut"))
+
+	(style
+		(width = 55px)
+		(height = 34px)
+		(flow = "horizontal")
+		(align = "middle")
+		(backgroundColor = "NO_COLOR")
+		(paddingLeft = "XS")
+		(hgap = "S")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_tooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+	
+	(block
+		(style
+			(paddingTop = "XS")
+			(paddingLeft = "XS")
+		)
+		(block
+			(style
+				(width = 4px)
+				(height = 4px)
+			)
+
+			(controller $Sector
+				(bind color "_color")
+				(arc = 360)
+				(radius = 4)
+				(innerRadius = 0)
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					to = "{ visualScaleX:1.5, visualScaleY:1.5 }"
+					action = "kill"
+					(bind enabled "isActive")
+				)
+
+				(bindcall play
+					duration = 0.15
+					to = "{ visualScaleX:1, visualScaleY:1 }"
+					action = "kill"
+					(bind enabled "!isActive")
+				)
+			)
+		)
+	)
+
+	(block
+		(controller $Instance
+			(bind renderer "_itemRenderer")
+			(args "_itemId")
+		)
+	)
+)
+
+(def element ProfilePlayerPercentEfficiency (_value:str, _label:str)
+	(scope
+		(macro STAGE_SIZE)
+		(var isSmallScreen:bool = "stageWidth < 1440")
+	)
+	(style
+		(bind width "isSmallScreen ? 152px : 162px")
+		(vgap = "S")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_label + '_TOOLTIP'"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(tf
+		(bind name "'Stat_' + _label")
+		(bind class "isSmallScreen ? '$TextDefaultBold50NM' : '$TextDefaultBold60NM'")
+		(style
+			(width = 100%)
+			(textAlign = "center")
+			(alpha = "TA")
+		)
+		(bind text "_value")
+	)
+
+	(tf
+		(class $TextDefaultBoldNM)
+		(style
+			(width = 100%)
+			(alpha = "TC")
+			(textAlign = "center")
+		)
+		(bind text "_label")
+	)
+)
+
+(def element LargeTextChoosedItemRendererRanked (_item:dict, _choosedItemRendererParams:dict, _labelMaxWidth:number)
+	(scope
+		(var isSeasonDropdown:bool = "_choosedItemRendererParams.isSeasonDropdown")
+		(var itemText:str = "_item.id	?	isSeasonDropdown	?	tr('IDS_SEASON_TITLE_' + _item.id)
+																:	tr('IDS_RANKED_LEAGUE_' + _item.id)
+										:	isSeasonDropdown	?	'IDS_ALL_SEASONS'
+																:	'IDS_ALL_LEAGUES'")
+	)
+
+	(element DefaultItemChooserPickedItemRenderer
+		_item = "itemText"
+		_choosedItemRendererParams = "_choosedItemRendererParams"
+		_labelMaxWidth = "_labelMaxWidth"
+	)
+)
+
+(def element TextListItemRendererRanked (_item:dict, _curItemIndex:number, _listItemRendererData:dict)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var isSelected:bool = "_curItemIndex == $index")
+
+		(var state:number = "	isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var isSeasonDropdown:bool = "_listItemRendererData.isSeasonDropdown")
+
+		(var itemText:str = "_item.id	?	isSeasonDropdown	?	tr('IDS_SEASON_TITLE_' + _item.id)
+																:	tr('IDS_RANKED_LEAGUE_' + _item.id)
+										:	isSeasonDropdown	?	'IDS_ALL_SEASONS'
+																:	'IDS_ALL_LEAGUES'")
+	)
+	(bind name "itemText")
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "'button_default'")
+	(dispatch "'evMenuClosed'" dir="EventDirection.UP" on='leftClick')
+	(dispatch "'evItemChooserInner'" args="{ _curItemIndex: $index }" dir="EventDirection.UP" on='leftClick')
+
+	(style
+		(width = 100%)
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(element MenuItemBackground
+		_state = "state"
+	)
+
+	(hblock
+		(class $SimpleDropdownElement)
+		(style
+			(hgap = "S")
+			(align = "middle")
+		)
+
+		(block
+			(bind visible "_item.id != 0 && isSeasonDropdown")
+			(style
+				(height = 100%)
+				(align = "middle")
+			)
+
+			(block
+				(style
+					(scaleX = 0.4)
+					(scaleY = 0.4)
+					(width = 60px)
+					(height = 60px)
+					(bind backgroundImage "'url:' + _item.iconPath")
+				)
+			)
+		)
+
+		(tf
+			(bind name "'menu_item_' + _item")
+
+			(bind class "isSelected ? '$DropdownSimpleOptionTextSelected': '$DropdownSimpleOptionText'")
+			(style
+				(alpha = "TA")
+				(elideMode = true)
+			)
+
+			(bind text "itemText")
+		)
+	)
+)
+
+(def element ShipRowItem (_vehicleId:number, _currentVehicleId:number, _battlesCount:number, _winRate:str)
+	(scope
+		(macro USER_PREF_DATA)
+	)
+	(style
+		(width = 100%)
+		(height = "SUMMARY_SHIP_ROW_HEIGHT")
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipStatsTooltip')
+		(args
+			_vehicleId = "_vehicleId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element DockSubmenuItem
+			_selected = "_currentVehicleId == _vehicleId"
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'vehicleIdChanged',
+							args:	{ vehicleId: _vehicleId }
+						}]"
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(class $InfoBlockHorizontalIndent)
+		(style
+			(align = "middle")
+			(hitTest = false)
+			(hgap = "M")
+		)
+
+		(element ShipLineItemNM
+			_shipId = "_vehicleId"
+			_withFlag = true
+			_fontClass = '$TextDefaultBold17NM'
+			_width = '100%'
+		)
+
+		(tf
+			(class $TextDefaultBold17NM)
+			(bind text "userPrefs.shipStatsSortIndex == 1 ? _battlesCount : _winRate")
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+)
+
+(def element AllShipsSelectedItem (_shipListLength:number, _totalWinRate:str, _currentVehicleId:number, _gamesPlayed:number)
+	(scope
+		(macro USER_PREF_DATA)
+	)
+	(style
+		(width = 100%)
+		(height = "SUMMARY_SHIP_ROW_HEIGHT")
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element DockSubmenuItem
+			_selected = "_currentVehicleId == 0"
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'vehicleIdChanged',
+							args:	{ vehicleId: 0 }
+						}]"
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(class $InfoBlockHorizontalIndent)
+		(style
+			(align = "middle")
+			(hitTest = false)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(tf
+				(class $TextDefaultBold17NM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+				(bind text "subst('IDS_SUBST_ALL_VEHICLES_WITH_COUNTER', [], { _shipCount: _shipListLength })")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold17NM)
+			(style (alpha = "TA"))
+			(bind text "userPrefs.shipStatsSortIndex == 1 ? _gamesPlayed : _totalWinRate")
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+)
+
+(def element StatsRowTooltip (_tooltipText:str, _hintVehicleId:number = null)
+	(style (width = 300px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemDescriptionText
+			_descriptionText = "_tooltipText"
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_hintVehicleId"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemShipWithTitle'
+				(bind enabled "_hintVehicleId")
+				(args
+					_title = 'IDS_ON_SHIP_STATS'
+					_shipId = "_hintVehicleId"
+					_withFlag = true
+				)
+			)
+		)
+	)
+)

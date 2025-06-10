@@ -3,6 +3,7 @@
 (def element ShipExtendedTooltip (	_shipId:number,
 									_isFromTree:bool=false,
 									_isRewards:bool=false,
+									_isShipComponent:bool=false,
 									_hasShipImage:bool=false,
 									_rewardRentUntil:number=0,
 									_rewardRentDuration:number=0,
@@ -10,7 +11,8 @@
 									_isSelf:bool=false,
 									_relation:number="SC.Battle.PLAYER_RELATION.SELF",
 									_isCompare:bool=false,
-									_isReversedCompare:bool=false)
+									_isReversedCompare:bool=false,
+									_isShipComponentsCarousel:bool = false)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 		(var shipId:number = "_shipId" watch=false (event "evStartShow"))
@@ -51,15 +53,9 @@
 
 		
 		(var shipComponentEntity:dhEntity = "getPrimaryEntity(CC.shipComponent, shipId)")
-		(var shipComponentsCount:number = "shipComponentEntity.shipComponent.count ?: 0" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var isAvailableForCrafting:bool = "shipComponentEntity.shipComponent.isAvailableForCrafting ?: false" (event "shipComponentEntity.shipComponent.evChanged"))
-		(var isShipComponentsEnough:bool = "shipComponentsCount >= SHIP_SHARDS.COMPONENTS_CRAFTING_COST")
-
 		(var shipMaterialEntity:dhEntity = "getPrimaryEntity(CC.shipMaterial, shipLevel)")
 		(var shipMaterialsCount:number = "shipMaterialEntity.shipMaterial.count ?: 0" (event "shipMaterialEntity.shipMaterial.evChanged"))
-		(var isShipShardsEnough:bool = "isAvailableForCrafting &&
-										shipComponentsCount < SHIP_SHARDS.COMPONENTS_CRAFTING_COST &&
-										shipComponentsCount >= SHIP_SHARDS.COMPONENTS_COUNT_MIN")
+		(var isAvailableForCraftingStatus:bool = "shipMaterialsCount >= SHIP_SHARDS.SHIP_CRAFTING_COST && !_isRewards && _isShipComponentsCarousel")
 
 		
 		(var isExplored:bool = "upgradableShipInfo.isExplored" (event "upgradableShipInfo.evUpdate"))
@@ -161,7 +157,12 @@
 
 		(block
 			(bind visible "_hasShipImage")
-			(style (width = 100%) (align = "center") (marginBottom = "-M"))
+			(style
+				(width = 100%)
+				(height = 140px)
+				(align = "center|middle")
+				(marginBottom = "-M")
+			)
 
 			(controller $Instance renderer='ShipImage'
 				(bind enabled "_hasShipImage")
@@ -175,6 +176,21 @@
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_hasShipImage"))
+		)
+
+		(block
+			(bind visible "_isShipComponent")
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHeaderSubheaderText'
+				(bind enabled "_isShipComponent")
+				(args
+					_headerText = 'IDS_SHIPCOMPONENT_FULL_TITLE'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isShipComponent"))
 		)
 
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
@@ -195,36 +211,17 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInRepairDock && !_isRewards"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isAvailableForCraftingStatus")
+			)
 		)
-
-		
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemProgressBarBlock'
-				(bind enabled "isInRepairDock && !isShipComponentsEnough && !_isRewards")
-				(args
-					_title = 'IDS_SHIPSHARDS_PROGRESS_TITLE'
-					_currentValue = "shipComponentsCount"
-					_maxValue = "SHIP_SHARDS.COMPONENTS_CRAFTING_COST"
-				)
-			)
 			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isInRepairDock && isShipComponentsEnough && !_isRewards")
+				(bind enabled "isAvailableForCraftingStatus")
 				(args
-					_text = 'IDS_SHIPSHARDS_PROGRESS_STATUS_DONE'
+					_text = 'IDS_SHIP_TOOLTIP_REPAIR_WITH_MATERIALS_AVAILABLE'
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
-				)
-			)
-		)
-		(block
-			(style (width = 100%) (bind marginTop "isShipShardsEnough && !_isRewards ? S : 0"))
-			(controller $Instance renderer='ShipShardsTTXDescriptionBlockFinish'
-				(bind enabled "isShipShardsEnough && !_isRewards")
-				(args
-					_shipLevel="levelRome"
-					_shipMaterialsCount="shipMaterialsCount"
-					_shipComponentsCount="shipComponentsCount"
 				)
 			)
 		)
@@ -454,8 +451,11 @@
 		
 		(block
 			(style (width = 100%))
-			(element TooltipSystemShipTagAndComplexity
+			(controller $Instance renderer='TooltipSystemShipTagAndComplexity'
+				(bind enabled "isNotEventGroup")
+				(args
 					_shipId = "shipId"
+				)
 			)
 		)
 
@@ -523,12 +523,10 @@
 		(var isSupership:bool = "shipInfo.level == SC.Ships.SHIP_LEVELS.SUPER_SHIP")
 		(var shipSubType:str = "shipInfo.subtype" (event "shipInfo.evUpdate"))
 		(var shipClass:str = "tr('IDS_SHIP_TAG_' + toUpper(shipSubType) + (isSupership ? '_LEGENDARY' : ''))")
-		(var isEventGroup:bool = "shipInfo.group == SC.Ships.SHIP_GROUPS.EVENT")
 		(var levelRome:str = "shipInfo.levelRome" (event "shipInfo.evUpdate"))
 
-		(var tagHeader:str = "	isEventGroup	? tr('IDS_SHIP_BRANCH_FEATURES_TOOLTIP_TITLE') :
-								isSupership		? subst('IDS_SUBST_SHIP_TAG_HEADER_LEGENDARY', [], { _shipClass: shipClass })
-												: subst('IDS_SUBST_SHIP_TAG_HEADER', [], { _shipClass: shipClass, _shipLevel: levelRome })")
+		(var tagHeader:str = "isSupership	? subst('IDS_SUBST_SHIP_TAG_HEADER_LEGENDARY', [], { _shipClass: shipClass })
+											: subst('IDS_SUBST_SHIP_TAG_HEADER', [], { _shipClass: shipClass, _shipLevel: levelRome })")
 	)
 	(macro TOOLTIP_SYSTEM_PARAMS_CONTAINER)
 

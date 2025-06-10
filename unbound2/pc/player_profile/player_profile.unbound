@@ -7,30 +7,177 @@
 		(var isProfileRoute:bool = "componentRoute.isActive" (event "componentRoute.evIsActiveChanged"))
 		(var profilePage:str = "componentRoute.activeChild" (event "componentRoute.evActiveChildChanged"))
 
-		(var renderProfilePage:str = "  profilePage == SC.Ui_windows.ROUTE.ACHIEVEMENTS		? 'PlayerAchievements' :
-										profilePage == SC.Ui_windows.ROUTE.RANKS			? 'PlayerRanks' :
-										profilePage == SC.Ui_windows.ROUTE.RATING_BATTLES	? 'RatingBattles'
-																							: ''")
+		(var isAccountLevelingPage:bool =	"profilePage == SC.Ui_windows.ROUTE.LEVELING")
+		(var isAchievementsPage:bool =		"profilePage == SC.Ui_windows.ROUTE.ACHIEVEMENTS")
+		(var isRanksPage:bool =				"profilePage == SC.Ui_windows.ROUTE.RANKS")
+		(var isRatingBattlesPage:bool =		"profilePage == SC.Ui_windows.ROUTE.RATING_BATTLES")
+		(var isCollectionage:bool =			"profilePage == SC.Ui_windows.ROUTE.COLLECTIONS")
+		(var isSummaryPage:bool =			"profilePage == SC.Ui_windows.ROUTE.SUMMARY")
+
+		(var renderProfilePage:str = "  isAccountLevelingPage		?	'PlayerProfileAccountPage' :
+										isAchievementsPage			?	'PlayerProfileAchievementsPage' :
+										isRanksPage					?	'PlayerProfileRanksPage' :
+										isRatingBattlesPage			?	'PlayerProfileRatingBattlesPage' :
+										isCollectionage				?	'PlayerProfileCollectionPage' :
+										isSummaryPage				?	'PlayerProfileSummaryPage'
+																	:	''")
+
+		(var tooltipTextData:dict = "isAccountLevelingPage 		?	{	tooltipHeader:	'IDS_ACCESS_LEVEL',
+																		paragraphs:		[ 'IDS_ACCESS_LEVELS_INSTRUCTION_0', 'IDS_ACCESS_LEVELS_INSTRUCTION_1', 'IDS_ACCESS_LEVELS_INSTRUCTION_2' ]} :
+									isAchievementsPage			?	{	tooltipHeader:	'IDS_PROFILE_ACHIEVEMENTS',
+																		paragraphs:		[ 'IDS_PROFILE_ACHIEVEMENTS_INSTRUCTION' ]} :
+									isRanksPage 				?	{	tooltipHeader:	'IDS_PROFILE_RANKS',
+																		paragraphs:		[ 'IDS_' + SC.Common.BATTLE_TYPES.RANKED_BATTLE + '_DESCRIPTION' ]} :
+									isRatingBattlesPage 		?	{	tooltipHeader:	'IDS_PROFILE_RATING_BATTLES',
+																		paragraphs:		[ 'IDS_RATINGBATTLE_DESCRIPTION' ]} :
+									isCollectionage				?	{	tooltipHeader:	'IDS_PROFILE_COLLECTIONS',
+																		paragraphs:		[ 'IDS_PROFILE_COLLECTION_INSTRUCTION_0', 'IDS_PROFILE_COLLECTION_INSTRUCTION_1' ]} :
+									isSummaryPage				?	{	tooltipHeader:	'IDS_PROFILE_SUMMARY',
+																		paragraphs:		[ 'IDS_PROFILE_SUMMARY_INSTRUCTION_0', 'IDS_PROFILE_SUMMARY_INSTRUCTION_1' ]}
+																:	null")
+
+		(var summaryHistoryEntity:dhEntity = "getSingleEntity(CC.rankedSeasonHistory)")
+		(var statData:dict = "summaryHistoryEntity.dataComponent.data" (event "summaryHistoryEntity.dataComponent.evDataChanged"))
+		(var timeLastBattleFormatted:str = "formatTime(statData.basicStats.timeLastBattle ?: 0, 'hh:mm  dd.MM.yyyy', '', true)")
+
+		
+		(var ranksRouteEntity:dhEntity =		"getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.RANKS)")
+		(var rankComponentRoute:dhComponent =	"ranksRouteEntity.route")
+		(var rankPage:str =						"rankComponentRoute.activeChild" (event "rankComponentRoute.evActiveChildChanged"))
+
+		(var ratingBattlesSeasonProgress:dhComponent =	"getSingleComponent(CC.ratingBattlesSeasonProgress)")
+		(var currentRatingBattleLeague:str =			"ratingBattlesSeasonProgress.leagueName" (event "ratingBattlesSeasonProgress.evLeagueNameChanged"))
+		(var initialQualificationBattlesResults:array =	"ratingBattlesSeasonProgress.initialQualificationBattlesResults ?: []" (event "ratingBattlesSeasonProgress.evInitialQualificationBattlesResultsChanged"))
+		(var isRatingQualification:bool =				"initialQualificationBattlesResults.length < SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
+
+		(var bgType:number = "	isRanksPage				? SC.Ui_styles.ANIMATED_BG.RANKS :
+								isRatingBattlesPage		? isRatingQualification		? SC.Ui_styles.ANIMATED_BG.DEFAULT
+																					: SC.Ui_styles.ANIMATED_BG.RATING_BATTLES
+														: SC.Ui_styles.ANIMATED_BG.DEFAULT")
+
+		(var selectedCategory:str =	"	isRanksPage			? rankPage :
+										isRatingBattlesPage	? isRatingQualification ? 'profile'
+																					: toLower(currentRatingBattleLeague)
+															: 'profile'")
 	)
 	(class $Fullsize)
+	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'profile']" on='addedToStage')
 	(dispatch evProfilePageActivated (bind enabled "isProfileRoute") (bind trigger "profilePage"))
 	(dispatch evProfilePageActivated on='addedToStage' (bind enabled "isProfileRoute"))
 
-	(controller $Animation
-		(bindcall play
-			keyframes = "[
-				{ time:0,		to:{ alpha:0 }},
-				{ time:0.1,		to:{ alpha:0 }},
-				{ time:0.25,	to:{ alpha:1 }, easing:Easing.sine_in_out}
-			]"
-			action = "kill"
-			(event "evProfilePageActivated")
+	(block
+		(macro DEFAULT_CACHED_SHOW_ANIMATION 0)
+		(class $FullsizeAbsolute)
+		(style (paddingTop = -60px))
+
+		(element AnimatedBackground
+			_selectedCategory = "selectedCategory"
+			_type = "bgType"
 		)
 	)
 
-	(controller $Instance
-		(bind enabled "renderProfilePage")
-		(bind renderer "renderProfilePage")
-		(reuseElement = true)
+	
+	(block
+		(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
+		(style
+			(position = "absolute")
+			(width = 200px)
+			(height = 100%)
+			(paddingTop = 21%)
+		)
+
+		(element ProfileSideTabButtons
+			_profilePage = "profilePage"
+		)
+	)
+
+	(block
+		(class $Fullsize)
+
+		(controller $Animation
+			(bindcall play
+				keyframes = "[
+					{ time:0,		to:{ alpha:0 }},
+					{ time:0.1,		to:{ alpha:0 }},
+					{ time:0.25,	to:{ alpha:1 }, easing:Easing.sine_in_out}
+				]"
+				action = "kill"
+				(event "evProfilePageActivated")
+			)
+		)
+
+		(controller $Instance
+			(bind enabled "renderProfilePage")
+			(bind renderer "renderProfilePage")
+			(reuseElement = true)
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(paddingTop = "S")
+			(paddingLeft = 6px)
+		)
+
+		(block
+			(bind visible "tooltipTextData")
+			(style
+				(width = 22px)
+				(height = 22px)
+				(backgroundImage = 'url:../service_kit/icons/icon_question_mark_grey.png')
+			)
+			(controller $Tooltip
+				(bind enabled "tooltipTextData")
+				(renderer = 'MultiparagraphStatusTooltip')
+				(args
+					_width = 350px
+					_headerText = "tooltipTextData.tooltipHeader"
+					_items = "tooltipTextData.paragraphs"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(block
+			(style
+				(marginTop = 10px)
+				(paddingLeft = "XS")
+			)
+
+			(tf
+				(class $TextDefault13NM)
+				(style (alpha = "TA"))
+				(bind text "statData.basicStats.registrationDate")
+			)
+
+			(tf
+				(class $TextDefault13NM)
+				(style
+					(alpha = "TA")
+					(marginTop = "XS")
+				)
+				(text = 'IDS_REGISTRATION_DATE')
+			)
+
+			(block
+				(bind visible "statData.basicStats.timeLastBattle > 0")
+				(style (marginTop = "SXS"))
+		
+				(tf
+					(class $TextDefault13NM)
+					(style (alpha = "TA"))
+					(bind text "timeLastBattleFormatted")
+				)
+
+				(tf
+					(class $TextDefault13NM)
+					(style
+						(alpha = "TA")
+						(marginTop = "XS")
+					)
+					(text = 'IDS_LAST_BATTLE')
+				)
+			)
+		)
 	)
 )
