@@ -1,14 +1,12 @@
 (def element ModalModernizationsReplace (_itemToMountEntity:dhEntity,
 										_itemToUnmountEntity:dhEntity,
 										_mountFlag:number,
-										_unmountFlag:number,
 										_shipId:number,
 										_slotId:number)
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
 		(event ItemChooser_unmountTypeChanged)
 		(event evDelayedUpdate)
-		(macro USER_PREF_DATA)
 
 		(var modernizationMountComponent:dhComponent = "_itemToMountEntity.modernization")
 
@@ -35,8 +33,13 @@
 		(var accountGold:number	= "resourceEntity.accountResource.gold ?: 0" (event "resourceEntity.accountResource.evChangedGold"))
 		(var accountCredits:number	= "resourceEntity.accountResource.credits ?: 0" (event "resourceEntity.accountResource.evChangedCredit"))
 
-		(var unmountFlag:number =	"userPrefs.switchUnmountSellModernization	? userPrefs.switchUnmountSellModernization
-																				: _unmountFlag")
+		(struct unmountFlagPref = GET_PREF_NUMBER(_option="'ui.switchUnmountSellModernization'"))
+		(var unmountFlag:number = "	unmountFlagPref.value != null	?	unmountFlagPref.value
+																	:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET" watch=false)
+
+		(bind unmountFlag "$event.selectedIndex == MODERNIZATION_UNINSTALL_OPTION.UNMOUNT	?	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET
+																							:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL" init=false watch=false (event "ItemChooser_unmountTypeChanged"))
+
 		(var sellCost:number = "modSellInfo.info.finalPrice * sellCoef.info.finalPrice")
 		(var curSellCost:number = "unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL ? sellCost : 0")
 		(var totalGoldPrice:number = "(buyPrice.info.currency == SC.Common.CURRENCIES.GOLD && isEmptyStorage ? buyPrice.info.finalPrice : 0)
@@ -60,8 +63,6 @@
 		(var btnEnabled:bool = "goldDeficit <= 0 && creditsDeficit <= 0")
 		(var isInstalledModSellCostVisible:bool = "unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL && (creditsDeficit <= 0)")
 	)
-
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'switchUnmountSellModernization', value: $event.selectedIndex ? SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL : SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET}]" watch=false (event "ItemChooser_unmountTypeChanged"))
 
 	(style (align = "center"))
 
@@ -311,7 +312,14 @@
 
 		(element ModalWindowSystemPurchaseItemYesNoCloseButtons
 			_isDeficit =	"!btnEnabled"
-			_okMethods =	"[{ type: 'inputMapping.onRequest', name: 'setModernizations', args: { shipId: _shipId, slotId: _slotId, modAdd: modMountId, mountFlag: _mountFlag, unmountFlag: unmountFlag } }]"
+			_okMethods =	"[	{	type: 'inputMapping.onRequest',
+									name: 'setModernizations',
+									args: { shipId: _shipId, slotId: _slotId, modAdd: modMountId, mountFlag: _mountFlag, unmountFlag: unmountFlag }},
+								{
+									type:	'direct.action',
+									name:	'option.set',
+									args:	['ui.switchUnmountSellModernization', unmountFlag]
+								}]"
 		)
 	)
 )

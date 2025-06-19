@@ -1,12 +1,8 @@
-(def element ModalModernizationsSellUninstall (	_itemToUnmountEntity:dhEntity,
-												_unmountFlag:number,
-												_shipId:number,
-												_slotId:number)
+(def element ModalModernizationsSellUninstall (	_itemToUnmountEntity:dhEntity, _unmountFlag:number, _shipId:number, _slotId:number)
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
 		(event ItemChooser_unmountTypeChanged)
 		(event evDelayedUpdate)
-		(macro USER_PREF_DATA)
 
 		(var modernizationComponent:dhComponent = "_itemToUnmountEntity.modernization")
 		(var modId:number = "modernizationComponent.modId ?: 0")
@@ -19,20 +15,24 @@
 		(struct sellCoef =	PULL_PRICE(_entityId = "'SELL_COEF'"	_actionId = "SC.Common.PRICE_ACTION.INFO"))
 
 		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
-		(var curCurrencyResource:number = "resourceEntity.accountResource[unmountPrice.info.currency]"(event "resourceEntity.accountResource.evChangedGold") (event "resourceEntity.accountResource.evChangedCredit"))
-
+		(var curCurrencyResource:number = "resourceEntity.accountResource[unmountPrice.info.currency]" (event "resourceEntity.accountResource.evChangedGold") (event "resourceEntity.accountResource.evChangedCredit"))
 		(var priceDeficit:number = "unmountPrice.info.finalPrice - curCurrencyResource")
-		(var sellCost:number = "modSellInfo.info.finalPrice * sellCoef.info.finalPrice")
-		(var unmountFlag:number =	"userPrefs.switchUnmountSellModernization	? userPrefs.switchUnmountSellModernization
-																				: SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET")
 
-		(var isUnsetFlag:bool = "unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET" (event "ItemChooser_unmountTypeChanged"))
-		(var isPriceDeficit:bool = "isUnsetFlag && (priceDeficit > 0)" (event "ItemChooser_unmountTypeChanged"))
+		(struct unmountFlagPref = GET_PREF_NUMBER(_option="'ui.switchUnmountSellModernization'"))
+		(var unmountFlag:number = "	_unmountFlag != null			?	_unmountFlag :
+									unmountFlagPref.value != null	?	unmountFlagPref.value
+																	:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET" watch=false)
 
+		(bind unmountFlag "$event.selectedIndex == MODERNIZATION_UNINSTALL_OPTION.UNMOUNT	?	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET
+																							:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL" init=false watch=false (event "ItemChooser_unmountTypeChanged"))
+
+		(var isUnsetFlag:bool = "unmountFlag == SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET")
+		(var isPriceDeficit:bool = "isUnsetFlag && (priceDeficit > 0)")
 		(var priceInfo:dict = "isUnsetFlag ? unmountPrice.info : null")
 
-		(var optionalPriceInfo:dict = "!isUnsetFlag ? {	finalPrice: sellCost,
-														currency: modSellInfo.info.currency }
+		(var sellCost:number = "modSellInfo.info.finalPrice * sellCoef.info.finalPrice")
+		(var optionalPriceInfo:dict = "!isUnsetFlag ? {	finalPrice:	sellCost,
+														currency:	modSellInfo.info.currency }
 													:	null")
 		(var currenciesPanelPrices:array = "[{currency: SC.Common.CURRENCIES.GOLD,		finalPrice: priceInfo ? -priceInfo.finalPrice : 0},
 											{currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: optionalPriceInfo ? optionalPriceInfo.finalPrice : 0}]")
@@ -42,9 +42,6 @@
 		(var visibleDeficitValue:number = 0)
 		(bind visibleDeficitValue "priceDeficit" watch=false (event "evDelayedUpdate"))
 	)
-
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'switchUnmountSellModernization', value: $event.selectedIndex ? SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL : SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET}]" watch=false (event "ItemChooser_unmountTypeChanged"))
-
 	(dispatch evDelayedUpdate delay="priceDeficit > 0 ? 0 : 0.15" (bind trigger "priceDeficit"))
 
 	(style (align = "center"))
@@ -60,7 +57,10 @@
 
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-		(style (marginLeft = "SXS") (marginRight = "SXS"))
+		(style
+			(marginLeft = "SXS")
+			(marginRight = "SXS")
+		)
 
 		(controller $Tooltip
 			(renderer = 'ModernizationTooltip')
@@ -89,9 +89,9 @@
 		(style (width = 100%) (marginTop = "SXS") (marginBottom = "XS"))
 
 		(element UnmountSellModernizationChooserDropdown
-			_sellCost = "sellCost"
-			_unmountFlag = "unmountFlag"
-			_unmountPrice = "{	finalPrice:	-unmountPrice.info.finalPrice,
+			_sellCost =		"sellCost"
+			_unmountFlag =	"unmountFlag"
+			_unmountPrice =	"{	finalPrice:	-unmountPrice.info.finalPrice,
 								currency:	unmountPrice.info.currency}"
 		)
 	)
@@ -135,7 +135,10 @@
 	)
 
 	(block
-		(style (ubScaleY = "isPriceDeficit ? 1 : 0") (alpha = "isPriceDeficit ? 1 : 0"))
+		(style
+			(ubScaleY = "isPriceDeficit ? 1 : 0")
+			(alpha = "isPriceDeficit ? 1 : 0")
+		)
 
 		(controller $Animation
 			(bindcall play
@@ -144,13 +147,16 @@
 				to		 = "{ alpha: 1, ubScaleY: 1 }"
 				easing	 = "Easing.quad_out"
 				action	 = "kill"
-				reverse	= "!isPriceDeficit"
+				reverse	 = "!isPriceDeficit"
 				(bind trigger "isPriceDeficit")
 			)
 		)
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
-			(style (marginTop = "SXS") (marginBottom = "SXS"))
+			(style
+				(marginTop = "SXS")
+				(marginBottom = "SXS")
+			)
 
 			(element PriceDeficit
 				_priceInfo =	"{currency: unmountPrice.info.currency}"
@@ -162,11 +168,22 @@
 
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
-		(style (align = "center") (width = 100%) (marginTop = "M"))
+		(style
+			(align = "center")
+			(width = 100%)
+			(marginTop = "M")
+		)
 
 		(element ModalWindowSystemPurchaseItemYesNoCloseButtons
 			_isDeficit =	"!btnEnabled"
-			_okMethods =	"[{ type: 'inputMapping.onRequest', name: 'setModernizations', args: { shipId: _shipId, slotId: _slotId, unmountFlag: unmountFlag } }]"
+			_okMethods =	"[{	type: 'inputMapping.onRequest',
+									name: 'setModernizations',
+									args: { shipId: _shipId, slotId: _slotId, unmountFlag: unmountFlag }},
+								{
+									type:	'direct.action',
+									name:	'option.set',
+									args:	['ui.switchUnmountSellModernization', unmountFlag]
+								}]"
 		)
 	)
 )

@@ -287,8 +287,7 @@
 		(struct sseFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
 		(var isSseUnlocked:bool = "sseFeature.state != 'locked'")
 
-		(var newbieQuestsExpireTimerEntity:dhEntity = "getSingleEntity(CC.newbieQuestsExpireTimer)")
-		(var newbieQuestsExpireTimerComponent:dhComponent = "newbieQuestsExpireTimerEntity.newbieQuestsExpireTimer")
+		(var newbieQuestsExpireTimerComponent:dhComponent = "getSingleComponent(CC.newbieQuestsExpireTimer)")
 		(var newbieQuestsExpireTimer:number = "newbieQuestsExpireTimerComponent.expire ?: 0")
 
 		(var nqTimeLeft:number = "newbieQuestsExpireTimer - serverTime")
@@ -303,7 +302,7 @@
 												daysUntilNQFinish)")
 
 		(var newbieQuestsExpireStatus:dict = "nqTimeLeft > 0 ? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE, text: statusTextTimeLeft } : null")
-		(var activeNewbieQuestsCollection:dhCollection = "newbieQuestsCollection.getChildByPath('notDone.sorted')")
+		(var activeNewbieQuestsCollection:dhCollection = "newbieQuestsCollection.getChildByPath('notDone')")
 		(var activeNewbieQuestsCollectionLength:number = "activeNewbieQuestsCollection.length")
 
 		(var attributesShipAces:array = "[	{	attributeIDS: 'IDS_SHIP_ACES_METRICS_TASKS_TOTAL',
@@ -1419,13 +1418,13 @@
 	
 		(var featureEntity:dhEntity = "getPrimaryEntity(CC.accountFeature, nextStepFeatures)")
 		(var accountFeatureComponent:dhComponent = "featureEntity.accountFeature")
+		(var featureIndex:number = "accountFeatureComponent.featureIndex" (event "accountFeatureComponent.evStateChanged"))
 
-		(var iconFeaturePath:str = 	"accountFeatureComponent.iconPath 	?: ''" (event "accountFeatureComponent.evStateChanged"))
-		(var titleFeature:str = 	"accountFeatureComponent.title 		?: ''" (event "accountFeatureComponent.evStateChanged"))
-		(var textFeature:str = 		"accountFeatureComponent.text 		?: ''" (event "accountFeatureComponent.evStateChanged"))
-		
+		(var titleFeature:str = "'IDS_UNLOCKS_TITLE_' + featureIndex")
+		(var textFeature:str = "'IDS_UNLOCKS_' + featureIndex")
+		(var imageURL:str = "'url:../accountLevel/unlocks/icon_' + featureIndex + '_small.png'")
+
 		(var subheaderText:str = "subst('IDS_PROFILE_ACCOUNT_LEVEL', [], {_accountLevel: (curAccountLevel + 1)})")
-		(var imageURL:str = "'url:' + iconFeaturePath + '_small.png'")
 		(var battlesToStep:number = "nextStepPoints - currentPoints")
 	)
 	(style (width = "BANNER_TOOLTIP_WIDTH") (hitTest = false))
@@ -1596,9 +1595,25 @@
 		(var taskConditions:array = "sseTaskComponent.conditions ?: []" (event "sseTaskComponent.evChanged"))
 		(var conditionId:number = "taskConditions[0]")
 
+		(var sseConditionEntity:dhEntity = "getEntity(conditionId)")
+		(var shipListRestrictionsComponent:dhComponent = "sseConditionEntity.shipListRestrictions")
+		(var restrictionsComponentId:str = "shipListRestrictionsComponent.id" (event "shipListRestrictionsComponent.evUpdate"))
+
+		(var battleTypes:array = "sseConditionEntity.battleTypesView.viewList" (event "sseConditionEntity.battleTypesView.evBattleTypesViewChanged"))
+		(var concreteShipsFiltersCollection:dhCollection = "getCollectionByPath(CC.shipFilterItem, restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.IDS)")
+		(var nationFiltersCollection:dhCollection = "getCollectionByPath(CC.shipFilterItem, restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.NATION)")
+		(var shipTypeFiltersCollection:dhCollection = "getCollectionByPath(CC.shipFilterItem, restrictionsComponentId + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.TYPE)")
+		(var shipLevelString:str = "shipListRestrictionsComponent.levelString ?: ''" (event "shipListRestrictionsComponent.evUpdate"))
+
+		(var isSseConditionsVisible:bool = "	battleTypes.length > 0 ||
+												nationFiltersCollection.length > 0 ||
+												shipTypeFiltersCollection.length > 0 ||
+												shipLevelString.length > 0 ||
+												concreteShipsFiltersCollection.length > 0")
+
 		(var sseChainName:str = "sseEntity.sseChain.name ?: ''" (event "sseEntity.sseChain.evChanged"))
 		(var sseChainDisplayName:str = "sseChainName == '' || sseChainName.length > MOTIVATOR_SYMBOLS_MAX	? tr('IDS_SSE_MOTIVATOR_TASK_COMMON_TITLE_COLON')
-																											: sseChainName + ':'")
+																											: sseChainName")
 		(var sseTaskName:str = "sseTaskComponent.name.length > MOTIVATOR_SYMBOLS_MAX ? tr('IDS_SSE_MOTIVATOR_TASK_COMMON_TITLE') : sseTaskComponent.name")
 		(var nameToDisplay:str = "isChain ? sseChainDisplayName : sseTaskName")
 
@@ -1613,6 +1628,7 @@
 		(var rewardsDiff:number = "isRewardsLimitExceeded ? sseTaskRewards.length - MOTIVATOR_REWARDS_STACK_LIMIT : 0")
 		(var rewardsLimitText:str = "subst('IDS_REST_REWARDS_HINT', [], { _count: rewardsDiff })")
 	)
+	(bindcall externalCall "restrictionsComponentId ? 'inputMapping.onAction' : ''" "['createRestrictionsSubCollection', { componentId: restrictionsComponentId }]" watch=false on='addedToStage' (bind trigger "restrictionsComponentId"))
 
 	(style (width = "BANNER_TOOLTIP_WIDTH") (hitTest = false))
 	(name = "'SseMotivatorBannerTooltip'")
@@ -1631,7 +1647,7 @@
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemSseConditions'
-				(bind enabled "conditionId")
+				(bind enabled "isSseConditionsVisible")
 				(args
 					_conditionId = "conditionId"
 				)
@@ -1639,7 +1655,7 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "conditionId"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isSseConditionsVisible"))
 		)
 
 		(block

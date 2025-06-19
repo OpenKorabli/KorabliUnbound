@@ -29,7 +29,8 @@
 		(event evBroadcastSelectedItemDownwards)
 		(event evBroadcastSelectedCategoryDownwards)
 		(event evBroadcastSelectedCategoryUpwards)
-
+		(event evScrollToBegin)
+		(event evScrollToActiveIndex)
 		(var sseCardsThirdLevel:dhCollection = "_isEpic		?	_epicTasks :
 												_isChain	?	_chainTasks
 															:	null")
@@ -37,6 +38,12 @@
 		(var sseCardsThirdLevelLen:number = "sseCardsThirdLevel.length ?: 0")
 		(var itemsByCategoryLen:number = "_itemsByCategory.length ?: 0")
 	)
+	
+	
+	
+	(dispatch evScrollToBegin on='addedToStage' (bind trigger "_activeTaskIndex") (event "evBroadcastSelectedItemDownwards") (event "evBroadcastSelectedItemUpwards"))
+	(dispatch evScrollToActiveIndex delay=0.1 on='addedToStage' (bind trigger "_activeTaskIndex") (event "evBroadcastSelectedItemDownwards") (event "evBroadcastSelectedItemUpwards"))
+
 	(class $Fullsize)
 
 	(hblock 
@@ -101,7 +108,7 @@
 		(block
 			(class $Fullsize)
 			(style (paddingLeft = "{ 1280:M, 1920:L }"))
-			
+
 			(block 
 				(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 4)
 				(style
@@ -175,9 +182,8 @@
 						)
 					)
 
-					(bindcall scrollTo index="_activeTaskIndex" (bind trigger "_activeTaskIndex"))
-					(bindcall scrollTo index="_activeTaskIndex" (event "evBroadcastSelectedItemDownwards") (event "evBroadcastSelectedItemUpwards"))
-					(bindcall scrollTo index="_activeTaskIndex" on='addedToStage')
+					(bindcall scrollToBegin animated=false (bind enabled "sseCardsThirdLevelLen > 0") (event "evScrollToBegin"))
+					(bindcall scrollTo index="_activeTaskIndex" watch=false (bind enabled "sseCardsThirdLevelLen > 0") (event "evScrollToActiveIndex"))
 				)
 			)
 		)
@@ -487,8 +493,8 @@
 	(scope
 		(var taskConditions:array = "_sseEntity.sseTask.conditions ?: []" (event "_sseEntity.sseTask.evChanged"))
 		(var sseConditionEntity:dhEntity = "getEntity(taskConditions[0])")
-		(var countablesIds:array = "sseConditionEntity.sseConditions.countablesIds ?: []" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
-		(var currentProgress:str = "countablesIds.length > 0 ? formatSeparator(countablesIds[0].currentProgress) : '0'")
+		(var taskDescriptionData:dict = "sseConditionEntity.sseConditions.taskDescriptionData" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
+		(var currentProgress:str = "taskDescriptionData.currentProgress ? formatSeparator(taskDescriptionData.currentProgress) : '0'")
 	)
 	(name = 'SseStatusOpenEnded')
 	(style (width = 100%) (flow = "horizontal"))
@@ -625,7 +631,8 @@
 																_sseCore =				"sseCoreComponent"))
 
 		(var sseConditionEntity:dhEntity = "getEntity(_sseConditionEntityId)")
-		(var countablesIds:array = "sseConditionEntity.sseConditions.countablesIds ?: []" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
+		(var taskDescriptionData:dict = "sseConditionEntity.sseConditions.taskDescriptionData" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
+
 		(var taskConditions:array = "sseTaskComponent.conditions" (event "sseTaskComponent.evChanged"))
 		(var battleTypes:array = "sseConditionEntity.battleTypesView.viewList" (event "sseConditionEntity.battleTypesView.evBattleTypesViewChanged"))
 		(var shipRestrictions:array = "sseConditionEntity.shipListRestrictions.selectedFilters" (event "sseConditionEntity.shipListRestrictions.evUpdate"))
@@ -692,8 +699,8 @@
 			(bind enabled "isSseOpenEnded")
 			(args
 				_text = 'IDS_SSE_PORTAL_RESULT_COLON'
-				_param_1 = "sseTaskStatusFlags.isPostBattle ? countablesIds[0].battleProgress : null"
-				_param_2 = "countablesIds[0].currentProgress"
+				_param_1 = "sseTaskStatusFlags.isPostBattle ? taskDescriptionData.battleProgress : null"
+				_param_2 = "taskDescriptionData.currentProgress"
 			)
 		)
 	)
@@ -807,7 +814,7 @@
 		(var isGlobalSse:bool = "sseEntity.hasComponent(CC.sseGlobal)")
 
 		(var sseConditionEntity:dhEntity = "getEntity(_conditionId ?: sseTaskComponent.conditions[0])")
-		(var countablesIds:array = "sseConditionEntity.sseConditions.countablesIds ?: []" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
+		(var taskDescriptionData:dict = "sseConditionEntity.sseConditions.taskDescriptionData" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
 		(var taskCategory:str = "sseConditionEntity.sseConditions.conditionCategory")
 
 		(var isEpic:bool =			"sseEpicComponent != null")
@@ -828,31 +835,31 @@
 		(var sseTaskDescriptionBase:str = "!_isHeader			?	isEpic			? 'IDS_SSE_COMPLETE_TASKS_IN_EPIC' :
 																	isChain			? 'IDS_SSE_COMPLETE_TASKS_IN_CHAIN' :
 																	isSseOpenEnded	? 'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + taskCategory + '_FULL'
-																					: countablesIds[0].ids :
+																					: taskDescriptionData.ids :
 											_isThirdLevel		?	isOrTask	? 'IDS_SSE_COMPLETE_ANY_TASK'
-																				: countablesIds[0].ids :
+																				: taskDescriptionData.ids :
 											sseName.length		? sseName :
 											isOrTask			? 'IDS_SSE_COMPLETE_ANY_TASK' :
 											isEpic || isChain	? subst('IDS_PL_SSE_COMPLETE_TASKS', [], { count: maxTasks }, maxTasks)
 																: 'IDS_TASK'")
-		(var achievements:array =				"countablesIds[0].achievements ?: []")
-		(var ribbons:array =					"countablesIds[0].ribbons ?: []")
-		(var isSubRibbon:bool =					"countablesIds[0].isSubRibbon")
-		(var achievementType:str =				"countablesIds[0].achievementType ?: ''")
-		(var achievementTypeText:str =			"countablesIds[0].achievementTypeText ?: ''")
-		(var achievementTypeShortDesc:str =		"countablesIds[0].achievementTypeShortDesc ?: ''")
-		(var tooltipAchievements:array =		"countablesIds[0].tooltipAchievements ?: []")
-		(var countableIdsMaxProgress:number =	"countablesIds[0].maxProgress ?: 0")
+		(var achievements:array =				"taskDescriptionData.achievements ?: []")
+		(var ribbons:array =					"taskDescriptionData.ribbons ?: []")
+		(var isSubRibbon:bool =					"taskDescriptionData.isSubRibbon")
+		(var achievementType:str =				"taskDescriptionData.achievementType ?: ''")
+		(var achievementCount:number =			"taskDescriptionData.maxProgress ?: 0")
+		(var tooltipAchievements:array =		"taskDescriptionData.tooltipAchievements ?: []")
+		(var countableIdsMaxProgress:number =	"taskDescriptionData.maxProgress ?: 0")
 
 		(var isThirdLevelOrNotHeaderDetails:bool = "_isDetails && !_isHeader || _isThirdLevel")
 		(var isShortSSEAchievementTaskDescription:bool = "isThirdLevelOrNotHeaderDetails && !isSseOpenEnded && achievementType && !_isShipMasteryTask")
+		(var isAchievementTypeTask:bool = "achievementType && achievementType != 'battle_any'")
 		(var isAnyBattleAchievementTask:bool = "achievementType == 'battle_any' && achievements.length == 0")
 
-		(var sseTaskDescription:str = "	isShortSSEAchievementTaskDescription	? achievementTypeShortDesc :
-										sseTaskDescriptionBase					? isAnyBattleAchievementTask	? countableIdsMaxProgress == 1	? 'IDS_EARN_ANY_BATTLE_ACHIEVEMENT_SINGLE'
+		(var sseTaskDescription:str = "	sseTaskDescriptionBase					? isAnyBattleAchievementTask	? countableIdsMaxProgress == 1	? 'IDS_EARN_ANY_BATTLE_ACHIEVEMENT_SINGLE'
 																																				: subst('IDS_EARN_ANY_BATTLE_ACHIEVEMENT_PLURAL', [], { _amount: countableIdsMaxProgress }, countableIdsMaxProgress)
 																												: (_indexNumber > 0 ? _indexNumber + '. ' : '' ) + tr(sseTaskDescriptionBase)
 																				: ''") 
+		(var achievementTypeText:str = "isAchievementTypeTask ? subst('IDS_PL_SSE_CONDITIONS_ACHIEVEMENT_DESC_' + achievementType,[], {count: achievementCount}, achievementCount) : ''")
 	)
 
 	(style (width = 100%))
@@ -874,7 +881,7 @@
 	)
 
 	(hblock
-		(bind visible "isShortSSEAchievementTaskDescription && achievementTypeText")
+		(bind visible "isShortSSEAchievementTaskDescription")
 
 		(style
 			(width = 100%)
@@ -901,7 +908,7 @@
 
 		(block
 			(controller $Instance renderer='AchievementTypeInfoItem'
-				(bind enabled "isShortSSEAchievementTaskDescription && achievementTypeText")
+				(bind enabled "isShortSSEAchievementTaskDescription")
 				(args
 					_achievementType =		"achievementType"
 					_tooltipAchievements =	"tooltipAchievements"
@@ -942,7 +949,7 @@
 			(bind enabled "isThirdLevelOrNotHeaderDetails && achievements")
 			(bind count "achievements.length")
 			(args
-				_achievementEntityId =	"achievements[$index].id"
+				_achievementEntityId =	"achievements[$index]"
 				_achievementsLen =		"achievements.length"
 				_isShipMasteryTask =	"_isShipMasteryTask"
 			)
@@ -1095,22 +1102,21 @@
 		(var progressMax:number = "progressComponent.max" (event "progressComponent.evChanged"))
 
 		(var sseConditionEntity:dhEntity = "getEntity(_conditionId)")
-		(var countablesIds:array = "sseConditionEntity.sseConditions.countablesIds ?: []" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
-
+		(var taskDescriptionData:dict = "sseConditionEntity.sseConditions.taskDescriptionData" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
 		(var isEpic:bool = "sseEpicComponent != null")
 		(var isChain:bool = "sseChainComponent != null")
 
 		
 		(var sseProgressCurrent:number = "	(isEpic || isChain)	? progressCurrent
-																: countablesIds[0].currentProgress")
+																: taskDescriptionData.currentProgress")
 
 		(var sseProgressBattle:number = "	isEpic	? epicBattleProgress :
 											isChain	? chainBattleProgress
-													: countablesIds[0].battleProgress")
+													: taskDescriptionData.battleProgress")
 
 		(var sseProgressMax:number = "	isEpic		? epicTasksToComplete :
 										isChain		? progressMax
-													: countablesIds[0].maxProgress")
+													: taskDescriptionData.maxProgress")
 
 		(var progressBeforeBattle:number = "sseProgressMax ? (sseProgressCurrent - sseProgressBattle) / sseProgressMax : 0")
 		(var progressAfterBattle:number = "sseProgressMax ? sseProgressBattle / sseProgressMax : 0")

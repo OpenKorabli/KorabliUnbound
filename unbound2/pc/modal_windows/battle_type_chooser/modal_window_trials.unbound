@@ -18,6 +18,9 @@
 		(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
 		(var battleType:str =				"battleTypeComponent.type")
 		(var battleTypeGameParamId:number = "battleTypeComponent.battleTypeGameParamId")
+
+		(struct trialsOnboardingChooseTaskNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_CHOOSE_TASK"))
+		(struct trialsOnboardingFinalNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_FINAL"))
 	)
 
 	(name = 'ModalWindowTrials')
@@ -68,6 +71,17 @@
 					_preselectedBattleTypeEntityId = "preselectedBattleTypeEntityId"
 				)
 			)
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "trialsOnboardingChooseTaskNewTip.isActive")
+				(args
+					_tipId = "SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_CHOOSE_TASK"
+					_tipPositioning = "TIP_POSITION_BOTTOM"
+					_noArrow = true
+					_noPointer = true
+					_offsetY = "M"
+					_modalWindowName = 'ModalWindowTrials'
+				)
+			)
 		)
 
 		(block
@@ -101,21 +115,36 @@
 		(class $Fullsize)
 		(style (align = "center|middle"))
 
-		(element DefaultButton
-			_label =			'IDS_CHOOSE'
-			_width =			160
-			_size =				"SIZE.MEDIUM"
-			_focusIndex =		0
-			_defaultFocused =	true
-			_methods = "[		{	type: 'inputMapping.onAction',
-									name: 'setBattleType',
-									args: { battleType: battleType, battleTypeGameParamId: battleTypeGameParamId }
-								},
-								{	type: 'inputMapping.onRequest',
-									name: 'closeModalSelectBattleType',
-									args: {}
-								}
-							]"
+		(block
+			(element DefaultButton
+				_label =			'IDS_CHOOSE'
+				_width =			160px
+				_size =				"SIZE.MEDIUM"
+				_focusIndex =		0
+				_defaultFocused =	true
+				_methods = "[		{	type: 'inputMapping.onAction',
+										name: 'setBattleType',
+										args: { battleType: battleType, battleTypeGameParamId: battleTypeGameParamId }
+									},
+									{	type: 'inputMapping.onRequest',
+										name: 'closeModalSelectBattleType',
+										args: {}
+									},
+									{	type: 'inputMapping.onAction',
+										name: 'deactivateTipChain',
+										args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.TRIALS_ONBOARDING }
+									}
+								]"
+			)
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "trialsOnboardingFinalNewTip.isActive")
+				(args
+					_tipId = "SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_FINAL"
+					_tipPositioning = "TIP_POSITION_TOP"
+					_modalWindowName = 'ModalWindowTrials'
+				)
+			)
 		)
 	)
 )
@@ -136,6 +165,13 @@
 		(var battleHeaderIDS:str = "'IDS_' + toUpper(gpName) + '_NAME'")
 
 		(var isNewBattle:bool = "battleTypeEntity.hasComponent(CC.newItem)")
+
+		(struct trialsOnboardingChooseTaskNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_CHOOSE_TASK"))
+		(struct trialsOnboardingFinalNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_CHOOSE_TASK"))
+
+		
+		(var wasTrialsOnboardingChooseTaskNewTipBeingActive:bool = "trialsOnboardingChooseTaskNewTip.isActive" watch=false)
+		(var wasTrialsOnboardingFinalNewTipBeingActive:bool = "trialsOnboardingFinalNewTip.isActive" watch=false)
 	)
 
 	(macro MOUSE_EVENTS_DISPATCHER)
@@ -148,6 +184,15 @@
 
 	(bindcall externalCall "'inputMapping.onAction'" "['setBattleType', { battleType: battleType, battleTypeGameParamId: battleTypeGameParamId }]" watch=false (event "evMouseDoubleClick"))
 	(bindcall externalCall "'inputMapping.onRequest'" "['closeModalSelectBattleType', {}]" watch=false (event "evMouseDoubleClick"))
+
+	(bindcall externalCall 'inputMapping.onAction' "['deactivateTipChain', {tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.TRIALS_ONBOARDING}]" watch=false
+		(bind enabled "wasTrialsOnboardingChooseTaskNewTipBeingActive || wasTrialsOnboardingFinalNewTipBeingActive")
+		(event "evMouseDoubleClick")
+	)
+	(bindcall externalCall 'inputMapping.onAction' "['setNextTip', {tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.TRIALS_ONBOARDING}]" watch=false
+		(bind enabled "trialsOnboardingChooseTaskNewTip.isActive")
+		(event "evClicked")
+	)
 
 	(style
 		(width = 100%)
@@ -239,6 +284,12 @@
 										PCVT002_CITADEL_PRIME: 2,
 										PCVT003_FRAGS_PRIME: 2,
 										PCVT004_MANEUVER_PRIME: 2}")
+
+		(var trialEntity:dhEntity = "getPrimaryEntity(CC.trialParams, battleTypeGameParamId)")
+		(var trialParamsComponent:dhComponent = "trialEntity.trialParams")
+		(var totalRounds:number = "trialParamsComponent.totalRounds ?: 0" (event "trialParamsComponent.evTotalRoundsChanged"))
+		(var trialStatsComponent:dhComponent = "trialEntity.trialStats")
+		(var bestRound:number = "trialStatsComponent.bestRound ?: 0" (event "trialStatsComponent.evBestRoundChanged"))
 	)
 
 	(macro MOUSE_EVENTS_DISPATCHER)
@@ -274,6 +325,38 @@
 				(alpha = "TA")
 			)
 			(bind text "battleHeaderIDS")
+		)
+
+		(hblock 
+			(style (height = 48px))
+
+			(element VerticalDivider)
+
+			(block
+				(style
+					(marginLeft = "L")
+					(height = 100%)
+					(align = "middle")
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style (alpha = "TC"))
+					(text = 'IDS_TRIAL_ROUND_STATS')
+				)
+
+				(block
+					(bind visible "totalRounds > 0")
+					(style
+						(width = 100%)
+						(marginTop = "SXS")
+					)
+					(element DefaultDividedCounter
+						_curValueTextClass = '$TextDefaultBold23NM'
+						_curValue = "bestRound"
+						_maxValue = "totalRounds"
+					)
+				)
+			)
 		)
 	)
 
@@ -400,6 +483,11 @@
 		(var textAlpha:number = "	isSelected 				? TA :
 									battleType_rollOver 	? 0.8
 															: TC")
+
+		(struct trialsOnboardingChooseBattleNewTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_CHOOSE_BATTLE_TYPE"))
+		(var currentTipId:number = "trialsOnboardingChooseBattleNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.TRIALS_ONBOARDING_CHOOSE_BATTLE_TYPE
+																				: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var isGuidingTipVisible:bool = "currentTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 	)
 	(name = 'typeItemTrial')
 
@@ -523,6 +611,16 @@
 			(args _text = 'IDS_TOOLTIP_BATTLE_RULES_DESCRIPTION')
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 			(macro TOOLTIP_HIDE_ON_EVENT "startHide")
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isGuidingTipVisible")
+		(args
+			_tipId = "currentTipId"
+			_tipPositioning = "TIP_POSITION_BOTTOM"
+			_offsetY = 10px
+			_modalWindowName = 'ModalWindowBattleTypeChooser'
 		)
 	)
 )

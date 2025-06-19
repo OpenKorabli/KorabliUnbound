@@ -19,6 +19,8 @@
 
 (def constant TUTORIAL_BANNER_MAX_LEVEL 14)
 
+(def constant NEWBIE_QUESTS_BANNER_MAX_LEVEL 8)
+
 (def css $PortBanner ()
 	(padding = "SXS")
 	(gap = "SXS")
@@ -51,7 +53,7 @@
 (def macro MOTIVATOR_STAGE_SIZES ()
 	(macro STAGE_SIZE)
 	(var isMediumResolution:bool = "stageHeight < 1080")
-	(var isSmallResolution:bool = "stageHeight <= 768")
+	(var isSmallResolution:bool = "stageHeight <= 800")
 )
 
 (def element SseBannerMain ()
@@ -66,7 +68,7 @@
 
 		(var itemsFirstLineCollection:dhCollection = "getCollection(CC.sseCore).child('bannerSSEItems')")
 		(var commonTasksCount:number = "itemsFirstLineCollection.length ?: 0")
-		
+
 		(var sseCountTasks:number = "commonTasksCount + activeOpenEndedTasksCount")
 		(var isTasksExist:bool = "sseCountTasks > 0")
 
@@ -90,7 +92,7 @@
 		(var newbieQuestAllCollection:dhCollection = "newbieQuestCollection.child('sorted')")
 		(var isNewbieQuestAvailable:bool = "newbieQuestAllCollection.length > 0 ")
 
-		(var newbieQuestActiveCollection:dhCollection = "newbieQuestCollection.getChildByPath('notDone.sorted')")
+		(var newbieQuestActiveCollection:dhCollection = "newbieQuestCollection.getChildByPath('notDone')")
 		(var newbieQuestActiveCount:number = "newbieQuestActiveCollection.length ?: 0")
 		(var isNewbieQuestCountVisible:bool = "isFeatureSseLocked && newbieQuestActiveCount > 0")
 
@@ -107,7 +109,11 @@
 		(var isNewShipAcesSeason:bool = "shipAcesSeasonEntity.hasComponent(CC.newItem)")
 		(var isNewSseOpenEnded:bool = 	"sseOpenEndedEntity.hasComponent(CC.newItem)")
 
-		(var isNewMarkerVisible:bool = "isTasksExist && isNewContent || isNewShipAcesSeason || isNewSseOpenEnded || isNewCampaigns")
+		(var newContentEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.NEWBIE_QUESTS_BANNER_STATE)")
+		(var newShipContentComponent:dhComponent = "newContentEntity.newContent")
+		(var isNewbieQuestMarkerVisible:bool = "newShipContentComponent.count > 0" (event "newShipContentComponent.evCountChanged"))
+
+		(var isNewMarkerVisible:bool = "isTasksExist && isNewContent || isNewShipAcesSeason || isNewSseOpenEnded || isNewCampaigns || isNewbieQuestMarkerVisible")
 
 		
 		(struct sseIntroNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SSE_INTRO"))
@@ -156,8 +162,9 @@
 		(class $PortBanner)
 		(block
 			(style (width = 100%))
-			(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM _triggerExpression = "!(isTasksExist || isNewbieQuestAvailable || hasReward || isShipAcesAvailable)")
-
+			(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM
+				_triggerExpression = "!(isTasksExist || isNewbieQuestAvailable || hasReward || isShipAcesAvailable)"
+			)
 			(element BannerItemTitle
 				_title = "title"
 				_isNewMarker = "isNewMarkerVisible"
@@ -372,7 +379,7 @@
 		(var taskConditions:array = "sseTaskComponent.conditions ?: []" (event "sseTaskComponent.evChanged"))
 		(var conditionId:number = "taskConditions[0]")
 		(var sseConditionEntity:dhEntity = "getEntity(conditionId)")
-		(var countablesIds:array = "sseConditionEntity.sseConditions.countablesIds" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
+		(var taskDescriptionData:dict = "sseConditionEntity.sseConditions.taskDescriptionData" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
 
 		(var sseTaskRewards:array = "sseTaskComponent.rewards ?: []" (event "sseTaskComponent.evChanged"))
 		(var rewardEntity:dhEntity = "getEntity(sseTaskRewards[0])")
@@ -432,7 +439,7 @@
 		(tf
 			(bind class "textClass")
 			(style (width = 100%) (alpha = "TA"))
-			(bind text "countablesIds[0].ids")
+			(bind text "taskDescriptionData.ids")
 		)
 	)
 	(block
@@ -1467,9 +1474,10 @@
 		(var promoRewardLevel:number = 		"accountPromoRewardBannerComponent.level" 		(event "accountPromoRewardBannerComponent.evChanged"))
 		(var promoRewardImageSmall:str = 	"accountPromoRewardBannerComponent.imageSmall" 	(event "accountPromoRewardBannerComponent.evChanged"))
 
-		(var promoImageEntity:dhEntity = "getPrimaryEntity(CC.byteArrayData, promoRewardImageSmall)")
-		
-		(var promoImageData:gfx = "promoImageEntity.byteArrayData.data" (event "promoImageEntity.byteArrayData.evChanged"))
+		(var promoImageEntity:dhEntity =		"getPrimaryEntity(CC.externalImage, promoRewardImageSmall)")
+		(var promoImageComponent:dhComponent =	"promoImageEntity.externalImage")
+		(var isImageLoaded:bool =				"promoImageComponent.isLoaded" (event "promoImageComponent.evIsLoadedChanged"))
+		(var promoImageUrl:str =				"isImageLoaded ? 'img://embedded:byteImage?url=' + promoImageComponent.url : ''")
 
 		(var accountLevelPointsEntity:dhEntity = "getSingleEntity(CC.accountLevelPoints)")
 		(var accountLevelPointsComponent:dhComponent = "accountLevelPointsEntity.accountLevelPoints")
@@ -1505,8 +1513,9 @@
 		(name = 'promoRewardBannerImage')
 		(class $Fullsize)
 		(style
-			(hitTest = false) (backgroundSize = "cover")
-			(bind backgroundImage "promoImageData")
+			(hitTest = false)
+			(backgroundSize = "cover")
+			(bind backgroundImage "promoImageUrl")
 		)
 	)
 
@@ -1849,7 +1858,7 @@
 		(event startHide)
 
 		(struct featureSse = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
-		
+
 		(var accountLevelComponent:dhComponent = "getSingleEntity(CC.accountLevel).accountLevel")
 		(var curAccountLevel:number = "accountLevelComponent.level" (event "accountLevelComponent.evLevelChanged"))
 
