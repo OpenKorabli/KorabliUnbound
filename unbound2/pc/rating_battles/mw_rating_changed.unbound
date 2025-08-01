@@ -6,7 +6,7 @@
 	QUALIFICATION: 'QUALIFICATION',
 })
 
-(def element ModalWindowRatingChanged ()
+(def element ModalWindowRatingChanged (_isPostBattleWindow:bool=true)
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
 	(scope
@@ -19,22 +19,36 @@
 		(var battleResult:number = "dataComponent.data.game_data.battle_result ?: 0")
 		(var ratingInfo:dict = "dataComponent.data.personal.ratingInfo ?: {}")
 
+		(var ratingBattlesSeasonProgress:dhComponent = "getSingleComponent(CC.ratingBattlesSeasonProgress)")
+		(var initialQualificationBattlesResults:array = "ratingBattlesSeasonProgress.initialQualificationBattlesResults ?: []" (event "ratingBattlesSeasonProgress.evInitialQualificationBattlesResultsChanged"))
+		(var isInitialQualificationBattlesResultsLen:bool = "initialQualificationBattlesResults.length >= SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
+		(var ratingBattlesSeason:dhComponent = "getSingleComponent(CC.ratingBattlesSeason)")
+
 		(var oldLeagueName:str = "ratingInfo.oldLeagueName ?: RATING_LEAGUE_NAME_NONE")
 		(var oldLeague:number = "SC.Common.RATING_BATTLES_LEAGUES[oldLeagueName]")
 		(var oldRating:number = "ratingInfo.oldLeagueProgress ?: 1")
-		(var leagueName:str = "ratingInfo.newLeagueName ?: RATING_LEAGUE_NAME_NONE")
+		(var progressDiff:number = "ratingInfo.progressDiff")
+		(var leagueName:str = "_isPostBattleWindow	? ratingInfo.newLeagueName ?: RATING_LEAGUE_NAME_NONE
+													: ratingBattlesSeasonProgress.leagueName")
 		(var league:number = "SC.Common.RATING_BATTLES_LEAGUES[leagueName]")
-		(var rating:number = "ratingInfo.newLeagueProgress ?: 1")
-		(var rewards:array = "ratingInfo.initialQualificationRewardEntitiesIDs ?: []")
+		(var rating:number = "_isPostBattleWindow	? ratingInfo.newLeagueProgress ?: 1
+													: ratingBattlesSeasonProgress.leagueProgress")
+		(var rewards:array = "_isPostBattleWindow	? ratingInfo.initialQualificationRewardEntitiesIDs ?: []
+													: ratingBattlesSeason.initialQualificationRewardEntitiesIDs ?: []")
 		(var battlesCount:number = "ratingInfo.initialQualificationBattlesCount ?: 0")
 
-		(var isQualification:bool = "battlesCount > 0")
-		(var isQualificationPassed:bool = "rewards.length > 0")
+		(var isQualification:bool = "_isPostBattleWindow	? battlesCount > 0
+															: isInitialQualificationBattlesResultsLen")
+		(var isQualificationPassed:bool = "_isPostBattleWindow	? rewards.length > 0
+																: isInitialQualificationBattlesResultsLen")
 		(var isLeagueRaised:bool = "oldLeagueName != RATING_LEAGUE_NAME_NONE && oldLeague < league")
 		(var isLeagueLoss:bool =  "oldLeagueName != RATING_LEAGUE_NAME_NONE && oldLeague > league")
-		(var isRatingRaised:bool = "isLeagueRaised || rating > oldRating")
-		(var isRatingNotChanged:bool = "rating == oldRating")
-		(var isRatingLoss:bool = "isLeagueLoss || rating < oldRating")
+		(var oldRatingForProgress:number = "	isLeagueRaised	? 0 :
+												isLeagueLoss	? 100
+																: oldRating")
+		(var isRatingRaised:bool = "isLeagueRaised || rating > oldRatingForProgress")
+		(var isRatingNotChanged:bool = "rating == oldRatingForProgress")
+		(var isRatingLoss:bool = "isLeagueLoss || rating < oldRatingForProgress")
 		(var ratingBattleStatus:str = "
 			isQualification && !isQualificationPassed	? RATING_BATTLE_RESULTS.QUALIFICATION :
 			isQualificationPassed						? RATING_BATTLE_RESULTS.QUALIFICATION_PASSED :
@@ -43,23 +57,26 @@
 			isRatingLoss								? RATING_BATTLE_RESULTS.RATING_LOSS
 														: ''")
 
-		(var subtitle:str = "isQualification && !isQualificationPassed	? 'IDS_RATING_BATTLES_QUALIFICATION_RESULTS_TEXT'
-																		: 'IDS_RATING_BATTLES_RESULTS_TEXT'")
+		(var subtitle:str = "	isQualification && !isQualificationPassed	? 'IDS_RATING_BATTLES_QUALIFICATION_RESULTS_TEXT' :
+								isQualificationPassed						? 'IDS_RATING_BATTLES_RESULTS_TEXT'
+																			: ''")
 
 		(var isLeaguePlatinum:bool = "leagueName == RATING_LEAGUES.PLATINUM")
 		(var progressPlatinum:number = "rating > PLATINUM_LEAGUE_PROGRESS_MAX ? 1 : rating/PLATINUM_LEAGUE_PROGRESS_MAX")
 		(var progressValue:number = "isLeaguePlatinum ? progressPlatinum : rating/100")
 
-		(var prevProgressPlatinum:number = "rating > PLATINUM_LEAGUE_PROGRESS_MAX ? 1 : oldRating/PLATINUM_LEAGUE_PROGRESS_MAX")
+		(var prevProgressPlatinum:number = "rating > PLATINUM_LEAGUE_PROGRESS_MAX ? 1 : oldRatingForProgress/PLATINUM_LEAGUE_PROGRESS_MAX")
 		(var prevProgress:number = "isQualification		? rating/100 :
 									isLeaguePlatinum	? prevProgressPlatinum :
 									isLeagueRaised		? 0 :
 									isLeagueLoss		? 1
-														: oldRating/100")
+														: oldRatingForProgress/100")
 
 		(var ratingText:str = "leagueName != RATING_LEAGUE_NAME_NONE ? subst('IDS_RATING_BATTLES_LEAGUE_' + leagueName + '_FULL', [], {_rating: rating}) : ''")
 	)
 	(bindcall externalCall 'sound.playSetSoundDirect' "['rating_change_window', 'start']" delay=0.02 (event "startShow"))
+	
+	(bindcall externalCall "isQualificationPassed ? 'direct.action' : ''" "['ratingBattles.setRatingQualificationPassedSeen', []]" init=false watch=false (event "startShow"))
 	(dispatch evStartAnimation dir="EventDirection.DOWN" delay=0.02 (event "startShow"))
 	(dispatch evStartProgressAnimation dir="EventDirection.DOWN" (event "evResultsAnimEnded"))
 
@@ -108,6 +125,7 @@
 				(hblock
 					(style (marginBottom = "LM"))
 					(tf
+						(bind visible "subtitle")
 						(class $TextDefaultBold46NM)
 						(style
 							(marginRight = "SXS")
@@ -159,17 +177,30 @@
 						)
 					)
 				)
-				(controller $Instance renderer='RatingQualificationRewards'
-					(bind enabled "isQualification && isQualificationPassed")
-					(args
-						_rewards = "rewards"
+				(block
+					(controller $Instance renderer='RatingQualificationRewards'
+						(bind enabled "isQualification && isQualificationPassed")
+						(args
+							_rewards = "rewards"
+						)
+					)
+					(controller $Instance renderer='RatingProgress'
+						(bind enabled "!isQualification")
+						(args
+							_prevProgress = "prevProgress"
+							_progress = "progressValue"
+						)
 					)
 				)
-				(controller $Instance renderer='RatingProgress'
-					(bind enabled "!isQualification")
-					(args
-						_prevProgress = "prevProgress"
-						_progress = "progressValue"
+				(hblock 
+					(bind visible "!isRatingNotChanged && !isQualification && !isQualificationPassed")
+					(style 
+						(marginTop = "M")
+					)
+					(tf
+						(class $TextDefault21NM)
+						(style (alpha = "TC"))
+						(bind text "subst('IDS_RATING_DIFF_' + (isRatingRaised ? 'PLUS' : 'MINUS'), [], { _ratingDiff: progressDiff})")
 					)
 				)
 			)
@@ -360,8 +391,7 @@
 			(bind enabled "_isQualificationEmblemVisible")
 			(args
 				_size = "SIZE.LARGE"
-				_isVictory = "_battleResult == SC.Battle.BATTLE_RESULT.VICTORY"
-				_isLoss = "_battleResult == SC.Battle.BATTLE_RESULT.DEFEAT"
+				_battleResult = "_battleResult"
 				_isDefault = false
 			)
 		)

@@ -180,19 +180,22 @@
 
 		(var isRankedBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE || battleType == SC.Common.BATTLE_TYPES.OLD_RANKED_BATTLE")
 		(var isNewRankedBattle:bool =	"battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE")
+		(var isRatingBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.RATING_BATTLE")
 
-		(var isRankedSeasonDropdownVisible:bool = "isRankedBattle && statData.basicStats.gamesPlayed")
+		(var isSeasonDropdownVisible:bool = "isRankedBattle || isRatingBattle && statData.basicStats.gamesPlayed")
 		(var isRankedLeagueDropdownVisible:bool = "isNewRankedBattle && curSeasonIndex")
 	)
-	(dispatch evResetSeasonData dir="EventDirection.NONE" args="{ selectedIndex: 0 }" (bind trigger "battleType"))
+	(dispatch evResetSeasonData dir="EventDirection.NONE" args="{ selectedIndex: 0 }" on='addedToStage' (bind trigger "battleType"))
 	(dispatch evResetLeagueData dir="EventDirection.NONE" args="{ selectedIndex: 0 }" (bind trigger "seasonId"))
 
 	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref',			{	name: 'summaryInset',
 																					value: $event.selectedIndex }]"	watch=false (event "ItemChooser_battleTypeChanged"))
 
-	(bindcall externalCall "'inputMapping.onAction'" "['battleTypeChanged',		{	battleType: battleType }]"		watch=false on='addedToStage'	(bind trigger "battleType"))
-	(bindcall externalCall "'inputMapping.onAction'" "['rankedSeasonChanged',	{	seasonId: seasonId }]"			watch=false						(bind trigger "seasonId"))
-	(bindcall externalCall "'inputMapping.onAction'" "['rankedLeagueChanged',	{	leagueId: leagueId }]"			watch=false						(bind trigger "leagueId"))
+	(bindcall externalCall "'inputMapping.onAction'" "[isRankedBattle	? 'rankedSeasonChanged' 
+																		: isRatingBattle	? 'ratingSeasonChanged' 
+																							: '',					{	seasonId: seasonId }]"		watch=false						(bind trigger "seasonId"))
+	(bindcall externalCall "'inputMapping.onAction'" "['battleTypeChanged',											{	battleType: battleType }]"	watch=false on='addedToStage'	(bind trigger "battleType"))
+	(bindcall externalCall "'inputMapping.onAction'" "['rankedLeagueChanged',										{	leagueId: leagueId }]"		watch=false						(bind trigger "leagueId"))
 
 	(name = 'PlayerProfileSummary')
 	(class $Fullsize)
@@ -280,21 +283,21 @@
 			)
 
 			(block
-				(style (bind marginTop "isRankedSeasonDropdownVisible ? S : 0px"))
+				(style (bind marginTop "isSeasonDropdownVisible ? S : 0px"))
 
 				(controller $Instance renderer='ItemChooser'
-					(bind enabled "isRankedSeasonDropdownVisible")
+					(bind enabled "isSeasonDropdownVisible")
 					(args
-						_name = 'RankedSeason'
+						_name = "isRankedBattle ? 'RankedSeason' : 'RatingSeason'"
 						_items = "statData.seasonList"
 						_curIndex = "curSeasonIndex"
-						_listItemRenderer = 'TextListItemRendererRanked'
-						_listItemRendererData = "{ isSeasonDropdown: true }"
-						_choosedItemRenderer = 'LargeTextChoosedItemRendererRanked'
+						_listItemRenderer = 'TextListItemRendererRankedOrRating'
+						_listItemRendererData = "{ isSeasonDropdown: true, isRankedBattle: isRankedBattle }"
+						_choosedItemRenderer = 'LargeTextChoosedItemRendererRankedOrRating'
 						_choosedItemRendererParams = "{ isSeasonDropdown: true }"
 						_onItemSelectedEvent = 'historySeasonChanged'
 						_dropDownWidth = 180px
-						_itemChooserTooltipText = 'IDS_CHOOSE_RANK_SEASON'
+						_itemChooserTooltipText = "isRankedBattle ? 'IDS_CHOOSE_RANK_SEASON' : 'IDS_CHOOSE_RATING_SEASON'"
 						_itemChooserTooltipUnifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 					)
 				)
@@ -311,9 +314,9 @@
 					_name = 'RankedLeague'
 					_items = "statData.leagueList"
 					_curIndex = "curLeagueIndex"
-					_listItemRenderer = 'TextListItemRendererRanked'
+					_listItemRenderer = 'TextListItemRendererRankedOrRating'
 					_listItemRendererData = "{ isSeasonDropdown: false }"
-					_choosedItemRenderer = 'LargeTextChoosedItemRendererRanked'
+					_choosedItemRenderer = 'LargeTextChoosedItemRendererRankedOrRating'
 					_choosedItemRendererParams = "{ isSeasonDropdown: false }"
 					_onItemSelectedEvent = 'historyLeagueChanged'
 					_dropDownWidth = 180px
@@ -507,8 +510,10 @@
 		(var isSmallScreen:bool = "stageWidth < 1440")
 		
 		(var isNoShipSelected:bool = "_statData.vehicleId == 0")
+		(var seasonStats:dict = "_statData.seasonStats")
 		(var isBattlePlayed:bool = "_statData.basicStats.gamesPlayed > 0")
-		(var isRankStereotypeVisible:bool = "_battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE && isBattlePlayed && _statData.seasonStats.rank && isNoShipSelected")
+		(var isRankStereotypeVisible:bool = "_battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE && isBattlePlayed && seasonStats.rank && isNoShipSelected")
+		(var isRatingStereotypeVisible:bool = "_battleType == SC.Common.BATTLE_TYPES.RATING_BATTLE && seasonStats.bestRating && isNoShipSelected")
 	)
 	(class $Fullsize)
 
@@ -565,8 +570,8 @@
 					(bind enabled "isRankStereotypeVisible")
 					(args
 						_size = "SIZE.SMALL"
-						_league = "_statData.seasonStats.league"
-						_rank = "_statData.seasonStats.rank"
+						_league = "seasonStats.league"
+						_rank = "seasonStats.rank"
 						_isDesaturated = true
 					)
 				)
@@ -576,6 +581,42 @@
 				(class $TextDefaultBoldNM)
 				(style (alpha = "TC"))
 				(text = 'IDS_BEST_RANK')
+			)
+		)
+		(block
+			(bind visible "isRatingStereotypeVisible")
+			(style
+				(align = "center")
+				(vgap = "XS")
+				(bind width		"isSmallScreen	? 152px	: 162px")
+				(bind marginTop "isSmallScreen	? -XXS	: 5px")
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_BEST_RATING_TOOLTIP'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(block
+				(controller $Instance renderer='RatingEmblem'
+					(bind enabled "isRatingStereotypeVisible")
+					(args
+						_size = -1
+						_leagueName = "SC.Common.RATING_BATTLES_LEAGUES.VALUE_TO_NAME[seasonStats.bestRating[0]]"
+						_rating = "seasonStats.bestRating[1] ?: 1"
+						_isRatingVisible = true
+						_isDesaturated = true
+					)
+				)
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TC"))
+				(text = 'IDS_BEST_RATING')
 			)
 		)
 	)
@@ -1078,7 +1119,7 @@
 	)
 )
 
-(def element LargeTextChoosedItemRendererRanked (_item:dict, _choosedItemRendererParams:dict, _labelMaxWidth:number)
+(def element LargeTextChoosedItemRendererRankedOrRating (_item:dict, _choosedItemRendererParams:dict, _labelMaxWidth:number)
 	(scope
 		(var isSeasonDropdown:bool = "_choosedItemRendererParams.isSeasonDropdown")
 		(var itemText:str = "_item.id	?	isSeasonDropdown	?	tr('IDS_SEASON_TITLE_' + _item.id)
@@ -1094,7 +1135,7 @@
 	)
 )
 
-(def element TextListItemRendererRanked (_item:dict, _curItemIndex:number, _listItemRendererData:dict)
+(def element TextListItemRendererRankedOrRating (_item:dict, _curItemIndex:number, _listItemRendererData:dict)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 		(var isSelected:bool = "_curItemIndex == $index")

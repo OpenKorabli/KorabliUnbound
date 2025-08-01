@@ -1,6 +1,14 @@
 (def constant MODAL_WINDOW_EXP_TRANSFER_WIDTH 492px)
 (def constant SNOWFLAKE_SHIP_ROW_HEIGHT 48px)
 
+(def constant SHIP_ROW_ITEM_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.2,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 1,
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 1,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 1,
+	SC.Ui_styles.BUTTON_STATE.UP		: 1
+})
+
 (def element ModalWindowConvertExp ()
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
@@ -411,9 +419,9 @@
 							(controller $DynamicRepeat renderer='ShipRowSelectableElement' name='shipExpConvertItemRenderer'
 								(bind count "ships.length")
 								(args
-									_collection =			"ships"
+									_shipEntity =			"ships.getEntityAtIndex($index)"
 									_hasPriceTag =			true
-									_hasMouseInstructions =	true
+									_hasMouseInstructions = true
 									_hideLowerDivider =		"$index == ships.length - 1"
 								)
 								(itemHeight =	"SNOWFLAKE_SHIP_ROW_HEIGHT")
@@ -629,31 +637,34 @@
 	)
 )
 
-(def element ShipRowSelectableElement (	_collection:dhCollection, _hasPriceTag:bool, _hasMouseInstructions:bool = false, _hideLowerDivider:bool = false, _isAllSelected:bool = false, _isLocked:bool = false,
-										_isSnowflakesModal:bool = false, _isConfirmedList:bool = false, _needSelectionChange:bool = false)
+(def constant SHIP_ROW_ITEM_TYPE {
+	0	: 'EXP_CONVERT',
+	1	: 'SNOWFLAKES'
+})
+
+(def element ShipRowSelectableElement (	_shipEntity:dhEntity, _hasPriceTag:bool, _hasMouseInstructions:bool = false, _hideLowerDivider:bool = false, _isAllSelected:bool = false,
+										_isSnowflakesModal:bool = false, _isLocked:bool = false, _isConfirmedList:bool = false, _needSelectionChange:bool = false, _hasShipImage:bool = false)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var shipEntity:dhEntity =				"_collection.getEntityAtIndex($index)")
-		(var upgradableShipInfo:dhComponent =	"shipEntity.upgradableShipInfo")
+		(var upgradableShipInfo:dhComponent =	"_shipEntity.upgradableShipInfo")
 		(var upgradableShipInfoExp:number =		"upgradableShipInfo.exp ?: 0"	(event "upgradableShipInfo.evUpdate"))
 
-		(var shipId:number =			"shipEntity.ship.id")
+		(var shipId:number =			"_shipEntity.ship.id")
 
-		(var bonusTagIndex:number =		"shipEntity.ship.bonusTags.length == 1 ? 0 : 1")
-		(var bonusTagEntityId:number =	"shipEntity.ship.bonusTags[bonusTagIndex]")
+		(var bonusTagIndex:number =		"_shipEntity.ship.bonusTags.length == 1 ? 0 : 1")
+		(var bonusTagEntityId:number =	"_shipEntity.ship.bonusTags[bonusTagIndex]")
 		(var bonusTagEntity:dhEntity =	"getEntity(bonusTagEntityId)")
 		(var rewards:array =			"bonusTagEntity.bonusTag.rewards")
 
-		(var isSelectedDH:bool =	"shipEntity.selection.value"	(event "shipEntity.selection.evChanged"))
-		
-		(var isSelectedDesignerCollection:bool = false)
-		(var isSelected:bool =		"isSelectedDH || isSelectedDesignerCollection")
+		(var isSelectedDH:bool =			"_shipEntity.selection.value"	(event "_shipEntity.selection.evChanged"))
+		(var isSnowflakeShipSelected:bool =	"_shipEntity.hasComponent(CC.snowflakeSelected)")
+		(var isSelected:bool =				"isSelectedDH || isSnowflakeShipSelected")
 
-		(var isInactive:bool =					"_isAllSelected && !isSelected || _isLocked")
+		(var isInactive:bool =			"_isAllSelected && !isSelected || _isLocked")
 		(var hasMouseInstructionsTooltip:bool =	"!isInactive && !_isSnowflakesModal")
 		(var hasRewardsTooltip:bool =			"!isInactive && _isSnowflakesModal && _hasMouseInstructions")
-		(var instructionText:str =				"isSelected ? 'IDS_HINT_LEFT_DESELECT_SHIPS' : 'IDS_HINT_LEFT_SELECT_SHIPS'")
+		(var instructionText:str =		"isSelected ? 'IDS_HINT_LEFT_DESELECT_SHIPS' : 'IDS_HINT_LEFT_SELECT_SHIPS'")
 
 		(var state:number = "	_isConfirmedList	? SC.Ui_styles.BUTTON_STATE.UP :
 								isInactive			? SC.Ui_styles.BUTTON_STATE.DISABLED :
@@ -662,7 +673,7 @@
 								isSelected			? SC.Ui_styles.BUTTON_STATE.SELECTED
 													: SC.Ui_styles.BUTTON_STATE.UP")
 
-		(var contentAlpha:number = "isInactive ? 0.2 : 1")
+		(var contentAlpha:number = "SHIP_ROW_ITEM_ALPHA[state]")
 	)
 
 	(style
@@ -685,8 +696,9 @@
 		(renderer = 'SnowflakesRewardsTooltip')
 		(bind enabled "hasRewardsTooltip")
 		(args
-			_rewards =		"rewards"
-			_isSelected =	"isSelected"
+			_rewards =			"rewards"
+			_isSelected =		"isSelected"
+			_isConfirmAction =	"_isConfirmedList"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -734,6 +746,18 @@
 				_shipId =		"shipId"
 				_withFlag =		true
 				_fontClass =	'$TextDefaultBold17NM'
+			)
+		)
+
+		(block
+			(bind visible "_hasShipImage")
+			(style
+				(width = 122px)
+				(height = 22px)
+				(hitTest = false)
+				(marginBottom = "S")
+				(marginRight = "XXL")
+				(bind backgroundImage "'url:' + (_shipEntity.ownShip != null ? _shipEntity.ship.pathTinyIcon : _shipEntity.ship.pathTinyDeadIcon)")
 			)
 		)
 
