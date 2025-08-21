@@ -1,0 +1,301 @@
+(def element ModalWindowResearchModule (modulePK:str)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipExp:number = "ownShipEntity.ownShip.exp ?: 0" (event "ownShipEntity.ownShip.evUpdateConfig"))
+
+		(var moduleEntity:dhEntity = "getPrimaryEntity(CC.module, modulePK)")
+		(var moduleInfo:dhComponent = "moduleEntity.module")
+		(var expDeficit:number = "moduleInfo.expDeficit ?: 0" (event "moduleInfo.evUpdated"))
+		(var isBuyAvailable:bool = "expDeficit <= 0")
+
+		(var moduleCostFreeXP:number = "moduleInfo.costFreeXP" (event "moduleInfo.evUpdated"))
+
+		(struct moduleExplorePrice = PULL_PRICE(_entityId = "moduleInfo.id" _actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+
+		(var questionText:str = "moduleInfo.totalCostXP > 0		? 'IDS_QUESTION_RESEARCH_FOR'
+																: 'IDS_QUESTION_RESEARCH_FOR_FREE'")
+
+		(var priceInfo:dict = "moduleInfo.totalCostXP - moduleCostFreeXP > 0	?	{	finalPrice: moduleInfo.totalCostXP - moduleCostFreeXP,
+																						currency: SC.Common.CURRENCIES.XP }
+																				: null")
+		
+		(var optionalPriceInfo:dict = "moduleCostFreeXP > 0	?	{	finalPrice: moduleCostFreeXP,
+																	currency: SC.Common.CURRENCIES.FREE_XP }
+																: null")
+	
+		(var isUsedFreeXP:bool = "optionalPriceInfo.finalPrice != null && optionalPriceInfo.finalPrice != 0")
+
+		(var currenciesPanelPrices:array = "isUsedFreeXP	? [	{currency: SC.Common.CURRENCIES.XP,			finalPrice: priceInfo ? -priceInfo.finalPrice : 0, expPreviousShip: ownShipExp ?: 0},
+																{currency: SC.Common.CURRENCIES.FREE_XP,	finalPrice: optionalPriceInfo ? -optionalPriceInfo.finalPrice : 0}]
+															: [ {currency: SC.Common.CURRENCIES.XP,			finalPrice: priceInfo ? -priceInfo.finalPrice : 0, expPreviousShip: ownShipExp ?: 0}]")
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setModalPreviewData', { moduleId: moduleInfo.id }]" watch=false on='addedToStage')
+	(bindcall externalCall "'inputMapping.onAction'" "['setModalPreviewData', { moduleId: null }]" on='removedFromStage')
+
+	(block
+		(class $EyeLevelAligned)
+		(style
+			(width = 350px)
+			(align = "center")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style (width = 100%))
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_RESEARCH_MODULE_HEADER'
+				_hasDivider = false
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(element CurrenciesPanel
+				_priceInfo = "currenciesPanelPrices"
+				_width = 350px
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+
+			(style
+				(width = 100%)
+				(marginBottom = "M")
+				(bind align "moduleInfo.dependentModules.length > 0 ? left : center")
+			)
+
+			(element ModuleElementModalWindow
+				_modulePK = "modulePK"
+				_maxWidth = 318px
+			)
+		)
+
+
+		(block
+			(bind visible "moduleInfo.dependentModules.length > 0")
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(style
+				(width = 100%)
+				(marginTop = "-SXS")
+				(marginBottom = "M")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginBottom = "M")
+				)
+				(element HorizontalDividerTwoPx)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(paddingLeft = "M")
+				)
+
+				(element PriceTagWithLabel
+					_priceInfo = "moduleExplorePrice.info"
+					_label = 'IDS_RESEARCH_COST_COLON'
+					_showDiscountTag = true
+					_width = 100%
+				)
+			)
+		)
+		
+		(block
+			(bind visible "moduleInfo.dependentModules.length > 0")
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(width = 100%)
+				(marginBottom = "M")
+			)
+
+			(controller $Instance renderer='ModuleDependenciesBlock'
+				(bind enabled "moduleInfo.dependentModules.length > 0")
+				(args
+					_dependentModules = "moduleInfo.dependentModules"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+			(style (width = 100%))
+			(element ShipIntegralParams
+				_showOnlyDiff = true
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(align = "center")
+				(marginTop = "S")
+				(marginBottom = "S")
+			)
+
+			(element PriceTagWithQuestion
+				_questionText = "questionText"
+				_priceInfo = "priceInfo"
+				_optionalPriceInfo = "optionalPriceInfo"
+				_isDeficit = "!isBuyAvailable"
+			)
+
+			(tf
+				(bind visible "!isBuyAvailable")
+				(class $TextDefault26NM)
+				(style
+					(marginTop = "MS")
+					(textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE")
+				)
+				(text = 'IDS_NOT_ENOUGH_FUNDS')
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(align = "center")
+			)
+
+			(block
+				(bind visible "!isBuyAvailable")
+				(style (marginTop = "XS") (marginBottom = "SXS"))
+
+				(controller $Animation
+					(bindcall play
+						duration = 0.15
+						from	 = "{ alpha: 0, ubScaleY: 0 }"
+						to		 = "{ alpha: 1, ubScaleY: 1 }"
+						easing	 = "Easing.quad_out"
+						action	 = "kill"
+						reverse	= "isBuyAvailable"
+						(bind trigger "!isBuyAvailable")
+					)
+				)
+
+				(element PriceDeficit
+					_priceInfo =	"{currency: SC.Common.CURRENCIES.XP}"
+					_deficit =		"expDeficit"
+					_size =			"SIZE.MEDIUM"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "M")
+			)
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_isDeficit = "!isBuyAvailable"
+				_okMethods =	"[	{	type: 'inputMapping.onRequest',
+										name: 'researchModule',
+										args: { shipId: viewedShipId, moduleId: moduleInfo.id }}]"
+			)
+		)
+	)
+)
+
+(def element ModuleDependenciesBlock (_dependentModules:array)
+	(style (width = 100%))
+
+	(tf 
+		(class $TextDefaultNM)
+		(style
+			(marginLeft = "M")
+			(marginRight = "SXS")
+			(alpha = "TA")
+			(marginBottom = "S")
+		)
+		(text = 'IDS_WILL_BE_ALSO_RESEARCHED')
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(style
+			(width = 100%)
+			(paddingTop = "S")
+			(paddingBottom = "S")
+			(paddingLeft = "M")
+			(paddingRight = "M")
+			(vgap = "S")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		)
+
+		(controller $Repeat renderer='ResearchDependenciesListItem'
+			(bind count "_dependentModules.length")
+			(args
+				_moduleDataArray = "_dependentModules[$index]"
+			)
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+)
+
+(def element ResearchDependenciesListItem (_moduleDataArray:array)
+	(scope
+		(struct moduleExplorePrice = PULL_PRICE(_entityId = "_moduleDataArray[1]" _actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
+		(var modulePK:str = "_moduleDataArray[3] + '_' + _moduleDataArray[5]")
+		(var moduleEntity:dhEntity = "getPrimaryEntity(CC.module, modulePK)")
+	)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(align = "middle")
+	)
+
+	(block
+		(style (backgroundColor = "NO_COLOR"))
+
+		(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+			_headerIconType =	"MODAL_WINDOW_SYSTEM_PURCHASABLE_ITEM_ICON.MODULE"
+			_imageWidth =		60px
+			_imageHeight =		60px
+			_maxWidth =			240px
+			_headerText =		"toUpper(_moduleDataArray[2])"
+			_subheaderText =	"toUpper('IDS_MODULE_TYPE' + _moduleDataArray[3])"
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_data =				"{	moduleInfoType:	_moduleDataArray[3],
+									isExplored:		false }"
+		)
+
+		(controller $Tooltip
+			(renderer = 'ModuleTooltip')
+			(args
+				_moduleEntity = "moduleEntity"
+				_noMouseInstructions = true
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(style
+			(align = "right|middle")
+			(position = "absolute")
+			(right = 0px)
+			(height = 100%)
+		)
+
+		(element PriceTag
+			_priceInfo = "moduleExplorePrice.info"
+			_showDiscountTag = true
+		)
+	)
+)

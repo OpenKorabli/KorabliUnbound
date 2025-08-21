@@ -1,4 +1,3 @@
-(def constant RATING_LEAGUE_PROGRESS_MAX 100)
 (def constant RATING_BATTLE_CONTENT_WIDTH {
 	SMALL: 994px,
 	BIG: 1216px,
@@ -30,10 +29,28 @@
 	PLATINUM: PLATINUM
 })
 
+(def constant RATING_LEAGUE_PROGRESS_MAX 100)
 (def constant PLATINUM_LEAGUE_PROGRESS_MAX 500)
 
-(def constant GOLD_SMOKE "{redOffset: 700, greenOffset: 30, blueOffset: -80, alphaMultiplier:1 }")
-(def constant CT_CARD "{ redMultiplier:3, greenMultiplier:0.79, blueMultiplier:0.35 }")
+(def constant CT_PROFILE_RATING_CARD "{
+	redMultiplier: 0,
+	greenMultiplier: 0.95,
+	blueMultiplier: 1.4,
+	alphaMultiplier: 1,
+	redOffset: 0,
+	greenOffset: 0,
+	blueOffset: 0,
+	alphaOffset: 0
+}")
+
+(def constant CT_BG_CARD "{
+	redMultiplier: 0,
+	greenMultiplier: 0,
+	blueMultiplier: 0,
+	redOffset: 76,
+	greenOffset: 214,
+	blueOffset: 232
+}")
 
 (def macro RATING_BATTLES_DIMENSIONS ()
 	(macro STAGE_SIZE)
@@ -55,70 +72,124 @@
 
 (def element PlayerProfileRatingBattlesPage ()
 	(scope
-		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.RATING_BATTLES" "'isInRatingBattles'")
 		(macro RATING_BATTLES_DIMENSIONS)
+		(struct isInRatingBattles = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.RATING"))
 
 		(var hasRatingBattleSeason:bool = "getSingleComponent(CC.ratingBattlesSeason) != null")
 		(var ratingBattlesSeasonProgress:dhComponent = "getSingleComponent(CC.ratingBattlesSeasonProgress)")
 		(var initialQualificationBattlesResults:array = "ratingBattlesSeasonProgress.initialQualificationBattlesResults ?: []" (event "ratingBattlesSeasonProgress.evInitialQualificationBattlesResultsChanged"))
 
+		(struct ratingBattlesFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.RATING_BATTLES"))
+		(var isNewRatingBattlesFeature:bool = "ratingBattlesFeature.state == 'new'")
+
 		(var isQualification:bool = "ratingBattlesSeasonProgress != null && initialQualificationBattlesResults.length < SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
 		(var isQualificationStatus:bool = "isQualification && hasRatingBattleSeason")
 		(var isRatingTimerVisible:bool = "!isQualification && hasRatingBattleSeason")
 
-		(var contentRenderer:str = "	ratingBattlesSeasonProgress == null	? 'RatingBattlesWaitingSeasonNoProgress' :
-										isQualification						? 'RatingBattlesQualification'
-																			: 'RatingBattlesLeagues'")
-		(var title:str = "isQualificationStatus ? 'IDS_RATING_BATTLES_QUALIFICATION' : 'IDS_RATING_BATTLES_SEASON'")
+		(var contentRenderer:str = "	ratingBattlesSeasonProgress == null	?	'RatingBattlesWaitingSeasonNoProgress'	:
+										isQualification						?	'RatingBattlesQualification'
+																			:	'RatingBattlesLeagues'")
+
+		(var currentRating:number = "ratingBattlesSeasonProgress.leagueProgress ?: 1" (event "ratingBattlesSeasonProgress.evLeagueProgressChanged"))
+		(var currentLeagueName:str = "ratingBattlesSeasonProgress.leagueName" (event "ratingBattlesSeasonProgress.evLeagueProgressChanged") (event "ratingBattlesSeasonProgress.evLeagueNameChanged") )
+		(var currentRatingText:str = "ratingBattlesSeasonProgress != null	?	subst('IDS_PROFILE_RATING_X', [], {_ratingNumber: currentRating, _ratingType: tr('IDS_RATING_BATTLES_LEAGUE_' + currentLeagueName)})
+																			:	''" (event "ratingBattlesSeasonProgress.evLeagueProgressChanged"))
+
+		(var title:str = "	ratingBattlesSeasonProgress == null	?	'IDS_RATING_BATTLES_SEASON' :
+							isQualificationStatus				?	'IDS_RATING_BATTLES_QUALIFICATION'
+																:	currentRatingText")
 	)
+
 	(name = 'PlayerProfileRatingBattles')
 	(bindcall externalCall "'direct.action'" "['ratingBattles.showSeasonResults', []]" watch=false on='addedToStage')
+	(bindcall externalCall "isNewRatingBattlesFeature ? 'inputMapping.onAction' : ''" "['featureSeen', { featureIndex: SC.Common.ACCOUNT_FEATURE.RATING_BATTLES }]" on='addedToStage')
+
 	(class $Fullsize)
 	(style
-		(paddingTop = "{720:LM, 1080:XLL}")
-		(paddingLeft = 200px)
+		(paddingTop = "{ 720:L, 1080:XL }")
+		(marginLeft = 85px)
 		(align = "center")
 	)
+
 	(block
-		(style (bind width "contentWidth"))
-		(hblock
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 1)
-			(style
-				(width = 100%)
-				(marginBottom = "SXS")
-			)
+		(style
+			(height = 100%)
+			(bind width "contentWidth")
+		)
+
+		
+		(block
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 1)
+
 			(tf
 				(class $TextDefaultBold30NM)
-				(style
-					(width = 100%)
-					(alpha = "TA")
-				)
+				(style (alpha = "TA"))
 				(bind text "title")
 			)
-			(block
-				(style (bind marginTop "isRatingTimerVisible ? S : 0"))
-				(controller $Instance renderer='RatingBattlesQualificationStatus'
-					(bind enabled "isQualificationStatus")
-					(args
-						_curValue = "initialQualificationBattlesResults.length"
-					)
-				)
-				(controller $Instance renderer='RatingBattlesTimerStatus'
-					(bind enabled "isRatingTimerVisible")
+		)
+
+		
+		(block
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 1)
+			(bind visible "isRatingTimerVisible")
+			(style (marginTop = "MS"))
+
+			(controller $Instance renderer='RatingBattlesTimerStatus'
+				(bind enabled "isRatingTimerVisible")
+			)
+		)
+
+		
+		(block
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 1)
+			(bind visible "isQualificationStatus")
+			(style (marginTop = "MS"))
+
+			(controller $Instance renderer='RatingBattlesQualificationStatus'
+				(bind enabled "isQualificationStatus")
+				(args
+					_curValue = "initialQualificationBattlesResults.length"
 				)
 			)
 		)
-		(block
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 1.5)
+
+		(hblock
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 1)
+			(bind visible "isQualificationStatus")
 			(style
 				(width = 100%)
-				(bind marginBottom "isQualificationStatus ? XL : {720:SXS, 1080: MS}")
+				(marginTop = "L")
+				(marginBottom = "MS")
 			)
-			(element HorizontalDividerTwoPx)
+
+			(block
+				(style
+					(width = 15px)
+					(height = 15px)
+					(marginTop = "-XXS")
+					(marginRight = "S")
+					(backgroundSize = "fill")
+					(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
+				)
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 600px)
+					(alpha = "TA")
+				)
+				(text = 'IDS_RATING_BATTLES_QUALIFICATION_TEXT')
+			)
 		)
+
 		(block
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 1.5)
-			(style (width = 100%))
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 1.5)
+			(style
+				(width = 100%)
+				(marginTop = "MS")
+			)
+
 			(controller $Instance
 				(bind renderer "contentRenderer")
 			)
@@ -132,20 +203,11 @@
 		(align = "middle")
 		(hgap = "SXS")
 	)
+
 	(tf
 		(class $TextDefaultNM)
 		(style (alpha = "TA"))
 		(text = 'IDS_RATING_BATTLES_QUALIFICATION_DESCRIPTION')
-	)
-	(block
-		(style (height = 24px))
-		(element VerticalDivider)
-	)
-	(element DefaultDividedCounter
-		_curValueTextClass = '$TextDefaultBold19NM'
-		_curValue = "_curValue"
-		_maxValue = "SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH"
-		_doNotAlphaOnZeroCurValue = true
 	)
 )
 
@@ -158,17 +220,16 @@
 		)
 	)
 
-	(style
-		(flow = "horizontal")
-		(bind hgap "isRatingSeasonActive ? M : 0")
-	)
+	(style (flow = "horizontal"))
 
 	(block
+		(style (marginRight = "M"))
+
 		(controller $Instance renderer='StatusLine'
 			(bind enabled "statusLineSeasonData")
 			(args
-				_unifiedStatus =	"statusLineSeasonData.unifiedStatus"
 				_text =				"statusLineSeasonData.text"
+				_unifiedStatus =	"statusLineSeasonData.unifiedStatus"
 			)
 		)
 	)
@@ -177,105 +238,146 @@
 		(controller $Instance renderer='StatusLine'
 			(bind enabled "isRatingSeasonActive && statusLinePrimeData")
 			(args
-				_unifiedStatus =	"statusLinePrimeData.unifiedStatus"
 				_text =				"statusLinePrimeData.text"
+				_unifiedStatus =	"statusLinePrimeData.unifiedStatus"
 			)
 		)
 	)
 )
 
+
 (def element RatingBattlesQualification ()
 	(scope
-		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.RATING_BATTLES" "'isInRatingBattles'")
-
-		(var ratingBattlesSeason:dhComponent = "getSingleComponent(CC.ratingBattlesSeason)")
-		(var initialQualificationRewardEntitiesIDs:array = "ratingBattlesSeason.initialQualificationRewardEntitiesIDs ?: []")
+		(macro RATING_BATTLES_DIMENSIONS)
+		(struct isInRatingBattles = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.RATING"))
 
 		(var ratingBattlesSeasonProgress:dhComponent = "getSingleComponent(CC.ratingBattlesSeasonProgress)")
 		(var initialQualificationBattlesResults:array = "ratingBattlesSeasonProgress.initialQualificationBattlesResults ?: []" (event "ratingBattlesSeasonProgress.evInitialQualificationBattlesResultsChanged"))
 	)
+
 	(style (width = 100%))
+
 	(hblock
-		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 1.5)
-		(style
-			(marginBottom = "XL")
-			(align = "bottom")
-		)
-		(controller $Repeat renderer='RatingBattlesQualificationItem'
+		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 1.5)
+		(style (bind hgap "isLargeDimension ? L : M"))
+
+		(controller $Repeat renderer='RatingBattlesQualificationCard'
 			(count = "SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
 			(args
 				_initialQualificationBattlesResults = "initialQualificationBattlesResults"
+				_isActiveQualification = true
 			)
 		)
 	)
+
 	(block
-		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 2.5)
+		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 3)
 		(style
 			(width = 100%)
-			(marginBottom = "MS")
+			(marginTop = "{ 720:M, 1080:XXL }")
 		)
-		(element HorizontalDividerTwoPx)
+
+		(element QualificationRewards)
 	)
-	(block
-		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 3)
-		(tf
-			(class $TextDefaultNM)
-			(style
-				(width = 570px)
-				(marginBottom = "MS")
-				(alpha = "TA")
-			)
-			(text = 'IDS_RATING_BATTLES_QUALIFICATION_TEXT')
+)
+
+
+(def element QualificationRewards()
+	(scope
+		(var ratingBattlesSeason:dhComponent = "getSingleComponent(CC.ratingBattlesSeason)")
+		(var initialQualificationRewardEntitiesIDs:array = "ratingBattlesSeason.initialQualificationRewardEntitiesIDs ?: []")
+	)
+
+	(tf
+		(class $TextDefaultBold22NM)
+		(style
+			(alpha = "TA")
+			(marginBottom = "M")
 		)
-		(tf
-			(class $TextDefaultNM)
-			(style
-				(marginBottom = "M")
-				(alpha = "TA")
-			)
-			(text = 'IDS_RATING_BATTLES_QUALIFICATION_REWARDS')
-		)
-		(hblock
-			(controller $Repeat renderer='RewardItemAdapter'
-				(bind count "initialQualificationRewardEntitiesIDs.length")
-				(args
-					_entityId = "initialQualificationRewardEntitiesIDs[$index]"
-				)
+		(text = 'IDS_RATING_BATTLES_QUALIFICATION_REWARDS')
+	)
+
+	(hblock
+		(controller $Repeat renderer='RewardItemAdapter'
+			(bind count "initialQualificationRewardEntitiesIDs.length")
+			(args
+				_entityId = "initialQualificationRewardEntitiesIDs[$index]"
 			)
 		)
 	)
 )
 
-(def element RatingBattlesQualificationItem (_initialQualificationBattlesResults:array = [])
+
+(def element RatingBattlesQualificationCard (_initialQualificationBattlesResults:array = [])
 	(scope
 		(macro RATING_BATTLES_DIMENSIONS)
-
+		(macro MOUSE_HANDLER_SCOPE)
 		(var currentBattlesCount:number = "_initialQualificationBattlesResults.length")
+		(var isQualificationBattleResult:bool = "_initialQualificationBattlesResults[$index] != null")
+		(var isActiveEarnedQualification:bool = "(currentBattlesCount - 1) == $index")
 	)
+
 	(style
 		(align = "center")
-		(bind width "isLargeDimension ? 243px : 199px")
+		(height = 288px)
+		(bind width "isLargeDimension ? 224px : 186px")
 	)
+
 	(block
-		(style (marginBottom = "M"))
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(bottom = 10px)
+			(backgroundSize = "fill")
+			(backgroundImage = 'url:../rating_battles/bg_card.png')
+			(bind alpha "isQualificationBattleResult ? 0.6 : 0.2")
+		)
+
+		(bind colorTransform "isQualificationBattleResult ? CT_BG_CARD : CT_NONE")
+	)
+
+	(block
+		(bind visible "isActiveEarnedQualification")
+		(class $Fullsize)
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(bottom = 0)
+			(backgroundSize = "fill")
+			(backgroundImage = 'url:../animations/spine/rating_battles/bg_card_smoke.skel')
+		)
+		(colorTransform = "CT_BG_CARD")
+	)
+
+	(block
+		(style
+			(height = 100%)
+			(align = "middle")
+		)
+
 		(element RatingBattleQualificationEmblem
-			_size = "SIZE.SMALL"
+			_size = "SIZE.MEDIUM"
 			_isDefault = "$index >= currentBattlesCount"
 			_battleResult = "_initialQualificationBattlesResults[$index]"
 		)
 	)
+
 	(element DefaultProgressBar
 		_height = 10px
 		_progress = "$index < currentBattlesCount ? 1 : 0"
+		_isBorderless = true
 	)
 )
+
 
 (def element RatingBattlesLeagues ()
 	(scope
 		(event evLeagueClicked)
 		(event evSetLeagueToCurrent)
 
-		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.RATING_BATTLES" "'isInRatingBattles'")
+		(macro RATING_BATTLES_DIMENSIONS)
+		(struct isInRatingBattles = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.RATING"))
 
 		(var ratingBattlesLeagues:dhCollection = "getCollection(CC.ratingBattlesLeague)")
 		(var ratingBattlesSeasonEntity:dhEntity = "getSingleEntity(CC.ratingBattlesSeason)")
@@ -291,18 +393,18 @@
 	(style (width = 100%))
 
 	(block
-		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 2)
-		(controller $Instance renderer='RatingStats'
+		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 2)
+		(controller $Instance renderer='RatingBattleStats'
 			(bind enabled "isRatingProgressVisible")
 		)
 	)
+
 	(hblock
-		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles" 2.5)
-		(style
-			(marginTop = -61px)
-			(marginBottom = "{720: S, 1080:XL}")
-		)
-		(controller $Repeat renderer='RatingBattlesLeague'
+		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRatingBattles.isActive" 2.5)
+		(style (bind marginTop "isFinalStatVisible	?	{ 720:-90px, 1080:50px}
+													:	{ 720:-140px, 1080:50px}"))
+
+		(controller $Repeat renderer='RatingBattlesLeagueCard'
 			(bind count "ratingBattlesLeagues.length")
 			(args
 				_entityId = "ratingBattlesLeagues[$index].id"
@@ -311,33 +413,38 @@
 			)
 		)
 	)
+
 	(block
-		(macro SPECIAL_LEVEL_ELEMENTS_APPEAR_ANIMATION "isInRatingBattles" 3.5)
+		(macro SPECIAL_LEVEL_ELEMENTS_APPEAR_ANIMATION "isInRatingBattles.isActive" 3.5)
+		(bind visible "!isFinalStatVisible")
 		(style
 			(width = 100%)
-			(marginBottom = "M")
+			(marginTop = "{ 720:SXS, 1080:LM }")
 		)
-		(controller $Instance renderer='HorizontalDividerTwoPx'
-			(bind enabled "isFinalStatVisible")
+
+		(element RatingBattlesLeagueRewards
+			_selectedLeague = "selectedLeague"
 		)
 	)
+
 	(block
-		(macro SPECIAL_LEVEL_ELEMENTS_APPEAR_ANIMATION "isInRatingBattles" 3.5)
-		(style (width = 100%))
-		(controller $Instance renderer='RatingBattlesLeagueRewards'
-			(bind enabled "!isFinalStatVisible")
-			(args
-				_selectedLeague = "selectedLeague"
-			)
+		(macro SPECIAL_LEVEL_ELEMENTS_APPEAR_ANIMATION "isInRatingBattles.isActive" 3.5)
+		(bind visible "isFinalStatVisible")
+		(style
+			(width = 100%)
+			(marginTop = "{ 720:M, 1080:L }")
 		)
+
 		(controller $Instance renderer='RatingBattlesFinalStats'
 			(bind enabled "isFinalStatVisible")
 		)
 	)
 )
 
+
 (def element RatingBattlesWaitingSeasonNoProgress ()
 	(style (width = 100%))
+
 	(tf
 		(class $TextDefaultNM)
 		(style (alpha = "TA"))
@@ -345,7 +452,8 @@
 	)
 )
 
-(def element RatingStats ()
+
+(def element RatingBattleStats ()
 	(scope
 		(var seasonStats:dhComponent = "getSingleComponent(CC.ratingBattlesSeasonStats)")
 		(var winRate:number = "seasonStats.winRate ?: 0" (event "seasonStats.evWinRateChanged"))
@@ -358,10 +466,12 @@
 				type: 'BATTLES_COUNT' }
 		]")
 	)
+
 	(style
 		(gap = "LS")
 		(flow = "horizontal")
 	)
+
 	(controller $Repeat renderer='RatingBattlesStatsItem'
 		(bind count "currentStats.length")
 		(args
@@ -373,7 +483,8 @@
 	)
 )
 
-(def element RatingBattlesLeague (_entityId:number = 0, _selectedLeague:number = 0, _isFinalStatVisible:bool = false)
+
+(def element RatingBattlesLeagueCard (_entityId:number = 0, _selectedLeague:number = 0, _isFinalStatVisible:bool = false)
 	(scope
 		(event evLeagueClicked)
 
@@ -394,13 +505,13 @@
 
 		(var isLeagueClaimed:bool = "league < SC.Common.RATING_BATTLES_LEAGUES[leagueSeasonProgress.currentLeague]")
 		(var progressPlatinum:number = "leagueProgressValue > PLATINUM_LEAGUE_PROGRESS_MAX ? 1 : leagueProgressValue/PLATINUM_LEAGUE_PROGRESS_MAX")
-		(var progressValue:number = "	isCurrentLeague	? leagueName == RATING_LEAGUES.PLATINUM ? progressPlatinum
-																								: leagueProgress :
-										isLeagueClaimed	? 1
-														: 0")
+		(var progressValue:number = "	isCurrentLeague	?	leagueName == RATING_LEAGUES.PLATINUM	?	progressPlatinum
+																									:	leagueProgress :
+										isLeagueClaimed	?	1
+														:	0")
 
 		(var ratingLeaguesCount:number = "SC.Common.RATING_BATTLES_LEAGUES.ALL.length - 1")  
-		(var leaguesOffset:number = "isLargeDimension ? MS : M")
+		(var leaguesOffset:number = "isLargeDimension ? L : M")
 		(var cardWidth:number = "(contentWidth - (ratingLeaguesCount - 1) * leaguesOffset) / ratingLeaguesCount")
 		(var bgHeight:number = "230px + $index * (isLargeDimension ? 50px : 30px)")
 
@@ -408,11 +519,11 @@
 		(var iconSize:number = "isLargeDimension ? SIZE.MEDIUM : SIZE.SMALL")
 		(var iconWidth:number = "isLargeDimension ? RATING_EMBLEM_SIZE.MEDIUM : RATING_EMBLEM_SIZE.SMALL")
 		(var isColoredLeague:bool = "isLeagueClaimed || isCurrentLeague")
-		(var stateAlpha:number = "	isCurrentLeague	? 0.8 :
-									isLeagueClaimed	? 0.4
-													: 0.2")
+		(var stateAlpha:number = "	isCurrentLeague	?	1 :
+									isLeagueClaimed	?	0.4
+													:	0.2")
 		(var progressAlpha:number = "isCurrentLeague || isLeagueClaimed ? TA : TS")
-		(var progressValueFont:str = "isColoredLeague ? '$TextDefaultBold17NM' : '$TextDefault17NM'")
+		(var progressValueFont:str = "isColoredLeague ? '$TextDefaultBold18NM' : '$TextDefault18NM'")
 		(var progressValueInfinityState:str = "isColoredLeague ? '_bold' : ''")
 	)
 	(macro MOUSE_EVENTS_DISPATCHER)
@@ -422,15 +533,17 @@
 
 	(style
 		(bind width "cardWidth")
-		(bind height "isLargeDimension ? 453px : 360px")
+		(bind height "isLargeDimension ? 453px : 400px")
 		(bind marginLeft "$index ? leaguesOffset : 0")
 	)
+
 	(block
 		(class $Fullsize)
 		(style
 			(align = "center|bottom")
-			(bind paddingBottom "isSelected ? S : 0")
+			(bind paddingBottom "isSelected ? SXS : 0")
 		)
+
 		(controller $Animation
 			(bindcall play
 				duration = 0.15
@@ -440,6 +553,7 @@
 				(bind trigger "isSelected")
 			)
 		)
+
 		(block
 			(style
 				(hitTest = false)
@@ -451,18 +565,21 @@
 				(alpha = "stateAlpha")
 				(bind height "bgHeight")
 			)
-			(bind colorTransform "isColoredLeague ? CT_CARD : CT_NONE")
+
+			(bind colorTransform "isColoredLeague ? CT_PROFILE_RATING_CARD : CT_NONE")
 			(alpha = "rollOver && !isSelected ? 1 : 0.4")
+
 			(controller $Animation
 				(bindcall play
 					duration = 0.15
 					from = "{ alpha: stateAlpha }"
-					to = "{ alpha: stateAlpha+0.2 }"
+					to = "{ alpha: stateAlpha + 0.2 }"
 					reverse = "!rollOver"
 					(bind trigger "rollOver")
 				)
 			)
 		)
+
 		(block
 			(bind visible "isCurrentLeague")
 			(style
@@ -474,8 +591,9 @@
 				(width = 100%)
 				(bind height "bgHeight")
 			)
-			(bind colorTransform "isColoredLeague ? GOLD_SMOKE : CT_NONE")
+			(bind colorTransform "isColoredLeague ? CT_PROFILE_RATING_CARD : CT_NONE")
 		)
+
 		(block
 			(style (marginBottom = "SXS"))
 			(element RatingEmblem
@@ -487,6 +605,7 @@
 				_isSelected = "isSelected"
 				_isEmblemAnimationVisible = true
 			)
+
 			(controller $Animation
 				(bindcall play	id = 'leagueIconAnim'
 								duration = 0.3
@@ -498,14 +617,16 @@
 				)
 			)
 		)
+
 		(tf
-			(class $TextDefaultBold21NM)
+			(class $TextDefaultBold22NM)
 			(style
 				(bind alpha "isColoredLeague ? TA : TS")
 				(bind marginBottom "iconPadding")
 			)
 			(bind text "'IDS_RATING_BATTLES_LEAGUE_' + leagueName")
 		)
+
 		(block
 			(style
 				(backgroundColor = "NO_COLOR")
@@ -514,6 +635,7 @@
 				(width = 100%)
 				(bind height "bgHeight")
 			)
+
 			(controller $Tooltip
 				(renderer='RatingBattlesLeagueTooltip')
 				(args
@@ -532,19 +654,23 @@
 			(height = 32px)
 			(marginTop = -1px)
 		)
+
 		(element DefaultProgressBar
 			_width = 100%
 			_height = 10px
 			_progress = "progressValue"
+			_isBorderless = true
 		)
+
 		(hblock
 			(style
 				(position = "absolute")
-				(bottom = "XS")
+				(bottom = 0px)
 				(width = 100%)
 				(align ="bottom")
 				(alpha = "isSelected ? 1 : 0")
 			)
+
 			(controller $Animation
 				(bindcall play
 					duration = 0.15
@@ -554,6 +680,7 @@
 					(bind trigger "isSelected")
 				)
 			)
+
 			(tf
 				(bind class "progressValueFont")
 				(style
@@ -573,6 +700,7 @@
 				)
 				(text = "RATING_LEAGUE_PROGRESS_MAX")
 			)
+
 			(block
 				(bind visible "leagueName == RATING_LEAGUES.PLATINUM")
 				(style
@@ -589,6 +717,7 @@
 	)
 )
 
+
 (def element RatingBattlesLeagueRewards (_selectedLeague:number = 0)
 	(scope
 		(var leagueName:str = "SC.Common.RATING_BATTLES_LEAGUES.VALUE_TO_NAME[_selectedLeague]")
@@ -599,14 +728,18 @@
 
 		(struct leagueSeasonProgress = RATING_SEASON_LEAGUE_PROGRESS(_leagueName = "leagueName"))
 	)
+
 	(style (width = 100%))
+
 	(hblock
-		(style (marginBottom = "S"))
+		(style (marginBottom = "SXS"))
+
 		(tf
-			(class $TextDefaultBold21NM)
+			(class $TextDefaultBold22NM)
 			(style (alpha = "TA"))
 			(text = 'IDS_RATING_BATTLES_LEAGUE_REWARDS_TITLE')
 		)
+
 		(block
 			(style
 				(width = 22px)
@@ -615,23 +748,20 @@
 				(marginLeft = "SXS")
 				(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
 			)
+
 			(controller $Tooltip
 				(renderer='RatingBattlesLeagueRewardsInfoTooltip')
 				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 			)
 		)
 	)
-	(block
-		(style
-			(width = 100%)
-			(marginBottom = "M")
-		)
-		(element HorizontalDividerTwoPx)
-	)
+
 	(hblock
 		(style (gap = "L"))
+
 		(block
 			(bind visible "toBool(initialRewardEntitiesIDs)")
+
 			(tf
 				(class $TextDefaultNM)
 				(style
@@ -640,6 +770,7 @@
 				)
 				(text = 'IDS_RATING_BATTLES_LEAGUE_PASSED_REWARDS')
 			)
+
 			(hblock
 				(controller $Repeat renderer='RewardItemAdapter'
 					(bind enabled "toBool(initialRewardEntitiesIDs)")
@@ -651,6 +782,14 @@
 				)
 			)
 		)
+
+		(block
+			(bind visible "toBool(initialRewardEntitiesIDs)")
+			(style (height = 100%))
+
+			(element VerticalDivider)
+		)
+
 		(block
 			(tf
 				(class $TextDefaultNM)
@@ -660,6 +799,7 @@
 				)
 				(text = 'IDS_RATING_BATTLES_LEAGUE_VICTORIES_REWARDS')
 			)
+
 			(hblock
 				(controller $Repeat renderer='RatingBattleRewardWrapper'
 					(bind count "victoryRewardEntitiesIDs.length")
@@ -684,6 +824,7 @@
 		(var isReceived:bool = "rewardComponent.type == SC.Common.REWARD_TYPE.LOOTBOX	? isIn(rewardSubtype, claimedLootboxesTypes)
 																						: isIn(rewardSubtype, claimedResourcesTypes)")
 	)
+
 	(element RewardItemAdapter
 		_entityId = "_entityId"
 		_isReceived = "isReceived"
@@ -698,13 +839,16 @@
 		(element TooltipSystemHeaderSubheaderText
 			_headerText = 'IDS_RATING_BATTLES_LEAGUE_REWARDS_TITLE'
 		)
+
 		(element TooltipSystemHorizontalDivider)
+
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemDescriptionText
 					_descriptionText = 'IDS_RATING_BATTLES_LEAGUE_TOOLTIP_TEXT_0'
 				)
 			)
+
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemDescriptionText
 					_descriptionText = 'IDS_RATING_BATTLES_LEAGUE_TOOLTIP_TEXT_1'
@@ -718,13 +862,15 @@
  											_league:number = 0,
  											_currentLeague:number = 0)
 	(scope
-		(var leagueState:number = "	_league == _currentLeague	? LEAGUE_STATE.CURRENT :
-									_league < _currentLeague	? LEAGUE_STATE.DONE
-																: LEAGUE_STATE.LOCKED")
+		(var leagueState:number = "	_league == _currentLeague	?	LEAGUE_STATE.CURRENT :
+									_league < _currentLeague	?	LEAGUE_STATE.DONE
+																:	LEAGUE_STATE.LOCKED")
 		(var unifiedStatus:str = "LEAGUE_UNIFIED_STATUS[leagueState]")
 	)
+
 	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
@@ -732,6 +878,7 @@
 					_headerText = "'IDS_RATING_BATTLES_LEAGUE_' + SC.Common.RATING_BATTLES_LEAGUES.VALUE_TO_NAME[_league]"
 				)
 			)
+
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemStatusLine
 					_unifiedStatus = "unifiedStatus"
@@ -739,24 +886,33 @@
 				)
 			)
 		)
+
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "_hasMouseInstruction")
+
+			(block
+				(style (width = 100%))
+
+				(controller $Instance renderer='TooltipSystemHorizontalDivider'
+					(bind enabled "_hasMouseInstruction")
+				)
 			)
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "_hasMouseInstruction")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-					_text = 'IDS_RATING_BATTLES_LEAGUE_MOUSE_INSTRUCTION'
+
+			(block
+				(style (width = 100%))
+
+				(controller $Instance renderer='TooltipSystemStatusLine'
+					(bind enabled "_hasMouseInstruction")
+					(args
+						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						_text = 'IDS_RATING_BATTLES_LEAGUE_MOUSE_INSTRUCTION'
+					)
 				)
 			)
 		)
 	)
 )
+
 
 (def element RatingBattlesFinalStats ()
 	(scope
@@ -776,12 +932,15 @@
 				type: 'EXP_MAX'}
 		]")
 	)
+
 	(style
 		(flow = "horizontal")
 		(gap = "LS")
 	)
+
 	(hblock
 		(style (gap = "LS"))
+
 		(controller $Repeat renderer='RatingBattlesStatsItem'
 			(count = 2)
 			(args
@@ -791,12 +950,15 @@
 			)
 		)
 	)
+
 	(block
 		(style (height = 100%))
 		(element VerticalDivider)
 	)
+
 	(hblock
 		(style (gap = "LS"))
+
 		(controller $Repeat renderer='RatingBattlesStatsItem'
 			(count = 3)
 			(args
@@ -808,14 +970,16 @@
 	)
 )
 
+
 (def element RatingBattlesStatsItem (	_postfix:str = '',
 										_value:number = 0,
 										_leagueName:str = '',
-										_textClass:str = '$TextDefaultBold21NM',
+										_textClass:str = '$TextDefaultBold22NM',
 										_isPercent:bool = false)
 	(scope
 		(var value:str = "_value + (_isPercent ? tr('IDS_PERCENT') : '')")
 	)
+
 	(tf
 		(class $TextDefaultNM)
 		(style
@@ -824,15 +988,17 @@
 		)
 		(bind text "'IDS_RATING_BATTLES_STATS_' + _postfix")
 	)
+
 	(hblock
 		(tf
 			(bind class "_textClass")
 			(style (alpha = "TA"))
 			(bind text "value")
 		)
+
 		(tf
 			(bind visible "_leagueName != ''")
-			(class $TextDefaultBold21NM)
+			(class $TextDefaultBold22NM)
 			(style
 				(marginLeft = "S")
 				(alpha = "TA")

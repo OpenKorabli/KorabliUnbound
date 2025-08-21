@@ -1,0 +1,205 @@
+(def constant BP_CONTENT_WIDTH 1116px)
+
+(def element ModalWindowBattlePurchaseLevels ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(macro INPUT_COUNTER_SCOPE_EVENTS)
+	(scope
+		(struct bpLevelPrice =		PULL_PRICE(_entityId = "'BATTLEPASS_LEVEL'"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct bpRegularPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_REGULAR'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct bpEnhancedPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_ENHANCED'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var levelsList:dhCollection = "getCollection(CC.battlePassLevel)")
+
+		(var battlePassCurrentLevelEntity:dhEntity = "getSingleEntity(CC.battlePassCurrentLevel)")
+		(var currentLevel:number = "battlePassCurrentLevelEntity.battlePassLevel.level" (event "battlePassCurrentLevelEntity.battlePassLevel.evChanged"))
+
+		(var battlePassEntity:dhEntity = "getSingleEntity(CC.battlePass)")
+		(var battlePassComponent:dhComponent = "battlePassEntity.battlePass")
+		(var bpType:number = "battlePassComponent.type" (event "battlePassComponent.evChanged"))
+		(var battlePassId:number = "battlePassComponent.id" (event "battlePassComponent.evChanged"))
+		(var previewRewardsStackId:number = "battlePassComponent.previewRewardsStack" (event "battlePassComponent.evChanged"))
+		(var finishTime:number = "battlePassComponent.finishTime" (event "battlePassComponent.evChanged"))
+
+		(var rewardsStackEntity:dhEntity = "getEntity(previewRewardsStackId)")
+		(var rewards:array = "rewardsStackEntity.rewardsStack.rewards ?: []" (event "rewardsStackEntity.rewardsStack.evChanged"))
+		(var rewardsLen:number = "rewards.length")
+
+		(var accountResource:dhComponent = "getSingleEntity(CC.accountResource).accountResource")
+		(var currentGoldBalance:number = "accountResource.gold ?: 0" (event "accountResource.evChangedGold"))
+
+		(var maxLevel:number = "levelsList.length - currentLevel")
+
+		(var levelsToPurchase:number = 1)
+		(var isDownBtnEnabled:bool = "toNumber(levelsToPurchase) > 1")
+		(var isUpBtnEnabled:bool = "toNumber(levelsToPurchase) < maxLevel")
+		(bind levelsToPurchase "levelsToPurchase - 1"			init=false watch=false (event "counterDownBtnClicked"))
+		(bind levelsToPurchase "levelsToPurchase + 1"			init=false watch=false (event "counterUpBtnClicked"))
+		(bind levelsToPurchase "toNumber($event.value) ?: 1"	init=false watch=false (event "evInputCountChanged"))
+		(bind levelsToPurchase "1"								init=false watch=false (event "onTextInputChangeEvent"))
+
+		(var finalPrice:number = "bpLevelPrice.info.basePrice * toNumber(levelsToPurchase)")
+		(var isGoldEnough:bool = "currentGoldBalance >= finalPrice")
+		(var deltaGold:number = "finalPrice - currentGoldBalance")
+
+		(var levelsRemaining:number = "levelsList.length - currentLevel")
+		(var buyGoldRequestParams:dict = "{ url: SC.Ui_windows.GUI_URL.BATTLEPASS_SHOP_IN_GAME,
+											params: {	battlepass_type: bpType,
+														battlepass_expiration_date: finishTime,
+														remaining_level: levelsRemaining,
+														total_levels: levelsList.length,
+														level_price: bpLevelPrice.info.basePrice,
+														battlepass_price: bpRegularPrice.info.basePrice,
+														battlepass_big_price: bpEnhancedPrice.info.basePrice}}")
+
+		(var columnRemainingRewards:number = "min(rewardsLen, MAX_DEFAULT_REWARDS_IN_ROW)")
+		(var rowRemainingRewards:number = "max(ceil(rewardsLen / MAX_DEFAULT_REWARDS_IN_ROW), 1)")
+		(var heightBlockReward:number = "min(rowRemainingRewards, 3) * (REWARD_DEFAULT_CARD_SIZE + REWARDS_OFFSET)")
+		(var heightScrollArea:number = "min(heightBlockReward, stageHeight - HEADER_AND_CLOSE_BUTTON_AREA_MIN_HEIGHT)")
+	)
+	(bindcall externalCall
+		"'inputMapping.onAction'"
+		"['BattlePassProxyUSS.previewBattlePassLevels', {levelsToPreview: toNumber(levelsToPurchase)}]"
+		init=false (bind trigger "currentLevel")
+	)
+	(style (align = "center|middle"))
+	(block
+		(style
+			(width = "BP_CONTENT_WIDTH")
+			(align = "center")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style
+				(width = 100%)
+				(marginBottom = "{720:SXS, 1080:L}")
+			)
+			(element ModalWindowShortHeader
+				_header = 'IDS_BATTLEPASS_PURCHASE_LEVELS_TITLE'
+			)
+			(block
+				(style
+					(position = "absolute")
+					(right = 0)
+					(top = "-M")
+				)
+				(element DockResourcesWidget
+					_name = 'goldBalance'
+					_currency = "SC.Common.CURRENCIES.GOLD"
+					_label = 'IDS_DO_PURCHASE'
+					_methods = "[	{	type: 'inputMapping.onRequest',
+										name: 'openMetashop',
+										args: buyGoldRequestParams}]"
+					_height = 47
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(marginBottom = "{720:M, 1080:L}")
+				(align = "middle")
+			)
+			(hblock
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(marginTop = "SXS")
+						(marginRight = "SXS")
+						(alpha = "TA")
+					)
+					(text = 'IDS_BATTLEPASS_PURCHASE_LEVELS_TEXT')
+				)
+				
+				(hblock
+					(style
+						(width = 88px)
+						(height = 40px)
+					)
+					(element InputCounter
+						_isDownBtnEnabled = "isDownBtnEnabled"
+						_isUpBtnEnabled = "isUpBtnEnabled"
+						_maxNumericValue = "maxLevel ?: 1"
+						_inputValue = "levelsToPurchase"
+					)
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+			(style
+				(width = 100%)
+				(marginBottom = "{720:M, 1080:L}")
+			)
+			(element HorizontalDividerTwoPx)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(marginBottom = "{720:M, 1080:L}")
+				(bind height "heightScrollArea")
+			)
+			(scrollArea
+				(class $Fullsize)
+				(style (backgroundColor = "NO_COLOR"))
+
+				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+					_singleStep = "REWARD_DEFAULT_CARD_SIZE"
+				)
+
+				(content
+					(style
+						(width = 100%)
+						(align = "center")
+						(backgroundColor = "NO_COLOR")
+					)
+
+					(block
+						(style
+							(maxWidth = 1020px)
+							(flow = "tile_horizontal")
+							(gap = "REWARDS_OFFSET")
+						)
+
+						(controller $Repeat renderer='RewardDefaultCard'
+							(bind count "rewardsLen")
+							(args
+								_rewardEntityId = "rewards[$index]"
+							)
+						)
+					)
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(style
+				(width = 100%)
+				(marginBottom = "{720:M, 1080:L}")
+			)
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+			(style (marginBottom = "MS"))
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_priceInfo = "{finalPrice: finalPrice, currency: SC.Common.CURRENCIES.GOLD}"
+				_questionString = 'IDS_QUESTION_DO_PURCHASE_FOR'
+				_isDeficit = "!isGoldEnough"
+				_deficit = "deltaGold"
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_isDeficit = "!isGoldEnough"
+				_okMethods = "[{	type: 'inputMapping.onAction',
+									name: 'BattlePassProxyUSS.buyBattlePassLevels',
+									args: {battlePassId: battlePassId, amount: levelsToPurchase}}]"
+			)
+		)
+	)
+)

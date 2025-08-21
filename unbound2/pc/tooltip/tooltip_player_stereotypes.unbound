@@ -12,8 +12,7 @@
 
 	(style
 		(width = 100%)
-		(flow = "horizontal")
-		(align = "middle")
+		(align = "center")
 	)
 
 	(block
@@ -21,8 +20,19 @@
 			(style
 				(width = "DOG_TAG_SIZE.SMALL")
 				(height = "DOG_TAG_SIZE.SMALL")
-				(backgroundColor = 0x01000000)
-				(alpha = 1)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from	 = "{ alpha: 1 }"
+					to		 = "{ alpha: 0.3 }"
+					easing	 = "Easing.quad_out"
+					action	 = "kill"
+					reverse	 = "!dogTag_rollOver"
+					(bind trigger "dogTag_rollOver")
+				)
 			)
 
 			(controller $Tooltip
@@ -34,26 +44,15 @@
 				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 			)
 
-			(element PlayerDogTagContainer
+			(element PlayerDogTag
 				_playerId = "_playerDbId"
+				_size = "DOG_TAG_SIZE.SMALL"
 			)
 
 			(macro MOUSE_HANDLER
 				_prefix = "'dogTag_'"
 				_soundSet = "'button_secondary'"
 				_methods = "[ { type: 'inputMapping.onRequest', name: 'modalDogTag', args: {} } ]"
-			)
-
-			(controller $Animation
-				(bindcall play
-					duration = 0.15
-					from	 = "{ alpha: 1 }"
-					to		 = "{ alpha: 0.3 }"
-					easing	 = "Easing.quad_out"
-					action	 ="kill"
-					reverse	 = "!dogTag_rollOver"
-					(bind trigger "dogTag_rollOver")
-				)
 			)
 		)
 
@@ -63,7 +62,7 @@
 				(hitTest = false)
 				(align = "center|middle")
 				(alpha = 0)
-				(top = 10px)
+				(visualOffsetY = 10px)
 			)
 
 			(element DefaultButton
@@ -77,8 +76,8 @@
 			(controller $Animation
 				(bindcall play
 					duration = 0.15
-					from	 = "{ alpha: 0, top: 10 }"
-					to		 = "{ alpha: 1.5, top: 0 }"
+					from	 = "{ alpha: 0, visualOffsetY: 10px }"
+					to		 = "{ alpha: 1, visualOffsetY: 0px }"
 					easing	 = "Easing.quad_out"
 					action	 ="kill"
 					reverse	 = "!dogTag_rollOver"
@@ -93,6 +92,7 @@
 			(width = 100%)
 			(marginLeft = "S")
 			(paddingRight = "S")
+			(marginTop = "M")
 		)
 
 		(element PlayerStereotype
@@ -125,7 +125,7 @@
 			(height = "DOG_TAG_SIZE.SMALL")
 		)
 
-		(element PlayerDogTagContainer
+		(element PlayerDogTag
 			_playerId = "_playerDbId"
 		)
 	)
@@ -156,10 +156,11 @@
 								_isAbuser:bool=false, _ctkStatus:bool=false, _abuseStatus:number=0, _isPremiumAccount:bool=false,
 								_noClanTagColor:bool=false, _isWithKarma:bool=false)
 	(scope
-		(var playerEntity:gfx = "$datahub.getPrimaryEntity(CC.accountSimple, _playerDbId)")
-		(var clanmanComponent:gfx = "playerEntity ? playerEntity.clanman : null" (event "playerEntity.evAdded") (event "playerEntity.evRemoved"))
-		(var accountRankComponent:gfx = "playerEntity ? playerEntity.accountRank : null" (event "playerEntity.evAdded") (event "playerEntity.evRemoved"))
-		(var divisionMemberComponent:gfx = "playerEntity ? playerEntity.divisionMember : null" (event "playerEntity.evAdded") (event "playerEntity.evRemoved"))
+		(var playerEntity:dhEntity = "getPrimaryEntity(CC.accountSimple, _playerDbId)")
+		(var clanmanComponent:dhComponent = "playerEntity.clanman")
+		(var accountRankComponent:dhComponent = "playerEntity.accountRank")
+		(var accountRatingComponent:dhComponent = "playerEntity.accountRating")
+		(var divisionMemberComponent:dhComponent = "playerEntity.divisionMember")
 
 		(var isSelf:bool = "playerEntity ? playerEntity.accountSimple.isSelfPlayer : true")
 
@@ -169,84 +170,125 @@
 		(var league:number =	"accountRankComponent ? accountRankComponent.league : 0"	(event "accountRankComponent.evChanged"))
 		(var seasonId:number =	"accountRankComponent ? accountRankComponent.seasonId : 0"	(event "accountRankComponent.evChanged"))
 
+		(var rating:number = "accountRatingComponent.leagueProgress ?: SC.Common.RATING_BATTLES_LEAGUES.NONE" (event "accountRatingComponent.evChanged"))
+		(var ratingLeague:str = "accountRatingComponent.leagueName ?: RATING_LEAGUE_NAME_NONE" (event "accountRatingComponent.evChanged"))
+
 		(var isInSameDivision:bool = "divisionMemberComponent ? divisionMemberComponent.isInSameDivision : false" (event "divisionMemberComponent.evDivisionChanged"))
 
-		(var clanEntity:gfx = "$datahub.getPrimaryEntity(CC.clan, clanId)")
+		(var clanEntity:dhEntity = "getPrimaryEntity(CC.clan, clanId)")
 		(var clanTag:str = "_clanTag	? _clanTag :
 							clanEntity	? clanEntity.clan.tag : ''" (event "clanEntity.clan.evTagChanged"))
 
-		(var clanExtendedEntity:gfx = "$datahub.getPrimaryEntity(CC.clanExtended, clanId)")
+		(var clanExtendedEntity:dhEntity = "getPrimaryEntity(CC.clanExtended, clanId)")
 		(var clanTagColor:str = "	_clanTagColor		? _clanTagColor :
 									clanExtendedEntity	? clanExtendedEntity.clanExtended.color : ''" (event "clanExtendedEntity.clanExtended.evColorChanged"))
 		(var isWithRank:bool = "!_noRank && !_isBot && (rank != 0 && league > 0) && rank != null")
-		(var leagueIDS:str = "league > 0 ? 'IDS_TOOLTIP_RANKED_RANK_X_LEAGUE_' + league : ''")
 
-		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
-		(var karma:number = "selfPlayerEntity ? selfPlayerEntity.accountSelf.karma : 0" (event "selfPlayerEntity.accountSelf.evKarmaChanged"))
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var karma:number = "selfPlayerEntity.accountSelf.karma ?: 0" (event "selfPlayerEntity.accountSelf.evKarmaChanged"))
 	)
 
 	(style (width = 100%))
 
-	(block
-		(style (width = 100%))
-
-		(element PlayerNameAndClanTag
-			_isSelf	=			"isSelf"
-			_isAbuser =			"_isAbuser || _abuseStatus == SC.Common.ABUSE_STATUS.SUSPECT"
-			_ctkStatus =		"_ctkStatus || _abuseStatus == SC.Common.ABUSE_STATUS.CONFIRMED"
-			_isPremiumAccount =	"_isPremiumAccount"
-			_isInSameDivision =	"isInSameDivision"
-			_fontSize =			17
-			_playerName =		"pureName"
-			_clanTag =			"clanTag"
-			_clanTagColor =		"clanTagColor"
-			_noClanTagColor =	"_noClanTagColor"
-			_isBot =			"_isBot"
-			_isTextBold =		true
-		)
+	(element PlayerNameAndClanTag
+		_isSelf	=			"isSelf"
+		_isAbuser =			"_isAbuser || _abuseStatus == SC.Common.ABUSE_STATUS.SUSPECT"
+		_ctkStatus =		"_ctkStatus || _abuseStatus == SC.Common.ABUSE_STATUS.CONFIRMED"
+		_isPremiumAccount =	"_isPremiumAccount"
+		_isInSameDivision =	"isInSameDivision"
+		_fontSize =			18
+		_playerName =		"pureName"
+		_clanTag =			"clanTag"
+		_clanTagColor =		"clanTagColor"
+		_noClanTagColor =	"_noClanTagColor"
+		_isBot =			"_isBot"
+		_isTextBold =		true
 	)
-
-	
 	(hblock
-		(bind visible "_isWithKarma")
-
-		(name = 'karma_account_progress_item')
-
+		(bind visible "isWithRank || ratingLeague != RATING_LEAGUE_NAME_NONE || _isWithKarma")
 		(style
-			(marginTop = 10px)
-			(backgroundColor= 0x01000000)
-			(hitTest = false)
+			(width = 100%)
+			(height = 15px)
+			(align = "middle")
+			(marginTop = "M")
+			(hgap = "SXS")
+		)
+		(hblock
+			(style
+				(hitTest = false)
+				(hgap = "XS")
+			)
+			
+			(block
+			 (bind visible "isWithRank")
+
+				(style
+					(height = 100%)
+					(align = "middle")
+					(marginLeft = -3px)
+				)
+
+				(controller $Instance renderer='IconRankSmall'
+					(bind enabled "isWithRank")
+					(args
+						_league = "league"
+						_rank = "rank"
+					)
+				)
+			)
+
+			
+			(block
+				(bind visible "ratingLeague != RATING_LEAGUE_NAME_NONE")
+
+				(style
+					(height = 100%)
+					(align = "middle")
+					(marginLeft = -3px)
+				)
+
+				(controller $Instance renderer='RatingIconSmall'
+					(bind enabled "ratingLeague != RATING_LEAGUE_NAME_NONE")
+					(args
+						_rating = "rating"
+						_leagueName = "ratingLeague"
+					)
+				)
+			)
 		)
 
-		(tf
-			(class $TextDefaultNM)
-			(style (marginRight = "XS") (alpha = "TC"))
+		
+		(hblock
+			(bind visible "_isWithKarma")
 
-			(text = 'IDS_KARMA_COLON')
+			(name = 'karma_account_progress_item')
+			(style (backgroundColor = "NO_COLOR"))
+
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(marginRight = "XS")
+					(alpha = "TC")
+				)
+
+				(text = 'IDS_KARMA_COLON')
+			)
+			(tf
+				(class $TextDefaultNM)
+				(style (alpha = "TC"))
+				(bind text "formatSeparator(karma)")
+			)
+
+			(controller $Tooltip
+				(renderer = 'KarmaAccountTooltip')
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
 		)
-		(tf
-			(class $TextDefaultNM)
-			(style (alpha = "TC"))
-			(bind text "formatSeparator(karma)")
-		)
-	)
-
-	(tf
-		(bind visible "isWithRank")
-
-		(class $TextDefaultNM)
-		(style
-			(hitTest = false)
-			(marginTop = "S")
-			(alpha = "TC")
-		)
-
-		(bind text "isWithRank ? subst(leagueIDS, [], { _rank: rank }) : ''")
 	)
 )
 
 (def element PlayerNameAndClanTag (	_isSelf:bool=false, _isAbuser:bool=false, _ctkStatus:bool=false, _isPremiumAccount:bool=false,
-									_isInSameDivision:bool=false, _fontSize:number=15, _playerName:str='', _clanTag:str='', _clanTagColor:str='',
+									_isInSameDivision:bool=false, _fontSize:number=16, _playerName:str='', _clanTag:str='', _clanTagColor:str='',
 									_noClanTagColor:bool=false, _isBot:bool=false, _isSuspended:bool=false, _isTextBold:bool=false, _isDead:bool=false)
 	(scope
 		(macro PULL_PLAYER_COLOR
@@ -290,6 +332,7 @@
 
 	
 	(tf
+	    (name = 'playerName')
 		(bind class "_isTextBold ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
 		(style
 			(wordWrap = false)

@@ -1,0 +1,526 @@
+(def css $StrokeLink ()
+	(width = 1px)
+	(height = 1px)
+	(hitTest = false)
+	(backgroundColor = 0xFFFFFFFF)
+	(alpha = 0.7)
+)
+
+(def element ShipInfoWidget ()
+	(scope
+		(var accountResource:dhComponent = "getSingleComponent(CC.accountResource)")
+		(var accountCredits:number = "accountResource.credits ?: 0" (event "accountResource.evChangedCredit"))
+		(var accountGold:number = "accountResource.gold ?: 0" (event "accountResource.evChangedGold"))
+		(var accountFreeXP:number = "accountResource.freeXP ?: 0" (event "accountResource.evChangedFreeXP"))
+
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo")
+		(var isExplored:bool = "upgradableShipInfo.isExplored" (event "upgradableShipInfo.evUpdate"))
+		(var exp:number = "upgradableShipInfo.exp" (event "upgradableShipInfo.evUpdate"))
+		(var expDeficit:number = "upgradableShipInfo.expDeficit" (event "upgradableShipInfo.evUpdate"))
+		(var isDependencyResearched:bool = "upgradableShipInfo.dependencyResearched" (event "upgradableShipInfo.evUpdate"))
+
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var isEventLike:bool = "shipInfo.isEventLike" (event "shipInfo.evUpdate"))
+		(var previousShipId:number =	"shipInfo.previousShipId"	(event "shipInfo.evUpdate"))
+		(var nextShipIds:array =		"shipInfo.nextShipIds"		(event "shipInfo.evUpdate"))
+
+		(var shipGroup:str = "shipInfo.group")
+		(var isNotEventGroup:bool = "shipGroup != SC.Ships.SHIP_GROUPS.EVENT")
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShip:dhComponent = "ownShipEntity.ownShip")
+		(var isOwned:bool = "ownShip != null")
+		(var ownShipExp:number = "ownShip.exp ?: 0" (event "ownShip.evUpdateConfig"))
+
+		(var isRented:bool = "toBool(ownShip.timeRent)" (event "ownShip.evUpdateDockState"))
+		(var canBuy:bool = "shipEntity.ship.canBuy" (event "shipEntity.ship.evUpdate"))
+		(var isPurchasable:bool = "(!isOwned || isRented) && canBuy")
+
+		(var shipUniqueFeatures:dhComponent = "getSingleComponent(CC.shipUniqueFeatures)")
+		(var featuresList:array = "shipUniqueFeatures.featuresList ?: []" (event "shipUniqueFeatures.evChanged"))
+		(var isSpecialPointsVisible:bool = "featuresList.length > 0")
+
+		(struct upgradesRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.UPGRADES"))
+
+		
+		(var superShipFeatureEntity:dhEntity = "getSingleEntity(CC.superShipFeature)")
+		(var isUnlockedSuperShipFeature:bool = "superShipFeatureEntity.superShipFeature.isUnlocked" (event "superShipFeatureEntity.superShipFeature.evUpdate"))
+		(var isSuperShip:bool = "shipInfo.level >= SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var isResearchSuperShipInfoVisible:bool = "!isOwned && !isUnlockedSuperShipFeature && isSuperShip")
+		
+
+		
+		(var isEarlyAccess:bool = "shipGroup == SC.Ships.SHIP_GROUPS.EARLY_ACCESS")
+		(var isModulesShipManagementContainerVisible:bool = "isPurchasable && !isResearchSuperShipInfoVisible && !isEarlyAccess")
+		
+
+
+		(struct freeXpShipTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP"))
+		(struct freeXpFinalTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_FINAL"))
+		(struct freeXpShipFinalRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_FINAL_REPEAT"))
+
+		(var newTipId:number = "freeXpShipTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP :
+								freeXpFinalTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_FINAL :
+								freeXpShipFinalRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_FINAL_REPEAT
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE ")
+	)
+
+	(block
+		(style (height = 60px))
+
+		(controller $Instance renderer='ShipShortNavigationElement'
+			(bind enabled "toBool(previousShipId)")
+			(args
+				_shipId = "previousShipId"
+				_isPrevShip = true
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(marginTop = "S")
+			(marginLeft = 6px)
+		)
+		
+		(controller $Tooltip
+			(renderer = 'ShipExtendedTooltip')
+			(args
+				_shipId = "viewedShipId"
+			)
+			(macro DEFAULT_TOOLTIP_HORIZONTAL_BEHAVIOUR)
+		)
+
+		(element ShipLineItemNM
+			_shipId = "viewedShipId"
+			_fontClass = '$TextDefaultBold28NM'
+			_iconSize = 39
+		)
+	)
+
+	(block
+		
+		(block
+			(bind visible "nextShipIds.length > 0")
+			(class $StrokeLink)
+			(style
+				(height = 100%)
+				(position = "absolute")
+				(top = 12px)
+				(left = 20px)
+			)
+		)
+
+		(block
+			(style
+				(marginTop = "SXS")
+				(marginBottom = "SXS")
+				(marginLeft = 44px)
+			)
+	
+			(block
+				(style (paddingTop = "S"))
+
+				
+				(block
+					(controller $Instance renderer='ComplexityLevel'
+						(bind enabled "isNotEventGroup")
+						(args
+							_complexityLevel = "shipInfo.currentComplexityLevel"
+							_maxComplexityLevel = "shipInfo.maxComplexityLevel"
+							_complexityType = "COMPLEXITY_TYPE.SHIP"
+							_size = "SIZE.MEDIUM"
+							_alpha = "TA"
+						)
+					)
+				)
+
+				
+				(block
+					(bind visible "isOwned")
+
+					(style (marginTop = "SXS"))
+
+					(controller $Instance renderer='PriceTagWithLabel'
+						(bind enabled "isOwned")
+						(args
+							_label =		'IDS_SHIP_EXPERIENCE_COLON'
+							_size =			"SIZE.MEDIUM"
+							_priceInfo =	"{finalPrice: ownShipExp, currency: SC.Common.CURRENCIES.XP, id: 'shipExp'}"
+						)
+					)
+				)
+
+				(block
+					(style
+						(width = 100%)
+						(bind paddingTop "isSpecialPointsVisible ? M : 0px")
+						(alpha = "upgradesRoute.isActive ? 1 : 0")
+						(ubScaleY = "upgradesRoute.isActive ? 1 : 0")
+					)
+
+					(controller $Animation
+						(bindcall play
+							duration = 0.15
+							to = "upgradesRoute.isActive ? { alpha:1, ubScaleY: 1 } : { alpha:0, ubScaleY: 0 }"
+							easing = "Easing.quad_out"
+							action = "kill"
+							watch = false
+							(bind trigger "upgradesRoute.isActive")
+						)
+					)
+
+					(controller $Instance renderer='ShipSpecialPointsLayout'
+						(bind enabled "isSpecialPointsVisible")
+					)
+				)
+	
+				(hblock
+					(style
+						(marginTop = "M")
+						(hgap = "SXS")
+					)
+
+					
+					(element DefaultButton
+						_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_size = "SIZE.MEDIUM"
+						_width = 136px
+						_label = 'IDS_ARMOUR_SCHEME'
+						_methods = "[	{	type: 'inputMapping.onAction',
+											name: 'navigateTo',
+											args: { route: SC.Ui_windows.ROUTE.SHIP_PREVIEW }
+										},
+										{	type: 'inputMapping.onAction',
+											name: 'selectShip',
+											args: { shipId: viewedShipId }
+										}]"
+					)
+
+					
+					(block
+						(bind visible "isNotEventGroup")
+
+						(element DefaultButton
+							_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+							_size = "SIZE.MEDIUM"
+							_width = 136px
+							_label = 'IDS_SHIP_BRANCHES_FEATURE'
+							_methods = "[	{	type: 'inputMapping.onRequest',
+												name: 'showModalShipsBranchesFeatures',
+												args: { _branchId: shipInfo.branchId, _shipId: viewedShipId }}]"
+						)
+					)
+				)
+			)
+		)
+	)
+
+	(hblock
+		(style
+			(hgap = "SXS")
+			(paddingTop = 20)
+		)
+
+		(controller $Repeat renderer='ShipShortNavigationElement'
+			(bind count "nextShipIds.length")
+			(args
+				_shipId = "nextShipIds[$index]"
+			)
+		)
+
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "newTipId")
+			(args
+				_tipId =				"newTipId"
+				_tipPositioning =		"TIP_POSITION_BOTTOM"
+				_offsetY =				"XS"
+				_screenOffsetLeft =		"M"
+				_noPointer =			true
+				_hasNextButton =		"freeXpShipTip.isActive"
+				_hasFinishButton =		"freeXpFinalTip.isActive || freeXpShipFinalRepeatTip.isActive"
+				_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
+			)
+		)
+	)
+)
+
+(def element ShipShortNavigationElement (_shipId:number, _isPrevShip:bool=false)
+	(scope
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo")
+		
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _shipId)")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var isDependencyResearched:bool = "upgradableShipInfo.dependencyResearched" (event "upgradableShipInfo.evUpdate"))
+		(var isAvailable:bool = "isDependencyResearched || shipInfo.group == SC.Ships.SHIP_GROUPS.EARLY_ACCESS")
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(var backgroundColorTransform:dict = "	mouseDown	?	BUTTON_MOUSE_STATE_CT.SECONDARY.DOWN :
+												rollOver	?	BUTTON_MOUSE_STATE_CT.SECONDARY.OVER
+															:	CT_NONE")
+
+		(var contentAlpha:number = "mouseDown	? TS :
+									rollOver	? 1.1
+												: TC")
+	)
+
+	(block
+		(style (height = 36px))
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+			_colorTransform = "backgroundColorTransform"
+			_duration = "0.12"
+		)
+
+		(controller $Tooltip
+			(renderer = 'ShipExtendedTooltip')
+			(args
+				_shipId = "_shipId"
+				_hasShipImage = true
+				_isCompare = true
+			)
+			(macro DEFAULT_TOOLTIP_HORIZONTAL_BEHAVIOUR)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/buttons/backgrounds/secondary.png')
+				(scale9grid = 10)
+			)
+		)
+
+		(block
+			(style
+				(marginLeft = "SXS")
+				(paddingRight = "SXS")
+				(marginTop = "SXS")
+				(alpha = "contentAlpha")
+			)
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger = "contentAlpha"
+				_alpha = "contentAlpha"
+			)
+
+			(element ShipLineItemNM
+				_shipId = "_shipId"
+				_showName = false
+			)
+		)
+
+		(macro MOUSE_HANDLER
+			_methods = "[	{ type: 'inputMapping.onAction',		name: 'selectShip',					args: { shipId: _shipId } },
+							{ type: 'direct.action',				name: 'direct.scrollToShipPreview',	args: {}}]"
+			_soundSet = "'button_ship'"
+		)
+	)
+
+	(block
+		(bind visible "_isPrevShip")
+		(macro MODULES_ALPHA_STATE "isDependencyResearched")
+		(class $StrokeLink)
+		(style
+			(marginTop = "S")
+			(marginLeft = 20px)
+			(height = 16px)
+		)
+	)
+)
+
+(def element ShipFeatureTooltip (_feature:number, _isOwn:bool=false, _featureName:str='', _imageUrl:str='', _rentUntil:number=0)
+	(scope
+		(var featuresEntity:dhEntity = "getSingleEntity(CC.shipUniqueFeatures)")
+		(var expCollectingShip:number = "featuresEntity.shipUniqueFeatures.expCollectingShipID ?: 0" (event "featuresEntity.shipUniqueFeatures.evChanged"))
+		(var battleRestrictions:array = "featuresEntity.shipUniqueFeatures.availableBattles ?: []" (event "featuresEntity.shipUniqueFeatures.evChanged"))
+
+		(var headerText:str = "'IDS_SHIP_FEATURES_' + _featureName")
+		(var isRent:bool = "_feature == SC.Ships.SHIP_UNIQUE_FEATURES.RENT_SHIP")
+
+		(var showBattles:bool = "battleRestrictions.length && isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.SHOW_AVAILABLE_BATTLES)")
+		(var subheaderText:str = "	isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.SPECIAL_FEATURES)	? 'IDS_SHIP_FEATURES_SUBHEADER_SPECIAL' :
+									isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.DISADVANTAGE)		? 'IDS_SHIP_FEATURES_SUBHEADER_DISADVANTAGE'
+																									: 'IDS_SHIP_FEATURES_SUBHEADER_ADVANTAGE'")
+		(var showExpConversion:bool = "isIn(_feature, SC.Ships.SHIP_UNIQUE_FEATURES.SHOW_EXP_CONVERSION)")
+	)
+	(style (width = 300px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl =			"_imageUrl"
+			_imageWidth = 		60
+			_imageHeight = 		60
+			_headerText =		"headerText"
+			_iconAmount =		'1'
+			_subheaderText =	"subheaderText"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isOwn"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isOwn")
+				(args
+					_text = 'IDS_ACTIVE'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRent"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemTimeLeftStatusLine'
+				(bind enabled "isRent")
+				(args
+					_timeLeftTimeStamp = "_rentUntil"
+					_substTextIDS = 'IDS_RENT_STATUS_TIME_LEFT'
+					_zeroTimeTextIDS = 'IDS_SHIP_RENT_UNTIL_ZERO'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!showBattles"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHtmlDescriptionText'
+				(bind enabled "!showBattles")
+				(args
+					_descriptionText = "headerText + '_DESCRIPTION'"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "showBattles"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "showBattles")
+				(args
+					_descriptionText = 'IDS_SHIP_FEATURES_BATTLE_RESTRICTIONS'
+				)
+			)
+		)
+
+		(hblock
+			(bind visible "showBattles")
+			(style (width = 100%) (marginTop = "SXS"))
+			(controller $Repeat renderer='BattleTypeRestriction'
+				(bind count "battleRestrictions.length")
+				(args
+					_battleType = "battleRestrictions[$index]"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "showExpConversion"))
+		)
+
+		(block
+			(bind visible "showExpConversion")
+			(style (width = 100%) (marginBottom = "XS"))
+			(tf
+				(class $TextDefaultNM)
+				(style (width = 100%) (alpha = "TA"))
+				(text = 'IDS_SHIP_FEATURES_EXP_COLLECTING')
+			)
+			(block
+				(style (width = 100%) (marginTop = "SXS"))
+				(element ShipLineItemNM
+					_shipId = "expCollectingShip"
+					_withFlag = true
+				)
+			)
+
+		)
+	)
+)
+
+(def element BattleTypeRestriction (_battleType:str)
+	(style
+		(marginRight = 6px)
+		(marginTop = 1px)
+		(width = 23px)
+		(height = 23px)
+		(bind backgroundImage "'url:../service_kit/battle_types/' + _battleType + '_tiny.png'")
+		(backgroundSize = "cover")
+	)
+)
+
+(def element ShipSpecialPointsLayout ()
+	(scope
+		(var featuresEntity:dhEntity = "getSingleEntity(CC.shipUniqueFeatures)")
+		(var shipUniqueFeatures:dhComponent = "featuresEntity.shipUniqueFeatures")
+		(var featuresList:array = "shipUniqueFeatures.featuresList ?: []" (event "shipUniqueFeatures.evChanged"))
+	)
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+		(hgap = "M")
+	)
+
+	(controller $Repeat renderer='ShipFeatureIcon'
+		(bind count "featuresList.length")
+		(args
+			_feature = "featuresList[$index]"
+		)
+	)
+)
+
+(def element ShipFeatureIcon (_feature:number)
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipInfo:dhComponent = "ownShipEntity.ownShip")
+		(var isOwned:bool = "ownShipEntity != null")
+		
+		(var rentUntil:number = "ownShipInfo.timeRent ?: 0" (event "ownShipInfo.evUpdateDockState"))
+		(var featureName:str = "SC.Ships.SHIP_UNIQUE_FEATURES.VALUE_TO_NAME[_feature]")
+		(var disabledIconStateText:str = "isOwned ? '' : '_disabled'")
+		(var imageURL:str = "toLower('url:../ships_tree_features/main_features/class_prem_' + featureName + '_small' + disabledIconStateText + '.png')")
+	)
+	(style
+		(height = 40px)
+		(width = 40px)
+		(bind backgroundImage "imageURL")
+		(backgroundSize = "cover")
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipFeatureTooltip')
+		(args
+			_feature = "_feature"
+			_isOwn = "isOwned"
+			_featureName = "featureName"
+			_imageUrl = "imageURL"
+			_rentUntil = "rentUntil"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)

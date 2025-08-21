@@ -72,6 +72,7 @@
 
 (def element ShipComponentListItem (_entityId:number = 0)
 	(scope
+		(event evMenuItemClicked)
 		(var exchangeableShipEntity:dhEntity = "getEntity(_entityId)")
 		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, exchangeableShipEntity.exchangeableShip.id)")
 		(var shipShortName:str = "shipEntity.ship.shortName ?: ''" (event "shipEntity.ship.evUpdate"))
@@ -122,6 +123,112 @@
 				_shipId = "shipId"
 			)
 			(macro DEFAULT_MENU_BEHAVIOUR "1")
+			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+		)
+	)
+)
+
+(def element ShipShardsWidget (_shipId:number)
+	(scope
+		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO("_shipId"))
+		(var shipMaterialsDelta:number = "SHIP_SHARDS.SHIP_CRAFTING_COST - shipMaterialInfo.count")
+
+		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
+		(var isRepairDockShipLoading:bool = "repairDockDataEntity.repairDockData.isRepairDockShipLoading" (event "repairDockDataEntity.repairDockData.evIsRepairDockShipLoadingChanged"))
+
+		(struct shipShardsShipRepairTTXTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_SHIP_REPAIR_TTX"))
+		(struct shipShardsEnoughShipComponentsTTXTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_ENOUGH_SHIP_COMPONENTS_TTX"))
+		(struct shipShardsNotEnoughShipComponentsTTXTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_NOT_ENOUGH_SHIP_COMPONENTS_TTX"))
+
+		(var tipId:number = "	shipShardsShipRepairTTXTip.isActive					? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_SHIP_REPAIR_TTX :
+								shipShardsEnoughShipComponentsTTXTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_ENOUGH_SHIP_COMPONENTS_TTX :
+								shipShardsNotEnoughShipComponentsTTXTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_NOT_ENOUGH_SHIP_COMPONENTS_TTX
+																					: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isAvailableForRepairGuidingTipVisible:bool = "isIn(tipId, [ SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_SHIP_REPAIR_TTX, SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_ENOUGH_SHIP_COMPONENTS_TTX ])")
+	)
+	(class $TTXWidgetContainer)
+
+	(element DockWidgetBackground
+		_roundSize = "SIZE.MEDIUM"
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(padding = "M")
+		)
+		(element PriceTagWithLabel
+			_label = "subst('IDS_SUBST_SHIP_SHARDS_TTX_REPAIR_SHIPMATERIAL_LEVEL',[], {_shipLevel: shipLevelsToRoman(shipMaterialInfo.shipLevel)})"
+			_priceInfo = "{finalPrice: SHIP_SHARDS.SHIP_CRAFTING_COST, currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
+			_width = 100%
+			_size = "SIZE.MEDIUM"
+		)
+
+		(block
+			(macro DEFAULT_CONTROL_MARKER_ANIMATION "!shipMaterialInfo.isCraftWithMaterialsAvailable")
+			(style
+				(width = 100%)
+				(marginTop = "SXS")
+			)
+			(element PriceDeficit
+				_isSingleFullLine = true
+				_hideIcon = true
+				_priceInfo = "{ currency: SC.Common.CURRENCIES.SHIPMATERIAL}"
+				_deficit = "shipMaterialsDelta"
+				_size = "SIZE.MEDIUM"
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "SXS")
+				(marginBottom = "S")
+			)
+			(element DefaultButton
+				_name = 'repair_button'
+				_width = 100%
+				_focusIndex = 0
+				_defaultFocused = true
+				_label = 'IDS_SHIP_SHARDS_TTX_BUTTON_REPAIR'
+				_enabled = "!isRepairDockShipLoading && shipMaterialInfo.isCraftWithMaterialsAvailable"
+				_methods = "[{ type: 'inputMapping.onRequest', name: 'openShipRepairModal', args: { shipId: _shipId }}]"
+			)
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "isAvailableForRepairGuidingTipVisible && shipMaterialInfo.isCraftWithMaterialsAvailable")
+				(args
+					_tipId =			"tipId"
+					_tipPositioning =	"TIP_POSITION_LEFT"
+					_offsetX =			"XS"
+					_pointerOffset =	162
+					_modalWindowName =	"SC.Ui_windows.MODAL.REPAIR_DOCK"
+				)
+			)
+		)
+
+		(element DefaultButton
+			_name = 'features_button'
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_width = 100%
+			_focusIndex = 2
+			_label = 'IDS_SHIP_SHARDS_TTX_BUTTON_FEATURES'
+			_methods = "[	{	type: 'inputMapping.onRequest',
+								name: 'showModalShipsBranchesFeatures',
+								args: { _branchId: shipMaterialInfo.ship.branchId,
+										_shipId: _shipId }}]"
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "tipId == SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_NOT_ENOUGH_SHIP_COMPONENTS_TTX")
+		(args
+			_tipId =			"tipId"
+			_tipPositioning =	"TIP_POSITION_LEFT"
+			_offsetX =			20
+			_noPointer =		true
+			_modalWindowName =	"SC.Ui_windows.MODAL.REPAIR_DOCK"
 		)
 	)
 )

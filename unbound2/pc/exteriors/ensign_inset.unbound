@@ -1,0 +1,293 @@
+(def element EnsignDockMainInset ()
+	(scope
+		(macro STAGE_SIZE)
+
+		(macro CAROUSEL_HEIGHT_SCOPE)
+		(macro PULL_SHIP_ID)
+		
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+		(var shipComponent:dhComponent = "shipEntity.ship")
+
+		(var shipTagsMask:number = "shipComponent.tagsMask")
+
+		(var isShipReadyForBattle:bool = 	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
+		(var isNeedRepair:bool = 			"ownShipComponent.isNeedRepair" 										(event "ownShipComponent.evUpdateDockState"))
+
+		(var selectedBattleTypeEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
+		(var battleUIInfoComponent:dhComponent = "selectedBattleTypeEntity.battleUIInfo")
+		(var scenariosTagsMask:number = "battleUIInfoComponent.tagsMaskForUI")
+
+		
+		(var ensignsCollection:gfx = "$datahub.getCollection(CC.ensign)")
+		(var activeEnsigns:gfx = "ensignsCollection.getChildByPath('activeEnsigns')" (event "ensignsCollection.evChildAdded") (event "ensignsCollection.evChildRemoved"))
+		(var activeEnsignsItems:array = "activeEnsigns.items" (event "activeEnsigns.evAdded") (event "activeEnsigns.evRemoved"))
+
+		(var installedEnsigns:gfx = "ensignsCollection.getChildByPath('installed')" (event "ensignsCollection.evChildAdded") (event "ensignsCollection.evChildRemoved"))
+		(var installedEnsignsItems:array = "installedEnsigns.items" (event "installedEnsigns.evAdded") (event "installedEnsigns.evRemoved"))
+		(var ensignLimit:number = "shipEntity.ownShip.ensignLimit" (event "shipEntity.ownShip.evUpdateConfig"))
+
+		(var navalFlags:array = "shipComponent.availableNavalFlags" (event "shipComponent.evCurrentFlagChanged"))
+		(var isNavalFlagsGroupVisible:bool = "navalFlags.length > 1")
+
+		(var hideExteriorsByScenario:bool =		"toBool(scenariosTagsMask & (1 << SC.Common.SCENARIO_TAGS_MASK.HIDE_EXTERIORS))")
+		(var hideExteriorsByShipTagMask:bool =	"toBool(shipTagsMask & (1 << SC.Ships.SHIP_TAG.HIDE_EXTERIORS))")
+
+		(var playerShips:dhCollection =			"getCollection(CC.ownShip)")
+		(var isAvailableHideExteriors:bool =	"(hideExteriorsByShipTagMask && playerShips.length > 0 && playerShipId > 0)
+												 || hideExteriorsByScenario || isNeedRepair")
+
+		(var statusDockTab:str = "	playerShips.length == 0		? 'IDS_NO_SHIPS' :
+									hideExteriorsByScenario		? 'IDS_EXTERIOR_UNAVAILABLE_BY_SCENARIO' :
+									isNeedRepair				? 'IDS_EXTERIOR_UNAVAILABLE_BY_MAINTENANCE' :
+									isAvailableHideExteriors	? 'IDS_EXTERIOR_UNAVAILABLE'
+																: null")
+
+		(var isShipLock:bool = "isShipReadyForBattle || isShipInBalancer || isNeedRepair")
+
+		(var maxScrollHeight:number = 0)
+		(var navalFlagOffset:number = "isNavalFlagsGroupVisible ? 110px : 0px")
+		(var installedEnsignOffset:number = "activeEnsignsItems && ensignLimit > 1 ? EXTERIOR_SMALL_CONTAINER_HEIGHT : 0px")
+		(var currentScrollOffset:number = "EXTERIOR_CONTENT_CAROUSEL_OFFSET + navalFlagOffset + installedEnsignOffset")
+	)
+
+	(class $Fullsize)
+	(style (bind paddingBottom "carouselAreaHeight"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['exterior', 'main']" on='addedToStage')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'ensigns']" on='addedToStage')
+
+	(block
+		(style
+			(width = "EXTERIOR_CONTENT_WIDTH")
+			(height = 100%)
+			(paddingTop = "{ 720: SXS, 900: L }")
+			(marginLeft = "{ 1280: SXS, 1920: L }")
+		)
+
+		(block
+			(bind visible "isAvailableHideExteriors")
+
+			(style
+				(position = "absolute")
+				(marginTop = "XL")
+				(alpha = "isAvailableHideExteriors ? 1 : 0")
+				(visualOffsetY = " isAvailableHideExteriors ? 0px : 10px")
+			)
+
+			(controller $Animation
+				(bindcall play
+					from =		"{ alpha: 0, visualOffsetY: 10px }"
+					to =		"{ alpha: 1, visualOffsetY: 0px }"
+					duration =	0.15
+					(bind trigger "isAvailableHideExteriors")
+					(bind enabled "isAvailableHideExteriors")
+				)
+			)
+
+			(element DockTabLockedPlug _text = "statusDockTab")
+		)
+
+		(block
+			(bind visible "!isAvailableHideExteriors")
+			(class $Fullsize)
+			(bind maxScrollHeight "$globalLayoutBounds[3] - currentScrollOffset" (event "$evLayoutBoundsChanged"))
+
+			(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
+
+			(block
+				(style (width = 100%))
+
+				(block
+					(class $FullsizeAbsolute)
+
+					(element BlurMapRoundedWithLayerContrastPanel)
+
+					(block
+						(class $FullsizeAbsolute)
+						(style
+							(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+							(borderRadius = "XS")
+							(alpha = 0.2)
+						)
+					)
+				)
+
+				(scrollArea
+					(style
+						(width = 100%)
+						(bind maxHeight "maxScrollHeight")
+						(backgroundColor = "NO_COLOR")
+					)
+					
+					(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+						_singleStep = "150"
+						_wheelScrollAcceleration = "0.8"
+						_isContrastScrollBar = "true"
+						_hasVerticalBorderOffset = "true"
+						_hasHorizontalBorderOffset = "true"
+					)
+
+					(content
+						(style
+							(width = 100%)
+							(paddingTop = "MS")
+						)
+
+						(element EnsignsPage)
+					)
+					(bindcall scrollToBegin animated=false on='addedToStage')
+				)
+
+				(block
+					(style (width = 100%))
+
+					(controller $Instance renderer='NavalGroup'
+						(bind enabled "isNavalFlagsGroupVisible")
+					)
+				)
+				(block
+					(bind visible "activeEnsignsItems && ensignLimit > 1")
+					(style
+						(width = 100%)
+						(height = "EXTERIOR_SMALL_CONTAINER_HEIGHT")
+						(flow = "horizontal")
+						(align = "right|middle")
+						(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+						(borderRadiusBottomLeft = "XS")
+						(borderRadiusBottomRight = "XS")
+						(paddingRight = "MS")
+					)
+					(tf
+						(class $TextDefaultNM)
+						(style (alpha = "TC"))
+						(bind text "subst('IDS_INSTALLED_ENSIGNS', [], {_installedEnsign: installedEnsignsItems.length, _ensignLimit: ensignLimit})")
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element EnsignsPage ()
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(var resourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
+		(var operationsAccountLocked:bool = "resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+
+		(var isShipReadyForBattle:bool = 	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" 	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
+		(var isNeedRepair:bool = 			"ownShipComponent.isNeedRepair" 										(event "ownShipComponent.evUpdateDockState"))
+
+		(var ensignGroups:array = "[SC.Common.ENSIGN_TYPE.REWARD, SC.Common.ENSIGN_TYPE.HISTORICAL, SC.Common.ENSIGN_TYPE.SPECIAL]")
+
+		(var ensignsCollection:gfx = "$datahub.getCollection(CC.ensign)")
+		(var activeEnsigns:gfx = "ensignsCollection.getChildByPath('activeEnsigns')" (event "ensignsCollection.evChildAdded") (event "ensignsCollection.evChildRemoved"))
+		(var activeEnsignsItems:array = "activeEnsigns.items" (event "activeEnsigns.evAdded") (event "activeEnsigns.evRemoved"))
+
+		(var isShipLock:bool = "operationsAccountLocked || isShipReadyForBattle || isShipInBalancer || isNeedRepair")
+	)
+	(name = 'EnsignsPage')
+	(style (width = 100%))
+
+	(block
+		(bind visible "!activeEnsignsItems.length")
+		(style (paddingBottom = "M") (width = 100%) (align = "center"))
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TA"))
+			(bind text "toUpper(tr('IDS_NO_ENSIGNS_AVAILABLE'))")
+		)
+	)
+
+	(class $ExteriorListHolder)
+	(controller $Repeat renderer='EnsignList'
+		(bind count "ensignGroups.length")
+		(args
+			_ensignCollection = "ensignsCollection"
+			_categoryEnsign = "ensignGroups[$index]"
+			_isActionsAvailable = "!isShipLock"
+		)
+	)
+)
+
+(def element NavalGroup ()
+	(scope
+		(macro PULL_SHIP_ID)
+		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+		(var navalFlags:array = "shipInfo.shipComponent.availableNavalFlags" (event "shipInfo.shipComponent.evCurrentFlagChanged"))
+	)
+	(style (width = 100%))
+
+	(hblock 
+		(style
+			(width = 100%)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+			(borderRadiusBottomLeft = "XS")
+			(borderRadiusBottomRight = "XS")
+			(paddingLeft = "L")
+			(paddingTop = "S")
+			(paddingBottom = "S")
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TA"))
+			(text = 'IDS_NAVAL_FLAGS')
+		)
+	)
+
+	(hblock
+		(style
+			(width = 100%)
+			(height = 85px)
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+		)
+
+		(controller $Repeat renderer='NavalFlagItem'
+			(bind count "navalFlags.length")
+			(args
+				_navalFlagName = "navalFlags[$index]"
+			)
+		)
+	)
+)
+
+(def element EnsignList (_ensignCollection:gfx, _categoryEnsign:number, _isActionsAvailable:bool)
+	(scope
+		(var ensignInGroup:gfx = "_ensignCollection.getChildByPath('activeEnsigns.byEnsignType.' + toString(_categoryEnsign))" (event "_ensignCollection.evChildAdded") (event "_ensignCollection.evChildRemoved"))
+		(var ensignInGroupItems:array = "ensignInGroup.items" (event "ensignInGroup.evAdded") (event "ensignInGroup.evRemoved"))
+	)
+	(style (width = 100%))
+
+	(tf
+		(bind visible "ensignInGroupItems.length")
+		(class $ExteriorCategoryLabelMargin)
+		(class $TextDefaultBold18NM)
+		(style (alpha = "TA"))
+
+		(bind text "tr('IDS_ENSIGN_GROUP_' + toString(_categoryEnsign))")
+	)
+	(htile
+		(class $ExteriorItemsGroup)
+		(controller $DynamicRepeat renderer='EnsignItem'
+			(bind count "ensignInGroupItems.length")
+			(args
+				_ensignEntity = "ensignInGroupItems[$index]"
+				_isActionsAvailable = "_isActionsAvailable"
+			)
+
+			(itemWidth = 84px)
+			(itemHeight = 84px)
+			(itemOffset = 168px)
+			(sharedCache = true)
+		)
+	)
+)
+

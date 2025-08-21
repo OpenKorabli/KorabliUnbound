@@ -1,3 +1,118 @@
+(def constant EVENT_MARKER_TYPE {
+	NEW: 'new',
+	ACTION: 'action',
+	REWARD: 'reward',
+	COUNTER: 'counter',
+	DISCOUNT: 'discount'
+})
+
+(def constant CT_BANNER_ROLL_OVER { redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+									redOffset: 20,		greenOffset: 20,	blueOffset: 20,		alphaOffset: 0
+})
+
+(def constant CT_BANNER_DOWN {	redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
+								redOffset: -20,		greenOffset: -20,	blueOffset: -20,	alphaOffset: 0
+})
+
+(def element EventBannerBackground (_entityId:number = 0, _rollOver:bool = false, _mouseDown:bool=false)
+	(scope
+		(struct tileLayout = EVENT_BANNER_TILE(_entityId = "_entityId"))
+
+		(var hasNoImage:bool = "	!toBool(tileLayout.tileId) ||
+									tileLayout.tileSize == SC.Ui_common.TILE_SIZE.S ||
+									tileLayout.tileId == SC.Common.TILE_CONTENT.ACCOUNT_LEVELING")
+	)
+	(class $FullsizeAbsolute)
+
+	(controller $Instance renderer='EventBannerBackgroundImage'
+		(bind enabled "!hasNoImage")
+		(args
+			_entityId = "_entityId"
+			_rollOver = "_rollOver"
+			_mouseDown = "_mouseDown"
+		)
+	)
+	(controller $Instance renderer='EventBannerBackgroundNoImage'
+		(bind enabled "hasNoImage")
+		(args
+			_rollOver = "_rollOver"
+			_mouseDown = "_mouseDown"
+		)
+	)
+)
+
+(def element EventBannerBackgroundImage (_entityId:number = 0, _rollOver:bool = false, _mouseDown:bool=false)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+
+		(struct tileLayout = EVENT_BANNER_TILE(_entityId = "_entityId"))
+
+		(var tileContentEntity:dhEntity = "getPrimaryEntity(CC.tileContent, tileLayout.tileId)")
+		(var tileContent:dhComponent = "tileContentEntity.tileContent")
+		(var externalImageKey:str = "tileLayout.tileSize == SC.Ui_common.TILE_SIZE.M	? tileContent.smallImageUrl
+																						: tileContent.bigImageUrl" (event "tileContent.evChanged"))
+
+		(var externalImageEntity:dhEntity = "getPrimaryEntity(CC.externalImage, externalImageKey)")
+		(var externalImageComponent:dhComponent = "externalImageEntity.externalImage")
+		(var isImageLoaded:bool = "externalImageComponent.isLoaded" (event "externalImageComponent.evIsLoadedChanged"))
+		(var externalImageUrl:str = "isImageLoaded ? 'img://embedded:byteImage?url=' + externalImageComponent.url : ''")
+
+		(var defaultImageUrl:str = "'url:../events/banners/' + tileLayout.tileId + '_' + SC.Ui_common.TILE_SIZE.VALUE_TO_NAME[tileLayout.tileSize] + '.png'")
+
+		(var bgImage:str = "externalImageUrl ?: defaultImageUrl")
+
+		(var colorTransform:dict = "	_rollOver && !_mouseDown	? CT_BANNER_ROLL_OVER :
+										_mouseDown					? CT_BANNER_DOWN
+																	: CT_NONE")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(class $FullsizeAbsolute)
+
+	(element DockWidgetBackground
+		_roundSize = "SIZE.MEDIUM"
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "bgImage")
+			(backgroundSize = "cover")
+			(borderRadius = "S")
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../events/banners/banner_blackout.png')
+			(backgroundSize = "fill")
+			(borderRadius = "S")
+		)
+	)
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+		_colorTransform = "colorTransform"
+	)
+)
+
+(def element EventBannerBackgroundNoImage (_rollOver:bool = false, _mouseDown:bool=false)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var bgState:number = " _mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								_rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(class $FullsizeAbsolute)
+
+	(element DockWidgetBackground
+		_roundSize = "SIZE.MEDIUM"
+	)
+	(element DockTTXWidgetMenuItemBackground
+		_state = "bgState"
+		_borderRadius = "S"
+	)
+)
+
 (def element BannerCountTask (_count:number)
 	(scope
 		(var isCompactView:bool = "_count > 999")
@@ -9,7 +124,7 @@
 	)
 
 	(tf
-		(bind class "isCompactView ? '$TextDefaultBoldNM' : '$TextDefaultBold17NM'")
+		(bind class "isCompactView ? '$TextDefaultBoldNM' : '$TextDefaultBold18NM'")
 		(style (elideMode = true))
 		(bind text "_count ? formatSeparator(_count) : ''")
 	)
@@ -24,15 +139,20 @@
 
 	(bind name "'banner_item_title_' + toUpper(tr(_title))")
 
-	(style (width = 100%) (flow = "horizontal"))
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+	)
 
 	(tf
-		(class $TextDefaultBold17NM)
+		(class $TextDefaultBold18NM)
 		(style
-			(maxWidth = 188px) (leading = -2)
-			(bind textColor "_isStateOwn ? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(maxWidth = 188px)
+			(leading = -2)
 			(bind alpha "_isStateOwn ? 1 : TA")
 			(bind multiline "_isMultiline")
+			(bind textColor "_isStateOwn	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+											: SC.Ui_styles.SERVICE_COLORS.WHITE")
 		)
 		(bind text "toUpper(tr(_title))")
 	)
@@ -51,8 +171,10 @@
 	(style (width = 100%))
 	(tf
 		(class $TextDefaultNM)
-		(style 
-			(multiline = false) (leading = -2) (width = 100%)
+		(style
+			(multiline = false)
+			(leading = -2)
+			(width = 100%)
 			(bind alpha "_isStateOwn ? 1 : TC")
 			(bind textColor "_isStateOwn ? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
 		)
@@ -60,53 +182,203 @@
 	)
 )
 
-(def element BannerProgressBar(_progress:number)
-	(style (height = 2px) (width = 100%))
-	
+(def element BannerProgressBarBlock (	_bannerSize:number = "SC.Ui_common.TILE_SIZE.M",
+										_progress:number = 0,
+										_text:str = '',
+										_curValue:number = 0,
+										_maxValue:number = 0)
+	(scope
+		(var isSmallBanner:bool = "_bannerSize == SC.Ui_common.TILE_SIZE.S")
+	)
+	(style (width = 100%))
+
 	(block
-		(class $FullsizeAbsolute)
-		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE") (alpha = 0.4))
+		(style (width = 100%))
+		(controller $Instance renderer='DefaultProgressBar'
+			(bind enabled "!isSmallBanner")
+			(args
+				_width = "isSmallBanner ? 100% : 200px"
+				_height = "isSmallBanner ? 2px : 4px"
+				_progress = "_progress"
+			)
+		)
+		(controller $Instance renderer='RoundedProgressBar'
+			(bind enabled "isSmallBanner")
+			(args
+				_width = "100%"
+				_height = "2px"
+				_progress = "_progress"
+				_borderRadius = "{bottomLeft: XXS, bottomRight: XXS}"
+			)
+		)
 	)
 
 	(block
-		(style
-			(height = 100%)
-			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW")
-			(bind width "_progress 	? toString((_progress > 1 ? 1 : _progress) * 100) + '%'
-									: 0%")
+		(bind visible "!isSmallBanner")
+		(style (marginTop = "XS"))
+		(controller $Instance renderer='BannerProgressBarDescription'
+			(bind enabled "!isSmallBanner")
+			(args
+				_text = "_text"
+				_curValue = "_curValue"
+				_maxValue = "_maxValue"
+			)
 		)
 	)
 )
 
-(def element BannerProgressBarDescription (_text:str, _costAmount:number = 0, _currencyIcon:str = '', _multiline:bool = false)
-	(style (width = 100%))
-	(hblock
-		(bind visible "_text != ''")
-		(style (width = 100%) (gap = "S"))
+(def element BannerProgressBarDescription (_text:str, _curValue:number = 0, _maxValue:number = 0)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+	)
 
-		(tf
-			(class $TextDefaultNM)
-			(style
-				(alpha = "TC") (leading = -4)
-				(multiline = "_multiline")
-				(bind width "_costAmount > 0 ? auto : 100%")
-			)
-			(bind text "_text")
-		)
-		
-		(hblock
-			(bind visible "_costAmount > 0")
-			(style (gap = "XXS"))
-			(tf
-				(class $TextDefaultNM)
-				(bind text "_costAmount > 0 ? formatSeparator(_costAmount) : ''")
-			)
-			(block
-				(style
-					(marginTop = -3px) (width = 16px)
-					(bind backgroundImage "_currencyIcon")
-				)
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TA"))
+		(bind text "_text")
+	)
+
+	(block
+		(controller $Instance renderer = 'DefaultDividedCounter'
+			(bind enabled "toBool(_maxValue)")
+			(args
+				_curValue = "_curValue"
+				_maxValue = "_maxValue"
+				_doNotAlphaOnZeroCurValue = true
+				_curValueTextClass = '$TextDefaultNM'
 			)
 		)
+	)
+)
+
+(def element EventBannerIcon (_icon:str = '', _isAnimated:bool = false, _size:number = "SC.Ui_common.TILE_SIZE.S")
+	(scope
+		(var animationSize:number = "_size == SC.Ui_common.TILE_SIZE.S ? SC.Ui_common.TILE_SIZE.S : SC.Ui_common.TILE_SIZE.M")
+		(var bgAnimation:str = "'url:../animations/spine/event_banners/reward_' + SC.Ui_common.TILE_SIZE.VALUE_TO_NAME[animationSize] + '.skel'")
+	)
+	(block
+		(bind visible "_isAnimated")
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(right = 0)
+			(bottom = 0)
+			(width = 200px)
+			(backgroundSize = "cover")
+			(bind backgroundImage "bgAnimation")
+			(bind height "_size == SC.Ui_common.TILE_SIZE.S	? EVENT_BANNER_HEIGHT.SMALL
+															: EVENT_BANNER_HEIGHT.LARGE")
+		)
+		(controller $Spine
+			(bind enabled "_isAnimated")
+		)
+	)
+	(block
+		(style
+			(width = 32px)
+			(height = 32px)
+			(marginBottom = "S")
+			(marginRight = "S")
+			(bind backgroundImage "_icon")
+		)
+	)
+)
+
+(def element EventBannerTitle (_title:str = '', _textClass:str = '$TextDefaultBold22NM', _isMultiline:bool = false, _isWordWrap:bool = true)
+	(style (width = 100%))
+	(tf
+		(bind class "_textClass")
+		(style
+			(alpha = "TA")
+			(width = 100%)
+			(bind multiline "_isMultiline")
+			(bind wordWrap "_isWordWrap")
+		)
+		(bind text "_title")
+	)
+)
+
+(def element EventBannerCounter (_count:number = 0, _textClass:str = '$TextDefaultBold22NM')
+	(tf
+		(bind class "_textClass")
+		(style (alpha = "TA"))
+		(bind text "_count ? formatSeparator(_count) : ''")
+	)
+)
+
+(def element EventBannerMarkers (	_isActionMarker:bool = false,
+									_isRewardMarker:bool = false,
+									_isNewMarker:bool = false,
+									_isDiscountMarker:bool = false,
+									_text:str = '',
+									_size:number = "SC.Ui_common.TILE_SIZE.M")
+	(style
+		(flow = "horizontal")
+		(gap = "XS")
+		(position = "absolute")
+		(right = "XS")
+		(bind top "_size == SC.Ui_common.TILE_SIZE.S ? -6px : XS")
+	)
+	(block
+		(controller $Instance renderer = 'EventBannerMarker'
+			(bind enabled "_isRewardMarker && _size != SC.Ui_common.TILE_SIZE.S")
+			(args
+				_type = "EVENT_MARKER_TYPE.REWARD"
+			)
+		)
+	)
+	(block
+		(controller $Instance renderer = 'EventBannerMarker'
+			(bind enabled "_isActionMarker && !_isRewardMarker")
+			(args
+				_type = "EVENT_MARKER_TYPE.ACTION"
+				_text = "_text"
+			)
+		)
+	)
+	(block
+		(controller $Instance renderer = 'EventBannerMarker'
+			(bind enabled "_isNewMarker && !(_isRewardMarker || _isActionMarker)")
+		)
+	)
+	(block
+		(controller $Instance renderer = 'EventBannerMarker'
+			(bind enabled "_isDiscountMarker")
+			(args
+				_type = "EVENT_MARKER_TYPE.DISCOUNT"
+			)
+		)
+	)
+)
+
+(def element EventBannerMarker (_type:str = "EVENT_MARKER_TYPE.NEW", _newContentCounter:number = null, _text:str = '')
+	(scope
+		(var isNewMarker:bool = "_type == EVENT_MARKER_TYPE.NEW")
+		(var isActionMarker:bool = "_type == EVENT_MARKER_TYPE.ACTION")
+		(var isRewardMarker:bool = "_type == EVENT_MARKER_TYPE.REWARD")
+		(var isDiscountMarker:bool = "_type == EVENT_MARKER_TYPE.DISCOUNT")
+	)
+	(style
+		(hitTest = false)
+		(padding = [7px, 6px])
+		(bind backgroundColor "	isNewMarker							? 0xFFD20020 :
+								isActionMarker						? SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE :
+								isRewardMarker || isDiscountMarker	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																	: 0xFFD20020")
+		(borderRadius = 6)
+	)
+	(tf
+		(class $TextDefaultBold12NMWithoutShadow)
+		(style
+			(antiAliasType = "ANTI_ALIAS_NAMES.ADVANCED")
+			(bind textColor "isNewMarker	? 0xFFF7E1D9 : 0xFF2D2E2E")
+		)
+		(bind text "	isRewardMarker			? 'IDS_MARKER_REWARD' :
+						isDiscountMarker		? 'IDS_PERCENT' :
+						isNewMarker				? 'IDS_MARKER_NEW' :
+						isActionMarker			? toUpper(tr(_text)) :
+						_newContentCounter == 0	? '1'
+												: toString(_newContentCounter)")
 	)
 )

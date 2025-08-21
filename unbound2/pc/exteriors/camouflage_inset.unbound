@@ -1,0 +1,445 @@
+(def constant EXTERIOR_CONTENT_WIDTH 452px)
+
+(def constant EXTERIOR_CONTENT_CAROUSEL_OFFSET 12px)
+(def constant EXTERIOR_CONTENT_ROUNDED_OFFSET 8px)
+(def constant EXTERIOR_SMALL_CONTAINER_HEIGHT 29px)
+
+(def constant CAMOUFLAGE_CONTENT_OFFSET "EXTERIOR_CONTENT_CAROUSEL_OFFSET + EXTERIOR_SMALL_CONTAINER_HEIGHT")
+
+(def animation KeyframeExteriorAnimShipChanged ()
+	keyframes = "[
+					{ time:0,		to:{ alpha:0, visualOffsetY: 10px }},
+					{ time:0.05,	to:{ alpha:0, visualOffsetY: 10px }},
+					{ time:0.2,		to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_out}
+				]"
+)
+
+(def css $ExteriorListHolder()
+	(paddingLeft = "MS")
+	(paddingRight = "MS")
+)
+
+(def css $ExteriorItemsGroup()
+	(width = 100%)
+	(paddingTop = "-SXS")
+	(paddingBottom = "M")
+	(paddingLeft = "-SXS")
+	(paddingRight = "-SXS")
+)
+
+(def css $ExteriorCategoryLabelMargin()
+	(marginBottom = "M")
+)
+
+(def css $ExteriorItemPadding()
+	(padding = "SXS")
+)
+
+(def css $ExteriorItemSize()
+	(width = 60px)
+	(height = 60px)
+)
+
+(def css $ExteriorItemSizeWithBorder()
+	(width = 64px)
+	(height = 64px)
+)
+
+(def element CamouflageMainInset ()
+	(scope
+		(struct stageSize = STAGE_SIZE())
+
+		(macro CAROUSEL_HEIGHT_SCOPE)
+		(macro PULL_SHIP_ID)
+		
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+		(var shipComponent:dhComponent = "shipEntity.ship")
+
+		(var canEquipCamouflage:bool =			"shipEntity.ownShip.canEquipCamouflage"	(event "shipEntity.ownShip.evUpdateConfig"))
+		(var shipTagsMask:number =				"shipComponent.tagsMask")
+		(var hideExteriorsByShipTagMask:bool =	"toBool(shipTagsMask & (1 << SC.Ships.SHIP_TAG.HIDE_EXTERIORS))")
+
+		(macro USER_PREF_DATA)
+		(var previewExteriorId:number = "toNumber(userPrefs.previewExteriorId)")
+
+		(var isShipReadyForBattle:bool = 	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
+		(var isNeedRepair:bool = 			"ownShipComponent.isNeedRepair" 										(event "ownShipComponent.evUpdateDockState"))
+
+		(var selectedBattleTypeEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
+		(var battleUIInfoComponent:dhComponent = "selectedBattleTypeEntity.battleUIInfo")
+		(var scenariosTagsMask:number = "battleUIInfoComponent.tagsMaskForUI")
+
+		(var hideExteriorsByScenario:number = "scenariosTagsMask & (1 << SC.Common.SCENARIO_TAGS_MASK.HIDE_EXTERIORS)")
+
+		(var playerShips:dhCollection =			"getCollection(CC.ownShip)")
+		(var isAvailableHideExteriors:bool =	"(hideExteriorsByShipTagMask && playerShips.length > 0 && playerShipId > 0)
+												 || hideExteriorsByScenario || !canEquipCamouflage || isNeedRepair")
+
+		(var statusDockTab:str = "	playerShips.length == 0		? 'IDS_NO_SHIPS' :
+									hideExteriorsByScenario		? 'IDS_EXTERIOR_UNAVAILABLE_BY_SCENARIO' :
+									isNeedRepair				? 'IDS_EXTERIOR_UNAVAILABLE_BY_MAINTENANCE' :
+									isAvailableHideExteriors	? 'IDS_EXTERIOR_UNAVAILABLE'
+																: null")
+
+		(var isShipLock:bool = "isShipReadyForBattle || isShipInBalancer || isNeedRepair")
+
+		(var maxScrollHeight:number = 0)
+
+
+		(struct permoCamoTip =					PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2"))
+		(struct permoCamoRepeatTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT"))
+		(struct expendableCamoTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3"))
+		(struct exteriorFinalRepeatTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_FINAL_REPEAT"))
+		(struct exteriorCantInstallTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_CANT_INSTALL_CAMO"))
+		(struct exteriorBlockedMaintenanceTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_BLOCKED_MAINTENANCE"))
+
+		(var newTipId:number = "permoCamoTip.isActive					? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2 :
+								permoCamoRepeatTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT :
+								expendableCamoTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3 :
+								exteriorFinalRepeatTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_FINAL_REPEAT :
+								exteriorCantInstallTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_CANT_INSTALL_CAMO :
+								exteriorBlockedMaintenanceTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_BLOCKED_MAINTENANCE
+																		: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var hasNextButton:bool = "isIn(newTipId, [	SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2,
+													SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT,
+													SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3 ])")
+
+		(var isDockStatusLockedTip:bool = "exteriorCantInstallTip.isActive || exteriorBlockedMaintenanceTip.isActive")
+
+		(struct topGuidingOffset =	ADAPTIVE_VERTICAL_SIZE(
+			_minStageHeight =	720px
+			_minValue =			-32px
+			_maxStageHeight =	1080px
+			_maxValue =			-200px
+			_stageHeight =		"stageSize.height"
+		))
+	)
+
+	(class $Fullsize)
+	(style (bind paddingBottom "carouselAreaHeight"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['exterior', 'main']" on='addedToStage')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'camouflages']" on='addedToStage')
+
+	
+	(bindcall externalCall "previewExteriorId ? 'inputMapping.onAction' : ''" "['setUserPref', { name: 'previewExteriorId', value: 0 }]" watch=false	on='removedFromStage'
+																																						(bind trigger "isShipReadyForBattle")
+																																						(bind trigger "playerShipId"))
+
+	
+	(bindcall externalCall "previewExteriorId ? 'inputMapping.onAction' : ''" "['disableExteriorPreview', { exteriorId: previewExteriorId }]" watch=false	on='removedFromStage'
+																																							(bind trigger "isShipReadyForBattle"))
+
+	(block
+		(style
+			(width = "EXTERIOR_CONTENT_WIDTH")
+			(height = 100%)
+			(paddingTop = "{ 720: SXS, 900: L }")
+			(marginLeft = "{ 1280: SXS, 1920: L }")
+		)
+
+		(block
+			(bind visible "isAvailableHideExteriors")
+
+			(style
+				(position = "absolute")
+				(marginTop = "XL")
+				(alpha = "isAvailableHideExteriors ? 1 : 0")
+				(visualOffsetY = " isAvailableHideExteriors ? 0px : 10px")
+			)
+
+			(controller $Animation
+				(bindcall play
+					from =		"{ alpha: 0, visualOffsetY: 10px }"
+					to =		"{ alpha: 1, visualOffsetY: 0px }"
+					duration =	0.15
+					(bind trigger "isAvailableHideExteriors")
+					(bind enabled "isAvailableHideExteriors")
+				)
+			)
+
+			(element DockTabLockedPlug
+				_text = "statusDockTab"
+			)
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "newTipId && isDockStatusLockedTip")
+				(args
+					_tipId =			"newTipId"
+					_tipPositioning =	"TIP_POSITION_BOTTOM"
+					_offsetY =			"M"
+					_noPointer =		true
+					_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+				)
+			)
+		)
+
+		(block
+			(bind visible "!isAvailableHideExteriors")
+			(class $Fullsize)
+			(bind maxScrollHeight "$globalLayoutBounds[3] - CAMOUFLAGE_CONTENT_OFFSET" (event "$evLayoutBoundsChanged"))
+			
+			(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
+
+			(block
+				(style (width = 100%))
+
+				(block
+					(class $FullsizeAbsolute)
+
+					(element BlurMapRoundedWithLayerContrastPanel)
+
+					(block
+						(class $FullsizeAbsolute)
+						(style
+							(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+							(borderRadius = "XS")
+							(alpha = 0.2)
+						)
+					)
+				)
+
+				(scrollArea
+					(style
+						(width = 100%)
+						(bind maxHeight "maxScrollHeight")
+						(backgroundColor = "NO_COLOR")
+					)
+					
+					(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+						_singleStep = "150"
+						_wheelScrollAcceleration = "0.8"
+						_isContrastScrollBar = "true"
+						_hasVerticalBorderOffset = "true"
+						_hasHorizontalBorderOffset = "true"
+					)
+
+					(content
+						(style
+							(width = 100%)
+							(paddingTop = "MS")
+						)
+
+						(controller $Animation
+							(bindcall play
+								name = 'KeyframeExteriorAnimShipChanged'
+								action = "kill"
+								(bind trigger "playerShipId")
+							)
+						)
+
+						(element CamouflagesPage)
+					)
+					(bindcall scrollToBegin animated=false on='addedToStage' (bind trigger "playerShipId"))
+				)
+
+				(element CamouflageAutopurchaseBlock
+					_isActionsAvailable = "!isShipLock"
+				)
+			)
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "newTipId && !isDockStatusLockedTip")
+				(args
+					_tipId =			"newTipId"
+					_tipPositioning =	"TIP_POSITION_RIGHT"
+					_offsetX =			"XS"
+					_offsetY =			"topGuidingOffset.value"
+					_noPointer =		true
+					_hasNextButton =	"hasNextButton"
+					_hasFinishButton =	"exteriorFinalRepeatTip.isActive"
+					_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+				)
+			)
+		)
+	)
+)
+
+(def element CamouflagesPage ()
+	(scope
+		(var exteriorCollection:gfx = "$datahub.getCollection(CC.ownCamouflage)")
+		(var permoflageCollection:gfx = "exteriorCollection.getChildByPath('permanent.sorted')" (event "exteriorCollection.evChildAdded") (event "exteriorCollection.evChildRemoved"))
+
+		(var resourceEntity:gfx = "$datahub.getSingleEntity(CC.accountResource)")
+		(var operationsAccountLocked:bool = "resourceEntity.accountResource.operationsLocked" (event "resourceEntity.accountResource.evOperationsLockChanged"))
+
+		(macro PULL_SHIP_ID)
+		(var permoflageItems:array = "permoflageCollection.items" (event "permoflageCollection.evAdded") (event "permoflageCollection.evRemoved"))
+
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+
+		(var isShipReadyForBattle:bool =				"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" 	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =					"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isNeedRepair:bool = 						"ownShipComponent.isNeedRepair" 										(event "ownShipComponent.evUpdateDockState"))
+		(var permoflageFirstBuyGoldDiscount:number = 	"ownShipComponent.permoflageFirstBuyGoldDiscount" 						(event "ownShipComponent.evPermoflageFirstBuyGoldDiscountChanged"))
+
+		(var isShipLock:bool = "operationsAccountLocked || isShipReadyForBattle || isShipInBalancer || isNeedRepair")
+
+		(macro USER_PREF_DATA)
+		(var previewExteriorId:number = "toNumber(userPrefs.previewExteriorId)")
+	)
+
+	(name = 'CamouflagesPage')
+	(style (width = 100%))
+
+	(class $ExteriorListHolder)
+
+	(block
+		(bind visible "!permoflageItems.empty")
+		(style (width = 100%))
+
+		(tf
+			(class $ExteriorCategoryLabelMargin)
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TA"))
+			(text = 'IDS_CAMOUFLAGE_LIST_PERMANENT')
+		)
+
+		(htile
+			(class $ExteriorItemsGroup)
+			(controller $Repeat renderer='PermoflageItem'
+				(bind count "permoflageItems.length")
+				(args
+					_exteriorEntity = "permoflageItems[$index]"
+					_isActionsAvailable = "!isShipLock"
+					_permoflageFirstBuyGoldDiscount = "permoflageFirstBuyGoldDiscount"
+					_previewExteriorId = "previewExteriorId"
+				)
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+	
+		(controller $Instance renderer='CamouflageList'
+			(args
+				_isActionsAvailable = "!isShipLock"
+				_previewExteriorId = "previewExteriorId"
+			)
+		)
+	)
+)
+
+(def element CamouflageList (_isActionsAvailable:bool, _previewExteriorId:number)
+	(style (width = 100%))
+
+	(tf
+		(class $ExteriorCategoryLabelMargin)
+		(class $TextDefaultBold18NM)
+		(style (alpha = "TA"))
+		(text = 'IDS_CAMOUFLAGE_LIST_EXPENDABLE')
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Repeat renderer='CamouflageGroup'
+			(bind count "SC.Camo_classification.CAMOUFLAGE_GROUPS.SORT_ORDER.length")
+			(args
+				_groupName = "SC.Camo_classification.CAMOUFLAGE_GROUPS.SORT_ORDER[$index]"
+				_isActionsAvailable = "_isActionsAvailable"
+				_previewExteriorId = "_previewExteriorId"
+			)
+		)
+	)
+)
+
+(def element CamouflageGroup (_groupName:str, _isActionsAvailable:bool, _previewExteriorId:number)
+	(scope
+		(var collectionPath:str = "'expendable.byGroup.' + _groupName + '.sorted'")
+
+		(var exteriorCollection:gfx = "$datahub.getCollection(CC.ownCamouflage)")
+		(var camouflagesInGroup:gfx = "exteriorCollection.getChildByPath(collectionPath)" (event "exteriorCollection.evChildAdded") (event "exteriorCollection.evChildRemoved"))
+		(var camouflagesInGroupItems:array = "camouflagesInGroup.items" (event "camouflagesInGroup.evAdded") (event "camouflagesInGroup.evRemoved"))
+		(struct camouflageGroupPrice = PULL_PRICE(_entityId = "'CAMOUFLAGE_GROUP_' + _groupName" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+	)
+
+	(bind visible "camouflagesInGroupItems.length > 0")
+	(style (width = 100%))
+
+	(hblock
+		(class $ExteriorCategoryLabelMargin)
+
+		(tf
+			(class $TextDefaultNM)
+			(style (alpha = "TA") (marginRight = "S"))
+			(bind text "tr('IDS_CAMOUFLAGE_EXPENDABLE_GROUP_' + toUpper(_groupName))")
+		)
+
+		(block
+			(controller $Instance renderer = 'PriceTag'
+				(bind enabled "camouflageGroupPrice.info.finalPrice > 0")
+				(args
+					_priceInfo = "camouflageGroupPrice.info"
+					_showDiscountTag = true
+				)
+			)
+		)
+	)
+
+	(htile
+		(class $ExteriorItemsGroup)
+
+		(controller $DynamicRepeat renderer='CamouflageItem'
+			(bind count "camouflagesInGroupItems.length")
+			(args
+				_exteriorEntity = "camouflagesInGroupItems[$index]"
+				_isActionsAvailable = "_isActionsAvailable"
+				_groupLength = "camouflagesInGroupItems.length"
+				_previewExteriorId = "_previewExteriorId"
+			)
+
+			(itemWidth = 84px)
+			(itemHeight = 84px)
+			(itemOffset = 168px)
+			(sharedCache = "_groupName != 'common'")
+		)
+	)
+)
+
+(def element CamouflageAutopurchaseBlock (_isActionsAvailable:bool)
+	(scope
+		(macro PULL_SHIP_ID)
+		(macro PULL_OWN_SHIP_SCOPE "playerShipId" "'shipEntity'" "'shipInfo'")
+
+		(var installedCamouflageWatcher:gfx = "$datahub.getFirstWatcher(CC.installedCamouflage)")
+		(var installedCamouflageEntity:gfx = "installedCamouflageWatcher.entity" (event "installedCamouflageWatcher.event"))
+
+		(var exteriorConfig:gfx = "installedCamouflageEntity.exteriorConfig")
+		(var isAutopurchaseOnDH:bool = "shipEntity.ownShip.autopurchaseCamouflage" (event "shipEntity.ownShip.evUpdateAutorecharge"))
+	)
+
+	(style
+		(width = 100%)
+		(height = "EXTERIOR_SMALL_CONTAINER_HEIGHT")
+		(flow = "horizontal")
+		(align = "right|middle")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(borderRadiusBottomLeft = "XS")
+		(borderRadiusBottomRight = "XS")
+		(paddingRight = "S")
+	)
+
+	(block
+		(element SwitchWithLeftLabel
+			_state = "isAutopurchaseOnDH"
+			_label = 'IDS_AUTOPURCHASE'
+			_enabled = "exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.CAMOUFLAGE && exteriorConfig.canBuy && _isActionsAvailable"
+			_methods = "[ {type: 'inputMapping.onAction', name: 'autopurchaseCamouflage', args: { isAutoBuy: !isAutopurchaseOnDH }} ]"
+		)
+
+		(controller $Tooltip
+			(renderer = 'AutoPurchaseTooltip')
+			(args
+				_type = "SC.Common.AUTOPURCHASABLE_ITEMS.CAMOUFLAGE"
+				_isAutopurchaseOn = "isAutopurchaseOnDH"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)

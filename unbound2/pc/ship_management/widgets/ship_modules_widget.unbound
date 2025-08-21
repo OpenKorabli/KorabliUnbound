@@ -1,0 +1,211 @@
+(def element ModuleManagementWidget ()
+	(scope
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity =		"getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipComponent:dhComponent =	"ownShipEntity.ownShip")
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" 	(event "ownShipComponent.evUpdateLock"))
+		
+		(var isModuleManagementLocked:bool = "isShipInBalancer || isShipReadyForBattle")
+
+		(var modernizationCollection:dhCollection = "getCollectionByPath(CC.equipmentSlot, 'bySlotType.' + SC.Ships.SHIP_SLOT_TYPES.MODULE)")
+
+
+		(struct freeXpModuleTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE"))
+		(struct freeXpModuleRepeatTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_REPEAT"))
+		
+		(var newTipId:number = "freeXpModuleTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE :
+								freeXpModuleRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_MODULE_REPEAT
+																: SC.Context_guiding_tip.TIP_TYPE.NONE ")
+	)
+
+	(element DockWidgetBackground
+		_roundSize = "SIZE.SMALL"
+	)
+
+	(block
+		(class $ShipManagementSectionContainer)
+
+		(block
+			(style (width =  100%))
+
+			(tf
+				(class $ShipManagementSectionHeader)
+				(text = 'IDS_MODULES')
+			)
+		)
+
+		(hblock
+			(style
+				(minWidth = 224px)
+				(hgap = "SHIP_MANAGEMENT_ITEM_HGAP")
+			)
+
+			(controller $Repeat renderer='ModuleItemSlot'
+				(bind count "modernizationCollection.length")
+				(args
+					_slotEntity = "modernizationCollection.getEntityAtIndex($index)"
+					_isModuleManagementLocked = "isModuleManagementLocked"
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "newTipId")
+		(args
+			_tipId =			"newTipId"
+			_tipPositioning =	"TIP_POSITION_RIGHT"
+			_offsetX =			"XS"
+			_noPointer =		true
+			_hasNextButton =	true
+			_modalWindowName = "SC.Ui_windows.WINDOWS.DOCK"
+		)
+	)
+)
+
+(def element ModuleItemSlot (_slotEntity:dhEntity, _isModuleManagementLocked:bool)
+	(scope
+		(event evHideInfotip)
+
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var equipmentSlotComponent:dhComponent =	"_slotEntity.equipmentSlot")
+		(var installedEntityId:number =				"equipmentSlotComponent.installedEntityId" (event "equipmentSlotComponent.evInstalledEntityIdChanged"))
+
+		(var isInfotipVisible:bool = false)
+
+		(var moduleEntity:dhEntity = "getEntity(installedEntityId)")
+		(var moduleType:str = "moduleEntity.module.type" (event "moduleEntity.module.evUpdated"))
+	
+		(var modulesByTypeCollection:dhCollection = "getCollectionByPath(CC.module, 'byModuleType.' + moduleType)")
+		(var modulesByTypeCollectionLen:number = "modulesByTypeCollection.length")
+
+		(var isInteractiveSlot:bool = "modulesByTypeCollectionLen > 1")
+		(var isClickableSlot:bool = "isInteractiveSlot && !_isModuleManagementLocked")
+
+		(var selectionState:number = "isClickableSlot	?	isInfotipVisible	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+															mouseDown			? SC.Ui_styles.BUTTON_STATE.DOWN :
+															rollOver			? SC.Ui_styles.BUTTON_STATE.OVER
+																				: SC.Ui_styles.BUTTON_STATE.UP
+														:	SC.Ui_styles.BUTTON_STATE.DISABLED")
+
+		(struct tooltipPosition = SHIP_MANAGEMENT_TOOLTIP_POSITION())
+	)
+
+	(bind name "'module_slot_' + moduleType")
+
+	(style (backgroundColor = "NO_COLOR"))
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER
+		_soundSet = "isClickableSlot ? 'button_flat' : ''"
+	)
+
+	(controller $Tooltip
+		(renderer = 'ModuleTooltip')
+		(args
+			_moduleEntity = "moduleEntity"
+			_isInteractiveSlot = "isInteractiveSlot"
+			_isClickableSlot = "isClickableSlot"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		(position = "border")
+		(bind align "tooltipPosition.align")
+	)
+
+	(controller $Tooltip
+		(bind enabled "isClickableSlot")
+		(renderer = 'ModulesInfotip')
+		(args
+			_modulesByTypeCollection = "modulesByTypeCollection"
+		)
+
+		(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+		(macro TOOLTIP_HIDE_ON_EVENT "evHideInfotip")
+
+		(bind isInfotipVisible "true" on='evStartShow')
+		(bind isInfotipVisible "false" on='evHide')
+	)
+
+	(block
+		(style
+			(width = 64px)
+			(height = 64px)
+			(padding = "XXS")
+		)
+
+		(element ShipModuleView
+			_moduleEntityId = "installedEntityId"
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(vgap = "XS")
+				(hitTest = false)
+				(top = "XS")
+			)
+
+			(controller $Repeat renderer='ShipModuleStateIcon'
+				(bind count "modulesByTypeCollection.length > 1 ? modulesByTypeCollection.length : 0")
+				(args
+					_isActive = "modulesByTypeCollection.getEntityAtIndex($index).id == installedEntityId"
+				)
+			)
+		)
+	)
+
+	(block
+		(style (marginTop = 5px))
+
+		(element SelectionStatePanel
+			_state = "selectionState"
+		)
+	)
+)
+ 
+(def element ShipModuleStateIcon (_isActive:bool)
+	(style
+		(width = 6px)
+		(height = 6px)
+		(bind backgroundImage "'url:../service_kit/module_markers/module_markers_' + (_isActive ? 'fill' : 'empty') + '.png'")
+		(backgroundSize = "fill")
+		(alpha = 0.9)
+	)
+)
+
+(def element ShipModuleView (_moduleEntityId:number)
+	(scope
+		(var moduleEntity:dhEntity = "getEntity(_moduleEntityId)")
+		(var moduleInfo:dhComponent = "moduleEntity.module")
+		(var moduleType:str = "moduleInfo.type" (event "moduleInfo.evUpdated"))
+		(var isModulePurchased:bool = "moduleInfo.isPurchased" (event "moduleInfo.evUpdated"))
+		(var isModuleExplored:bool = "moduleInfo.isExplored" (event "moduleInfo.evUpdated"))
+
+		(var iconPath:str = "'url:../modules/icon_module' +	moduleType + (	isModulePurchased		? '' :
+																			isModuleExplored		? '_researched'
+																									: '_not_owned') + '.png'")
+	)
+
+	(style
+		(width = 60px)
+		(height = 60px)
+		(bind backgroundImage "moduleType ? iconPath : ''")
+		(backgroundSize = "cover")
+	)
+)
+
+(def element ModuleItemView (_moduleInfoType:str, _isExplored:bool)
+	(scope
+		(var moduleState:str =	"_isExplored ? '_researched' : '_not_owned'")
+		(var iconPath:str =		"_moduleInfoType ? 'url:../modules/icon_module' + _moduleInfoType + moduleState + '.png' : ''")
+	)
+
+	(style
+		(width = 60px)
+		(height = 60px)
+		(bind backgroundImage "iconPath")
+		(backgroundSize = "cover")
+	)
+)

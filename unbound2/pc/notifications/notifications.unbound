@@ -25,7 +25,7 @@
 											})
 
 (def constant SYSTEM_MESSAGES_OFFSET 200)
-(def constant INFOTIP_WIDTH 326)
+(def constant INFOTIP_WIDTH 328)
 
 (def constant SYSTEM_MESSAGE_ITEM_HEIGHT 37)
 (def constant SYSTEM_MESSAGE_ITEM_LABEL_WIDTH 250)
@@ -84,7 +84,6 @@
 		(event evSystemMessagesInfotipShown)
 		(event evSystemMessagesInfotipHidden)
 
-		(struct balancerRoute =			PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BALANCER"))
 		(struct newbieGiftsRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.NEWBIE_GIFTS"))
 		(struct strategicActionsRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.STRATEGIC_ACTIONS"))
 
@@ -93,10 +92,7 @@
 		(struct windowQueue = PULL_WINDOW_QUEUE())
 		(var isLoadingBattle:bool =	"isIn('LoadingBattle', windowQueue.queue)")
 
-		(var balancerInfoEntity:dhEntity = "getSingleEntity(CC.balancerInfo)")
-		(var isPreparingForBattle:bool = "balancerInfoEntity.balancerInfo.isPreparingForBattle" (event "balancerInfoEntity.balancerInfo.evIsPreparingForBattleChanged"))
-
-		(var isNotificationLogHidden:bool = "balancerRoute.isActive || isPreparingForBattle || isLoadingBattle || newbieGiftsRoute.isActive || strategicActionsRoute.isActive")
+		(var isNotificationLogHidden:bool = "isLoadingBattle || newbieGiftsRoute.isActive || strategicActionsRoute.isActive")
 
 		(var isNotificationInfotipShown:bool = "false")
 		(bind isNotificationInfotipShown "true" init=false (event "evSystemMessagesInfotipShown"))
@@ -203,9 +199,10 @@
 	)
 
 	(controller $Tooltip
-		(renderer='SystemMessagesInfotip')
+		(renderer = 'SystemMessagesInfotip')
 		(macro DEFAULT_INFOTIP_BEHAVIOUR "1")
-		(align = "top|center")
+		(align = "top|innerRight")
+		(offsetMap = "{ left:0px, top: 9px, right: 0px, bottom: 0px }")
 
 		(bindcall externalCall "'direct.action'" "['onNotificationsPanelOpen',	{}]" on='evStartShow')
 		(bindcall externalCall "'direct.action'" "['onClearMessagesQueue',		{}]" on='rightClick')
@@ -253,11 +250,11 @@
 		(bind isHitTest "true" init=false watch=false (event "evShow"))
 		(bind isHitTest "false" init=false watch=false (event "evStartHide"))
 	)
-	(style (width = "INFOTIP_WIDTH") (bind height "dragInfotip.infotipHeight") (backgroundColor = 0x66000000) (bind hitTest "isHitTest"))
+	(style (width = "INFOTIP_WIDTH") (bind height "dragInfotip.infotipHeight") (bind hitTest "isHitTest"))
 	(bindcall externalCall "isPrefGroup ? 'direct.action' : ''" "['option.set', ['ui.notificationsSelectedGroup', activeGroup]]" init=false watch=false (event "evSetActiveGroup"))
 	(dispatch evSetActiveGroup dir="EventDirection.NONE" args="$event" delay=0.01 (event "evGroupClick"))
 
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
 	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
 		(class $Fullsize)
 		(block
@@ -290,6 +287,8 @@
 			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
 				_singleStep = "SYSTEM_MESSAGE_ITEM_HEIGHT"
 				_isContrastScrollBar = "true"
+				_hasVerticalBorderOffset = "true"
+				_hasHorizontalBorderOffset = "!isSessionStatisticsGroup"
 			)
 			(repeatController = 'systemMessageContainer')
 			(scrollPerItem = true)
@@ -298,7 +297,11 @@
 				(style (width = 100%))
 
 				(reverse
-					(style (width = 100%))
+					(style
+						(width = 100%)
+						(bind padding "isSessionStatisticsGroup ? 0px : XS")
+						(vgap = "XXS")
+					)
 
 					(controller $DynamicRepeat renderer='SystemMessageWrapper' name='systemMessageContainer'
 						(bind enabled "!isSessionStatisticsGroup")
@@ -308,7 +311,6 @@
 							_isBattleResultGroup = "isBattleResultGroup"
 						)
 
-						(itemWidth = 100%)
 						(itemHeight = "SYSTEM_MESSAGE_ITEM_HEIGHT")
 						(itemOffset = "SYSTEM_MESSAGES_OFFSET")
 					)
@@ -330,7 +332,7 @@
 			(class $Fullsize)
 			(style (align = "center|middle"))
 			(tf
-				(class $TextDefault17NM)
+				(class $TextDefault18NM)
 				(style (alpha = "TC"))
 				(bind text "isNoSystemMessages ? 'IDS_NO_NEW_SYSTEM_MESSAGES' : 'IDS_PLAY_BATTLE_FOR_STATS'")
 			)
@@ -363,7 +365,7 @@
 	(element TabButton
 		_isSelected = "_activeGroup == _groupList[$index]"
 		_isDisabled = "_isInfotipDragging"
-		_width = "'100%'"
+		_width = 100%
 		_image = "tabIcons[$index]"
 		_dispatchedEv = "'evGroupClick'"
 		_dispatchParams = "{ groupIndex: $index }"
@@ -411,18 +413,15 @@
 					(marginBottom = "S")
 				)
 
-				(block
-					(width = 100%)
-					(element ItemChooser
-						_items = "nonzeroBattleTypes"
-						_choosedItemRenderer = 'BattleTypeChosenItemRenderer'
-						_listItemRenderer = 'SessionStatsTextListItemRenderer'
-						_curIndex = "selectedBattleTypeIndex"
-						_onItemSelectedEvent = 'evBattleTypeSelected'
-						_itemChooserTooltipText = 'IDS_CHOOSE_BATTLETYPE_FOR_SESSION_STATS'
-						_itemChooserTooltipUnifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-						_dropDownWidth = 171
-					)
+				(element ItemChooser
+					_items = "nonzeroBattleTypes"
+					_choosedItemRenderer = 'BattleTypeChosenItemRenderer'
+					_listItemRenderer = 'SessionStatsTextListItemRenderer'
+					_curIndex = "selectedBattleTypeIndex"
+					_onItemSelectedEvent = 'evBattleTypeSelected'
+					_itemChooserTooltipText = 'IDS_CHOOSE_BATTLETYPE_FOR_SESSION_STATS'
+					_itemChooserTooltipUnifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_dropDownWidth = 171
 				)
 
 				(block
@@ -542,11 +541,17 @@
 	)
 )
 
-(def element BattleTypeChosenItemRenderer (_item:gfx, _state:number)
+(def element BattleTypeChosenItemRenderer (_item:str, _state:number)
 	(scope
 		(var isBattleTypeIcon:bool = "_item && _item != SC.Common.BATTLE_TYPES.ALL_TYPES")
 	)
-	(style (height = 32px) (flow = "horizontal") (paddingTop = "XS") (paddingLeft = "XS"))
+	(style
+		(height = 32px)
+		(flow = "horizontal")
+		(paddingTop = "XS")
+		(paddingLeft = "XS")
+		(hitTest = false)
+	)
 
 	(block
 		(bind visible "isBattleTypeIcon")
@@ -554,35 +559,33 @@
 			(width = 24px)
 			(height = 24px)
 			(bind backgroundImage "isBattleTypeIcon ? 'url:../service_kit/battle_types/' + _item + '_tiny.png' : ''")
+			(backgroundSize = "cover")
 		)
 
-		(bind colorTransform "	_state == SC.Ui_styles.BUTTON_STATE.DOWN ||
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+			_colorTransform = "	_state == SC.Ui_styles.BUTTON_STATE.DOWN ||
 								_state == SC.Ui_styles.BUTTON_STATE.SELECTED	? COLOR_TRANSFORM_MOUSE_DOWN :
 								_state == SC.Ui_styles.BUTTON_STATE.OVER		? COLOR_TRANSFORM_MOUSE_OVER
-																				: {}")
+																				: CT_NONE"
+		)
 	)
 
 	(block
 		(style
-			(hitTest = false)
-			(paddingLeft = "S")
-			(paddingRight = 5px)
-			(paddingTop = 6px)
+			(paddingLeft = 6px)
+			(paddingRight = 7px)
+			(paddingTop = 5px)
 			(paddingBottom = 6px)
 		)
 
 		(tf
-			(class $TextDefaultBoldNM)
-			(style
-				(alpha = "ITEM_CHOOSER_LABEL_ALPHA[SC.Ui_styles.BUTTON_STATE.UP]")
-				(elideMode = true)
-			)
-
+			(class $TextDefaultBold18NM)
+			(style (alpha = "ITEM_CHOOSER_LABEL_ALPHA[_state]"))
 			(bind text "tr('IDS_' + toUpper(_item))")
 
 			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
-				_trigger	= "_state"
-				_alpha		= "ITEM_CHOOSER_LABEL_ALPHA[_state]"
+				_trigger = "_state"
+				_alpha = "ITEM_CHOOSER_LABEL_ALPHA[_state]"
 			)
 		)
 	)
@@ -681,8 +684,8 @@
 		(block
 			(class $Fullsize)
 			(style
-				(backgroundImage = 'url:../service_kit/panel_backgrounds/menu_item_panel.png')
-				(scale9grid = 3)
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.MENU_ITEM")
+				(borderRadius = "XS")
 				(bind alpha "0" (event "evAddedToStage"))
 			)
 
@@ -716,11 +719,6 @@
 				_messageEntity = "_messageEntity"
 			)
 		)
-	)
-
-	(block
-		(style (width = 100%) (position = "absolute") (bottom = 0))
-		(element HorizontalDividerTwoPx)
 	)
 
 	(controller $Tooltip
@@ -762,7 +760,7 @@
 		(style
 			(position = "absolute")
 			(left = "M")
-			(top = "SXS")
+			(top = 13px)
 			(alpha = "TA")
 			(width = "SYSTEM_MESSAGE_ITEM_LABEL_WIDTH")
 			(letterSpacing = "0")
@@ -774,11 +772,11 @@
 	)
 
 	(tf
-		(class $TextDefault13NM)
+		(class $TextDefault14NM)
 		(style
 			(position = "absolute")
 			(right = "M")
-			(top = 13px)
+			(top = 15px)
 			(alpha = "TC")
 		)
 		(bind text "timeStamp")
@@ -849,7 +847,7 @@
 	)
 
 	(tf
-		(class $TextDefault13NM)
+		(class $TextDefault14NM)
 		(style
 			(marginTop = 13px)
 			(marginRight = "M")
@@ -892,13 +890,39 @@
 		(var systemNotificationCollection:gfx = "$datahub.getCollection(CC.renderedSysMsg).getChildByPath('byClassId.' + CC.notificationSysMsgToBeRendered)")
 		(var emergencyAlertsCollection:gfx = "$datahub.getCollection(CC.renderedSysMsg).getChildByPath('byClassId.' + CC.emergencySysMsgToBeRendered)")
 		(var emergencyAlertsCollectionLength:number = "emergencyAlertsCollection ? emergencyAlertsCollection.items.length : 0")
+
+
+		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
+		(var hasShips:bool = "playerShipsCollection.length > 0")
+
+		(var portElementsVisibility:dhComponent =	"getSingleComponent(CC.portElementsVisibility)")
+		(var isCarouselVisible:bool = "hasShips && portElementsVisibility.carouselVisible" (event "portElementsVisibility.evCarouselVisibleChanged"))
+
+		(struct repairDockRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.REPAIR_DOCK"))
+		(struct bargeRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.LOOTBOXES"))
+
+		(var systemNotificationOffset:number = "isCarouselVisible || repairDockRoute.isActive || bargeRoute.isActive ? carouselAreaHeight : 40px")
+
+		(var verifiedSystemNotificationOffset:number = "systemNotificationOffset" watch=false)
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.1
+				duration = 0.15
+				to = "{ verifiedSystemNotificationOffset: systemNotificationOffset }"
+				easing = "Easing.line"
+				action = "kill"
+				watch = false
+				(bind trigger "systemNotificationOffset")
+			)
+		)
 	)
 	(style
 		(width = 100%)
 		(height = 100%)
 		(align = "right|bottom")
-		(paddingRight = 25px)
-		(bind paddingBottom "carouselAreaHeight")
+		(paddingRight = 26px)
+		(bind paddingBottom "verifiedSystemNotificationOffset")
 	)
 
 	
@@ -923,7 +947,7 @@
 			(style
 				(right = 0)
 				(bind position "isSmallWindow ? absolute : relative")
-				(bind bottom "isSmallWindow ? -carouselAreaHeight + 30px : 0")
+				(bind bottom "isSmallWindow ? -verifiedSystemNotificationOffset + 30px : 0")
 			)
 			
 
@@ -1125,7 +1149,6 @@
 	(scope
 		(var header:str = "_notificationContentComponent.header" (event "_notificationContentComponent.evChanged"))
 		(var subHeader:str = "_notificationContentComponent.subHeader" (event "_notificationContentComponent.evChanged"))
-		(var unifiedStatus:str = "_notificationContentComponent.unifiedStatus" (event "_notificationContentComponent.evChanged"))
 		(var hasSubHeader:bool = "subHeader && subHeader != ''")
 	)
 	(style (width = 100%) (hitTest = false))
@@ -1138,7 +1161,6 @@
 
 			(element TooltipSystemHeaderSubheaderText
 				_headerText = "header"
-				_unifiedStatus = "unifiedStatus"
 			)
 		)
 
@@ -1487,11 +1509,11 @@
 		(var headerText:str = "tr('IDS_' + campaignName + '_TITLE')")
 		(var subheaderText:str = "tr('IDS_CAMPAIGN')")
 	)
-	(style (width = 100%) (hitTest = false))
+	(style (width = 100%))
 
 	(element TooltipSystemHeaderWithIconAndText
-		_imageHeight = 		"80"
-		_imageWidth = 		"80"
+		_imageHeight = 		80px
+		_imageWidth = 		80px
 		_headerText =		"headerText"
 		_subheaderText =	"subheaderText"
 		_headerIconType = 	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CAMPAIGN"
@@ -1513,7 +1535,7 @@
 		(var campaignName:str = "campaignParams.name")
 		(var campaignNameIDS:str = "'IDS_' + campaignName + '_TITLE'")
 	)
-	(style (width = 100%) (hitTest = false))
+	(style (width = 100%))
 
 	(element TooltipSystemHeaderWithIconAndText
 		_imageHeight = 		60px
@@ -1551,7 +1573,7 @@
 		(var campaignName:str = "campaignParams.name")
 		(var campaignNameIDS:str = "'IDS_' + campaignName + '_TITLE'")
 	)
-	(style (width = 100%) (hitTest = false))
+	(style (width = 100%))
 
 	(element TooltipSystemHeaderWithIconAndText
 		_imageHeight = 		60px

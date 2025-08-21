@@ -11,19 +11,22 @@
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
 
 	(class $ContextMenuDimensions)
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip="true")
 
-	(block
-		(style (width = 100%))
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
 
-		(controller $Instance
-			(bind renderer "renderContextMenu")
-			(args
-				_entityAccountId = "_entityAccountId"
-				_inviteType = "_inviteType"
-				_isInvitation = "_isInvitation"
-				_playerContext = "_playerContext"
-				_currentGroupId = "_currentGroupId"
+		(block
+			(style (width = 100%))
+
+			(controller $Instance
+				(bind renderer "renderContextMenu")
+				(args
+					_entityAccountId = "_entityAccountId"
+					_inviteType = "_inviteType"
+					_isInvitation = "_isInvitation"
+					_playerContext = "_playerContext"
+					_currentGroupId = "_currentGroupId"
+				)
 			)
 		)
 	)
@@ -49,7 +52,7 @@
 (def element NormalContactContextMenu (_entityAccountId:number, _inviteType:number, _isInvitation:bool=false, _playerContext:dict={}, _currentGroupId:str=null)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
-		(struct balancerRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BALANCER"))
+		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
 		
 		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
 		(var trainingRoomComponent:dhComponent = "trainingRoomEntity.trainingRoom")
@@ -146,13 +149,13 @@
 
 		(var maxPlayers:number = "isInTrainingRoom	? trMaxPlayers
 													: shipRestrictionsMaxPlayers")
-		(var freePlaces:number = "maxPlayers - playersInDivisionCount - playersInvitedToDivisionCount")
+		(var isExistFreePlaces:bool = "(maxPlayers - playersInDivisionCount - playersInvitedToDivisionCount) > 0")
 
 		(macro GET_PREF 'selfVoiceChatEnabled' "'sound.voice.chat.enabled'")
 
 		(var isBot:bool = "entityAccount && entityAccount.hasComponent(CC.bot)")
 		(var isInviteIToGrouptemVisible:bool = "!isIgnored && canAddGroupEntitiesId.length > 0 && contactsGroupCount > 1 && !isBot")
-		(var isExcludePlayerMenuItemVisible:bool = "isInPrebattle && (!isInTrainingRoom || (isInTrainingRoom && isSelfPlayerTrainingRoomOwner && !isPrebattlePlayerTrainingRoomOwner))")
+		(var isExcludePlayerAccess:bool = "isInPrebattle && (!isInTrainingRoom || (isInTrainingRoom && isSelfPlayerTrainingRoomOwner && !isPrebattlePlayerTrainingRoomOwner))")
 		
 		(var isTournamentRoomInfo:bool = 	"getSingleComponent(CC.tournamentRoomInfo) != null")
 		(var isDivisionData:bool = 			"divisionDataEntity != null")
@@ -161,8 +164,8 @@
 		(var isVisibleInvaiteInTrainingRoom:bool = "!isTournamentRoomInfo && isInTrainingRoom && (isSelfPreBattleOwner || isSelfTrainingCommander) &&
 													isAccountOnline && !isInFormation && !isInvitedToPrebattle")
 
-		(var isVisibleInvaiteInDivision:bool = "((isSelfPreBattleOwner && freePlaces > 0) || canInviteToDivision) && isAccountOnline && !isInFormation &&
-												!balancerRoute.isActive && _playerContext.type != 'inviteToTrainingRoom' && !isInvitedToPrebattle &&
+		(var isVisibleInvaiteInDivision:bool = "((isSelfPreBattleOwner && isExistFreePlaces) || canInviteToDivision) && isAccountOnline && !isInFormation &&
+												!isInBalancer && _playerContext.type != 'inviteToTrainingRoom' && !isInvitedToPrebattle &&
 												!isInTrainingRoom && !isTournamentRoomInfo")
 
 		
@@ -170,18 +173,33 @@
 		(var isTrainingTeamNeutral:bool = 	"teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.NEUTRAL_TEAM")
 		(var isMyTeam:bool = 				"teamId == selfTeamId")
 
+		(var isTrainingCommaderOpportunity:bool = "isSelfTrainingCommander && isMyTeam")
+
 		(var isTrainingAndTournamentRestrictionForSetRole:bool = "	isCommandersManagement && !isOtherTrainingCommander
 																	&& !isTrainingTeamObserver && !isTrainingTeamNeutral")
 
 		(var isSetRoleCommanderForDivision:bool = 	"isDivisionData && isSelfPreBattleOwner")
 		(var isSetRoleCommanderForTournament:bool = "	isTournamentRoomInfo && isSelfPreBattleOwner && isTrainingAndTournamentRestrictionForSetRole")
 		(var isSetRoleCommanderForTrainig:bool = 	"	isTrainingRoomState && isTrainingAndTournamentRestrictionForSetRole
-														&& (isSelfPreBattleOwner || (isSelfTrainingCommander && isMyTeam && !isCommanderOwner))")
+														&& (isSelfPreBattleOwner || (isTrainingCommaderOpportunity && !isCommanderOwner))")
 
-		(var isSetRoleCommanderItemVisible:bool = "	isInPrebattle && !isPrebattlePlayerMercenary && !isBot
-													&& (isSetRoleCommanderForDivision || isSetRoleCommanderForTournament || isSetRoleCommanderForTrainig)")
+		(var isSetRoleCommanderAccess:bool = "	isInPrebattle && !isPrebattlePlayerMercenary && !isBot
+												&& (isSetRoleCommanderForDivision || isSetRoleCommanderForTournament || isSetRoleCommanderForTrainig)")
 		
 		(var textForMoveRoleCommander:str = "isSelfPreBattleOwner ? 'IDS_APPOINT_PLAYER_TO_COMMANDER' : 'IDS_CONVEY_PLAYER_TO_COMMANDER'")
+
+		(var isInviteClanVisible:bool = "haveOwnClan && canInvite && !alreadyInYourClan && !isBot")
+
+		(var isPrebattleOpportunity:bool = "(isSelfPreBattleOwner || isTrainingCommaderOpportunity) 
+											&& (isInPrebattle || isInvitedToPrebattle)
+											&& !isInBalancer")
+		
+		(var isRecallInvitationVisible:bool = 				"isPrebattleOpportunity && isInvitedToPrebattle")
+		(var isExcludePlayerVisible:bool = 					"isPrebattleOpportunity && isExcludePlayerAccess")
+		(var isSetRoleCommanderVisible:bool = 				"isPrebattleOpportunity && isSetRoleCommanderAccess")
+		(var isDividerForPrebattleOpportunityVisible:bool = "isPrebattleOpportunity && !isBot && isChatServerAvailable")
+
+		(var isInviteToChannel:bool = "_playerContext.type == 'inviteToChannel'")
 	)
 	(bind alpha "accountDbId != null ? 1 : 0.5")
 	(bind mouseChildren "accountDbId != null")
@@ -190,7 +208,7 @@
 	
 	(controller $Tooltip
 		(bind enabled "accountDbId == null")
-		(renderer ='SimpleStatusTooltip')
+		(renderer = 'SimpleStatusTooltip')
 		(args
 			_text = 'IDS_UNABLED_ACTION_WITH_PLAYER'
 			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
@@ -199,38 +217,44 @@
 	)
 
 	(block
-		(style (width = 100%))
-		(bind visible "(isSelfPreBattleOwner || (isInTrainingRoom && isSelfTrainingCommander && selfTeamId == teamId)) &&  (isInPrebattle || isInvitedToPrebattle) && (!balancerRoute.isActive)")
+		(style
+			(width = 100%)
+			(vgap = "XXS")
+		)
 
 		(block
-			(bind visible "isInvitedToPrebattle")
 			(style (width = 100%))
 
-			(element ContextMenuItem
-				_title = 'IDS_RECALL_INVITATION'
-				_methods = "[ {
-								type:	'inputMapping.onAction',
-								name:	'revokeInvitationToDivision',
-								args:	{ id: prebattlePlayerId }
-							}]"
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "isRecallInvitationVisible")
+				(args
+					_title = 'IDS_RECALL_INVITATION'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'revokeInvitationToDivision',
+									args:	{ id: prebattlePlayerId }
+								}]"
+				)
 			)
 		)
 
 		(block
-			(bind visible "isExcludePlayerMenuItemVisible")
 			(style (width = 100%))
 
-			(element ContextMenuItem
-				_title = "isInTrainingRoom ? 'IDS_EXCLUDE_PLAYER_OUT_OF_TRAINING_ROOM' : 'IDS_EXCLUDE_PLAYER_OUT_OF_DIVISION'"
-				_methods = "[ {
-								type:	isBot ? 'inputMapping.onAction' : 'inputMapping.onRequest',
-								name:	'kickPlayerFromDivision',
-								args:	{	playerId: prebattlePlayerId,
-											name: nickName,
-											subtitle: isInTrainingRoom ? 	'IDS_MODAL_EXCLUDE_PLAYER_OUT_OF_TRAINING_ROOM' :
-																			'IDS_MODAL_EXCLUDE_PLAYER_OUT_OF_DIVISION'
-										}
-							}]"
+			(controller $Instance renderer = 'ContextMenuItem'
+				(bind enabled "isExcludePlayerVisible")
+				(args
+					_title = "isInTrainingRoom ? 'IDS_EXCLUDE_PLAYER_OUT_OF_TRAINING_ROOM' : 'IDS_EXCLUDE_PLAYER_OUT_OF_DIVISION'"
+					_methods = "[ {
+									type:	isBot ? 'inputMapping.onAction' : 'inputMapping.onRequest',
+									name:	'kickPlayerFromDivision',
+									args:	{	playerId: prebattlePlayerId,
+												name: nickName,
+												subtitle: isInTrainingRoom ? 	'IDS_MODAL_EXCLUDE_PLAYER_OUT_OF_TRAINING_ROOM' :
+																				'IDS_MODAL_EXCLUDE_PLAYER_OUT_OF_DIVISION'
+											}
+								}]"
+				)
 			)
 		)
 
@@ -238,7 +262,7 @@
 			(style (width = 100%))
 
 			(controller $Instance renderer='ContextMenuItem'
-				(bind enabled "isSetRoleCommanderItemVisible")
+				(bind enabled "isSetRoleCommanderVisible")
 				(args
 					_title = "textForMoveRoleCommander"
 					_methods = "[ {
@@ -251,193 +275,222 @@
 				)
 			)
 		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='ContextMenuHorizontalDivider' (bind enabled "isDividerForPrebattleOpportunityVisible"))
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(vgap = "XXS")
+		)
 
 		(block
-			(bind visible "!isBot && isChatServerAvailable")
 			(style (width = 100%))
-			(element HorizontalDividerTwoPx)
+
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isInviteToChannel")
+				(args
+					_title = 'IDS_INVITE_PLAYER_TO_CHANNEL'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'sendChannelInvite',
+									args:	{	channelId: _playerContext.channelId,
+												inviteDbId: accountDbId
+											}
+								}]"
+				)
+			)
 		)
-	)
 
-	(block
-		(bind visible "_playerContext.type == 'inviteToChannel'")
-		(style (width = 100%))
+		(block
+			(style (width = 100%))
 
-		(element ContextMenuItem
-			_title = 'IDS_INVITE_PLAYER_TO_CHANNEL'
-			_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	'sendChannelInvite',
-							args:	{	channelId: _playerContext.channelId,
-										inviteDbId: accountDbId
-									}
-						}]"
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isInviteToChannel")
+				(args
+					_title = 'IDS_SEND_MESSAGE'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'openChannelForPrivateMessages',
+									args:	{ dbId: accountDbId }
+								}]"
+				)
+			)
 		)
-	)
 
-	(block
-		(bind visible "_playerContext.type == 'inviteToChannel'")
-		(style (width = 100%))
+		(block
+			(style (width = 100%))
 
-		(element ContextMenuItem
-			_title = 'IDS_SEND_MESSAGE'
-			_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	'openChannelForPrivateMessages',
-							args:	{ dbId: accountDbId }
-						}]"
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isVisibleInvaiteInDivision")
+				(args
+					_enabled = "canInviteToDivision"
+					_title = 'IDS_INVITE_IN_DIVISION'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'inviteToDivision',
+									args:	{ playerId: accountDbId, playerName: pureName, inviteType: _inviteType }
+								}]"
+				)
+			)
 		)
-	)
 
-	(block
-		(style (width = 100%))
+		(block
+			(style (width = 100%))
 
-		(controller $Instance renderer='ContextMenuItem'
-			(bind enabled "isVisibleInvaiteInDivision")
-			(args
-				_enabled = "canInviteToDivision"
-				_title = 'IDS_INVITE_IN_DIVISION'
-				_methods = "[ {
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isVisibleInvaiteInTrainingRoom")
+				(args
+					_title = 'IDS_INVITE_IN_TRAINING_ROOM'
+					_methods = "[ {
 								type:	'inputMapping.onAction',
-								name:	'inviteToDivision',
-								args:	{ playerId: accountDbId, playerName: pureName, inviteType: _inviteType }
+								name:	'inviteToTrainingRoom',
+								args:	{ inviteeDBID: accountDbId }
 							}]"
+				)
 			)
 		)
-	)
 
-	(block
-		(style (width = 100%))
+		(block
+			(style (width = 100%))
 
-		(controller $Instance renderer='ContextMenuItem'
-			(bind enabled "isVisibleInvaiteInTrainingRoom")
-			(args
-				_title = 'IDS_INVITE_IN_TRAINING_ROOM'
-				_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	'inviteToTrainingRoom',
-							args:	{ inviteeDBID: accountDbId }
-						}]"
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "!isIgnored && !isBot && isChatServerAvailable")
+				(args
+					_title = "groupIdsOfAccount.length > 0 ? 'IDS_REMOVE_FROM_CONTACTS' : 'IDS_ADD_TO_CONTACTS'"
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	groupIdsOfAccount.length > 0 ? 'removeContact' : 'addContact',
+									args:	{ dbId: accountDbId }
+								}]"
+				)
 			)
 		)
-	)
 
-	(block
-		(bind visible "!isIgnored && !isBot && isChatServerAvailable")
-		(style (width = 100%))
+		(block
+			(style (width = 100%))
 
-		(element ContextMenuItem
-			_title = "groupIdsOfAccount.length > 0 ? 'IDS_REMOVE_FROM_CONTACTS' : 'IDS_ADD_TO_CONTACTS'"
-			_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	groupIdsOfAccount.length > 0 ? 'removeContact' : 'addContact',
-							args:	{ dbId: accountDbId }
-						}]"
+			(controller $Instance renderer='ContextMenuItemExpand'
+				(bind enabled "isInviteIToGrouptemVisible")
+				(args
+					_title = 'IDS_ADD_TO_GROUP'
+					_contextElement = 'MoveToGroupContextSubMenu'
+					_args = "{ _entityAccountId: _entityAccountId, _items: canAddGroupEntitiesId }"
+				)
+			)
 		)
-	)
 
-	(block
-		(bind visible "isInviteIToGrouptemVisible")
-		(style (width = 100%))
+		(block
+			
+			(style (width = 100%))
 
-		(element ContextMenuItemExpand
-			_title = 'IDS_ADD_TO_GROUP'
-			_contextElement = 'MoveToGroupContextSubMenu'
-			_args = "{ _entityAccountId: _entityAccountId, _items: canAddGroupEntitiesId }"
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "_currentGroupId && !isIgnored && !isBot")
+				(args
+					_title = 'IDS_REMOVE_FROM_GROUP'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'removeContactFromGroup',
+									args:	{ dbId: entityAccount.accountSimple.dbId, fromGroupId: _currentGroupId }
+								}]"
+				)
+			)
 		)
-	)
 
-	(block
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "!isBot && isChatServerAvailable")
+				(args
+					_title = "!isIgnored ? 'IDS_IGNORE_PLAYER' : 'IDS_NOT_IGNORE_PLAYER'"
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'userIgnoreContact',
+									args:	{ dbId: accountDbId, ignore: !isIgnored }
+								}]"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='MenuItemReportPortChatMisbehaviour'
+				(bind enabled "!isBot && isChatServerAvailable")
+				(args
+					_dbId = "entityAccount.accountSimple.dbId"
+					_channelId = "_playerContext.channelIdl"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='VoiceChatMenuItem'
+				(bind enabled "(selfVoiceChatEnabled || isSelf) && isInFormation")
+				(args
+					_playerVoiceState = "playerVoiceState"
+					_actionType = 'direct.action'
+					_action = 'toggleVoice'
+					_actionArgs = "{ playerName: pureName, nickName: nickName }"
+				)
+			)
+		)
+
+		(block
+			
+			(style (width = 100%))
+
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isInviteClanVisible")
+				(args
+					_enabled = "!(alreadyInAnotherClan || noFreePlacesInClan)"
+					_title = 'IDS_INVITATION_TO_CLAN'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'sendInviteToClan',
+									args:	{ playerDBID: accountDbId }
+								}]"
+				)
+			)
+
+			(controller $Tooltip
+				(bind enabled "isInviteClanVisible && (alreadyInAnotherClan || noFreePlacesInClan)")
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = "noFreePlacesInClan 	? 'IDS_CLAN_INVITATION_DENY_REASON_CLAN_IS_FULL':
+							alreadyInAnotherClan 	? 'IDS_CLAN_INVITATION_DENY_REASON_PLAYER_ALREADY_IN_CLAN'
+													: ''"
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
 		
-		(bind visible "_currentGroupId && !isIgnored && !isBot")
-		(style (width = 100%))
 
-		(element ContextMenuItem
-			_title = 'IDS_REMOVE_FROM_GROUP'
-			_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	'removeContactFromGroup',
-							args:	{ dbId: entityAccount.accountSimple.dbId, fromGroupId: _currentGroupId }
-						}]"
-		)
-	)
-
-	(block
-		(bind visible "!isBot && isChatServerAvailable")
-		(style (width = 100%))
-
-		(element ContextMenuItem
-			_title = "!isIgnored ? 'IDS_IGNORE_PLAYER' : 'IDS_NOT_IGNORE_PLAYER'"
-			_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	'userIgnoreContact',
-							args:	{ dbId: accountDbId, ignore: !isIgnored }
-						}]"
-		)
-
-		(element MenuItemReportPortChatMisbehaviour
-			_dbId = "entityAccount.accountSimple.dbId"
-			_channelId = "_playerContext.channelIdl"
-		)
-	)
-
-	(block
-		(bind visible "(selfVoiceChatEnabled || isSelf) && isInFormation")
-
-		(style (width = 100%))
-
-		(element VoiceChatMenuItem
-			_playerVoiceState = "playerVoiceState"
-			_actionType = 'direct.action'
-			_action = 'toggleVoice'
-			_actionArgs = "{ playerName: pureName, nickName: nickName }"
-		)
-	)
-
-	(block
 		
-		(bind visible "haveOwnClan && canInvite && !balancerRoute.isActive && !alreadyInYourClan && !isBot")
-		(style (width = 100%))
+		(block
+			(style (width = 100%))
 
-		(element ContextMenuItem
-			_enabled = "!(alreadyInAnotherClan || noFreePlacesInClan)"
-			_title = 'IDS_INVITATION_TO_CLAN'
-			_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	'sendInviteToClan',
-							args:	{ playerDBID: accountDbId }
-						}]"
-		)
-
-		(controller $Tooltip
-			(bind enabled "alreadyInAnotherClan || noFreePlacesInClan")
-			(renderer ='SimpleStatusTooltip')
-			(args
-				_text = "noFreePlacesInClan 	? 'IDS_CLAN_INVITATION_DENY_REASON_CLAN_IS_FULL':
-						alreadyInAnotherClan 	? 'IDS_CLAN_INVITATION_DENY_REASON_PLAYER_ALREADY_IN_CLAN'
-												: ''"
-				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "!isBot && isChatServerAvailable")
+				(args
+					_title = 'IDS_PROFILE'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'navigateTo',
+									args:	{
+												route: SC.Ui_windows.ROUTE.OVERLAY_BROWSER,
+												data: { url: SC.Ui_windows.GUI_URL.PLAYER_STATS, accountId: toString(accountDbId)}
+											}
+								}]"
+				)
 			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
-	)
-	
-
-	
-	(block
-		(bind visible "!balancerRoute.isActive && !isBot && isChatServerAvailable")
-		(style (width = 100%))
-
-		(element ContextMenuItem
-			_title = 'IDS_PROFILE'
-			_methods = "[ {
-							type:	'inputMapping.onAction',
-							name:	'navigateTo',
-							args:	{
-										route: SC.Ui_windows.ROUTE.PORTAL,
-										data: { url: SC.Ui_windows.GUI_URL.PLAYER_STATS, accountId: toString(accountDbId)}
-									}
-						}]"
 		)
 	)
 )
@@ -481,10 +534,14 @@
 
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
 	(class $ContextMenuDimensions)
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
 
-	(block
-		(style (width = 100%))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip = "true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
+		(style
+			(width = 100%)
+			(vgap = "XXS")
+		)
 
 		(controller $Repeat renderer='MoveToGroupContextSubMenuItem'
 			(bind count "_args._items.length")
@@ -500,11 +557,11 @@
 
 (def element MoveToGroupContextSubMenuItem (_args:dict)
 	(scope
-		(var entityAccount:gfx = "$datahub.getEntity(_args._entityAccountId)")
+		(var entityAccount:dhEntity = "getEntity(_args._entityAccountId)")
 		(var accountDbId:number = "entityAccount.accountSimple.dbId")
-		(var groupEntity:gfx = "$datahub.getEntity(_args._items[$index])")
+		(var groupEntity:dhEntity = "getEntity(_args._items[$index])")
 
-		(var groupOfElements:gfx = "groupEntity.groupOfElements")
+		(var groupOfElements:dhComponent = "groupEntity.groupOfElements")
 		(var groupId:str = "groupOfElements.groupId")
 		(var isNoTranslate:bool = "	groupOfElements.isLocal || 
 									groupOfElements.groupType == 'channels' || 
@@ -515,7 +572,6 @@
 
 	(element ContextMenuItem
 		_title = "groupOfElements.name"
-		_dispatchedEv = 'evContextMenuClose'
 		_noTranslate = "!isNoTranslate"
 		_methods = "[ {
 						type:	'inputMapping.onAction',
@@ -586,6 +642,9 @@
 		(var currentNickname:str = "'channelTypeIdent' in _playerContext && _playerContext.channelTypeIdent == 'clan' ? pureName : nickName")
 
 		(var isTournamentRoomInfo:bool = "getSingleComponent(CC.tournamentRoomInfo) != null")
+		(var isFormationPlayerIconVisible:bool = "(isInDivision || (isInvitedToDivision && !isSelf)) && !isInTrainingRoom")
+		(var isRatingIconVisible:bool = "ratingLeague != RATING_LEAGUE_NAME_NONE && !(_isShort || isInDivision)")
+		(var isRankIconVisible:bool = "rank > 0 && !(_isShort || isInDivision)")
 	)
 	(style
 		(bind alpha "isAccountOnline ? 1 : 0.65")
@@ -596,7 +655,11 @@
 	)
 
 	(block
-		(style (position = "absolute") (top = 5px) (left = "-18"))
+		(style
+			(position = "absolute")
+			(top = 5px)
+			(left = -18px)
+		)
 
 		(controller $Instance renderer='VoiceChatDockIcon'
 			(bind enabled "isAccountOnline && isInFormation")
@@ -610,19 +673,24 @@
 	(block
 		(bind visible "isAccountOnline && (inBattle && !isInFormationBattle)")
 		(style
-			(marginTop = "S") (marginRight = "XS")
-			(height = 15px) (width = 15px)
-			(backgroundImage = 'url:../service_kit/divisions_icons/player_in_battle_division_other_division.png')
+			(marginTop = 6px)
+			(marginRight = "XS")
+			(width = 13px)
+			(height = 18px)
+			(backgroundImage = 'url:../service_kit/divisions_icons/player_in_battle_other_team.png')
+			(backgroundSize = "cover")
 		)
 	)
 
 	(hblock
-		(bind visible "(isInDivision || (isInvitedToDivision && !isSelf)) && !isInTrainingRoom")
-		(style (marginTop = 7px) (marginRight = "XS"))
-
+		(bind visible "isFormationPlayerIconVisible")
+		(style
+			(marginTop = 7px)
+			(marginRight = "XS")
+		)
 
 		(controller $Instance renderer='FormationPlayerIcon'
-			(bind enabled "(isInDivision || (isInvitedToDivision && !isSelf)) && !isInTrainingRoom")
+			(bind enabled "isFormationPlayerIconVisible")
 			(args
 				_isEmptySlot = "isInvitedToDivision"
 				_isCommander = "isCommander"
@@ -634,11 +702,14 @@
 	)
 
 	(block
-		(bind visible "rank > 0 && !(_isShort || isInDivision)")
-		(style (marginTop = 3px) (marginRight = "XS"))
+		(bind visible "isRankIconVisible")
+		(style
+			(marginTop = 3px)
+			(marginRight = "XS")
+		)
 
 		(controller $Instance renderer='IconRankSmall'
-			(bind enabled "rank > 0 && !(_isShort || isInDivision)")
+			(bind enabled "isRankIconVisible")
 			(args
 				_rank = "rank"
 				_league = "rankLeague"
@@ -647,11 +718,14 @@
 	)
 
 	(block
-		(bind visible "rating > 0 && !(_isShort || isInDivision)")
-		(style (marginTop = 3px) (marginRight = "XS"))
+		(bind visible "isRatingIconVisible")
+		(style
+			(marginTop = 3px)
+			(marginRight = "XS")
+		)
 
 		(controller $Instance renderer='RatingIconSmall'
-			(bind enabled "ratingLeague != RATING_LEAGUE_NAME_NONE && !(_isShort || isInDivision)")
+			(bind enabled "isRatingIconVisible")
 			(args
 				_rating	= "rating"
 				_leagueName	= "ratingLeague"
@@ -660,7 +734,11 @@
 	)
 
 	(block
-		(style (width = 100%) (marginTop = 9px))
+		(style
+			(width = 100%)
+			(marginTop = 8px)
+		)
+
 		(tf
 			(bind name "'playerContactName_' + nickName")
 			(bind class "isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
@@ -961,7 +1039,7 @@
 	(block
 		(style (width = "DOG_TAG_SIZE.SMALL") (height = "DOG_TAG_SIZE.SMALL") (marginRight = "S"))
 
-		(element PlayerDogTagContainer
+		(element PlayerDogTag
 			_playerId = "_playerDbId"
 		)
 	)
@@ -973,7 +1051,7 @@
 			(style (width = 100%) (paddingRight = "S"))
 
 			(tf
-				(class $TextDefaultBold17NM)
+				(class $TextDefaultBold18NM)
 				(style (width = 100%) (alpha = "TA"))
 				(bind text "nickName")
 			)

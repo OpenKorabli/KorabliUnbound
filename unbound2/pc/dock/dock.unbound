@@ -1,53 +1,88 @@
-(def constant DOCK_ROUTE_ELEMENTS "{
-										SC.Ui_windows.ROUTE.BARGE:			'BargeDockInset',
-										SC.Ui_windows.ROUTE.SHIP_MASTERY:	'ShipMasteryDockInset',
-										SC.Ui_windows.ROUTE.SHIP_PREVIEW:	'ShipPreviewDockInset',
-										SC.Ui_windows.ROUTE.NEWBIE_GIFTS:	'NewbieGiftsDockInset'
-									}")
+(def constant PORT_MAIN_INSETS "{
+	SC.Ui_windows.ROUTE.ACTIVITIES:			'ActivitiesMainInset',
+	SC.Ui_windows.ROUTE.SHIP:				'ShipMainInset',
+	SC.Ui_windows.ROUTE.CLAN:				'ClanMainInset',
+	SC.Ui_windows.ROUTE.RESEARCH:			'ShipResearchMainInset'
+}")
 
-(def constant PORT_ROUTE_ELEMENTS "{
-										SC.Ui_windows.ROUTE.MAIN:		'PortMainInset',
-										SC.Ui_windows.ROUTE.MANAGEMENT:	'ShipManagementMainInset',
-										SC.Ui_windows.ROUTE.EXTERIOR:	'ExteriorsMainInset',
-										SC.Ui_windows.ROUTE.RESEARCH:	'ShipResearchMainInset',
-										SC.Ui_windows.ROUTE.PROFILE:	'ProfileMainInset',
-										SC.Ui_windows.ROUTE.CLANS:		'ClanMainInset'
-									}")
+(def constant ACTIVITIES_INSET_PAGES "{
+	SC.Ui_windows.ROUTE.EVENTS:				'EventsDockMainInset',
+	SC.Ui_windows.ROUTE.SSE:				'SseMainInset',
+	SC.Ui_windows.ROUTE.LOOTBOXES:			'BargeMainInset',
+	SC.Ui_windows.ROUTE.SHIP_MASTERY:		'ShipMasteryMainInset'
+}")
+
+(def constant SHIP_INSET_PAGES "{
+	SC.Ui_windows.ROUTE.OVERVIEW:  			'ShipManagementMainInset',
+	SC.Ui_windows.ROUTE.UPGRADES:  			'ShipManagementMainInset',
+	SC.Ui_windows.ROUTE.CREW_MANAGEMENT:	'CrewManagementMainInset',
+	SC.Ui_windows.ROUTE.ECOBOOSTS:			'EconomicsManagementMainInset',
+	SC.Ui_windows.ROUTE.CAMOUFLAGE:			'CamouflageMainInset',
+	SC.Ui_windows.ROUTE.ENSIGN:				'EnsignDockMainInset'
+}")
+
+(def css $DockInsetPageContent ()
+	(extends $FullsizeAbsolute)
+	(paddingTop = "DOCK_HEADER_HEIGHT + SECONDARY_DOCK_TAB_HEIGHT")
+)
+
+(def css $DockInsetPageSecondaryTabOffset ()
+	(paddingTop = "-SECONDARY_DOCK_TAB_HEIGHT")
+)
+
+(def css $DockInsetPageHeaderOffset ()
+	(extends $FullsizeAbsolute)
+	(paddingTop = "-(DOCK_HEADER_HEIGHT + SECONDARY_DOCK_TAB_HEIGHT)")
+)
+
+(def macro PULL_RENDER_PAGE_ITEM (_route:expression, _map:expression = {})
+	(var rootRouteEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.WINDOWS.DOCK)")
+	(var previousLeaf:str = "rootRouteEntity.rootRoute.previousLeaf" (event "rootRouteEntity.rootRoute.evActiveLeafChanged"))
+	
+	(var routeEntity:dhEntity = 		"getPrimaryEntity(CC.route, _route)")
+	(var componentRoute:dhComponent =	"routeEntity.route")
+	(var activeChild:str =				"componentRoute.activeChild" (event "componentRoute.evActiveChildChanged"))
+
+	(var activeChildRoute:str = "activeChild" watch=false)
+	(bind activeChildRoute "activeChild ?: activeChildRoute" init=false watch=false (event "rootRouteEntity.rootRoute.evActiveLeafChanged"))
+
+	(var renderItem:str = "_map[activeChildRoute] ?: ''" watch=false)
+	(bind renderItem "_map[activeChildRoute] ?: renderItem" init=false watch=false (bind trigger "activeChildRoute"))
+)
 
 (def element Dock ()
 	(macro MODAL_WINDOW_INIT)
 	(scope
 		(event evDockInsetShow)
 		(event evDockInsetHide)
-		(event evHideSpace)
-		(macro USER_PREF_DATA)
-		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option = "'ui.carousel.carouselAreaHeight'"))
 
-		(struct dockRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.WINDOWS.DOCK"))
-		(var currentDockState:str = "dockRoute.activeChild" watch=false)
-		(bind currentDockState "dockRoute.activeChild ?: currentDockState" init=false watch=false (bind trigger "dockRoute.activeChild"))
+		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
 
-		(var isActivePortRoute:bool = "currentDockState == SC.Ui_windows.ROUTE.PORT")
-
+		(struct portRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.PORT"))
+		(struct armoryRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.ARMORY"))
+		(var isActivePortRoute:bool = "portRoute.isActive && !armoryRoute.isActive")
+	
 		
 		(var referralCollection:dhCollection = "getCollection(CC.referral)")
 		(var isRefSysParticipant:bool = "referralCollection.length > 0")
 
-		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
-
-		(var renderInsetItem:str = "currentDockState in DOCK_ROUTE_ELEMENTS ? DOCK_ROUTE_ELEMENTS[currentDockState]
-																			: ''")
+		(var sessionPrefs:dhComponent = "getSingleComponent(CC.sessionPreference)")
+		(var dockReady:bool = "sessionPrefs.dockReady" (event "sessionPrefs.evDockReadyChanged"))
 	)
 	(dispatch evDockInsetShow dir="EventDirection.NONE" (bind enabled "isActivePortRoute") (bind trigger "isActivePortRoute"))
 	(dispatch evDockInsetHide dir="EventDirection.NONE" (bind enabled "!isActivePortRoute") (bind trigger "isActivePortRoute"))
 
-	(bindcall externalCall "'inputMapping.onRequest'" "['dockReady', {}]" on='addedToStage')
+	(bindcall externalCall "!dockReady ? 'inputMapping.onRequest' : ''" "['dockReady', {}]" watch=false on='addedToStage')
+
+	(bindcall externalCall 'direct.action' "['setSessionPref', { prefName: 'dockReady', newValue: true }]"	on='addedToStage')
+	(bindcall externalCall 'direct.action' "['setSessionPref', { prefName: 'dockReady', newValue: false }]"	on='removedFromStage')
+
 	(bindcall externalCall "isRefSysParticipant ? 'inputMapping.onAction' : ''" "['ReferralProgramProxy.requestReferralPoints', {}]" on='addedToStage')
 
 	(block
 		(class $FullsizeAbsolute)
 		(style
-			(backgroundColor = 0xff000000)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.BLACK")
 			(alpha = 0)
 			(hitTest = false)
 		)
@@ -77,28 +112,19 @@
 
 	(block
 		(visible = "isActivePortRoute")
+		(alpha = "isActivePortRoute ? 1 : 0")
+
 		(class $FullsizeAbsolute)
 
 		(controller $Animation
 			(bindcall play
-				delay =	"dockRoute.prevActiveChild == SC.Ui_windows.ROUTE.BARGE				? 0.5 :
-						 dockRoute.prevActiveChild == SC.Ui_windows.ROUTE.SHIP_PREVIEW		? 0.2 :
-						 dockRoute.prevActiveChild == SC.Ui_windows.ROUTE.SHIP_MASTERY		? 0.2
-																							: 0"
-				duration = 0.2
-				to = "{ alpha: 1, visible: true }"
+				delay = 0.1
+				duration = 0.3
+				to = "isActivePortRoute ? { alpha: 1, visible: true } : { alpha: 0, visible: false }"
 				easing = "Easing.quad_out"
 				action = "kill"
 				watch = false
-				(event "evDockInsetShow")
-			)
-
-			(bindcall play
-				duration = 0.2
-				to = "{ alpha: 0, visible: false }"
-				easing = "Easing.quad_out"
-				action = "kill"
-				(event "evDockInsetHide")
+				(bind trigger "isActivePortRoute")
 			)
 		)
 
@@ -108,10 +134,49 @@
 	(block
 		(class $FullsizeAbsolute)
 
+		(element ArmorTooltipHub)
+	)
+)
+
+(def element MainDockInset ()
+	(scope
+		(macro PULL_RENDER_PAGE_ITEM
+			_route = "SC.Ui_windows.ROUTE.PORT"
+			_map = "PORT_MAIN_INSETS"
+		)
+
+		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option = "'ui.carousel.carouselAreaHeight'"))
+
+		(var windowManager:dhComponent = "getSingleComponent(CC.windowManager)")
+		(var topWindowNodeName:str = "windowManager.topWindowNodeName ?: ''" (event "windowManager.evTopWindowNodeNameChanged"))
+		(var isDockHeaderHidden:bool = "isIn(topWindowNodeName, SC.Ui_windows.MODAL.DOCK_HEADER_HIDDEN)")
+	)
+	(class $Fullsize)
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(bind name "renderItem")
+
+	(block
+		(class $DockInsetPageContent)
+
 		(controller $Instance
-			(bind renderer "renderInsetItem")
+			(bind renderer "renderItem")
+			(args
+				_previousRoute = "previousLeaf"
+			)
 			(reuseElement = true)
 		)
+	)
+
+	(element DeclareBlurLayer)
+
+	(block
+		(style (width = 100%))
+
+		(macro CONTROL_VISIBLE_STATE_ANIMATION
+			_isTrigger = "!isDockHeaderHidden"
+		)
+
+		(element DockNavigationPanel)
 	)
 
 	(block
@@ -123,349 +188,47 @@
 
 		(element InformerLogContainer)
 	)
-
-	(block
-		(class $FullsizeAbsolute)
-		(style
-			(align = "center|bottom")
-			(bind paddingBottom "carouselAreaHeightPref.value")
-		)
-
-		(element InstructionHintBlock)
-	)
-)
-
-(def element MainDockInset ()
-	(scope
-		(event evActiveChildPortChanged)
-
-		(struct portRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.PORT"))
-		(var currentDockState:str = "portRoute.activeChild" watch=false (event "evActiveChildPortChanged"))
-		(var renderChild:str = "PORT_ROUTE_ELEMENTS[currentDockState] ?: ''")
-
-		(var ctaPlayButtonResearchEntity:dhEntity = "getPrimaryEntity(CC.splitRunTest, 'Player_Focus_And_CTA_Button_Research')")
-		(var splitRunTest:dhComponent = "ctaPlayButtonResearchEntity.splitRunTest")
-		(var isCTABattleButtonActive:bool = "splitRunTest.data.isCTABattleButtonActive" (event "splitRunTest.evDataChanged"))
-		(var ctaPlayButtonResearchEntityTag:str = "splitRunTest.id" (event "splitRunTest.evDataChanged"))
-
-		(struct mainRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.MAIN"))
-		(var isTaskEntity:bool = "getSingleEntity(CC.sseCore, 'firstLineSSE.bySSETag.' + ctaPlayButtonResearchEntityTag) != null")
-		(var isCTABannerVisible:bool = "mainRoute.isActive && isCTABattleButtonActive && isTaskEntity && portRoute.isActive")
-	)
-	(dispatch evActiveChildPortChanged dir="EventDirection.NONE" (bind enabled "portRoute.activeChild") (bind trigger "portRoute.activeChild"))
-	(macro HIDE_UI_ON_SHIPOVERVIEW)
-
-	(class $Fullsize)
-
-	(block
-		(class $FullsizeAbsolute)
-		(style (paddingTop = 60px))
-
-		(controller $Instance
-			(bind renderer "renderChild")
-			(reuseElement = true)
-		)
-	)
-
-	(element DockHeader)
-
-	
-	(block
-		(style
-			(position = "absolute")
-			(width = 100%)
-			(align = "center")	
-			(top = "SXS")
-		)
-
-		(controller $Animation
-			(bindcall play
-				keyframes = "[
-					{ time:0,		to:{ alpha:0 }},
-					{ time:0.5,		to:{ alpha:0 }},
-					{ time:0.9,		to:{ alpha:1 }}
-				]"
-				action = "kill"
-				(bind enabled "isCTABannerVisible")
-			)
-		)
-
-		(controller $Instance renderer='CallToActionPlayButtonBanner'
-			(bind enabled "isCTABannerVisible")
-		)
-	)
-)
-
-(def element PortMainInset ()
-	(scope
-		(macro PULL_SHIP_ID)
-		(var shipEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, playerShipId)")
-		(var isNeedRepair:bool =	"shipEntity.ownShip.isNeedRepair"	(event "shipEntity.ownShip.evUpdateDockState"))
-		(var isLocked:bool =		"shipEntity.ownShip.isLocked"		(event "shipEntity.ownShip.evUpdateLock"))
-		(var isInFormation:bool =	"shipEntity.ownShip.isInFormation"	(event "shipEntity.ownShip.evUpdateLock"))
-
-		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
-		(var playerShipsCollectionLen:number = "playerShipsCollection.length")
-
-		(var divisionDataEntity:dhEntity =	"getSingleEntity(CC.division)")
-		(var hasDivision:bool = "toBool(divisionDataEntity)")
-
-		(var selfPlayerEntity:dhEntity =	"getSingleEntity(CC.accountSelf)")
-		(var isCommander:bool = "selfPlayerEntity.preBattlePlayerSimple.isCommander" (event "selfPlayerEntity.preBattlePlayerSimple.evIsCommanderChanged"))
-
-		
-		(var selectedBattleTypesEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
-		(var selectedBattleType:str = "selectedBattleTypesEntity.battleType.type")
-		(var isClanBattle:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE")
-		
-
-		
-		(var clanId:number =	"selfPlayerEntity.clanman.clanId" (event "selfPlayerEntity.clanman.evClanIdChanged"))
-		(var role:str =			"selfPlayerEntity.clanman.role" (event "selfPlayerEntity.clanman.evRoleChanged"))
-		
-		(macro PULL_CLANINFO
-			_clanId = "clanId"
-		)
-		
-		(var canCreateClanBattle:bool = "isIn(role, SC.Clan.CLAN_ROLE.CAN_INVITE)")
-		(var isCreateDivisionButtonVisible:bool = "isClanBattle && canCreateClanBattle && !hasDivision")
-	
-		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option = "'ui.carousel.carouselAreaHeight'"))
-
-		(var shipStatusDockHeaderInfoList:array = "	playerShipsCollectionLen == 0							? [ 'IDS_NO_SHIPS' ] :
-													isNeedRepair 											? [ 'IDS_SHIP_NEEDS_SERVICE_MESSAGE' ] :
-													isInFormation && isCommander							? [ 'IDS_SHIP_IN_DIVISION_MESSAGE_COMMANDER_0', 'IDS_SHIP_IN_FORMATION_MESSAGE_1' ] :
-													isInFormation 											? [ 'IDS_SHIP_IN_DIVISION_MESSAGE_NOT_COMMANDER_0', 'IDS_SHIP_IN_FORMATION_MESSAGE_1' ]:
-													isLocked 												? [ 'IDS_SHIP_IN_BATTLE_MESSAGE' ]:
-													isClanBattle && !canCreateClanBattle && !hasDivision	? [ 'IDS_CLAN_BATTLES_ROLE_NOT_ALLOWED_TO_START_CLAN_BATTLE' ] :
-													isClanBattle && !hasDivision							? [ 'IDS_NOT_IN_DIVISION_FOR_CLAN_BATTLE_WITH_TRANSFER' ]
-																											: []")
-	)
-	(class $Fullsize)
-	(style (bind paddingBottom "carouselAreaHeightPref.value + 29px"))
-	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'main']" on='addedToStage')
-
-	(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
-
-	
-	(block
-		(class $FullsizeAbsolute)
-		(style (align = "center|bottom"))
-
-		(block
-			(style (hitTest = false))
-			(controller $Instance renderer='ShipStatusDockHeader'
-				(bind enabled "shipStatusDockHeaderInfoList.length > 0")
-				(args
-					_texts = "shipStatusDockHeaderInfoList"
-				)
-			)
-		)
-
-		(block
-			(style (bind marginTop "isCreateDivisionButtonVisible ? SXS : 0px"))
-
-			(controller $Instance renderer='DefaultButton'
-				(bind enabled "isCreateDivisionButtonVisible")
-				(args
-					_width = 160px
-					_label = 'IDS_CREATE_DIVISION'
-					_methods = "[{	type: 'inputMapping.onAction',
-									name: 'DockProxy.createDivision',
-									args: { battleType: SC.Common.BATTLE_TYPES.CLAN_BATTLE }
-								}]"
-				)
-			)
-		)
-
-		(block
-			(style (bind marginTop "isNeedRepair ? 9px : 0px"))
-
-			(controller $Instance renderer='ShipStatusDock'
-				(bind enabled "isNeedRepair")
-				(args
-					_shipId = "playerShipId"
-				)
-			)
-		)
-	)
-
-	(block
-		(style
-			(position = "absolute")
-			(top = 38px)
-			(height = 100%)
-		)
-
-		(element LeftSideBanners)
-	)
 )
 
 (def element ClanMainInset ()
-	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'clans']" on='addedToStage')
-	(name = 'ClansHomePage')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'clan']" on='addedToStage')
 	(class $Fullsize)
 )
 
-(def element ShipStatusDock(_shipId:number)
+(def element ActivitiesMainInset ()
 	(scope
-		(var shipEntity:dhEntity =		"getPrimaryEntity(CC.ownShip, _shipId)")
-		(var creditsDeficit:number =	"shipEntity.ownShip.creditsDeficit"	(event "shipEntity.ownShip.evCreditsDeficitChanged"))
-		(var isNeedRepair:bool =		"shipEntity.ownShip.isNeedRepair"	(event "shipEntity.ownShip.evUpdateDockState"))
-		(var costRepair:number =		"shipEntity.ownShip.costRepair"		(event "shipEntity.ownShip.evUpdateDockState"))
-
-		(struct blurOptionPref =		GET_PREF_BOOL(_option = "'graphics.GUI.blur'"))
-		(struct uiContrastOptionPref =	GET_PREF_BOOL(_option = "'graphics.GUI.contrast'"))
-		(var isHighContrast:bool = "uiContrastOptionPref.value || !blurOptionPref.value")
-
-		(var isServeShipButtonVisible:bool = "isNeedRepair && creditsDeficit <= 0")
-	)
-	(style (align = "center"))
-	(alpha = 0)
-	
-	(controller $Animation
-		(bindcall play
-			delay = 0.15
-			duration = 0.3
-			to = "{ alpha: 1 }"
-			action = "kill"
-			on = 'addedToStage'
+		(macro PULL_RENDER_PAGE_ITEM
+			_route = "SC.Ui_windows.ROUTE.ACTIVITIES"
+			_map = "ACTIVITIES_INSET_PAGES"
 		)
 	)
+	(bind name "renderItem")
+	(class $Fullsize)
 
-	(block
-		(class $FullsizeAbsolute)
-		(style
-			(paddingLeft = "-XL")
-			(paddingRight = "-XL")
-			(hitTest = false)
+	(controller $Instance
+		(bind renderer "renderItem")
+		(args
+			_previousRoute = "previousLeaf"
 		)
-
-		(controller $Instance renderer='BlurMap'
-			(bind enabled "!isHighContrast")
-			(args
-				_blurType = "BLUR_TYPE.LOW_SPHERE"
-			)
-		)
-	)
-
-	(block
-		(bind visible "isHighContrast")
-		(class $FullsizeAbsolute)
-		(style
-			(paddingTop = "-S")
-			(paddingBottom = "-M")
-			(paddingLeft = "-LM")
-			(paddingRight = "-LM")
-		)
-
-		(block
-			(class $FullsizeAbsolute)
-			(style
-				(backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_high_contrast.png')
-				(scale9grid = 3)
-			)
-		)
-	)
-
-	(block
-		(style
-			(width = 300px)
-			(marginTop = "SXS")
-			(marginBottom = "SXS")
-			(hitTest = false)
-			(vgap = "SXS")
-		)
-
-		(hblock
-			(style (width = 100%))
-
-			
-			(block
-				(style (width = 100%))
-
-				(tf
-					(class $TextDefaultNM)
-					(style
-						(width = 100%)
-						(alpha = "TA")
-						(leading = -2)
-					)
-					(text = 'IDS_SERVICE_COST')
-				)
-			)
-
-			(element PriceTag
-				_priceInfo = "{ finalPrice: costRepair, currency: SC.Common.CURRENCIES.CREDITS }"
-			)
-		)
-
-		(element HorizontalDividerTwoPx)
-	)
-	
-	(block
-		(controller $Instance renderer='DefaultButton'
-			(bind enabled "isServeShipButtonVisible")
-			(args
-				_width = 200px
-				_label = 'IDS_PURCHASE_BUTTON'
-				_methods = "[{	type: 'inputMapping.onAction',
-								name: 'DockProxy.onServeShip',
-								args: { shipId: _shipId }
-							}]"
-			)
-		)
-	)
-
-	
-	(hblock
-		(bind visible "creditsDeficit > 0")
-		(style
-			(hgap = "S")
-			(marginTop = "SXS")
-			(hitTest = false)
-		)
-
-		(element StatusLine
-			_text = 'IDS_NOT_ENOUGH'
-			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
-		)
-
-		(element PriceTag
-			_priceInfo = "{ finalPrice: creditsDeficit, currency: SC.Common.CURRENCIES.CREDITS }"
-		)
+		(reuseElement = true)
 	)
 )
 
-(def element ShipStatusDockHeader(_texts:array)
-	(name = 'ShipStatusDockHeaderId')
-	(style
-		(width = 700px)
-		(align = "center")
-		(vgap = "M")
-	)
-	(alpha = 0)
-
-	(controller $Animation
-		(bindcall play
-			delay = 0.15
-			duration = 0.3
-			to = { alpha: 1 }
-			action = "kill"
-			on = 'addedToStage'
+(def element ShipMainInset ()
+	(scope
+		(macro PULL_RENDER_PAGE_ITEM
+			_route = "SC.Ui_windows.ROUTE.SHIP"
+			_map = "SHIP_INSET_PAGES"
 		)
 	)
+	(bind name "renderItem")
+	(class $Fullsize)
 
-	(controller $Repeat renderer='RepeatParagraphItemNM'
-		(bind count "_texts.length")
+	(controller $Instance
+		(bind renderer "renderItem")
 		(args
-			_isBold = true
-			_toUpper = true
-			_maxWidth = 700px
-			_textAlign = "center"
-			_paragraphText = "_texts[$index]"
-			_size = "SC.Ui_styles.SIZE.LARGE"
-			_textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"
+			_previousRoute = "previousLeaf"
 		)
+		(reuseElement = true)
 	)
 )

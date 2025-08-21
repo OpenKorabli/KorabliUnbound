@@ -1,0 +1,359 @@
+(def element ShipManagementWidget (_shipId:number)
+	(scope
+		(struct shipBuyPrice = PULL_PRICE(_entityId = "_shipId"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo")
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _shipId)")
+		(var ownShipInfo:dhComponent = "ownShipEntity.ownShip")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var isRented:bool = "ownShipInfo.timeRent > 0" (event "ownShipInfo.evUpdateDockState"))
+		(var isResearchableShip:bool = "!isIn(shipInfo.group, [SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS, SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS_PREM, SC.Ships.SHIP_GROUPS.EARLY_ACCESS])")
+
+		(var isExplored:bool =				"upgradableShipInfo.isExplored"				(event "upgradableShipInfo.evUpdate"))
+		(var isDependencyResearched:bool =	"upgradableShipInfo.dependencyResearched"	(event "upgradableShipInfo.evUpdate"))
+
+		
+		(var shipCrossResearchInfo:dhComponent = "getSingleComponent(CC.shipCrossResearchInfo)")
+
+		(var isFreeExpAvailable:bool =					"shipCrossResearchInfo.isFreeExpAvailable"					(event "shipCrossResearchInfo.evChanged"))
+		(var isPrevShipResearched:bool =				"shipCrossResearchInfo.isPrevShipResearched"				(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchPriceVisible:bool =				"shipCrossResearchInfo.isResearchPriceVisible"				(event "shipCrossResearchInfo.evChanged"))
+		(var isFreeExpCost:bool =						"shipCrossResearchInfo.isFreeExpCost"						(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchDeficit:bool =					"shipCrossResearchInfo.isResearchDeficit"					(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchPreviousShipLockVisible:bool =	"shipCrossResearchInfo.isResearchPreviousShipLockVisible"	(event "shipCrossResearchInfo.evChanged"))
+		(var isResearchAvailable:bool =					"shipCrossResearchInfo.isResearchAvailable"					(event "shipCrossResearchInfo.evChanged"))
+
+		(var researchPriceInfo:dict =					"shipCrossResearchInfo.researchPriceInfo"					(event "shipCrossResearchInfo.evChanged"))
+		(var dependenciesResearchPriceInfo:dict =		"shipCrossResearchInfo.dependenciesResearchPriceInfo"		(event "shipCrossResearchInfo.evChanged"))
+		(var isDependenciesResearchPriceVisible:bool =	"shipCrossResearchInfo.dependenciesResearchPriceVisible"	(event "shipCrossResearchInfo.evChanged"))
+		(var researchDeficitPriceInfoDH:dict =			"shipCrossResearchInfo.researchDeficitPriceInfo"			(event "shipCrossResearchInfo.evChanged"))
+
+		(var researchDeficitPriceInfo:dict =	"{	finalPrice:	researchDeficitPriceInfoDH.finalPrice >= 0	? researchDeficitPriceInfoDH.finalPrice
+																											: 0,
+													currency:	researchDeficitPriceInfoDH.currency}")
+
+		(var dependenciesResearchTitle:str = "isPrevShipResearched ? 'IDS_RESEARCH_WITH_MODULES_COST_TTX' : 'IDS_RESEARCH_WITH_PREV_ITEMS_COST_TTX'")
+
+		
+		(var superShipFeature:dhComponent =		"getSingleComponent(CC.superShipFeature)")
+		(var isUnlockedSuperShipFeature:bool =	"superShipFeature.isUnlocked"		(event "superShipFeature.evUpdate"))
+		(var topShipsExplored:number =			"superShipFeature.topShipsExplored"	(event "superShipFeature.evUpdate"))
+
+		(var isSuperShipReseachInfoVisible:bool =	"!isExplored && shipInfo.group == SC.Ships.SHIP_GROUPS.SUPER_SHIP")
+		(var isSuperShipReseached:bool =			"isExplored && shipInfo.group == SC.Ships.SHIP_GROUPS.SUPER_SHIP")
+
+		
+		(var accountResource:dhComponent =		"getSingleComponent(CC.accountResource)")
+		(var totalMoneyAfterPurchase:number =	"accountResource[shipBuyPrice.info.currency] - shipBuyPrice.info.finalPrice"	(event "accountResource.evChangedGold")
+																																(event "accountResource.evChangedCredit"))
+
+		(var isBuyPriceVisible:bool = "(!isOwned || isRented) && isResearchableShip && shipInfo.canBuy")
+		(var isMoneyDeficit:bool = "totalMoneyAfterPurchase < 0")
+
+		(var isMoneyDeficitVisible:bool =	"isMoneyDeficit && (isFreeExpAvailable || isDependencyResearched || isSuperShipReseached)")
+		(var isBuyAvailable:bool =			"isBuyPriceVisible && isExplored && !isMoneyDeficit")
+
+		(var moneyDeficit:number = "isMoneyDeficit ? abs(totalMoneyAfterPurchase) : 0")
+
+		(var moneyDeficitPriceInfo:dict = "{	finalPrice: moneyDeficit,
+												currency: shipBuyPrice.info.currency }")
+
+		
+		(var isGettingShipButtonsVisible:bool = "(!isOwned || isRented) && (isBuyAvailable || isResearchAvailable) &&
+												isIn(shipInfo.group, [	SC.Ships.SHIP_GROUPS.SUPER_SHIP,
+																		SC.Ships.SHIP_GROUPS.UPGRADEABLE,
+																		SC.Ships.SHIP_GROUPS.UPGRADEABLE_ULT,
+																		SC.Ships.SHIP_GROUPS.UPGRADEABLE_EXCL,
+																		SC.Ships.SHIP_GROUPS.EVENT,
+																		SC.Ships.SHIP_GROUPS.START,
+																		SC.Ships.SHIP_GROUPS.PREMIUM])")
+
+		(struct researchRoute =			PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.RESEARCH"))
+		(struct previewRoute =			PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SHIP_PREVIEW"))
+		(struct shipRoute =				PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SHIP"))
+		(struct shipRouteMenuData = 	ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.SHIP"))
+
+		(var isGoToShipButtonAvailable:bool = "shipRouteMenuData.isEnabled && !shipRoute.isActive && !previewRoute.isActive")
+
+		(var isCrossResearchHighlightEnabled:bool = "researchRoute.isActive && !isDependencyResearched && !isExplored && !isFreeExpCost")
+
+
+		(struct finalBuyResearchTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FINAL_BUY_RESEARCH"))
+
+		(var newTipId:number = "finalBuyResearchTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.RESEARCH_FINAL_BUY_RESEARCH
+																: SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+
+	(class $TTXWidgetContainer)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element DockWidgetBackground)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(paddingLeft = "M")
+			(paddingRight = "SXS")
+			(paddingTop = "M")
+			(paddingBottom = "M")
+			(vgap = "S")
+		)
+
+		
+		(block
+			(bind visible "isSuperShipReseachInfoVisible || isResearchPriceVisible || isBuyPriceVisible || isResearchPreviousShipLockVisible")
+
+			(style
+				(width = 100%)
+				(vgap = "SXS")
+				(marginBottom = "XS")
+			)
+
+			
+			(block
+				(bind visible "isSuperShipReseachInfoVisible")
+
+				(style
+					(width = 100%)
+					(vgap = "S")
+				)
+
+				(hblock
+					(bind visible "!isUnlockedSuperShipFeature")
+
+					(style
+						(width = 100%)
+						(backgroundColor = "NO_COLOR")
+					)
+
+					(controller $Tooltip
+						(renderer = 'HeaderDescriptionInstructionTooltip')
+						(args
+							_headerText =		'IDS_RESEARCH_TOP_TIER'
+							_descriptionText =	'IDS_RESEARCH_SUPERSHIP_TOP_TIER_SHIPS_INFO'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(tf
+						(class $TextDefaultBold18NM)
+						(style
+							(width = 100%)
+							(alpha = "TA")
+						)
+
+						(text = 'IDS_RESEARCH_TOP_TIER_COLON')
+					)
+
+					(block
+						(controller $Instance renderer='DefaultDividedCounter'
+							(bind enabled "!isUnlockedSuperShipFeature")
+							(args
+								_curValueTextClass =	'$TextDefaultBold18NM'
+								_curValue =				"topShipsExplored"
+								_maxValue =				3
+								_unifiedStatus =		"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+							)
+						)
+					)
+				)
+
+				(hblock
+					(bind visible "!isPrevShipResearched")
+
+					(style
+						(width = 100%)
+						(backgroundColor = "NO_COLOR")
+					)
+
+					(controller $Tooltip
+						(renderer = 'HeaderDescriptionInstructionTooltip')
+						(args
+							_headerText =		'IDS_RESEARCH_SHIP'
+							_descriptionText =	'IDS_RESEARCH_SUPERSHIP_PREVIOUS_SHIP_INFO'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(tf
+						(class $TextDefault18NM)
+						(style
+							(width = 100%)
+							(alpha = "TA")
+						)
+						(text = 'IDS_RESEARCH_ACTION')
+					)
+
+					(element ShipLineItemNM
+						_shipId =		"shipInfo.previousShipId"
+						_fontClass =	'$TextDefaultBold18NM'
+					)
+				)
+			)
+			
+
+			
+			(block
+				(bind visible "isResearchPriceVisible")
+
+				(style
+					(width = 100%)
+					(vgap = "S")
+				)
+
+				(block
+					(style (width = 100%))
+					
+					(controller $Instance renderer='PriceTagWithLabel'
+						(bind enabled "shipInfo.level < SC.Ships.SHIP_LEVELS.SUPER_SHIP && isResearchPriceVisible && researchPriceInfo")
+						(args
+							_label =			'IDS_RESEARCH_COST_TTX'
+							_size =				"SIZE.MEDIUM"
+							_priceInfo =		"researchPriceInfo"
+							_showDiscountTag =	true
+							_width =			100%
+						)
+					)
+				)
+
+				(block
+					(bind visible "isDependenciesResearchPriceVisible && dependenciesResearchPriceInfo")
+					(style (width = 100%))
+
+					(controller $Instance renderer='PriceTagWithLabel'
+						(bind enabled "isDependenciesResearchPriceVisible && dependenciesResearchPriceInfo")
+						(args
+							_label =			"dependenciesResearchTitle"
+							_size =				"SIZE.MEDIUM"
+							_priceInfo =		"dependenciesResearchPriceInfo"
+							_showDiscountTag =	true
+							_width =			100%
+						)
+					)
+				)
+
+				(block
+					(bind visible "isResearchDeficit")
+					(style (width =  100%))
+
+					(controller $Instance renderer='PriceTagWithDeficitAndLabelRow'
+						(bind enabled "isResearchDeficit")
+						(args
+							_priceInfo =	"researchDeficitPriceInfo"
+							_title =		'IDS_NOT_ENOUGH'
+							_size =			"SIZE.MEDIUM"
+						)
+					)
+				)
+			)
+			
+
+			
+			(block
+				(bind visible "isBuyPriceVisible")
+				(style
+					(width = 100%)
+					(vgap = "S")
+				)
+
+				(element PriceTagWithLabel
+					_priceInfo =		"shipBuyPrice.info"
+					_label =			'IDS_PURCHASE_COST_TTH'
+					_size =				"SIZE.MEDIUM"
+					_showDiscountTag =	true
+					_width =			100%
+				)
+
+				(block
+					(bind visible "isMoneyDeficitVisible")
+					(style (width = 100%))
+
+					(controller $Instance renderer='PriceTagWithDeficitAndLabelRow'
+						(bind enabled "isMoneyDeficitVisible")
+						(args
+							_priceInfo =	"moneyDeficitPriceInfo"
+							_title =		'IDS_NOT_ENOUGH'
+							_size =			"SIZE.MEDIUM"
+						)
+					)
+				)
+			)
+			
+			
+			
+			(block
+				(bind visible "isResearchPreviousShipLockVisible")
+				(style (width = 100%))
+
+				(element StatusLine
+					_text =				'IDS_RESEARCH_PREVIOUS_SHIPS'
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_width =			100%
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+
+			(block
+				(bind visible "isGettingShipButtonsVisible")
+
+				(style
+					(width = 100%)
+					(bind marginBottom "isGoToShipButtonAvailable ? SXS : 0px")
+				)
+
+				(bindcall externalCall "isCrossResearchHighlightEnabled ? 'inputMapping.onAction' : ''" "['evHighlightCrossResearchShipsOver', { shipId: _shipId }]"			watch=false		on='rollOver')
+				(bindcall externalCall "isCrossResearchHighlightEnabled ? 'inputMapping.onAction' : ''" "['evHighlightCrossResearchShipsOut',  { country: shipInfo.country }]"	watch=false		on='rollOut')
+
+				(element DefaultButton
+					_name =				'ButtonResearchAndBuy'
+					_label =			"isExplored			? 'IDS_PURCHASE_UPPER_CASE' :
+										 !isMoneyDeficit	? 'IDS_RESEARCH_PURCHASE_UPPER_CASE'
+															: 'IDS_RESEARCH_UPPER_CASE'"
+					_width =			100%
+					_focusIndex =		1
+					_isTransactionBtn =	true
+					_methods =			"isExplored	? [ {	type: 'inputMapping.onAction',	name: 'purchaseShip',	args: { shipId: _shipId } } ]
+													: [ {	type: 'inputMapping.onAction',	name: 'researchShip',	args: { shipId: _shipId } } ]"
+				)
+
+				(controller $Instance renderer='GuidingTipHub'
+					(bind enabled "newTipId")
+					(args
+						_tipId =			"newTipId"
+						_tipPositioning =	"TIP_POSITION_LEFT"
+						_offsetX =			20
+						_pointerOffset =	180
+						_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+					)
+				)
+			)
+
+			(block
+				(bind visible "isGoToShipButtonAvailable")
+				(style (width = 100%))
+
+				(controller $Instance  renderer='DefaultButton'
+					(bind enabled "isGoToShipButtonAvailable")
+					(args
+						_name =			'LookAtShipButton'
+						_label =		'IDS_TO_SHIP_ROUTE_UPPER_CASE'
+						_type =			"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_width =		100%
+						_methods =		"[	{ type: 'inputMapping.onAction',	name: 'selectShip',	args: { shipId: _shipId } },
+											{ type: 'inputMapping.onAction',	name: 'navigateTo',	args: { route: SC.Ui_windows.ROUTE.SHIP}}]"
+					)
+				)
+			)
+		)
+	)
+)

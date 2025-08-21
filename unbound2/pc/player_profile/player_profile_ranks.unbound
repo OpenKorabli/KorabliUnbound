@@ -1,10 +1,16 @@
 (def constant RANK_ITEM_PER_ROW 6)
 
+(def constant RANK_CARD_BG_COLORS {
+	CLOSED: 0x26081225,
+	SKIPPED: 0x0DFFFFFF,
+	OPENED: 0x73081225,
+})
+
 (def constant RANKS_CONTAINER {
-	WIDTH_MIN: 672,
-	HEIGHT_MIN: 292,
-	WIDTH_MAX: 864,
-	HEIGHT_MAX: 386
+	WIDTH_MIN: 578,
+	HEIGHT_MIN: 296,
+	WIDTH_MAX: 884,
+	HEIGHT_MAX: 390
 }) 
 
 (def constant RANKS_REWARDS_STACK_LIMIT {
@@ -27,12 +33,16 @@
 	QUAL_LOCKED: 6
 })
 
-(def constant START_LEAGUE_INDEX 3)
+(def constant CT_PROFILE_RANK_CARD_SMOKE "{
+	redMultiplier: 0,
+	redOffset: 76,
+	greenMultiplier: 0,
+	greenOffset: 214,
+	blueMultiplier: 0,
+	blueOffset: 232
+}")
 
-(def macro RANKS_DIMENSIONS ()
-	(macro STAGE_SIZE)
-	(var isLargeDimension:bool = "stageWidth >= 1400 && stageHeight >= 900")
-)
+(def constant START_LEAGUE_INDEX 3)
 
 (def struct GET_RANK_LEAGUE_ID (_entityId:number)
 	(var entity:dhEntity = "getEntity(_entityId)")
@@ -42,12 +52,10 @@
 
 (def element PlayerProfileRanksPage ()
 	(scope
-		(event startShow)
-		(event startHide)
-		(macro RANKS_DIMENSIONS)
+		(macro STAGE_SIZE)
+		(var isLargeDimension:bool = "stageWidth >= 1400 && stageHeight >= 930")
 
-		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.RANKS" "'isInRanks'")
-		(var currentRoute:str = "componentRoute.activeChild" (event "componentRoute.evActiveChildChanged"))
+		(struct rankRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.RANKS"))
 
 		(struct rankBattlesFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.RANK_BATTLES"))
 		(var isNewRankBattlesFeature:bool = "rankBattlesFeature.state == 'new'")
@@ -85,9 +93,9 @@
 		(var isSeasonFinished:bool = "floor(rankSeasonFinishTime - serverTime) <= 0")
 		(var isSprintFinished:bool = "floor(sprintTimer) <= 0")
 
-		(macro COUNTDOWN_SCOPE "'formattedSeasonTimeStamp'" "seasonTimeToShow" "'HIGHESTDAYS'")
-		(macro COUNTDOWN_SCOPE "'formattedSprintTimeStamp'" "rankSprintFinishTime" "'HIGHESTDAYS'")
-		(macro COUNTDOWN_SCOPE "'formattedPrimeTimeStamp'" "primeTimeFinishTime" "'HIGHESTDAYS'")
+		(macro COUNTDOWN_SCOPE "'formattedSeasonTimeStamp'" "seasonTimeToShow" "'HIGHEST,WITH_DAYS'")
+		(macro COUNTDOWN_SCOPE "'formattedSprintTimeStamp'" "rankSprintFinishTime" "'HIGHEST,WITH_DAYS'")
+		(macro COUNTDOWN_SCOPE "'formattedPrimeTimeStamp'" "primeTimeFinishTime" "'HIGHEST,WITH_DAYS'")
 
 		(var seasonStatusText:str = "	isSeasonWaiting		? subst('IDS_SUBST_RANKED_SEASON_STARTS_IN', [], {_timeTillStart: formattedSeasonTimeStamp}) :
 										isSeasonFinished	? 'IDS_RANKED_SEASON_FINISHED'
@@ -108,22 +116,32 @@
 										isPrimeTimeActive && primeTimeFinishTime - serverTime < HOUR_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION
 																											: SC.Ui_styles.UNIFIED_STATUS.DATE")
 
-		(var title:str = "!isActiveSprint	? subst('IDS_RANKED_BATTLES_SEASON_NO_ACTIVE_SPRINT', [], {_seasonId: seasonId})
-											: subst('IDS_RANKED_BATTLES_SEASON_AND_SPRINT', [], {_seasonId: seasonId, _sprintId: toString(sprintId)})")
+		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
+		(var rankStateComponent:dhComponent = "rankStateEntity ? rankStateEntity.rankState : null")
+		(var currentLeague:number = "rankStateComponent.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE" (event "rankStateComponent.evCurrentLeagueChanged"))
+
+		(var rankPlayerEntity:dhEntity = "getPrimaryEntity(CC.rankPlayer, currentLeague)")
+		(var rankPlayerComponent:dhComponent = "rankPlayerEntity ? rankPlayerEntity.rankPlayer : null")
+		(var currentRank:number = "rankPlayerComponent ? rankPlayerComponent.rank : 0" (event "rankPlayerComponent.evChanged"))
+
+		(var title:str = "	currentLeague == 3	?	subst('IDS_RANK_IN_LEAGUE_3', [], {_rankId: currentRank}) :
+							currentLeague == 2	?	subst('IDS_RANK_IN_LEAGUE_2', [], {_rankId: currentRank}) :
+													subst('IDS_RANK_IN_LEAGUE_1', [], {_rankId: currentRank})")
 	)
+
 	(name = 'PlayerProfileRanks')
 	(class $Fullsize)
+	(style
+		(paddingTop = "{ 720:L, 1080:XL }")
+		(marginLeft = 85px)
+		(align = "center")
+	)
 
 	(bindcall externalCall "isNewRankBattlesFeature ? 'inputMapping.onAction' : ''" "['featureSeen', { featureIndex: SC.Common.ACCOUNT_FEATURE.RANK_BATTLES }]" on='addedToStage')
 	(bindcall externalCall "'inputMapping.onRequest'" "['showRanksResults', {}]" on='addedToStage')
 	(bindcall externalCall "'inputMapping.onAction'" "['rankProfileWindowClosed', {}]" on='removedFromStage')
 
-	(style
-		(paddingTop = "{720:LM, 1080:XLL}")
-		(paddingLeft = 200px)
-		(align = "center")
-	)
-
+	
 	(block
 		(class $FullsizeAbsolute)
 		(controller $Instance renderer='NoItemsComeBackLater'
@@ -134,68 +152,94 @@
 		)
 	)
 
+	
 	(block
 		(bind visible "toBool(rankSeasonEntity)")
-		(style (bind width "isLargeDimension ? 1200 : 1000"))
+
+		
 		(hblock
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRanks" 1)
-			(style
-				(width = 100%)
-				(marginBottom = "{720:MS, 1080:LS}")
-			)
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "rankRoute.isActive" 1)
+			(style 	(marginBottom = "MS"))
+
 			(tf
-				(class $TextDefaultBold27NM)
+				(class $TextDefaultBold30NM)
 				(style
-					(width = 100%)
 					(alpha = "TA")
+					(marginRight = "SXS")
 				)
+				(text = 'IDS_YOUR_RANK')
+			)
+
+			(tf
+				(class $TextDefaultBold30NM)
+				(style (alpha = "TA"))
 				(bind text "title")
 			)
-			(hblock
-				(style
-					(marginTop = 6px)
-					(bind gap "!isSeasonWaiting ? M : 0")
-				)
-				(element StatusLine
-					_unifiedStatus = "unifiedStatusSeason"
-					_text = "seasonStatusText"
-				)
-				(block
-					(controller $Instance renderer='StatusLine'
-						(bind enabled "!isSeasonWaiting")
-						(args
-							_unifiedStatus = "unifiedStatusSprint"
-							_text = "sprintStatusText"
-						)
+		)
+
+		
+		(hblock
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "rankRoute.isActive" 1.5)
+			(style
+				(marginBottom = "{ 720:SXS, 1080:LS }")
+				(bind gap "!isSeasonWaiting ? M : 0")
+			)
+
+			(element StatusLine
+				_unifiedStatus = "unifiedStatusSeason"
+				_text = "seasonStatusText"
+			)
+
+			(block
+				(controller $Instance renderer='StatusLine'
+					(bind enabled "!isSeasonWaiting")
+					(args
+						_unifiedStatus = "unifiedStatusSprint"
+						_text = "sprintStatusText"
 					)
 				)
-				(block
-					(controller $Instance renderer='StatusLine'
-						(bind enabled "!isSeasonWaiting")
-						(args
-							_unifiedStatus = "unifiedStatusPrime"
-							_text = "primeTimeStatusText"
-						)
+			)
+
+			(block
+				(controller $Instance renderer='StatusLine'
+					(bind enabled "!isSeasonWaiting")
+					(args
+						_unifiedStatus = "unifiedStatusPrime"
+						_text = "primeTimeStatusText"
 					)
 				)
 			)
 		)
+
 		
 		(hblock
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "isInRanks" 2)
-			(style (width = 100%) (marginBottom = "{720:SXS, 1080:M}"))
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "rankRoute.isActive" 2)
+			(style
+				(width = 100%)
+				(marginBottom = "{ 720:SXS, 1080:M }")
+			)
+
 			(controller $Repeat renderer='RankLeagueTabButton'
 				(bind count "leaguesCount")
 				(args
 					_entityId = "leagues[$index].id"
-					_currentRoute = "currentRoute"
+					_currentRoute = "rankRoute.activeChild"
 				)
 			)
+
 			(block
-				(style (position = "absolute") (right = 0) (bottom = "SXS"))
-				(element PriceTag
-					_priceInfo = "{finalPrice: amountBrass, currency: SC.Common.CURRENCIES.BRASS}"
+				(style
+					(position = "absolute")
+					(right = 0)
+					(bottom = 10px)
 				)
+
+				(element PriceTag
+					_priceInfo = "{	finalPrice: amountBrass,
+									currency: SC.Common.CURRENCIES.BRASS }"
+					_size = "SIZE.MEDIUM"
+				)
+
 				(controller $Tooltip
 					(renderer='CurrencyTooltip')
 					(args
@@ -205,15 +249,22 @@
 					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 				)
 			)
+
 			(block
-				(style (position = "absolute") (width = 100%) (bottom = 0))
+				(style
+					(position = "absolute")
+					(width = 100%)
+					(bottom = 0)
+				)
+
 				(element HorizontalDividerTwoPx)
 			)
 		)
+
 		
 		(block
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "currentRoute" 3)
-			(element RankLeagueContentWrapper _currentRoute = "currentRoute")
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "rankRoute.activeChild" 3)
+			(element RankLeagueContentWrapper _currentRoute = "rankRoute.activeChild")
 		)
 	)
 )
@@ -221,12 +272,13 @@
 (def element RankLeagueContentWrapper (_currentRoute:str = '')
 	(scope
 		(var leagues:dhCollection = "getCollectionByPath(CC.rankLeague, 'sorted')")
-		(var leagueIndex:number = "	_currentRoute == SC.Ui_windows.ROUTE.RANKS_BRONZE	? 0 :
-									_currentRoute == SC.Ui_windows.ROUTE.RANKS_SILVER	? 1 :
-									_currentRoute == SC.Ui_windows.ROUTE.RANKS_GOLD		? 2
-																						: -1")
+		(var leagueIndex:number = "	_currentRoute == SC.Ui_windows.ROUTE.RANKS_BRONZE	?	0 :
+									_currentRoute == SC.Ui_windows.ROUTE.RANKS_SILVER	?	1 :
+									_currentRoute == SC.Ui_windows.ROUTE.RANKS_GOLD		?	2
+																						:	-1")
 		(var league:dhEntity = "leagues.length && leagueIndex != -1 ? leagues[leagueIndex] : null")
 	)
+
 	(element RankLeagueContent _entityId="league.id")
 )
 
@@ -235,6 +287,7 @@
 		(struct league = GET_RANK_LEAGUE_ID(_entityId = "_entityId"))
 		(var isSelected:bool = "_currentRoute == SC.Ui_windows.ROUTE.RANKS_LEAGUES[$index]")
 	)
+
 	(element TabButton
 		_label = "'IDS_RANKED_LEAGUE_' + league.id"
 		_isSelected = "isSelected"
@@ -245,17 +298,17 @@
 (def element RankLeagueContent (_entityId:number = 0)
 	(scope
 		(macro SERVER_TIME_SCOPE)
-		(macro RANKS_DIMENSIONS)
+		(macro STAGE_SIZE)
+		(var isLargeDimension:bool = "stageWidth >= 1400 && stageHeight >= 930")
+
 		(struct league = GET_RANK_LEAGUE_ID(_entityId = "_entityId"))
 
 		(var rankPlayerEntity:dhEntity = "getPrimaryEntity(CC.rankPlayer, league.id)")
 		(var rankPlayer:dhComponent = "rankPlayerEntity.rankPlayer")
-		(var rank:number = "rankPlayer.rank ?: 0" (event "rankPlayer.evChanged"))
 		(var stars:number = "rankPlayer.stars ?: 0" (event "rankPlayer.evChanged"))
 		(var isInQualification:bool = "rankPlayer.isInQualification" (event "rankPlayer.evChanged"))
 		(var isQualificationPassed:bool = "rankPlayer.hasQualificationPassed" (event "rankPlayer.evChanged"))
 		(var isLeagueSkipped:bool = "rankPlayer.isLeagueSkipped" (event "rankPlayer.evChanged"))
-
 		(var restrictionsEntityId:number = "isInQualification && !isQualificationPassed	? getPrimaryEntity(CC.rankLeague, (league.id -1)).id
 																						: _entityId")
 
@@ -273,7 +326,10 @@
 		(var isCurrentLeague:bool = "currentLeague == league.id")
 		(var isLeaguePassed:bool = "currentLeague < league.id || isQualificationPassed")
 		(var isSkipLeagueEnabled:bool = "isCurrentLeague && !isLeagueSkipped && !isLeaguePassed && isSkipLeagueStarted && !isSkipLeagueEnded")
+		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
 		(var isSkipLeagueAvailable:bool = "league.id > SC.Ranked.RANK_LEAGUE.GOLD && isSkipLeagueComponent")
+
+		(var rank:number = "rankPlayer.rank ?: 0" (event "rankPlayer.evChanged"))
 
 		(var ranksCollection:dhCollection = "getCollectionByPath(CC.rankCarouselItem, 'byLeague.' + league.id + '.sorted')")
 		(var ranksList:array = "ranksCollection.items ?: []" (event "ranksCollection.evAdded"))
@@ -281,77 +337,155 @@
 		(var ranksAreaWidth:number = "isLargeDimension ? RANKS_CONTAINER.WIDTH_MAX : RANKS_CONTAINER.WIDTH_MIN")
 		(var ranksAreaHeight:number = "isLargeDimension ? RANKS_CONTAINER.HEIGHT_MAX : RANKS_CONTAINER.HEIGHT_MIN")
 		(var rankTemplateSize:number = "isLargeDimension ? SIZE.MEDIUM : SIZE.SMALL")
-	)
-	(bindcall externalCall "'inputMapping.onAction'" "['navigateTo', { route: SC.Ui_windows.ROUTE.RANKS_LEAGUES[START_LEAGUE_INDEX - currentLeague] }]" watch=false (bind trigger "currentLeague"))
-	(hblock
-		(style (width = 100%) (marginBottom = "{720:SXS, 1080:XL}") (align = "middle"))
-		(tf
-			(class $TextDefaultNM)
-			(style (marginRight = "M") (alpha = "TA"))
-			(bind text "isInQualification && !isQualificationPassed ? 'IDS_RANKS_SHIP_RESTRICTIONS_QUALIFICATION' : 'IDS_RANKS_SHIP_RESTRICTIONS'")
-		)
-		(block
-			(style (width = 100%) (marginTop = -1px))
-			(element ShipRestrictions _restrictionsEntityId = "restrictionsEntityId")
-		)
-		(block
-			(bind visible "isSkipLeagueAvailable")
-			(style
-				(width = 22px)
-				(height = 22px)
-				(marginRight = "SXS")
-				(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
-			)
-			(controller $Tooltip
-				(renderer='SkipLeagueTooltip')
-				(bind enabled "isSkipLeagueAvailable")
-				(args
-					_entityId = "_entityId"
-					_isSkipLeagueEnabled = "isSkipLeagueEnabled"
-				)
-				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-			)
-		)
-		(block
-			(style (height = 32px))
 
-			(controller $Instance renderer='DefaultButton'
-				(bind enabled "isSkipLeagueAvailable")
-				(args
-					_name = 'league_skip_btn'
-					_label = 'IDS_RANKS_LEAGUE_SKIP_BUTTON'
-					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
-					_width = 200
-					_enabled = "isSkipLeagueEnabled"
-					_methods = "[{
-						type: 'inputMapping.onRequest',
-						name: 'openModalWindowRanksLeagueSkip',
-						args: { price: skipLeaguePrice, currency: skipLeagueCurrency }
-					}]"
-				)
-			)
-			(controller $Tooltip
-				(renderer ='SimpleStatusTooltip')
-				(bind enabled "!isSkipLeagueEnabled")
-				(args
-					_text = 'IDS_RANKS_LEAGUE_SKIP_BUTTON_TOOLTIP_TEXT_UNAVAILABLE'
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
-				)
-				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-			)
-		)
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var amountBrass:number = "resourceEntity.accountResource.brass ?: 0" (event "resourceEntity.accountResource.evChangedBrass"))
+
+		(var scrollItemRankCardHeight:number = "rankTemplateSize == SIZE.SMALL ? RANK_STEREOTYPE_HEIGHT.SMALL :
+										rankTemplateSize == SIZE.MEDIUM ? RANK_STEREOTYPE_HEIGHT.MEDIUM :
+										RANK_STEREOTYPE_HEIGHT.LARGE")
+		(var scrollItemRankCardWidth:number = "rankTemplateSize == SIZE.SMALL ? RANK_STEREOTYPE_WIDTH.SMALL :
+										rankTemplateSize == SIZE.MEDIUM ? RANK_STEREOTYPE_WIDTH.MEDIUM :
+										RANK_STEREOTYPE_WIDTH.LARGE")
 	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['navigateTo', { route: SC.Ui_windows.ROUTE.RANKS_LEAGUES[START_LEAGUE_INDEX - currentLeague] }]" watch=false (bind trigger "currentLeague"))
+
+	
 	(hblock
 		(style
-			(marginBottom = "{ 720:MS, 1080:XL }")
-			(hgap = "L")
+			(height = 32px)
+			(width = 100%)
+			(marginBottom = "{ 720:SXS, 1080:XL }")
+			(align = "middle")
 		)
 
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginRight = "M")
+				(alpha = "TA")
+			)
+			(bind text "isInQualification && !isQualificationPassed ? 'IDS_RANKS_SHIP_RESTRICTIONS_QUALIFICATION' : 'IDS_RANKS_SHIP_RESTRICTIONS'")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginBottom = 6px)
+			)
+
+			(element ShipRestrictions
+				_restrictionsEntityId = "restrictionsEntityId"
+				_showShipRestrictions = true
+				_withShipTypeCounters = true
+				_isCompactListShips = true
+			)
+		)
+
+		(hblock
+			(bind visible "isSkipLeagueAvailable")
+			(style
+				(height = 100%)
+				(align = "middle")
+			)
+
+			(block
+				(style
+					(width = 22px)
+					(height = 22px)
+					(marginRight = "SXS")
+					(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
+				)
+
+				(controller $Tooltip
+					(renderer='SkipLeagueTooltip')
+					(bind enabled "isSkipLeagueAvailable")
+					(args
+						_entityId = "_entityId"
+						_isSkipLeagueEnabled = "isSkipLeagueEnabled"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(block
+				(style
+					(height = 100%)
+					(marginRight = "M")
+				)
+
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "isSkipLeagueAvailable")
+					(args
+						_name = 'league_skip_btn'
+						_label = 'IDS_RANKS_LEAGUE_SKIP_BUTTON'
+						_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_width = 200
+						_enabled = "isSkipLeagueEnabled && !isInBalancer"
+						_methods = "[{
+							type: 'inputMapping.onRequest',
+							name: 'openModalWindowRanksLeagueSkip',
+							args: { price: skipLeaguePrice, currency: skipLeagueCurrency }
+						}]"
+					)
+				)
+
+				(controller $Tooltip
+					(renderer ='SimpleStatusTooltip')
+					(bind enabled "!isSkipLeagueEnabled || isInBalancer")
+					(args
+						_text = "!isInBalancer ? 'IDS_RANKS_LEAGUE_SKIP_BUTTON_TOOLTIP_TEXT_UNAVAILABLE' : 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER_EVENT_BATTLES'"
+						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(block
+				(style
+					(height = 100%)
+					(marginRight = "M")
+				)
+
+				(element VerticalDivider)
+			)
+
+			(block
+				(style
+					(height = 100%)
+					(align = "middle")
+					(marginTop = -1px)
+				)
+
+				(element PriceTag
+					_priceInfo = "{	finalPrice: skipLeaguePrice,
+									currency: skipLeagueCurrency }"
+					_size = "SIZE.MEDIUM"
+				)
+
+				(controller $Tooltip
+					(renderer='CurrencyTooltip')
+					(args
+						_currency = "SC.Common.CURRENCIES.BRASS"
+						_amount = "amountBrass"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+		)
+	)
+
+	(hblock
+		(style (marginBottom = "{ 720:M, 1080:XL }"))
+
+		
 		(block
 			(style
 				(bind width "ranksAreaWidth")
 				(bind height "ranksAreaHeight")
 				(paddingRight = "-DEFAULT_SCROLL_TRACK_SIZE")
+				(marginRight = "L")
 			)
 
 			(scrollArea
@@ -365,6 +499,7 @@
 						(width = 100%)
 						(flow = "tile_horizontal")
 						(paddingRight = "DEFAULT_SCROLL_TRACK_SIZE")
+						(gap = "XS")
 					)
 
 					(controller $Repeat renderer='RankCarouselItem'
@@ -383,12 +518,15 @@
 				)
 			)
 		)
-	
+
+		
 		(element LeagueRewardsPanel
 			_entityId = "_entityId"
 			_isLargeDimension = "isLargeDimension"
 		)
 	)
+
+	
 	(element LeagueRewards
 		_entityId = "_entityId"
 		_isQualificationPassed = "isQualificationPassed"
@@ -427,20 +565,30 @@
 		(var diffCountText:str = "subst('IDS_PL_RANK_REWARDS_DIFF_COUNT', [], {_rewardsCount: toString(diffCount)}, diffCount)")
 		(var isStatusVisible:bool = "isLeagueSkipped || isQualificationPassed")
 	)
+
 	(name = 'LeagueRewardsPanel')
 	(style
-		(width = 300px)
+		(width = 296px)
 		(height = 100%)
-		(backgroundColor = 0x0DFFFFFF)
 	)
+
 	(block
 		(class $FullsizeAbsolute)
-		(style (backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png') (scale9grid = 2) (alpha = 0.1))
+		(style
+			(alpha = 0.05)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(borderRadius = "S")
+		)
 	)
+
 	(block
-		(style (width = 100%) (padding = "M"))
+		(style
+			(width = 100%)
+			(padding = "M")
+		)
+
 		(tf
-			(class $TextDefaultBold19NM)
+			(class $TextDefaultBold22NM)
 			(style
 				(width = 100%)
 				(leading = -2)
@@ -449,6 +597,7 @@
 			)
 			(bind text "title")
 		)
+
 		(block
 			(controller $Instance renderer='StatusLine'
 				(bind enabled "isStatusVisible")
@@ -459,9 +608,16 @@
 			)
 		)
 	)
+
 	(element HorizontalDividerTwoPx)
+
 	(htile
-		(style (width = 100%) (paddingLeft = "XS"))
+		(style
+			(width = 100%)
+			(align = "center")
+			(marginLeft = "XS")
+		)
+
 		(controller $Repeat renderer='RewardItemAdapter'
 			(bind count "rewardsToShow")
 			(args
@@ -469,20 +625,29 @@
 			)
 		)
 	)
+
 	(block
 		(bind visible "isRewardStack")
-		(style (width = 100%) (marginTop = "L") (align = "center|middle"))
+		(style
+			(width = 100%)
+			(marginTop = "L")
+			(align = "center|middle")
+		)
+
 		(tf
-			(class $TextDefault17NM)
-			(style (marginBottom = "SXS") (alpha = "TC"))
+			(class $TextDefault18NM)
+			(style
+				(marginBottom = "SXS")
+				(alpha = "TC")
+			)
 			(bind text "diffCountText")
 		)
+
 		(block
 			(controller $Instance renderer='DefaultButton'
 				(bind enabled "isRewardStack")
 				(args
-					_width = 140px
-					_size = "SIZE.SMALL"
+					_width = 180px
 					_name = 'openAllRanksRewards'
 					_label = 'IDS_RANK_REWARD_BUTTON_CHECK_ALL_REWARDS'
 					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
@@ -503,27 +668,7 @@
 								_isLeagueSkipped:bool = false,
 								_isQualificationPassed:bool = false,
 								_size:number = "SIZE.SMALL")
-	(block
-		(bind visible "$index == RANK_ITEM_PER_ROW || $index == 0")
-		(style
-			(position = "absolute")
-			(left = 0)
-			(width = 1px)
-			(height = 100%)
-			(scale9grid = 2)
-			(backgroundImage = 'url:../ranks/rank_stereotype/bg/border_one_line.png')
-		)
-	)
-	(block
-		(bind visible "$index < RANK_ITEM_PER_ROW")
-		(class $FullsizeAbsolute)
-		(style (backgroundImage = 'url:../ranks/rank_stereotype/bg/border_top_row.png') (scale9grid = 2))
-	)
-	(block
-		(bind visible "$index >= RANK_ITEM_PER_ROW")
-		(class $FullsizeAbsolute)
-		(style (backgroundImage = 'url:../ranks/rank_stereotype/bg/border_common.png') (scale9grid = 2))
-	)
+
 	(element RankStereotypeWrapper
 		_entityId = "_entityId"
 		_league = "_league"
@@ -559,29 +704,37 @@
 									isLeagueSkipped			? LEAGUE_STATUS.SKIPPED
 															: LEAGUE_STATUS.UNAVAILABLE")
 	)
+
 	(name = 'LeagueRewardsProgress')
 	(style (width = 100%))
+
 	(hblock
-		(style (marginBottom = 72px))
+		(style (marginBottom = "{ 720:60px, 1080:72px }"))
+
 		(tf
-			(class $TextDefaultBold19NM)
-			(style (alpha = "TA"))
+			(class $TextDefaultBold20NM)
+			(style
+				(alpha = "TA")
+				(marginRight = "SXS")
+			)
 			(text = 'IDS_RANKED_VICTORY_REWARDS_TITLE')
 		)
+
 		(block
 			(style
 				(width = 22px)
 				(height = 22px)
 				(marginTop = "-XS")
-				(marginLeft = "SXS")
 				(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
 			)
+
 			(controller $Tooltip
 				(renderer='LeagueRewardsInfoTooltip')
 				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 			)
 		)
 	)
+
 	(element RewardsWithProgress
 		_victoryRewards = "victoryRewards"
 		_victories = "victories"
@@ -591,11 +744,15 @@
 		_leagueStatus = "leagueStatus"
 		_isLeagueSkipped = "isLeagueSkipped"
 		_isZeroHidden = false
+		_showPrevReward = false
 	)
 )
 
 (def element LeagueRewardsInfoTooltip ()
-	(style (hitTest = false) (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(style
+		(hitTest = false)
+		(width = "DEFAULT_TOOLTIP_WIDTH")
+	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -620,7 +777,11 @@
 		(var isLeaguePassed:bool = "isQualificationPassed || isLeagueSkipped")
 		(var isSkipLeagueButtonActive:bool = "rankPlayer.id == league.id && _isSkipLeagueEnabled && (!isLeaguePassed || !isLeagueSkipped)")
 	)
-	(style (hitTest = false) (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(style
+		(hitTest = false)
+		(width = "DEFAULT_TOOLTIP_WIDTH")
+	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -633,11 +794,13 @@
 					_descriptionText = "'IDS_RANKS_LEAGUE_SKIP_BUTTON_TOOLTIP_TEXT_1_LEAGUE_' + league.id"
 				)
 			)
+
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemDescriptionText
 					_descriptionText = 'IDS_RANKS_LEAGUE_SKIP_BUTTON_TOOLTIP_TEXT_2_LEAGUE_REWARDS'
 				)
 			)
+
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemDescriptionText
 					_descriptionText = 'IDS_RANKS_LEAGUE_SKIP_BUTTON_TOOLTIP_TEXT_LOCKED'

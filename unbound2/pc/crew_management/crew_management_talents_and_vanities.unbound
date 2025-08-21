@@ -2,10 +2,10 @@
 	(scope
 		(struct crew =	PULL_CREW(_crewId = "_crewId"))
 
-		(var classificationId:number =	"crew.component.classificationId"	(event "crew.component.evClassificationIdChanged"))
-		(var crewNation:str =			"crew.component.nation"				(event "crew.component.evChanged"))
-		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
-		(var isNoNation:bool =			"crewNation == SC.Common.NATION.COMMON")
+		(var rarity:number =	"crew.component.rarity"		(event "crew.component.evRarityChanged"))
+		(var crewNation:str =	"crew.component.nation"		(event "crew.component.evChanged"))
+		(var isCrewElite:bool =	"rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
+		(var isNoNation:bool =	"crewNation == SC.Common.NATION.COMMON")
 
 		(var isCrewEliteOnCrewInfoMW:bool = "isCrewElite && _isCrewInfoModalWindow")
 
@@ -24,9 +24,10 @@
 	(style (width = 100%))
 
 	(tf
-		(class $TextDefaultBold17NM)
+		(class $TextDefaultBold18NM)
 		(style
 			(width = 100%)
+			(marginTop = "!isCrewEliteOnCrewInfoMW ? { 720: -XS, 1080: 0px } : 0px")
 			(marginBottom = "CREW_MANAGEMENT_HEADER_SPACING_BOTTOM")
 			(alpha = "TA")
 		)
@@ -40,14 +41,12 @@
 			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
 		)
 
-		(element HorizontalDividerTwoPx)
-
 		(block
 			(style
 				(align = "center")
 				(width = 100%)
-				(paddingTop = "{ 720: 6px, 1080: MS }")
-				(paddingBottom = "{ 720: 6px, 1080: MS }")
+				(paddingTop = "_isCrewInfoModalWindow ? { 720: S, 1080: M } : { 720: 0px, 1080: M }")
+				(paddingBottom = "_isCrewInfoModalWindow ? { 720: S, 1080: M } : { 720: 0px, 1080: M }")
 			)
 
 
@@ -55,7 +54,7 @@
 			(hblock
 				(style
 					(bind width "isDividerShown ? 3px : 0px")
-					(height = 64px)
+					(height = "CREW_SKILL_SLOT_SIZE")
 				)
 
 				(hblock
@@ -122,8 +121,6 @@
 			)
 			
 		)
-
-		(element HorizontalDividerTwoPx)
 	)
 )
 
@@ -137,7 +134,7 @@
 		(bind marginRight	"SKILL_TREE_ICON_MARGINS.HORIZONTAL")
 		(width = "CREW_SKILL_SLOT_SIZE")
 		(height = "CREW_SKILL_SLOT_SIZE")
-		(padding = "XXS")
+		(padding = "XS")
 	)
 
 	(controller $Tooltip
@@ -165,13 +162,33 @@
 		(var uniqueVanityEntity:dhEntity =	"getPrimaryEntity(CC.crewVanity, _item)")
 		(var vanityComponent:dhComponent =	"uniqueVanityEntity.crewVanity")
 
+		(var curShipId:number = "crew.component.shipID" (event "crew.component.evShipChanged"))
+		
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, curShipId)")
+		(var ownShipComponent:dhComponent = "ownShipEntity.ownShip")
+
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipLockedOpportunity:bool = "isShipReadyForBattle || isShipInBalancer")
+	
 		(var vanityName:str =		"vanityComponent.vanityName")
 		(var vanityType:number =	"vanityComponent.vanityType")
 		(var isActive:bool =		"vanityComponent.state"			(event "vanityComponent.evUpdate"))
 
-		(var isMouseEnabled:bool = "!_isCrewInfoModalWindow && !permissions.isDisabledLearnSkills")
+		(var isMouseInstruction:bool = "!_isCrewInfoModalWindow && !permissions.isDisabledLearnSkills")
+		(var isMouseEnabled:bool = "!_isCrewInfoModalWindow && !permissions.isDisabledLearnSkills && !isShipLockedOpportunity")
 
 		(var iconAlpha:number = "isActive || (isMouseEnabled && rollOver) ? 1 : 0.7")
+
+		(var mouseInstruction:dict = " 	!isMouseInstruction		? 	null :
+										isShipInBalancer 		?	{	text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+										isShipReadyForBattle	?	{	text: 'IDS_UNABLE_TO_SET_WHILE_READY_FOR_BATTLE',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+										isActive 				?	{ 	text: 'IDS_CREW_VANITY_UNINSTALL',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }
+																:	{ 	text: 'IDS_CREW_VANITY_INSTALL',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }")
 	)
 
 	(style
@@ -179,7 +196,7 @@
 		(bind marginRight	"SKILL_TREE_ICON_MARGINS.HORIZONTAL")
 		(width = "CREW_SKILL_SLOT_SIZE")
 		(height = "CREW_SKILL_SLOT_SIZE")
-		(padding = "XXS")
+		(padding = "XS")
 	)
 
 	(bind colorTransform "	isMouseEnabled && isActive	?	mouseDown	? COLOR_TRANSFORM_MOUSE_DOWN :
@@ -192,7 +209,7 @@
 		(renderer = 'CrewVanityTooltip')
 		(args
 			_id =					"_item"
-			_noMouseInstruction =	"!isMouseEnabled"
+			_mouseInstruction = 	"mouseInstruction"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -221,7 +238,8 @@
 		(backgroundSize = "fill")
 		(bind backgroundImage "'url:../crew_commander/talents/' + _talentId + '.png'")
 	)
-	(bind colorTransform "_isForceWhite	? {} : COLOR_TRANSFORM_WHITE_TO_YELLOW")
+
+	(bind colorTransform "_isForceWhite	? CT_NONE : COLOR_TRANSFORM_SKILL_LIGHT_BLUE")
 )
 
 (def element CrewVanityItemView (_vanityName:str, _isActive:bool)
@@ -231,7 +249,8 @@
 		(backgroundSize = "fill")
 		(bind backgroundImage "'url:../reward_icons/reward_unlocks/reward_unlock_' + toLower(tr(_vanityName)) + '.png'")
 	)
-	(bind colorTransform "_isActive ? COLOR_TRANSFORM_WHITE_TO_YELLOW : {}")
+
+	(bind colorTransform "_isActive ? COLOR_TRANSFORM_SKILL_LIGHT_BLUE : CT_NONE")
 )
 
 (def element CrewTalentSlotItem (_crewId:number, _selectedShipClass:str, _possibleTalents:array, _selfTalentsSet:array)
@@ -283,7 +302,7 @@
 		(bind marginRight	"SKILL_TREE_ICON_MARGINS.HORIZONTAL")
 		(width = "CREW_SKILL_SLOT_SIZE")
 		(height = "CREW_SKILL_SLOT_SIZE")
-		(padding = "XXS")
+		(padding = "XS")
 	)
 
 	(controller $Tooltip
@@ -293,7 +312,8 @@
 			_id =						"installedTalentId"
 			_crewId =					"_crewId"
 			_selectedShipClass =		"_selectedShipClass"
-			_crewInfoMouseInstruction =	'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_SLOT_INFOTIP_OPEN'
+			_crewInfoMouseInstruction =	"{	text: 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_SLOT_INFOTIP_OPEN', 
+											unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }"
 			_isFromSlot =				true
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
@@ -338,12 +358,8 @@
 
 		(bind align "center|bottom")
 
-		(screenBoundsOffset = 10)
-
 		(bind isInfotipVisible "true" on='evStartShow')
 		(bind isInfotipVisible "false" on='evHide')
-		(pinTop='InfotipPinTop')
-		(pinBottom='InfotipPinBottom')
 	)
 
 	
@@ -352,29 +368,31 @@
 			(hitTest = false)
 			(align = "center|middle")
 			(position = "absolute")
-			(top = "-XXS")
-			(left = "-XXS")
+			(top = "-XS")
+			(left = "-XS")
 			(width = "CREW_SKILL_SLOT_SIZE")
 			(height = "CREW_SKILL_SLOT_SIZE")
-			(backgroundSize = "fill")
-			(bind backgroundImage "	talentEntity	? 'url:../service_kit/frames/64px_not_empty_field.png' :
-									isMaxLevel		? crewAvailableTalentsLen == 0		? 'url:../service_kit/frames/64px_orange.png'
-																						: 'url:../service_kit/frames/64px_empty_field.png'
-													: 'url:../service_kit/frames/64px_not_empty_field.png'")
-			(alpha = "slotFrameAlpha")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (align = "center|bottom"))
+
+			(element CrewSkillSelectionStatePanel
+				_state =		"slotState"
+				_isAttention =	"!isMaxLevel || (!talentEntity && isMaxLevel && crewAvailableTalentsLen == 0)"
+			)
 		)
 
 		(block
 			(bind visible "!talentEntity")
 
 			(style
-				(bind width				"isMaxLevel ? 60px : 32px")
-				(bind height			"isMaxLevel ? 60px : 32px")
-				(bind backgroundImage	"isMaxLevel ? 'url:../service_kit/frames/60px_add_item.png' : 'url:../service_kit/icons/icon_lock_small.png'")
+				(bind width				"isMaxLevel ? 64px : 32px")
+				(bind height			"isMaxLevel ? 64px : 32px")
+				(bind backgroundImage	"isMaxLevel ? 'url:../service_kit/frames/64px_add_item.png' : 'url:../service_kit/icons/icon_lock_small.png'")
 			)
 		)
-
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotState" _alpha="slotFrameAlpha")
 	)
 	
 
@@ -402,7 +420,7 @@
 	(style (width = 360px))
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
-	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
 		(block
 			(style (width = 100%))
 
@@ -444,19 +462,25 @@
 		(var crewTalentEntity:dhEntity = "getPrimaryEntity(CC.crewUniqueSkill, _crewTalentId)")
 
 		(struct crew =		PULL_CREW(_crewId = "_crewId"))
+		(var curShipId:number = "crew.component.shipID" (event "crew.component.evShipChanged"))
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, curShipId)")
+		(var ownShipComponent:dhComponent = "ownShipEntity.ownShip")
+
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipLockedOpportunity:bool = "isShipReadyForBattle || isShipInBalancer")
 
 		(var isInstalled:bool =			"_crewTalentId == _installedTalentId")
 		(var isTalentAvailable:bool =	"crewTalentEntity.availableSkill != null"	(event "crewTalentEntity.evAdded") (event "crewTalentEntity.evRemoved"))
-		(var isUnclickable:bool =		"!isTalentAvailable || (_installedTalentId && !isInstalled)")
+		(var isUnclickable:bool =		"isShipLockedOpportunity || !isTalentAvailable || (_installedTalentId && !isInstalled)")
 
 		(struct crewTalentUnlockPrice = PULL_PRICE(_entityId = "TALENT_RESEARCH_ENTITY_PK_KEY"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
 
 		(var talentAlphaParam:number = "isUnclickable	? CREW_SKILL_ICON_ALPHA.INFOTIP_LOCKED :
 										isInstalled		? CREW_SKILL_ICON_ALPHA.INFOTIP_UNLOCKED_ACTIVE
 														: CREW_SKILL_ICON_ALPHA.INFOTIP_DEFAULT")
-		(var textAlphaParam:number = "	isUnclickable	? 0.5 :
-										isInstalled		? 1
-														: TA")
+		(var textAlphaParam:number = "	isUnclickable	? 0.5 : TA")
 
 		(var clickAction:str = "operationsAccountLocked || isUnclickable	? '' :
 								isInstalled									? CREW_ACTIONS.OPEN_DENY_TALENT_WINDOW
@@ -467,15 +491,20 @@
 											rollOver		? SC.Ui_styles.BUTTON_STATE.OVER :
 											isInstalled		? SC.Ui_styles.BUTTON_STATE.SELECTED
 															: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var crewInfoMouseInstruction:dict = "	isShipInBalancer 		? 	{ 	text:			'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER',
+																				unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+												isShipReadyForBattle 	? 	{ 	text:			'IDS_UNABLE_TO_SET_WHILE_READY_FOR_BATTLE',
+																				unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+												isUnclickable			? 	null :
+												isInstalled				?	{ 	text:			'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_DENY',
+																				unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }
+																		:	{	text:			'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_RECEIVE',
+																				unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT } ")
 	)
 
 	(bind name "'CrewTalentInfotipItem_' + _crewTalentId")
 	(style (width = 100%))
-
-	(block
-		(style (width = 100%))
-		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "$index > 0"))
-	)
 
 	(block
 		(class $FullsizeAbsolute)
@@ -488,9 +517,7 @@
 				_id =							"_crewTalentId"
 				_crewId =						"_crewId"
 				_selectedShipClass =			"_selectedShipClass"
-				_crewInfoMouseInstruction =		"isUnclickable	? '' :
-												 isInstalled	? 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_DENY'
-																: 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_RECEIVE'"
+				_crewInfoMouseInstruction =		"crewInfoMouseInstruction"
 				_isCrewInfoInfotipItemTooltip =	true
 				_isNoMentorOnAccount =			"!isTalentAvailable"
 				_isInstalled =					"isInstalled"
@@ -544,7 +571,6 @@
 			(style
 				(width = 180px)
 				(leading = -2)
-				(bind textColor "isInstalled ?  SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
 				(bind alpha "textAlphaParam")
 			)
 
@@ -593,17 +619,11 @@
 )
 
 
-(def element CrewVanityTooltip (_id:str, _noMouseInstruction:bool = false)
+(def element CrewVanityTooltip (_id:str, _mouseInstruction:dict = null)
 	(scope
 		(var uniqueVanityEntity:dhEntity =	"getPrimaryEntity(CC.crewVanity, _id)")
 		(var vanityName:str =				"uniqueVanityEntity.crewVanity.vanityName")
 		(var isActive:bool =				"uniqueVanityEntity.crewVanity.state" (event "uniqueVanityEntity.crewVanity.evUpdate"))
-
-		(var mouseInstructionText:str = "_noMouseInstruction	? '' :
-										isActive				? 'IDS_CREW_VANITY_UNINSTALL'
-																: 'IDS_CREW_VANITY_INSTALL'")
-		(var mouseInstructionUnifiedStatus:str = "isActive		? SC.Ui_styles.UNIFIED_STATUS.CHECK
-																: SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
 	)
 
 	(style (width = 320px))
@@ -614,10 +634,9 @@
 			_imageUrl =			"'url:../reward_icons/reward_unlocks/reward_unlock_' + toLower(tr(vanityName)) + '.png'"
 			_imageWidth =		"CREW_SKILL_ICON_SIZE"
 			_imageHeight =		"CREW_SKILL_ICON_SIZE"
-			_unifiedStatus =	"mouseInstructionUnifiedStatus"
 			_headerText =		"tr('IDS_REWARD_UNLOCK_' + vanityName)"
 			_subheaderText =	'IDS_VANITY_CAT_NAME_DEFAULT'
-			_data =				"{ colorTransform: isActive ? COLOR_TRANSFORM_WHITE_TO_YELLOW : {} }"
+			_data =				"{ colorTransform: isActive ? COLOR_TRANSFORM_SKILL_LIGHT_BLUE : {} }"
 		)
 
 		(block
@@ -642,23 +661,29 @@
 
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!_noMouseInstruction"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_mouseInstruction != null"))
 		)
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "!_noMouseInstruction")
+				(bind enabled "_mouseInstruction != null")
 				(args
-					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-					_text =				"mouseInstructionText"
+					_unifiedStatus =	"_mouseInstruction.unifiedStatus"
+					_text =				"_mouseInstruction.text"
 				)
 			)
 		)
 	)
 )
 
-(def element CrewTalentTooltip (_id:str, _selectedShipClass:str, _crewId:number, _crewInfoMouseInstruction:str='', _isCrewInfoInfotipItemTooltip:bool=false, _isInstalled:bool=false,
-								_isNoMentorOnAccount:bool=false, _isFromSlot:bool=false)
+(def element CrewTalentTooltip (_id:str,
+								_selectedShipClass:str,
+								_crewId:number,
+								_crewInfoMouseInstruction:dict=null,
+								_isCrewInfoInfotipItemTooltip:bool=false,
+								_isInstalled:bool=false,
+								_isNoMentorOnAccount:bool=false,
+								_isFromSlot:bool=false)
 	(scope
 		(struct windowQueue =	PULL_WINDOW_QUEUE())
 		(var isUnlockTalentMW:bool =	"isIn('ModalWindowUnlockCrewSkill', windowQueue.queue)")
@@ -668,11 +693,11 @@
 		(macro PULL_SHIP_ID)
 		(struct crew =		PULL_CREW(_crewId = "_crewId"))
 
+		(var rarity:number = "crew.component.rarity" (event "crew.component.evRarityChanged"))
 		(var crewNation:str =			"crew.component.nation")
-		(var classificationId:number = "crew.component.classificationId" (event "crew.component.evClassificationIdChanged"))
 
 		(var isEventCrew:bool =	"crewNation == SC.Common.NATION.EVENTS")
-		(var isCrewElite:bool =	"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+		(var isCrewElite:bool = "rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
 
 		(var uniqueSkillEntity:dhEntity = "getPrimaryEntity(CC.crewUniqueSkill, _id)")
 		(var attributesNegative:array = "uniqueSkillEntity.attributes.negative" (event "uniqueSkillEntity.attributes.evChanged"))
@@ -706,16 +731,17 @@
 
 		(var isPriceShown:bool = "!isLearned && !isDenyTalentMW && !availabilityAttention")
 
-		(var mouseInstruction:dict =			"!availabilityAttention && _crewInfoMouseInstruction	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
-																											text:			_crewInfoMouseInstruction }
-																										: null")
-		(var cnxtMenuMouseInstruction:dict =	"mouseInstruction	? _isFromSlot && uniqueSkillEntity	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT,
-																											text:			'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_DENY' }
-																										: null
-																	: null")
+		(var isMouseInctructionVisible:bool =	"!availabilityAttention && (_crewInfoMouseInstruction != null)")
+		(var isNationTalentDenyVisible:bool =   "isMouseInctructionVisible && _isFromSlot && uniqueSkillEntity")
+
+		(var mouseInstruction:dict = "  isMouseInctructionVisible ? _crewInfoMouseInstruction : null")
+																	
+		(var cnxtMenuMouseInstruction:dict = "	isNationTalentDenyVisible 	? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT,
+																				text: 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_NATIONAL_TALENT_DENY' }
+																			: null")
 	)
 
-	(style (width = 320px) (hitTest = false))
+	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -723,10 +749,9 @@
 			_imageUrl =			"'url:../crew_commander/talents/' + _id + '.png'"
 			_imageWidth =		"CREW_SKILL_ICON_SIZE"
 			_imageHeight =		"CREW_SKILL_ICON_SIZE"
-			_unifiedStatus =	"isLearned ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
 			_headerText =		"tr('IDS_TALENT_' + _id)"
 			_subheaderText =	'IDS_TALENT_CAT_NAME_DEFAULT'
-			_data =				"isLearned ? { colorTransform: COLOR_TRANSFORM_WHITE_TO_YELLOW } : {}"
+			_data =				"isLearned ? { colorTransform: COLOR_TRANSFORM_SKILL_LIGHT_BLUE } : {}"
 		)
 
 		
@@ -803,9 +828,8 @@
 
 		
 		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemInnerHeaderText
-			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-			_headerText =		'IDS_TOOLTIP_SKILL_TRIGGER_TITLE'
+		(element TooltipSystemSecondaryHeaderText
+			_headerText = 'IDS_TOOLTIP_SKILL_TRIGGER_TITLE'
 		)
 
 		

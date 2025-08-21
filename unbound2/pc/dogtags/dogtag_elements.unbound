@@ -1,12 +1,14 @@
-(def element DogTagComponentTooltip (_elementEntityId:number, _isNotSelf:bool=false, _canInstall:bool=false, _isRewardTooltip:bool=false, _isClickDisabled:bool=false)
+(def element DogTagComponentTooltip (_elementEntityId:number, _rewardItem:dict = {}, _canInstall:bool=false, _isClickDisabled:bool=false)
 	(scope
-		(var dogTagEntity:gfx = "$datahub.getEntity(_elementEntityId)")
-		(var dogTagComponent:gfx =	"dogTagEntity	? dogTagEntity.dogTagComponent		? dogTagEntity.dogTagComponent : 
-													dogTagEntity.dollBackgroundColor	? dogTagEntity.dollBackgroundColor : 
-													dogTagEntity.dollBorderColor		? dogTagEntity.dollBorderColor : 
-													dogTagEntity.dollTexture			? dogTagEntity.dollTexture 
-																						: null
-													: null")  
+		(var isReward:bool = "'id' in _rewardItem")
+		(var dogTagEntity:dhEntity = "isReward	? getPrimaryEntity(CC.dogTagComponent, _rewardItem.id)
+												: getEntity(_elementEntityId)")
+
+		(var dogTagComponent:dhComponent =	"dogTagEntity.hasComponent(CC.dogTagComponent)		? dogTagEntity.dogTagComponent : 
+											dogTagEntity.hasComponent(CC.dollBackgroundColor)	? dogTagEntity.dollBackgroundColor : 
+											dogTagEntity.hasComponent(CC.dollBorderColor)		? dogTagEntity.dollBorderColor : 
+											dogTagEntity.hasComponent(CC.dollTexture)			? dogTagEntity.dollTexture
+																								: null")
 		
 		(var enabled:bool =			"dogTagComponent ? dogTagComponent.enabled : true"					(event "dogTagComponent.evUpdate"))
 		(var gpName:str =			"dogTagComponent ? dogTagComponent.gpName : null"					(event "dogTagComponent.evUpdate"))
@@ -41,14 +43,19 @@
 
 		(var isDogTagComponentSaved:bool = "dogTagEntity && dogTagEntity.hasComponent(CC.dogTagComponentSaved)" (event "dogTagEntity.evAdded") (event "dogTagEntity.evRemoved"))
 
-		(var unifiedStatus:str = "	enabled && isDogTagComponentSaved ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.ATTENTION")
-		(var statusText:str = "	enabled && isDogTagComponentSaved	? 'IDS_DOGTAG_COMPONENT_SET': 'IDS_DOGTAG_COMPONENT_NOT_AVAILABLE'")
-		(var statusVisible:bool = "!_isNotSelf && (!enabled || (enabled && isDogTagComponentSaved)) ")
+		(var unifiedStatus:str =	"enabled && isDogTagComponentSaved	? SC.Ui_styles.UNIFIED_STATUS.CHECK
+																		: SC.Ui_styles.UNIFIED_STATUS.ATTENTION")
+
+		(var statusText:str =		"enabled && isDogTagComponentSaved	? 'IDS_DOGTAG_COMPONENT_SET'
+																		: 'IDS_DOGTAG_COMPONENT_NOT_AVAILABLE'")
+
+		(var isStatusVisible:bool = "!isReward && (!enabled || (enabled && isDogTagComponentSaved)) ")
 
 		(var battleTypes:array = "data ? data.battleTypes : []" (event "dogTagComponent.evUpdate"))
 
 		(var hasRestrictions:bool = "dogTagEntity && (dogTagEntity.hasComponent(CC.shipListRestrictions) || dogTagEntity.hasComponent(CC.divisionRestrictions))" (event "dogTagEntity.evAdded") (event "dogTagEntity.evRemoved"))
-	
+		(var hasProgressBarBlock:bool = "!enabled && !isReward")
+
 		(var mouseInstructionText:str = "toUpper('IDS_SELECT_DOGTAG_COMPONENT_' + SC.Common.DOGTAG_ELEMENTS.VALUE_TO_NAME[categoryId])")
 	)
 	(style (width = 320px) (hitTest = false))
@@ -59,24 +66,25 @@
 			(style (width = 100%))
 			(controller $Instance renderer='DogTagComponentTooltipHeader'
 				(args
-					_id = "_elementEntityId"
+					_id = "dogTagEntity.id"
 					_iconPath = "iconPath"
 					_categoryId = "categoryId"
 					_gpName = "gpName"
 					_clanTagVisible = "clanTagVisible"
 					_colorTransform = "iconTransform"
+					_isReward = "isReward"
 				)
 			)
 		)
 		
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "statusVisible"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isStatusVisible"))
 		)
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "statusVisible")
+				(bind enabled "isStatusVisible")
 				(args
 					_unifiedStatus = "unifiedStatus"
 					_text = "statusText"
@@ -102,33 +110,38 @@
 		
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!_isRewardTooltip && quest"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!isReward && quest"))
 		)
 		(block
-			(style (width = 100%))
+			(style
+				(width = 100%)
+			)
 			(block
-				(style (width = 100%))
+				(style
+					(width = 100%)
+					(bind marginBottom "hasProgressBarBlock && quest ? SXS : 0px")
+				)
 				(controller $Instance renderer= 'TooltipSystemDescriptionText'
-					(bind enabled "!_isRewardTooltip && quest")
+					(bind enabled "!isReward && quest")
 					(args
 						_descriptionText = "quest"
 					)
 				)
 			)
 			(block
-				(style (width = "100%"))
+				(style
+					(width = 100%)
+					(vgap = 9px)
+				)
 				
 				(controller $Repeat renderer='TooltipSystemProgressBarBlock'
-					(bind enabled "!enabled && !_isNotSelf")
+					(bind enabled "hasProgressBarBlock")
 					(bind count "progress.length")
 					(args
 						_title = "tr(toUpper('IDS_DOGTAG_PARAM_' + progress[$index][0]))"
 						_currentValue = "progress[$index][2]"
 						_maxValue = "progress[$index][1]"
 						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-					)
-					(exprs
-						(style (marginTop = 9px)) 
 					)
 				)
 			)
@@ -187,29 +200,27 @@
 		
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' 
-				(bind enabled "(!_isNotSelf && _canInstall || _isRewardTooltip) && !_isClickDisabled")
-			)
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'  (bind enabled "_canInstall && !_isClickDisabled"))
 		)
+
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "(!_isNotSelf && _canInstall || _isRewardTooltip) && !_isClickDisabled")
+				(bind enabled "_canInstall && !_isClickDisabled")
 				(args
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-					_text = "	_isRewardTooltip	? 'IDS_DOGTAG_TOOLTIP_GO_TO_CONSTUCTOR' 
-													: mouseInstructionText"
+					_text = "mouseInstructionText"
 				)
 			)
 		)
 	)
 )
 
-(def element DogTagComponentTooltipHeader (_id:number, _iconPath:str, _categoryId:number, _gpName:str, _clanTagVisible:bool=true, _colorTransform:dict={})
+(def element DogTagComponentTooltipHeader (_id:number, _iconPath:str, _categoryId:number, _gpName:str, _clanTagVisible:bool=true, _colorTransform:dict={}, _isReward:bool = false)
 	(scope
 		(macro PULL_SELF_PLAYER_SCOPE)
-		(var header:str = "tr(toUpper('IDS_DOGTAG_' + _gpName + '_NAME'))")
-		(var subHeader:str = "tr(toUpper('IDS_DOGTAG_COMPONENT_TOOLTIP_CATEGORY_' + _categoryId))")
+		(var header:str = "tr('IDS_DOGTAG_' + _gpName + '_NAME')")
+		(var subHeader:str = "_isReward ? tr('IDS_DOGTAG_COMPONENT_REWARD_CATEGORY_' + _categoryId) : tr('IDS_DOGTAG_COMPONENT_TOOLTIP_CATEGORY_' + _categoryId)")
 	)
 	(style (width = 100%) (minHeight = 80px) (flow = "horizontal") (align = "middle"))
 	(block
@@ -232,8 +243,8 @@
 	)
 
 	(element TooltipSystemHeaderSubheaderText
-		_headerText="header"
-		_subheaderText="subHeader"
+		_headerText = "header"
+		_subheaderText = "subHeader"
 	)
 )
 

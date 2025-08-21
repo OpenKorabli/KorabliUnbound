@@ -44,6 +44,8 @@
 		(var isPVERandomBattle:bool = "battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE && _battleTypeEntity.operation.hasMultipleMaps")
 		(var isRatingBattle:bool = "battleType == SC.Common.BATTLE_TYPES.RATING_BATTLE")
 
+		(var isCompetitiveBattle:bool = "isRankedBattle || isRatingBattle")
+
 		
 		(var divisionDataEntity:gfx = "$datahub.getSingleEntity(CC.division)")
 		(var isDivisionsAvailableInThisBattleType:bool = "!isCustomBattle && (!isRankedBattle || isDivisionAllowedInRanked)")
@@ -60,39 +62,48 @@
 									isRandomBattle 										?	pvpDescNewTip.isActive					? SC.Context_guiding_tip.TIP_TYPE.PVP_FINAL :
 																							repeatPvpDesc1NewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.PVP_FINAL_REPEAT
 																																	: SC.Context_guiding_tip.TIP_TYPE.NONE :
-									isRankedBattle	|| isRatingBattle					?	competitiveFinalNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.COMPETITIVE_FINAL :
+									isCompetitiveBattle									?	competitiveFinalNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.COMPETITIVE_FINAL :
 																							competitiveFinalRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.COMPETITIVE_FINAL_REPEAT
 																																	: SC.Context_guiding_tip.TIP_TYPE.NONE
 																						:	SC.Context_guiding_tip.TIP_TYPE.NONE")
-		(var isGuidingTipVisible:bool = "currentTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
 
-		(var chainId:number = "	isRandomBattle		?	pvpDescNewTip.isActive					? SC.Context_guiding_tip.TIP_CHAIN_ID.PVP :
-														repeatPvpDesc1NewTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.PVP_REPEAT
-																								: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE :
-								isRankedBattle
-								|| isRatingBattle	?	competitiveFinalNewTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.COMPETITIVE :
-														competitiveFinalRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_CHAIN_ID.COMPETITIVE_REPEAT
-																								: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE :
-								isPVERandomBattle 	?	pveChooseNewTip.isActive				? SC.Context_guiding_tip.TIP_CHAIN_ID.PVE :
-														pveChooseRepeatNewTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.PVE_REPEAT
-																								: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE
-													:	SC.Context_guiding_tip.TIP_CHAIN_ID.NONE")
+		(var chainId:number = "	isRandomBattle			?	pvpDescNewTip.isActive					? SC.Context_guiding_tip.TIP_CHAIN_ID.PVP :
+															repeatPvpDesc1NewTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.PVP_REPEAT
+																									: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE :
+								isCompetitiveBattle		?	competitiveFinalNewTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.COMPETITIVE :
+															competitiveFinalRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_CHAIN_ID.COMPETITIVE_REPEAT
+																									: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE :
+								isPVERandomBattle 		?	pveChooseNewTip.isActive				? SC.Context_guiding_tip.TIP_CHAIN_ID.PVE :
+															pveChooseRepeatNewTip.isActive			? SC.Context_guiding_tip.TIP_CHAIN_ID.PVE_REPEAT
+																									: SC.Context_guiding_tip.TIP_CHAIN_ID.NONE
+														:	SC.Context_guiding_tip.TIP_CHAIN_ID.NONE")
+
 		(var hasFinishButton:bool = "isRankedBattleInactive || isRatingBattleInactive || !isSelectableBattleType")
 		(var onDeactivateTipChain:bool = "chainId != SC.Context_guiding_tip.TIP_CHAIN_ID.NONE && !isNewRankedFinishTip")
 	)
+
 	(bindcall externalCall 'inputMapping.onAction' "[onDeactivateTipChain ? 'deactivateTipChain' : '',  {tip_chain_id: chainId}]" watch=false (event "evBattleTypeChosen"))
 
 	(style (width = 100%))
 
 	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "isGuidingTipVisible")
+		(bind enabled "currentTipId")
 		(args
 			_tipId =			"currentTipId"
 			_tipPositioning =	"TIP_POSITION_BOTTOM"
-			_offsetY =			10px
+			_offsetY =			"isCompetitiveBattle ? LM : L"
+			_pointerOffset =	"isCompetitiveBattle ? -58 : -28"
 			_hasFinishButton =	"hasFinishButton"
 			_noPointer =		"!isSelectableBattleType"
-			_modalWindowName =	'ModalWindowBattleTypeChooser'
+			_modalWindowName =	"SC.Ui_windows.MODAL.BATTLE_TYPE_CHOOSER"
+		)
+	)
+)
+
+(def macro DESATURATION_BATTLE_TYPE(_isNotDesaturated:expression)
+	(filters
+		(colorMatrix
+			(bind matrix "_isNotDesaturated ? [0, 0, 0, 0] : [ 0, -100, -10, -35 ]")
 		)
 	)
 )
@@ -250,14 +261,18 @@
 				(block
 					(class $Fullsize)
 					(class $MiddleAlignedAbsolutely)
-					(style (macro DESATURATION_DEFAULT "isSelectableBattleType"))
+					(style (macro DESATURATION_BATTLE_TYPE "isSelectableBattleType"))
 					(element BattleTypeIcon _iconBattleName = "battleName")
 				)
 
 				
 				(block
-					(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNewBattle")
-					(style (position = "absolute") (top = -10px) (right = 1px))
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNewBattle && isSelectableBattleType")
+					(style
+						(position = "absolute")
+						(top = -10px)
+						(right = 44px)
+					)
 					(element MarkerNew)
 				)
 			)
@@ -266,7 +281,7 @@
 				(bind visible "_showBattleHeader")
 				(style (width = 100%) (align = "center"))
 				(tf
-					(class $TextDefaultBold19NM)
+					(class $TextDefaultBold20NM)
 					(style (width = 100%) (textAlign = "center") (leading = -3))
 					(bind alpha "	!isSelectableBattleType ? TS :
 									isSelected 				? TA :
@@ -284,7 +299,7 @@
 				(bind visible "showBattleSubheader")
 				(style (width = 100%) (align = "center") (marginTop = "SXS"))
 				(tf
-					(class $TextDefault17NM)
+					(class $TextDefault18NM)
 					(style (width = 100%) (textAlign = "center"))
 					(bind alpha "	!isSelectableBattleType ? TS :
 									isSelected 				? TA :
@@ -293,12 +308,13 @@
 					(bind text "battleTypeSubheader")
 				)
 			)
-			
+
 			(controller $Tooltip
 				(bind renderer "tooltipRenderElementName")
-				(args _battleTypeEntityId = "battleTypeEntity.id")
+				(args
+					_battleTypeEntityId = "battleTypeEntity.id"
+				)
 				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				(macro TOOLTIP_HIDE_ON_EVENT "startHide")
 			)
 
 			(macro CLICK_HANDLER
@@ -344,12 +360,12 @@
 								args:	{_entityId: battleTypeEntity.id, _rulesType: battleType} }]"
 			)
 
-			
 			(controller $Tooltip
 				(renderer = 'SimpleStatusTooltip')
-				(args _text = 'IDS_TOOLTIP_BATTLE_RULES_DESCRIPTION')
+				(args
+					_text = 'IDS_TOOLTIP_BATTLE_RULES_DESCRIPTION'
+				)
 				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				(macro TOOLTIP_HIDE_ON_EVENT "startHide")
 			)
 		)
 	)
@@ -396,7 +412,7 @@
 
 	(block
 		(style
-			(width = 210px) (height = 210px) (backgroundSize = "fill")
+			(width = 220px) (height = 220px) (backgroundSize = "fill")
 			(backgroundImage = 'url:../animations/spine/selected_battle_type/selected_battle_type.skel')
 		)
 		(controller $Spine)
@@ -414,7 +430,7 @@
 	(block
 		(class $MiddleAlignedAbsolutely)
 		(style
-			(width = 190px) (height = 190px) (backgroundSize = "fill")
+			(width = 200px) (height = 200px) (backgroundSize = "fill")
 			(backgroundImage = 'url:../animations/spine/selected_battle_type/selected_battle_type.skel')
 		)
 		(controller $Spine)
@@ -434,8 +450,8 @@
 (def element SelectedBattleTypeAnimation ()
 	(style
 		(hitTest = false)
-		(width = 200px) (height = 200px)
-		(ubScaleX = 1.1) (ubScaleY = 1.1)
+		(width = 220px) (height = 220px)
+		(ubScaleX = 1.3) (ubScaleY = 1.3)
 		(backgroundImage = 'url:../animations/spine/selected_battle_type/selected_battle_type.skel')
 		(backgroundSize = "fill")
 	)
@@ -446,7 +462,7 @@
 	(controller $Animation
 		(bindcall play
 			duration = 0.08
-			from = "{ alpha: 0, ubScaleX: 1.1, ubScaleY: 1.1}"
+			from = "{ alpha: 0, ubScaleX: 1.3, ubScaleY: 1.3}"
 			to = "{ alpha: 1.3, ubScaleX: 1, ubScaleY: 1}"
 			easing = "Easing.quad_in"
 			on = 'addedToStage'
@@ -456,7 +472,7 @@
 
 (def element CurrentSeasonButton (_isRatingBattle:bool = false)
 	(scope
-		(var route:str = "_isRatingBattle ? SC.Ui_windows.ROUTE.RATING_BATTLES : SC.Ui_windows.ROUTE.RANKS")
+		(var route:str = "_isRatingBattle ? SC.Ui_windows.ROUTE.RATING : SC.Ui_windows.ROUTE.RANKS")
 	)
 	(style (width = 100%) (align = "center"))
 	(element DefaultButton

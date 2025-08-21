@@ -1,6 +1,8 @@
 (def constant CREW_ITEM_WIDTH 339px)
 (def constant CREW_ITEM_HEIGHT 124px)
-(def constant MIN_SCREEN_WIDTH_TO_FIT_3 1870px)
+(def constant MIN_SCREEN_WIDTH_TO_FIT_3 1710px)
+(def constant LIST_WIDTH_3_CARDS 1041px)
+(def constant LIST_WIDTH_2_CARDS 682px)
 
 (def constant CREW_LIST_CARD_COLORS "{
 	BACKGROUND:	0xBF242933,
@@ -22,10 +24,6 @@
 
 		(var stageRelativeWidth:number = "min(stageWidth, 1920)")
 		(var isAbleToFit3Cards:bool = "stageRelativeWidth >= MIN_SCREEN_WIDTH_TO_FIT_3")
-		(var cardsInRow:number = "isAbleToFit3Cards ? 3 : 2")
-
-		(var hGapSize:number = "round(XS + (S - XS) * (stageRelativeWidth - 1280) / (1920 - 1280))") 
-		(var crewTileWidth:number =	"round((CREW_ITEM_WIDTH * cardsInRow) + (hGapSize * (cardsInRow - 1)))")
 
 		(var isGuidingTipEnabled:bool = true)
 		(bind isGuidingTipEnabled "false"	init=false watch=false		(event "evScrollAreaValueChanged"))
@@ -43,15 +41,16 @@
 	
 	(hblock
 		(bind visible "isAnyFilterShown")
+
 		(style
 			(width = 100%)
 			(hgap = "XS")
 			(align = "right")
 			(paddingTop = "XS")
 			(paddingBottom = "XS")
-			(paddingRight = "S")
 			(backgroundColor = "NO_COLOR")
 		)
+
 		(controller $Repeat renderer='CrewAppliedFilter'
 			(bind count "SC.Common.CREW_FILTER_TYPE.ALL.length")
 			(args
@@ -75,19 +74,15 @@
 		(content
 			(style
 				(width = 100%)
-				(paddingLeft = "S")
-				(paddingRight = "S")
 				(paddingBottom = "S")
 				(bind paddingTop "isAnyFilterShown ? 0px : { 720: S, 1080: M }")
 				(align = "center")
 			)
 
-			(block
+			(htile
 				(style
-					(bind width "crewTileWidth")
-					(flow = "tile_horizontal")
-					(bind hgap "hGapSize")
-					(vgap = "{ 720: XS, 1080: S }")
+					(bind width "isAbleToFit3Cards ? LIST_WIDTH_3_CARDS : LIST_WIDTH_2_CARDS")
+					(bind gap "isAbleToFit3Cards ? SXS : XS")
 				)
 
 				(controller $DynamicRepeat renderer='CrewListItemRenderer' name='crewListItemRenderer'
@@ -108,6 +103,8 @@
 		(bindcall scrollToBegin animated=false (event "evSetScrollToFirstItem"))
 	)
 
+	(element HorizontalDividerTwoPx)
+
 	(block
 		(class $FullsizeAbsolute)
 		(style
@@ -126,7 +123,7 @@
 
 (def element NoCrewInListPlug (_text:str)
 	(tf
-		(class $TextDefault17NM)
+		(class $TextDefault18NM)
 		(style (textAlign = "center") (alpha = "TC"))
 		(bind text "_text")
 	)
@@ -134,6 +131,7 @@
 
 (def element CrewListItemRenderer (_collection:dhCollection, _shipId:number = 0, _isGuidingTipEnabled:bool = false)
 	(scope
+		(event evMenuItemClicked)
 		(event evCrewIdChanged)
 
 		(macro MOUSE_HANDLER_SCOPE)
@@ -143,6 +141,7 @@
 		(var canDisassignCrew:bool =		"freeBarracksSlots > 0")
 
 		(var shipTargetOwnEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, _shipId)")
+		(var ownShipTargetComponent:dhComponent = "shipTargetOwnEntity.ownShip")
 		(var targetShipInfo:dhComponent =	"shipTargetOwnEntity.ship" (event "shipTargetOwnEntity.ship.evUpdate"))
 
 		(var shipSubtype:str =				"targetShipInfo.subtype ?: ''")
@@ -157,7 +156,7 @@
 		(var crewId:number =			"crew.component.id ?: 0")
 		(var baseUrl:str =				"crew.component.baseUrl ?: ''"				(event "crew.component.evRankChanged"))
 		(var overlayUrl:str =			"crew.component.overlayUrl ?: ''"			(event "crew.component.evRankChanged"))
-		(var classificationId:number =	"crew.component.classificationId ?: 0"		(event "crew.component.evClassificationIdChanged"))
+		(var rarity:number =			"crew.component.rarity ?: 0"				(event "crew.component.evRarityChanged"))
 		(var allSkillPoints:number =	"crew.component.allSkillPoints ?: 0"		(event "crew.component.evLevelUp"))
 		(var timeRentTimeStamp:number =	"crew.component.timeRent ?: 0"				(event "crew.component.evTimeRentChanged") (event "crew.component.evChanged"))
 		(var canMove:bool =				"crew.component && crew.component.canMove"	(event "crew.component.evChanged"))
@@ -180,23 +179,25 @@
 		
 
 		(var ownShipEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, shipId)")
+		(var ownShipComponent:dhComponent = "ownShipEntity.ownShip")
 
-		(var isThisLocked:bool =		"ownShipEntity.ownShip.isLocked"		(event "ownShipEntity.ownShip.evUpdateLock"))
-		(var isThisInFormation:bool =	"ownShipEntity.ownShip.isInFormation"	(event "ownShipEntity.ownShip.evUpdateLock"))
+		(var isShipReadyForBattle:bool = 	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" 	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool = 		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
 
-		(var isTargetLocked:bool =		"shipTargetOwnEntity.ownShip.isLocked"		(event "shipTargetOwnEntity.ownShip.evUpdateLock"))
-		(var isTargetFormation:bool =	"shipTargetOwnEntity.ownShip.isInFormation"	(event "shipTargetOwnEntity.ownShip.evUpdateLock"))
-		(var targetCrewId:number =		"shipTargetOwnEntity.ownShip.crewId ?: 0"	(event "shipTargetOwnEntity.ownShip.evCrewChanged"))
+		(var isShipTargetBalancer:bool =		"ownShipTargetComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"			(event "ownShipTargetComponent.evUpdateLock"))
+		(var isShipTargetReadyForBattle:bool =	"ownShipTargetComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipTargetComponent.evUpdateLock"))
+		(var targetCrewId:number =				"ownShipTargetComponent.crewId ?: 0"										(event "ownShipTargetComponent.evCrewChanged"))
 
 		(struct targetCrew =	PULL_CREW(_crewId = "targetCrewId"))
 
 		(var isFromBarracks:bool =			"shipId == 0")
 		(var hasSpaceToAssignCrew:bool =	"isFromBarracks || canDisassignCrew || (!canDisassignCrew && targetCrewId == 0)")
-		(var crewLockReason:str =			"isThisInFormation		? 'IDS_CREW_LIST_OVERLAY_STATUS_THIS_IN_DIVISION' :
-											 isThisLocked			? 'IDS_CREW_LIST_OVERLAY_STATUS_THIS_IN_BATTLE' :
-											 isTargetFormation		? 'IDS_CREW_LIST_OVERLAY_STATUS_TARGET_IN_DIVISION' :
-											 isTargetLocked			? 'IDS_CREW_LIST_OVERLAY_STATUS_TARGET_IN_BATTLE' :
-											 !hasSpaceToAssignCrew	? 'IDS_CREW_LIST_OVERLAY_STATUS_BARRACK_IS_FULL'
+
+		(var crewLockReason:str =	"	isShipTargetBalancer		? 'IDS_CREW_LIST_WHEN_BALANCER' :
+										isShipInBalancer			? 'IDS_CREW_LIST_WHEN_BALANCER' :
+										isShipReadyForBattle		? 'IDS_CREW_LIST_OVERLAY_STATUS_THIS_IN_DIVISION' :
+									 	isShipTargetReadyForBattle	? 'IDS_CREW_LIST_OVERLAY_STATUS_TARGET_IN_DIVISION' :
+									 	!hasSpaceToAssignCrew		? 'IDS_CREW_LIST_OVERLAY_STATUS_BARRACK_IS_FULL'
 																	: ACTION_DENY_REASON_NONE")
 
 		(var isRental:bool = "timeRentTimeStamp > 0")
@@ -213,13 +214,13 @@
 															 isDisabledAssign	? false
 																				: crewHasCompatibleShip")
 
-		(var isSkillInfoButtonVisible:bool =	"!isThisInFormation")
-		(var isToSkillsButtonVisible:bool =		"shipId && !isThisInFormation")
+		(var isSkillInfoButtonVisible:bool =	"!isShipReadyForBattle && !isShipInBalancer")
+		(var isToSkillsButtonVisible:bool =		"shipId && !isShipReadyForBattle && !isShipInBalancer")
 
 		(var canAssignWithoutRetrain:bool =		"isCrewCompatibleShipBySpecialization || isWithoutCrewPenalty || specializationID == 0 || isDisabledAssign || isRental")
 		(var crewStatusIcon:str =				"!isCrewCompatibleForTargetShip ? 'url:../crew_commander/icons/negative_big.png' : 'url:../crew_commander/icons/retraining_big.png'")
 
-		(var forceOverlayStatusVisible:bool =	"isThisInFormation || isThisLocked")
+		(var forceOverlayStatusVisible:bool =	"isShipReadyForBattle || isShipInBalancer")
 		(var isOverlayedStatusVisible:bool =	"crewLockReason != ACTION_DENY_REASON_NONE && (rollOver || forceOverlayStatusVisible)")
 
 		(var isFaded:bool =			"isOverlayedStatusVisible || !isCrewCompatibleForTargetShip || isDisabledAssign")
@@ -236,12 +237,16 @@
 		(var isSpineAnimation:bool = "crew.component.isAnimated")
 		(var isContextMenuDisabled:bool =	"!shipId && !isCrewFireAvailable")
 
+
 		(struct crewHireTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE"))
 		(struct crewHireRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_REPEAT"))
-		(var guidingTipId:number =	"crewHireTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE :
-									 crewHireRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_REPEAT
-																: SC.Context_guiding_tip.TIP_TYPE.NONE")
-		(var isNewTipVisible:bool =	"guidingTipId != SC.Context_guiding_tip.TIP_TYPE.NONE && $index == 0 && isFromBarracks && _isGuidingTipEnabled")
+
+		(var guidingTipId:number =	"crewHireTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE :
+									 crewHireRepeatTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_REPEAT
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(var isNewTipVisible:bool =	"guidingTipId && $index == 0 && isFromBarracks && _isGuidingTipEnabled")
+
 
 		(var hasBeenRolledOver:bool = false)
 		(bind hasBeenRolledOver "true" init=false (bind trigger "rollOver"))
@@ -257,6 +262,7 @@
 			(padding = "SXS")
 			(paddingRight = "S")
 			(backgroundColor = "CREW_LIST_CARD_COLORS.BACKGROUND")
+			(borderRadius = "XS")
 		)
 
 		
@@ -265,41 +271,56 @@
 			(bindcall externalCall "externalCallType" "[externalCallName, { crewId: crewId, shipId: _shipId }]" watch=false on='leftClick')
 
 			(class $FullsizeAbsolute)
-			(style (padding = "-SXS") (paddingRight = "-S"))
+			(style
+				(paddingTop = "-SXS")
+				(paddingBottom = "-SXS")
+				(paddingLeft = "-SXS")
+				(paddingRight = "-S")
+			)
 
 			(block
 				(class $Fullsize)
-				(style (backgroundColor = "CREW_LIST_CARD_COLORS.OVER") (alpha = 0))
+				(style
+					(backgroundColor = "CREW_LIST_CARD_COLORS.OVER")
+					(alpha = 0)
+					(borderRadius = "XS")
+				)
 
 				(controller $Animation
 					(bindcall play
 						duration = 0.1
 						from = "{ alpha: 0 }"
-						to = "{ alpha: 1}"
+						to = "{ alpha: 1 }"
 						reverse = "!isHighlighted"
 						(bind trigger "isHighlighted")
 					)
 				)
 			)
 
-			(controller $Tooltip
-				(bind enabled "!isContextMenuDisabled")
-				(renderer = 'CrewListMenu')
-				(args
-					_crewId =	"crewId"
-					_shipId =	"_shipId"
-				)
-				(macro DEFAULT_MENU_BEHAVIOUR "1")
-			)
+			(block
+				(class $FullsizeAbsolute)
+				(style (backgroundColor = "NO_COLOR"))
 
-			(controller $Tooltip
-				(renderer='CrewTooltip')
-				(args
-					_crewId =					"crewId"
-					_targetShipId =				"_shipId"
-					_noContextMenuInstruction =	"isContextMenuDisabled"
+				(controller $Tooltip
+					(bind enabled "!isContextMenuDisabled")
+					(renderer = 'CrewListMenu')
+					(args
+						_crewId = "crewId"
+						_shipId = "_shipId"
+					)
+					(macro DEFAULT_MENU_BEHAVIOUR "1")
+					(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
 				)
-				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+
+				(controller $Tooltip
+					(renderer = 'CrewTooltip')
+					(args
+						_crewId = "crewId"
+						_targetShipId = "_shipId"
+						_noContextMenuInstruction = "isContextMenuDisabled"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
 			)
 		)
 		
@@ -314,7 +335,7 @@
 			(element CrewPortraitWithBGR
 				_baseUrl =			"baseUrl"
 				_overlayUrl =		"overlayUrl"
-				_classificationId =	"classificationId"
+				_rarity =			"rarity"
 				_portraitWidth =	102px
 				_portraitHeight =	94px
 				_borderSize =		3px
@@ -435,6 +456,7 @@
 			(hitTest = false)
 			(align = "middle|center")
 			(backgroundColor = "CREW_LIST_CARD_COLORS.FADE")
+			(borderRadius = "XS")
 		)
 
 		(tf
@@ -528,9 +550,12 @@
 	(controller $Instance renderer='GuidingTipHub'
 		(bind enabled "isNewTipVisible")
 		(args
-			_tipId =			"guidingTipId"
-			_tipPositioning =	"TIP_POSITION_BOTTOM"
-			_modalWindowName =	'ModalWindowCrewManagement'
+			_tipId =				"guidingTipId"
+			_tipPositioning =		"TIP_POSITION_BOTTOM"
+			_offsetY =				"XS"
+			_pointerOffset =		"-XL"
+			_alongPointerOffset =	-104
+			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 		)
 	)
 )

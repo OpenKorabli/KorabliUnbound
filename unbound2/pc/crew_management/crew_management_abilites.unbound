@@ -1,5 +1,5 @@
 (def constant CREW_SKILL_ICON_SIZE 60)
-(def constant CREW_SKILL_SLOT_SIZE 64)
+(def constant CREW_SKILL_SLOT_SIZE 68)
 
 (def constant EMPTY_CREW_SKILL_ID 0)
 
@@ -38,8 +38,8 @@
 	(scope
 		(struct crew =	PULL_CREW(_crewId = "_crewId"))
 
-		(var classificationId:number =	"crew.component.classificationId ?: 0"	(event "crew.component.evClassificationIdChanged"))
-		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+		(var rarity:number =			"crew.component.rarity" (event "crew.component.evRarityChanged"))
+		(var isCrewElite:bool =			"rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
 		(var isMaxLevel:bool =			"crew.component.isMaxLevel"				(event "crew.component.evLevelUp"))
 		(var isPenaltiesActive:bool =	"crew.component.isPenaltiesActive"		(event "crew.component.evIsPenaltiesActiveChanged"))
 		(var isMaxLevelEliteCrew:bool =	"isCrewElite && isMaxLevel")
@@ -47,15 +47,16 @@
 		(var learnedSkillsCollection:dhCollection = "getCollectionByPath(CC.crewSkill, 'byCrewAndShip.' + _crewId + '_' + _selectedShipClass + '.sorted')")
 		(var isAnySkillLearned:bool = "learnedSkillsCollection.length > 0")
 
+
 		(struct crewSelectSkillNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_SELECT_SKILL"))
 		(struct crewSelectSkillRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_SELECT_SKILL_REPEAT"))
 
-		(var matrixTipId:number = "	crewSelectSkillNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CREW_SELECT_SKILL :
+		(var newTipId:number = "	crewSelectSkillNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.CREW_SELECT_SKILL :
 									crewSelectSkillRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.CREW_SELECT_SKILL_REPEAT
 																			: SC.Context_guiding_tip.TIP_TYPE.NONE")
 
-		(var isNewTipVisible:bool = "matrixTipId != SC.Context_guiding_tip.TIP_TYPE.NONE && !_isCrewInfoModalWindow")
 		(var hasFinishButton:bool = "crewSelectSkillRepeatNewTip.isActive && isAnySkillLearned")
+
 
 		(var crewShipEntity:dhEntity =	"getPrimaryEntity(CC.ship, crew.component.shipID)")
 		(var crewShipInfo:dhComponent =	"crewShipEntity.ship")
@@ -68,10 +69,10 @@
 
 	(block
 		(style
-			(bind paddingTop	"_isCrewInfoModalWindow	? M : { 720: XS, 1080: M }")
-			(bind paddingBottom	"_isCrewInfoModalWindow	? isMaxLevelEliteCrew	? { 720: (M + SXS + infoTextHeight), 1080: (M + M + infoTextHeight) }
+			(bind paddingTop	"_isCrewInfoModalWindow	? M : { 720: 0px, 1080: 28px }")
+			(bind paddingBottom	"_isCrewInfoModalWindow	? isMaxLevelEliteCrew	? { 720: (SXS + SXS + infoTextHeight - XS), 1080: (MS + MS + infoTextHeight - SXS) }
 																				: M
-														: { 720: XS, 1080: M }")
+														: { 720: 0px, 1080: 28px }")
 		)
 
 		(hblock
@@ -94,16 +95,16 @@
 			)
 
 			(controller $Instance renderer='GuidingTipHub'
-				(bind enabled "isNewTipVisible")
+				(bind enabled "newTipId")
 				(args
-					_tipId =			"matrixTipId"
+					_tipId =			"newTipId"
 					_tipPositioning =	"TIP_POSITION_RIGHT"
 					_noPointer =		"hasFinishButton"
 					_offsetY =			"hasFinishButton ? 0 : 46px"
-					_offsetX =			"hasFinishButton ? 0 : -3px"
-					_pointerOffset =	"L"
+					_offsetX =			"hasFinishButton ? 0 : -XS"
+					_pointerOffset =	-54
 					_hasFinishButton =	"hasFinishButton"
-					_modalWindowName =	'ModalWindowCrewManagement'
+					_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
 				)
 			)
 		)
@@ -114,7 +115,7 @@
 
 		(style
 			(position = "absolute")
-			(bottom = "{ 720: 14px, 1080: 18px }")		
+			(bottom = "{ 720: SXS, 1080: MS }")
 			(width = 100%)
 			(bind alpha "isEliteCrewMaxLevelAndOnInfoMW ? 1 : 0")
 		)
@@ -140,7 +141,7 @@
 		)
 
 		(tf
-			(class $TextDefaultBold19NM)
+			(class $TextDefaultBold20NM)
 			(style
 				(textAlign = "center")
 				(textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE")
@@ -255,6 +256,25 @@
 																											: CREW_SKILL_ICON_ALPHA.UP
 																:	isUseless								? CREW_SKILL_ICON_ALPHA.LOCKED_USELESS
 																											: CREW_SKILL_ICON_ALPHA.LOCKED")
+		
+		(var isInAdaptation:bool = "crew.entity.hasComponent(CC.retraining)")
+
+		(var isCrewSkillLearned:bool = "crewSkill.component != null")
+
+		(var isEnoughPointsToSelect:bool = "crew.component.maxSkillPoints >= (learnedSkillsPrice + selectedSkillsLearnPrice + tier)")
+
+		(var isNotHasMouseInstruction:bool = "isInAdaptation || isCrewSkillLearned || permissions.isDisabledLearnSkills")
+
+		(var mouseInstruction:dict = "	isNotHasMouseInstruction	? null :
+										isSelected					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																		text: 'IDS_CREW_SKILL_UNSELECT_INSTRUCTION' } :
+										!isEnoughPointsToSelect		? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+																		text: 'IDS_CREW_SKILL_ALL_POINTS_DISTRIBUTED_INSTRUCTION' } :
+										!isUnlockedTier				? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																		text: 'IDS_SKILL_FIRST_SELECT_PREVIOUS_LEVEL' } :
+										!isSelected					? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																		text: 'IDS_CREW_SKILL_SELECT_INSTRUCTION' }
+																	: null")
 	)
 
 	(style
@@ -264,7 +284,7 @@
 		(bind marginBottom	"SKILL_TREE_ICON_MARGINS.VERTICAL")
 		(width = "CREW_SKILL_SLOT_SIZE")
 		(height = "CREW_SKILL_SLOT_SIZE")
-		(padding = "XXS")
+		(padding = "XS")
 	)
 
 	(controller $Tooltip
@@ -273,7 +293,7 @@
 			_skillKey =				"_entityId"
 			_crewId =				"_crewId"
 			_selectedShipClass =	"_selectedShipClass"
-			_noMouseInstructions =	"permissions.isDisabledLearnSkills"
+			_mouseInstruction = 	"mouseInstruction"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -331,10 +351,11 @@
 		(style
 			(hitTest = false)
 			(position = "absolute")
-			(right = "M")
-			(bottom = "M")
-			(backgroundImage = 'url:../service_kit/icons/icon_recommended.png')
+			(right = "-XS")
+			(bottom = "-XS")
 		)
+
+		(element RecommendedItemIcon)
 	)
 	
 
@@ -344,7 +365,8 @@
 		(class $FullsizeAbsolute)
 		(style
 			(hitTest = false)
-			(padding = "-XXS")
+			(padding = "-XS")
+			(bind alpha "rollOver && !mouseDown	? 1 : 0.7")
 		)
 
 		(block
@@ -352,10 +374,9 @@
 			(style
 				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
 				(scale9grid = 2)
-				(bind alpha "mouseDown	? 0.7 :
-							 rollOver	? 1
-										: 0.7")
 			)
+
+			(colorTransform = "COLOR_TRANSFORM_ACCENT_BLUE")
 		)
 	)
 
@@ -392,11 +413,11 @@
 		(var skillSubType:number =	"skill.component.skillSubType")
 		(var isEpic:bool =			"skillSubType == SC.Common.SKILL_SUBTYPE.EPIC")
 
+		(var rarity:number =			"crew.component.rarity"		(event "crew.component.evRarityChanged"))
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel"	(event "crew.component.evLevelUp"))
+
 		(var availableSkillComponent:dhComponent =	"skill.entity.availableSkill")
 		(var doesSkillHaveSeveralOwners:bool =		"availableSkillComponent.hasSeveralOwners" (event "availableSkillComponent.evHasSeveralOwnersChanged"))
-
-		(var classificationId:number =	"crew.component.classificationId"	(event "crew.component.evClassificationIdChanged"))
-		(var isMaxLevel:bool =			"crew.component.isMaxLevel"			(event "crew.component.evLevelUp"))
 
 		
 		(var skillsCollection:gfx =							"$datahub.getCollection(CC.skill)")
@@ -408,10 +429,11 @@
 
 		(var crewSkillRenderer:str =	"_entityId == EMPTY_CREW_SKILL_ID ? 'CrewFileSkillEmptyItem' : 'CrewSkillIconView'")
 
-		(var isCrewElite:bool =			"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
+		(var isCrewElite:bool =			"rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
 		(var isMaxLevelEliteCrew:bool =	"isCrewElite && isMaxLevel")
 		(var isClickable:bool =			"!operationsAccountLocked && isMaxLevelEliteCrew && (epicSkillsCollectionItems.length > 0)")
 
+		
 		(var slotState:number = "	!isClickable		? SC.Ui_styles.BUTTON_STATE.DISABLED :
 									isInfotipVisible	? SC.Ui_styles.BUTTON_STATE.SELECTED :
 									mouseDown			? SC.Ui_styles.BUTTON_STATE.DOWN :
@@ -430,6 +452,10 @@
 																								: CREW_ACTIONS.OPEN_WARNING_LAST_SKILL_WINDOW
 																: ''")
 		(var contextActionObj:dict =	"{ _crewId: _crewId, _crewSkillEntityId: _entityId, _selectedShipClass: _selectedShipClass }")
+
+		(var mouseInstruction:dict = "isClickable  	? { text: 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_EPIC_SKILL_SLOT_INFOTIP_OPEN',
+														unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }
+													: null ")
 	)
 
 	(bindcall externalCall "contextClickAction ? 'inputMapping.onRequest' : ''"		"[ contextClickAction, contextActionObj ]"	watch=false on='rightClick')
@@ -442,7 +468,7 @@
 		(bind marginBottom	"SKILL_TREE_ICON_MARGINS.CREW_INFO_MW_VERTICAL")
 		(width = "CREW_SKILL_SLOT_SIZE")
 		(height = "CREW_SKILL_SLOT_SIZE")
-		(padding = "XXS")
+		(padding = "XS")
 	)
 
 	(controller $Tooltip
@@ -451,7 +477,7 @@
 			_skillKey =						"_entityId"
 			_crewId =						"_crewId"
 			_selectedShipClass =			"_selectedShipClass"
-			_crewInfoMouseInstruction =		"isClickable ? 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_EPIC_SKILL_SLOT_INFOTIP_OPEN' : ''"
+			_mouseInstruction =				"mouseInstruction"
 			_isEpicSkillAvailableForSlot =	"isClickable && isAnyEpicSkillAvailableForActionInSlot && !isEpic"
 			_isNoMentorOnAccountForSlot =	"!isAnyEpicSkillAvailableForActionInSlot"
 			_isFromSlot =					"isClickable"
@@ -475,31 +501,25 @@
 
 		(bind align "center|bottom")
 
-		(screenBoundsOffset = 10)
-
 		(bind isInfotipVisible "true" on='evStartShow')
 		(bind isInfotipVisible "false" on='evHide')
-		(pinTop='InfotipPinTop')
-		(pinBottom='InfotipPinBottom')
 	)
 
 	
 	(block
 		(bind visible "isClickable")
 
+		(class $FullsizeAbsolute)
 		(style
 			(hitTest = false)
-			(position = "absolute")
-			(top = "-XXS")
-			(left = "-XXS")
-			(width = "CREW_SKILL_SLOT_SIZE")
-			(height = "CREW_SKILL_SLOT_SIZE")
-			(backgroundSize = "fill")
-			(bind backgroundImage "isAnyEpicSkillAvailableForActionInSlot ? 'url:../service_kit/frames/64px_not_empty_field.png' : 'url:../service_kit/frames/64px_orange.png'")
-			(alpha = "slotFrameAlpha")
+			(bottom = "-XS")
+			(align = "center|bottom")
 		)
 
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotState" _alpha="slotFrameAlpha")
+		(element CrewSkillSelectionStatePanel
+			_state =		"slotState"
+			_isAttention =	"!isAnyEpicSkillAvailableForActionInSlot"
+		)
 	)
 	
 
@@ -559,7 +579,7 @@
 	(style (width = 360px))
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
-	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
 		(block
 			(style (width = 100%))
 
@@ -604,6 +624,14 @@
 
 		(var eliteCrewLearning:dhComponent = "crew.entity.eliteCrewLearning")
 
+		(var curShipId:number = "crew.component.shipID" (event "crew.component.evShipChanged"))
+		
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, curShipId)")
+		(var ownShipComponent:dhComponent = "ownShipEntity.ownShip")
+
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+
 		(var exploredSkillsCountByShipType:dict =		"eliteCrewLearning.exploredSkillsCountByShipType"	(event "eliteCrewLearning.evChanged"))
 		(var skillUnlockingCostCategory:number =		"eliteCrewLearning.skillUnlockingCostCategory"		(event "eliteCrewLearning.evChanged"))
 		(var unlockedSkillsForShipClassCount:number =	"exploredSkillsCountByShipType[_selectedShipClass]")
@@ -622,7 +650,12 @@
 		(var availableSkillComponent:dhComponent =	"skill.entity.availableSkill")
 		(var doesSkillHaveSeveralOwners:bool =		"availableSkillComponent.hasSeveralOwners" (event "availableSkillComponent.evHasSeveralOwnersChanged"))
 
-		(var isUnclickable:bool =		"!availableSkillComponent || (isMaxSkillsCountUnlockedForShipClass && !isUnlocked)")
+		(var isUnclickable:bool = "	isShipReadyForBattle ||
+									isShipInBalancer ||
+									!availableSkillComponent ||
+									(isMaxSkillsCountUnlockedForShipClass && !isUnlocked)")
+
+		(var noMouseInstruction:bool = "!availableSkillComponent || (isMaxSkillsCountUnlockedForShipClass && !isUnlocked)")
 
 		(var skillUnlockPKKey:str =		"SKILL_RESEARCH_ENTITY_PK_KEY_BY_COST_CATEGORY[skillUnlockingCostCategory]")
 		(struct crewSkillUnlockPrice =	PULL_PRICE(_entityId = "skillUnlockPKKey"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
@@ -630,9 +663,7 @@
 		(var skillAlphaParam:number = "	isUnclickable	? CREW_SKILL_ICON_ALPHA.INFOTIP_LOCKED :
 										isLearned		? CREW_SKILL_ICON_ALPHA.INFOTIP_UNLOCKED_ACTIVE
 														: CREW_SKILL_ICON_ALPHA.INFOTIP_DEFAULT")
-		(var textAlphaParam:number = "	isUnclickable	? 0.5 :
-										isLearned		? 1
-														: TA")
+		(var textAlphaParam:number = "	isUnclickable	? 0.5 : TA")
 
 		(var clickAction:str = "operationsAccountLocked || isUnclickable	? '' :
 								isUnlocked									? doesSkillHaveSeveralOwners	? CREW_ACTIONS.OPEN_DENY_SKILL_WINDOW
@@ -644,15 +675,20 @@
 											rollOver		? SC.Ui_styles.BUTTON_STATE.OVER :
 											isUnlocked		? SC.Ui_styles.BUTTON_STATE.SELECTED
 															: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var mouseInstruction:dict = "	noMouseInstruction	 	?	null :
+										isShipInBalancer		? 	{ 	text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+										isShipReadyForBattle	? 	{	text: 'IDS_UNABLE_TO_SET_WHILE_READY_FOR_BATTLE',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :											
+										isUnlocked  			? 	{ 	text: 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_EPIC_SKILL_DENY',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }
+										 						:	{ 	text: 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_EPIC_SKILL_UPGRADE',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }")
 	)
 
 	(bind name "'CrewSkillInfotipItem_' + name")
 	(style (width = 100%))
-
-	(block
-		(style (width = 100%))
-		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "$index > 0"))
-	)
 
 	(block
 		(class $FullsizeAbsolute)
@@ -664,9 +700,7 @@
 				_skillKey =					"_crewSkillEntityId"
 				_crewId =					"_crewId"
 				_selectedShipClass =		"_selectedShipClass"
-				_crewInfoMouseInstruction =	"isUnclickable	? '' :
-											 isUnlocked		? 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_EPIC_SKILL_DENY'
-															: 'IDS_MOUSE_INSTRUCTION_CREW_INFO_MODAL_EPIC_SKILL_UPGRADE'"
+				_mouseInstruction =			"mouseInstruction"
 				_isUnlocked =				"isUnlocked"
 				_isSkillInfotipItem =		true
 			)
@@ -729,7 +763,6 @@
 			(style
 				(width = 180px)
 				(leading = -2)
-				(bind textColor "isLearned ?  SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
 				(bind alpha "textAlphaParam")
 			)
 

@@ -1,5 +1,5 @@
 (def constant MODAL_WINDOW_EXP_TRANSFER_WIDTH 492px)
-(def constant SNOWFLAKE_SHIP_ROW_HEIGHT 48px)
+(def constant SHIP_ROW_HEIGHT 48px)
 
 (def constant SHIP_ROW_ITEM_ALPHA {
 	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0.2,
@@ -20,7 +20,8 @@
 		(event evInputDelayPassed)
 		(event evDelayedGoldInputChanged)
 		(event evFreeXPInputFocusChanged)
-
+		(event evSetScrollToFirstItem)
+		(event ItemChooser_sortingOptionSelected)
 
 		(struct goldExpExchange =		PULL_PRICE(_entityId = "'FREE_XP_RATE_PER_GOLD'"				_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
 		(struct eliteXPToFreeExchange =	PULL_PRICE(_entityId = "'FREE_XP_FOR_ELITE_XP_RATE_PER_GOLD'"	_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
@@ -31,12 +32,19 @@
 		(var accountEliteXP:number =	"accountResourceComponent.eliteXP ?: 0"		(event "accountResourceComponent.evChangedEliteXP"))
 		(var useEliteXP:bool =			"accountResourceComponent.useEliteXP"		(event "accountResourceComponent.evUseEliteXPChanged"))
 
-		(var ships:dhCollection =	"getCollectionByPath(CC.upgradableShipInfo, 'convertExp')")
+		(var ships:dhCollection =	"getCollectionByPath(CC.upgradableShipInfo, 'convertExp.sorted')")
 
 		(var convertExpComponent:dhComponent =	"getSingleComponent(CC.convertExp)")
 		(var selectedExp:number =		"convertExpComponent.selectedExp ?: 0"		(event "convertExpComponent.evSelectedExpChanged"))
 		(var totalAvailableExp:number =	"convertExpComponent.availableExp ?: 0"		(event "convertExpComponent.evAvailableExpChanged"))
 		(var allSelected:bool =			"convertExpComponent.allSelected"			(event "convertExpComponent.evAllSelectedChanged"))
+
+		
+		(struct shipsSortingIndexPref =				GET_PREF_NUMBER(_option="'ui.convertExp.sorting.sortIndex'"))
+		(var selectedSortingOptionIndex:number =	"shipsSortingIndexPref.value")
+		(struct shipsSortingReversedPref =			GET_PREF_BOOL(_option="'ui.convertExp.sorting.isReversed'"))
+		(var isSortingReversed:bool =				"shipsSortingReversedPref.value")
+		
 
 		(var inset:number = "$event.value ?: SC.Common.EXCHANGE_EXP_INSET.SHIP_XP" watch=false	(event "evTabSelected"))
 
@@ -97,7 +105,7 @@
 
 		(var isFreeXPInputFocused:bool = "$event ?: false"	watch=false		(event "evFreeXPInputFocusChanged"))
 
-		(var areShipsVisible:bool = "isInsetShipExp && accountGold > 0 && ships.length > 0")
+		(var areShipsVisible:bool = "isInsetShipExp && ships.length > 0")
 
 		(var currenciesPanelPrices:array = "[	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: -inputGoldValue },
 												{ currency: SC.Common.CURRENCIES.FREE_XP,	finalPrice: accountGold > 0	? isFreeXPInputFocused	? inputGoldValue * curExchangeRate
@@ -132,8 +140,8 @@
 		
 		
 		
-		(var scrollHeight:number =			"150 + ((stageHeight - 720) * (140 / HEIGHT_RATIO))")
-		(var totalShipItemsHeight:number =	"ships.length * SNOWFLAKE_SHIP_ROW_HEIGHT")
+		(var scrollHeight:number =			"150 + ((stageHeight - 720) * (208 / HEIGHT_RATIO))")
+		(var totalShipItemsHeight:number =	"ships.length * SHIP_ROW_HEIGHT")
 		(var currentScrollHeight:number = 	"totalShipItemsHeight < scrollHeight	? totalShipItemsHeight : scrollHeight")
 		(var contentScrollHeight:number =	0)
 		
@@ -144,13 +152,19 @@
 	(dispatch evInputDelayPassed				dir="EventDirection.NONE"	delay=1		reset=true		(event "evExpInputChanged"))
 	(dispatch evDelayedGoldInputChanged			dir="EventDirection.NONE"	delay=0.02	reset=true		(event "evGoldInputChanged"))
 
+	(bindcall externalCall "'direct.action'"	"['option.set',		[ 'ui.convertExp.sorting.sortIndex',	$event.selectedIndex ]]"	(event "ItemChooser_sortingOptionSelected"))
+	(bindcall externalCall "'direct.action'"	"['option.set',		[ 'ui.convertExp.sorting.isReversed',	$event.direction ]]"		(event "ItemChooser_sortingOptionSelected"))
 
-	(style (align = "center|middle"))
+	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "selectedSortingOptionIndex"))
+	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "isSortingReversed"))
+
+	(style (align = "center"))
 
 	(block
 		(style
 			(align = "center")
 			(width = "MODAL_WINDOW_EXP_TRANSFER_WIDTH")
+			(marginTop = 178px)
 		)
 
 		(block
@@ -159,11 +173,19 @@
 			(style
 				(align = "center")
 				(width = 100%)
+				(marginBottom = "S")
 			)
 
-			(element ModalWindowShortHeader
-				_header =		'IDS_FREE_EXP_CONVERSION'
-				_hasDivider =	false
+			(block
+				(style
+					(width = 100%)
+					(marginBottom = "XS")
+			)
+
+				(element ModalWindowShortHeader
+					_header =		'IDS_FREE_EXP_CONVERSION'
+					_hasDivider =	false
+				)
 			)
 
 			(element CurrenciesPanel
@@ -173,29 +195,72 @@
 		)
 
 		(hblock
-			(bind visible "useEliteXP")
-
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
 
 			(style
 				(width = 100%)
-				(bind marginBottom "isInsetEliteExp ? MS : S")
+				(marginBottom = "M")
 			)
 
 			(element TabButton
 				_label =			'IDS_FROM_SHIPS'
+				_width =			130px
 				_isSelected =		"isInsetShipExp"
-				_width =			'50%'
 				_dispatchedEv =		'evTabSelected'
 				_dispatchParams =	"{ value: SC.Common.EXCHANGE_EXP_INSET.SHIP_XP }"
 			)
 
-			(element TabButton
-				_label =			'IDS_FROM_COMMANDERS'
-				_isSelected =		"isInsetEliteExp"
-				_width =			'50%'
-				_dispatchedEv =		'evTabSelected'
-				_dispatchParams =	"{ value: SC.Common.EXCHANGE_EXP_INSET.ELITE_XP }"
+			(block
+				(controller $Instance renderer='TabButton'
+					(bind enabled "useEliteXP")
+					(args
+						_label =			'IDS_FROM_COMMANDERS'
+						_width =			130px
+						_isSelected =		"isInsetEliteExp"
+						_dispatchedEv =		'evTabSelected'
+						_dispatchParams =	"{ value: SC.Common.EXCHANGE_EXP_INSET.ELITE_XP }"
+					)
+				)
+			)
+
+			(hblock
+				(bind visible "isInsetShipExp")
+				(style
+					(position = "absolute")
+					(align = "middle")
+					(right = "XS")
+					(marginTop = "-XS")
+				)
+				(block
+					(style (marginRight = "XXS"))
+
+					(element ImageButton
+						_width =			24px
+						_height =			24px
+						_backgroundImage =	"isSortingReversed ? 'url:../service_kit/buttons/icons/sort_up.png' : 'url:../service_kit/buttons/icons/sort_down.png'"
+						_methods =			"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.convertExp.sorting.isReversed', !isSortingReversed ] }]"
+					)
+
+					(controller $Tooltip
+						(renderer='SimpleStatusTooltip')
+						(args
+							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+							_text =				'IDS_HINT_SHIP_EXP_FILTERING_SORT_SET_REVERSE'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+
+				(element ItemChooser
+					_items =							"[ 'IDS_SHIP_EXP_SORT_DEFAULT', 'IDS_SHIP_EXP_SORT_NATION', 'IDS_SHIP_EXP_SORT_CLASS', 'IDS_SHIP_EXP_SORT_LEVEL' ]"
+					_curIndex =							"selectedSortingOptionIndex"
+					_curDirection =						"isSortingReversed"
+					_onItemSelectedEvent =				'sortingOptionSelected'
+					_itemChooserTooltipUnifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_itemChooserTooltipText =			'IDS_HINT_SHIP_EXP_FILTERING_SORT'
+					_dropDownWidth =					160px
+					_name =								'ShipExpConvertOrdering'
+				)
 			)
 
 			(block
@@ -204,28 +269,201 @@
 					(width = 100%)
 					(bottom = 0)
 				)
-				
+
 				(element HorizontalDividerTwoPx)
 			)
 		)
 
 		
 		(block
-			(bind visible "isInsetShipExp")
-
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.25)
+			(visible = "isInsetEliteExp && accountEliteXP > 0")
 
 			(style
-				(align = "center")
 				(width = 100%)
+				(height = 72px)
+				(alpha = "isInsetEliteExp && accountEliteXP > 0 ? 1 : 0")
+				(scaleY = "isInsetEliteExp && accountEliteXP > 0 ? 1 : 0")
+				(bind marginBottom "isNotEnoughExpToConvert ? SXS : 0")
 			)
 
-			(hblock
-				(style
-					(align = "center|middle")
-					(width = 100%)
-					(height = 39px)
+			(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
+				_trigger =	"isInsetEliteExp && accountEliteXP > 0"
+				_duration =	"0.15"
+				_easing =	"Easing.quad_out"
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+				(class $Fullsize)
+				(style (align = "center|middle"))
+
+				(element InnerPanelFullsizeAbsolute)
+
+				(hblock
+					(style
+						(width = 100%)
+						(paddingLeft = 20px)
+						(paddingRight = 20px)
+					)
+					(tf
+						(class $TextDefaultBold18NM)
+						(style
+							(width = 100%)
+							(alpha = "TA")
+						)
+
+						(text = 'IDS_CURRENCY_ELITE_XP')
+					)
+
+					(element PriceTag
+						_priceInfo =	"{ finalPrice: accountEliteXP, currency: SC.Common.CURRENCIES.ELITE_XP }"
+						_size =			"SIZE.MEDIUM"
+						_name =			'crew_elite_xp'
+					)
 				)
+			)
+		)
+		
+
+		
+		(block
+			(visible = "areShipsVisible")
+
+			(style
+				(width = 100%)
+				(alpha = "areShipsVisible ? 1 : 0")
+				(scaleY = "areShipsVisible ? 1 : 0")
+			)
+
+			(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
+				_trigger =	"areShipsVisible"
+				_duration =	"0.15"
+				_easing =	"Easing.quad_out"
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+				(style (width = 100%))
+
+				(scrollArea
+					(style
+						(width = 100%)
+						
+						(bind height "currentScrollHeight")
+						(backgroundColor = "NO_COLOR")
+					)
+
+					(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+						_singleStep = "SHIP_ROW_HEIGHT"
+						_wheelScrollAcceleration = "0.8"
+						_maxScrollingAnimatedDistance = "280"
+					)
+
+					(repeatController = 'shipExpConvertItemRenderer')
+					(scrollPerItem = true)
+
+					(content
+							(style
+								(width = 100%)
+								(padding = "XS")
+								(vgap = "XXS")
+							)
+						(bind contentScrollHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))		
+
+						(controller $DynamicRepeat renderer='ShipRowSelectableElement' name='shipExpConvertItemRenderer'
+							(bind count "ships.length")
+							(args
+								_shipEntity =			"ships.getEntityAtIndex($index)"
+								_hasPriceTag =			true
+								_hasMouseInstructions =	true
+								_hideLowerDivider =		"$index == ships.length - 1"
+							)
+							(itemHeight =	"SHIP_ROW_HEIGHT")
+							(itemOffset =	"SHIP_ROW_HEIGHT * 2")
+						)
+					)
+					(bindcall scrollToBegin animated=false (event "evSetScrollToFirstItem"))
+				)
+			)
+		)
+		
+
+		(block
+			(style
+				(flow = "horizontal")
+				(width = 100%)
+				(height = 39px)
+				(marginTop = "XS")
+			)
+
+			
+			(hblock
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+
+				(class $Fullsize)
+				(style (width = 100%) (align = "middle"))
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginRight = 10px)
+						(alpha = "TA")
+					)
+
+					(text = 'IDS_RATE')
+				)
+
+				(block
+					(style (marginRight = "XXS"))
+
+					(element PriceTag
+						_priceInfo =		"isInsetShipExp ? goldExpExchange.info : eliteXPToFreeExchange.info"
+						_showDiscountTag =	true
+					)
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginRight = 10px)
+						(alpha = "TA")
+					)
+
+					(text = 'IDS_SIGN_PLUS')
+				)
+
+				(block
+					(style (marginRight = "XXS"))
+
+					(element PriceTag
+						_priceInfo =	"{ finalPrice: 1, currency: SC.Common.CURRENCIES.GOLD }"
+					)
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginRight = 10px)
+						(alpha = "TA")
+					)
+
+					(text = 'IDS_SIGN_EQUAL')
+				)
+
+				(element PriceTag
+					_priceInfo =	"{ finalPrice: curExchangeRate, currency: SC.Common.CURRENCIES.FREE_XP }"
+				)
+			)
+			
+
+			
+			(hblock
+				(bind visible "isInsetShipExp")
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+				(style (align = "middle"))
 
 				(tf
 					(class $TextDefaultNM)
@@ -247,201 +485,8 @@
 					)
 				)
 			)
+			
 		)
-		
-
-		
-		(hblock
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
-
-			(style
-				(align = "center|middle")
-				(width = 100%)
-				(marginBottom = "M")
-			)
-
-			(tf
-				(class $TextDefault17NM)
-				(style
-					(marginRight = 10px)
-					(alpha = "TA")
-				)
-
-				(text = 'IDS_RATE')
-			)
-
-			(block
-				(style (marginRight = "XXS"))
-
-				(element PriceTag
-					_priceInfo =		"isInsetShipExp ? goldExpExchange.info : eliteXPToFreeExchange.info"
-					_size =				"SIZE.MEDIUM"
-					_showDiscountTag =	true
-				)
-			)
-
-			(tf
-				(class $TextDefault17NM)
-				(style
-					(marginRight = 10px)
-					(alpha = "TA")
-				)
-
-				(text = 'IDS_SIGN_PLUS')
-			)
-
-			(block
-				(style (marginRight = "XXS"))
-
-				(element PriceTag
-					_priceInfo =	"{ finalPrice: 1, currency: SC.Common.CURRENCIES.GOLD }"
-					_size =			"SIZE.MEDIUM"
-				)
-			)
-
-			(tf
-				(class $TextDefault17NM)
-				(style
-					(marginRight = 10px)
-					(alpha = "TA")
-				)
-
-				(text = 'IDS_SIGN_EQUAL')
-			)
-
-			(element PriceTag
-				_priceInfo =	"{ finalPrice: curExchangeRate, currency: SC.Common.CURRENCIES.FREE_XP }"
-				_size =			"SIZE.MEDIUM"
-			)
-		)
-		
-
-		
-		(block
-			(visible = "isInsetEliteExp && accountEliteXP > 0")
-
-			(style
-				(width = 100%)
-				(height = 72px)
-				(bind marginBottom "isNotEnoughExpToConvert ? SXS : 0")
-				(alpha = "isInsetEliteExp && accountEliteXP > 0 ? 1 : 0")
-				(scaleY = "isInsetEliteExp && accountEliteXP > 0 ? 1 : 0")
-			)
-
-			(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
-				_trigger =	"isInsetEliteExp && accountEliteXP > 0"
-				_duration =	"0.15"
-				_easing =	"Easing.quad_out"
-			)
-
-			(element HorizontalDividerTwoPx)
-
-			(block
-				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
-
-				(class $Fullsize)
-				(style (align = "center|middle"))
-
-				(element InnerPanelFullsizeAbsolute)
-
-				(hblock
-					(tf
-						(class $TextDefaultBold17NM)
-						(style
-							(marginRight = 10px)
-							(alpha = "TA")
-						)
-
-						(text = 'IDS_CURRENCY_ELITE_XP')
-					)
-
-					(element PriceTag
-						_priceInfo =	"{ finalPrice: accountEliteXP, currency: SC.Common.CURRENCIES.ELITE_XP }"
-						_size =			"SIZE.MEDIUM"
-						_name =			'crew_elite_xp'
-					)
-				)
-			)
-
-			(element HorizontalDividerTwoPx)
-		)
-		
-
-		
-		(block
-			(visible = "areShipsVisible")
-
-			(style
-				(width = 100%)
-				(alpha = "areShipsVisible ? 1 : 0")
-				(scaleY = "areShipsVisible ? 1 : 0")
-			)
-
-			(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
-				_trigger =	"areShipsVisible"
-				_duration =	"0.15"
-				_easing =	"Easing.quad_out"
-			)
-
-			(block
-				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
-
-				(style (width = 100%))
-
-				(element HorizontalDividerTwoPx)
-
-				(block
-					(style (width = 100%))
-
-					(element InnerPanelFullsizeAbsolute)
-
-					(scrollArea
-						(style
-							(width = 100%)
-							
-							(bind height "currentScrollHeight")
-							(backgroundColor = "NO_COLOR")
-						)
-
-						(macro DEFAULT_VERTICAL_SCROLL_PARAMS
-							_singleStep = "SNOWFLAKE_SHIP_ROW_HEIGHT"
-							_wheelScrollAcceleration = "0.8"
-							_maxScrollingAnimatedDistance = "280"
-						)
-
-						(repeatController = 'shipExpConvertItemRenderer')
-						(scrollPerItem = true)
-
-						(content
-							(style (width = 100%))
-							(bind contentScrollHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))		
-
-							(controller $DynamicRepeat renderer='ShipRowSelectableElement' name='shipExpConvertItemRenderer'
-								(bind count "ships.length")
-								(args
-									_shipEntity =			"ships.getEntityAtIndex($index)"
-									_hasPriceTag =			true
-									_hasMouseInstructions = true
-									_hideLowerDivider =		"$index == ships.length - 1"
-								)
-								(itemHeight =	"SNOWFLAKE_SHIP_ROW_HEIGHT")
-								(itemOffset =	"SNOWFLAKE_SHIP_ROW_HEIGHT")
-							)
-						)
-					)
-
-					(element ShipsSelectElement
-						_isSelected =			"allSelected"
-						_totalAvailableExp =	"totalAvailableExp"
-						_priceInfo =			"{ finalPrice: totalGoldForAllShipsExp, currency: SC.Common.CURRENCIES.GOLD }"
-						_isNotEnoughExp =		"isNotEnoughExp"
-					)
-				)
-
-				(element HorizontalDividerTwoPx)
-			)
-		)
-		
 
 		
 		(block
@@ -455,9 +500,11 @@
 				(style
 					(align = "center")
 					(width = 100%)
-					(height = 72px)
+					(height = 38px)
+					(marginBottom = "M")
 					(alpha = "isConversionQuestionVisible ? 1 : 0")
 					(scaleY = "isConversionQuestionVisible ? 1 : 0")
+					(bind marginTop "isInsetEliteExp ? MS : LS")
 				)
 
 				(macro DEFAULT_FADE_ANIM_ALPHA_SCALE_VISIBILITY
@@ -473,7 +520,7 @@
 					)
 
 					(tf
-						(class $TextDefault25NM)
+						(class $TextDefault26NM)
 						(style
 							(marginRight = "S")
 							(alpha = "TA")
@@ -510,7 +557,7 @@
 					)
 
 					(tf
-						(class $TextDefault25NM)
+						(class $TextDefault26NM)
 						(style
 							(marginRight = 10px)
 							(alpha = "TA")
@@ -546,7 +593,7 @@
 					)
 
 					(tf
-						(class $TextDefault25NM)
+						(class $TextDefault26NM)
 						(style (alpha = "TA"))
 
 						(text = 'IDS_QUESTION')
@@ -558,9 +605,10 @@
 				(visible = "isNotEnoughExpToConvert")
 
 				(style
-					(align = "middle")
+					(align = "center|middle")
 					(width = 100%)
-					(bind height "isInsetEliteExp ? 64px : 60px")
+					(marginTop = "MS")
+					(marginBottom = "MS")
 					(alpha = "isNotEnoughExpToConvert ? 1 : 0")
 					(scaleY = "isNotEnoughExpToConvert ? 1 : 0")
 				)
@@ -571,11 +619,12 @@
 					_easing =	"Easing.quad_out"
 				)
 
-				(controller $Instance renderer='NotEnoughExpToConvert'
+				(controller $Instance renderer='StatusLine'
 					(bind enabled "isNotEnoughExpToConvert")
 					(args
-						_isNoExp =		"curTotalAvailableExp == 0"
-						_isEliteXP =	"isInsetEliteExp"
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+						_text =				"curTotalAvailableExp ? 'IDS_NOT_ENOUGH_EXP_TO_CONVERT' : 'IDS_NO_EXP_TO_CONVERT'"
+						_textClass =		'$TextDefaultNM'
 					)
 				)
 			)
@@ -584,9 +633,10 @@
 				(visible = "isZeroGoldVisible")
 
 				(style
-					(align = "middle")
+					(align = "center|middle")
 					(width = 100%)
-					(height = 72px)
+					(marginTop = "MS")
+					(marginBottom = "MS")
 					(alpha = "isZeroGoldVisible ? 1 : 0")
 					(scaleY = "isZeroGoldVisible ? 1 : 0")
 				)
@@ -596,8 +646,15 @@
 					_duration =	"0.15"
 					_easing =	"Easing.quad_out"
 				)
-				
-				(controller $Instance renderer='ZeroGoldInfoBlock' (bind enabled "isZeroGoldVisible"))
+
+				(controller $Instance renderer='StatusLine'
+					(bind enabled "isZeroGoldVisible")
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+						_text =				'IDS_NO_GOLD_TO_CONVERT'
+						_textClass =		'$TextDefaultNM'
+					)
+				)
 			)
 		)
 		
@@ -605,10 +662,7 @@
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
 
-			(style
-				(width = 100%)
-				(bind marginTop "isNotEnoughExpToConvert && isInsetEliteExp ? SXS : 0")
-			)
+			(style (width = 100%))
 
 			(element HorizontalDividerTwoPx)
 		)
@@ -649,16 +703,16 @@
 
 		(var upgradableShipInfo:dhComponent =	"_shipEntity.upgradableShipInfo")
 		(var upgradableShipInfoExp:number =		"upgradableShipInfo.exp ?: 0"	(event "upgradableShipInfo.evUpdate"))
-
-		(var shipId:number =			"_shipEntity.ship.id")
+		(var isOwnShip:bool =					"_shipEntity.hasComponent(CC.ownShip)")
+		(var shipId:number =					"_shipEntity.ship.id")
 
 		(var bonusTagIndex:number =		"_shipEntity.ship.bonusTags.length == 1 ? 0 : 1")
 		(var bonusTagEntityId:number =	"_shipEntity.ship.bonusTags[bonusTagIndex]")
 		(var bonusTagEntity:dhEntity =	"getEntity(bonusTagEntityId)")
 		(var rewards:array =			"bonusTagEntity.bonusTag.rewards")
 
-		(var isSelectedDH:bool =			"_shipEntity.selection.value"	(event "_shipEntity.selection.evChanged"))
-		(var isSnowflakeShipSelected:bool =	"_shipEntity.hasComponent(CC.snowflakeSelected)")
+		(var isSelectedDH:bool =			"upgradableShipInfo.isSelectedForExpConversion"	(event "upgradableShipInfo.evIsSelectedForExpConversionChanged"))
+		(var isSnowflakeShipSelected:bool =	"_shipEntity.ship.isSelectedForSnowflakes"		(event "_shipEntity.ship.evIsSelectedForSnowflakesChanged"))
 		(var isSelected:bool =				"isSelectedDH || isSnowflakeShipSelected")
 
 		(var isInactive:bool =			"_isAllSelected && !isSelected || _isLocked")
@@ -678,7 +732,7 @@
 
 	(style
 		(width = 100%)
-		(height = "SNOWFLAKE_SHIP_ROW_HEIGHT")
+		(height = "SHIP_ROW_HEIGHT")
 		(bind hitTest "!(_isSnowflakesModal && isInactive)")
 	)
 
@@ -704,7 +758,7 @@
 	)
 
 	(block
-		(bind visible "!_hideLowerDivider")
+		(bind visible "_isSnowflakesModal && !_hideLowerDivider")
 
 		(style
 			(position = "absolute")
@@ -719,8 +773,19 @@
 		(class $FullsizeAbsolute)
 		(style (paddingTop = 1px))
 
-		(element MenuItemBackground
-			_state = "state"
+		(controller $Instance renderer='MenuItemBackground'
+			(bind enabled "_isSnowflakesModal")
+			(args
+				_state = "state"
+			)
+		)
+
+		(controller $Instance renderer='ShipRowItemBackground'
+			(bind enabled "!_isSnowflakesModal")
+			(args
+				_state =		"state"
+ 			    _isSelected =	"isSelected"
+			)
 		)
 	)
 
@@ -731,21 +796,24 @@
 			(align = "middle")
 			(paddingLeft = "MS")
 			(paddingRight = "SXS")
-			(alpha = "contentAlpha")
+			(alpha = "SHIP_ROW_ITEM_ALPHA[state]")
 		)
 
 		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
 			_trigger	= "state"
-			_alpha		= "contentAlpha"
+			_alpha		= "SHIP_ROW_ITEM_ALPHA[state]"
 		)
 
 		(block
-			(style (width = 100%))
+			(style
+				(width = 100%)
+				(bind alpha "isOwnShip ? 1 : 0.5")
+			)
 
 			(element ShipLineItemNM
 				_shipId =		"shipId"
 				_withFlag =		true
-				_fontClass =	'$TextDefaultBold17NM'
+				_fontClass =	'$TextDefaultBold18NM'
 			)
 		)
 
@@ -781,77 +849,48 @@
 	)
 )
 
-(def element ShipsSelectElement (_isSelected:bool, _totalAvailableExp:number, _priceInfo:dict, _isNotEnoughExp:bool)
+(def element ShipRowItemBackground (_state:number, _isSelected:bool=false)
 	(scope
-		(macro MOUSE_HANDLER_SCOPE)
-
-		(var state:number = "	mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
-								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER :
-								_isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED
-												: SC.Ui_styles.BUTTON_STATE.UP")
+		(var rowItemAlpha:number = "MENU_ITEM_BACKGROUND[_state]")
 	)
 
+	(class $FullsizeAbsolute)
 	(style
-		(width = 100%)
-		(height = "SNOWFLAKE_SHIP_ROW_HEIGHT")
-	)
-
-	(controller $Tooltip
-		(renderer = 'ShipsSelectTooltip')
-		(args
-			_priceInfo =		"_priceInfo"
-			_showPrice =		"!_isNotEnoughExp"
-			_text =				"_isNotEnoughExp ? 'IDS_NOT_ENOUGH_EXP_TO_CONVERT' : 'IDS_COMMON_PRICE_FOR_ALL_FREE_EXP'"
-			_instructionText =	"_isSelected ? 'IDS_HINT_LEFT_DESELECT_ALL_SHIPS' : 'IDS_HINT_LEFT_SELECT_ALL_SHIPS'"
-		)
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(paddingTop = 1px)
+		(paddingBottom = 1px)
 	)
 
 	(block
 		(class $FullsizeAbsolute)
-		(style (paddingTop = 1px))
-
-		(element MenuItemBackground
-			_state = "state"
-		)
-	)
-
-	(hblock
-		(class $Fullsize)
-		(style
-			(align = "middle")
-			(paddingLeft = "MS")
-			(paddingRight = "SXS")
-		)
-
-		(block
-			(style (width = 100%))
-
-			(tf
-				(class $TextDefaultBold17NM)
-				(style (alpha = "TA"))
-				(text = 'IDS_ALL_VEHICLES')
-			)
-		)
-
-		(element PriceTag
-			_priceInfo =	"{ finalPrice: _totalAvailableExp, currency: SC.Common.CURRENCIES.XP }"
-			_size =			"SIZE.MEDIUM"
-		)
+		(style (bind backgroundColor "_isSelected ? NO_COLOR : SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
 	)
 
 	(block
-		(style
-			(position = "absolute")
-			(width = 100%)
+		(class $FullsizeAbsolute)
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(bind alpha "_isSelected ? 0.7 : 0.2")
+				(scale9grid = 2)
+			)
 		)
 
-		(element HorizontalDividerTwoPx)
-	)
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(bind alpha "_isSelected ? 0.15 : 0.05")
+			)
+		)
 
-	(macro MOUSE_HANDLER
-		_soundSet =	"'button_secondary'"
-		_methods =	"[ { type: 'inputMapping.onAction',	name: 'selectAll',	args: {} } ]"
+		(alpha = "rowItemAlpha")
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger =	"_state"
+			_alpha =	"rowItemAlpha"
+		)
 	)
 )
 
@@ -884,54 +923,6 @@
 		(element TooltipSystemStatusLine
 			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 			_text =				"_instructionText"
-		)
-	)
-)
-
-(def element NotEnoughExpToConvert (_isEliteXP:bool = false, _isNoExp:bool = false)
-	(style
-		(align = "center")
-		(width = 100%)
-	)
-
-	(element StatusLine
-		_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
-		_text =				"_isNoExp ? 'IDS_NO_EXP_TO_CONVERT' : 'IDS_NOT_ENOUGH_EXP_TO_CONVERT'"
-	)
-
-	(block
-		(bind visible "_isEliteXP")
-
-		(style (marginTop = "S"))
-
-		(controller $Instance renderer='InstructionBigTech'
-			(bind enabled "_isEliteXP")
-			(args
-				_instructionText =	'IDS_ACCUMULATE_ELITE_EXP'
-				_maxWidth =			450px
-				_leading =			-5
-			)
-		)
-	)
-)
-
-(def element ZeroGoldInfoBlock ()
-	(style
-		(align = "center")
-		(width = 100%)
-	)
-
-	(element StatusLine
-		_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
-		_text =				'IDS_NO_GOLD_TO_CONVERT'
-	)
-
-	(block
-		(style (marginTop = "S"))
-
-		(element InstructionBigTech
-			_instructionText =	'IDS_BUY_GOLD_TO_COMPLETE'
-			_maxWidth =			450px
 		)
 	)
 )

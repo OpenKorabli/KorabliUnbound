@@ -3,32 +3,13 @@
 	(height = 410px)
 )
 
-(def element ButtonDivisionTooltip (_battleType:str, _isFormationsEnabled:bool = false)
-	(scope
-		(var rankSeasonEntity:gfx = "$datahub.getSingleEntity(CC.rankSeason)")
-		(var isDivisionAllowedInRanked:bool = "rankSeasonEntity.rankSeason.isDivisionAllowed" (event "rankSeasonEntity.rankSeason.evChanged"))
-	)
-	(style (width = 260px) (hitTest = false))
+(def element ButtonDivisionTooltip ()
+	(style (width = 300px))
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemDescriptionText'
-				(bind enabled "_isFormationsEnabled")
-				(args
-					_descriptionText = 'IDS_HINT_CREATE_DIVISION'
-				)
-			)
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "!_isFormationsEnabled")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
-					_text = "	_battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE && !isDivisionAllowedInRanked	? 'IDS_DIVISIONS_ARE_NOT_ALLOWED_IN_RANK_BATTLES' :
-								_battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE								? 'IDS_DIVISIONS_ARE_NOT_ALLOWED_IN_TRAINING_BATTLES'
-																													: 'UNKNOWN_DENY_REASON'"
-				)
-			)
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_HINT_CREATE_DIVISION'
 		)
 
 		(element TooltipSystemHorizontalDivider)
@@ -87,7 +68,7 @@
 		(bind height "_isResizeInfotip ? dragInfotip.infotipHeight : 400px")
 	)
 
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
 	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
 		(class $Fullsize)
 		(block
@@ -174,86 +155,55 @@
 		(struct divisionSeekingTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_SEEKING"))
 		(struct divisionAlreadySeekingTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_ALREADY_SEEKING"))
 
-		(var newTipId:number = "	divisionSeekingTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_SEEKING :
-									divisionAlreadySeekingTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_ALREADY_SEEKING
-																		: SC.Context_guiding_tip.TIP_TYPE.NONE")
-		(var isTipVisible:bool = "newTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var newTipId:number = "divisionSeekingTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_SEEKING :
+								divisionAlreadySeekingTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_ALREADY_SEEKING
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+
+		(macro MOUSE_HANDLER_SCOPE)
 	)
+
 	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'commentWantTo_division', value: $event.value }]" init=false watch=false (event "evDivisionCommentChanged"))
 	(bindcall externalCall "'inputMapping.onAction'" "['updateSeekerComment', { comment: $event.value }]" init=false watch=false (event "evDivisionCommentChanged"))
 
 	(class $Fullsize)
 
 	(element DEFAULT_EXPAND_CONTAINER "divisionDataEntity == null && !_isFromTrainingRoomBtn"
-		(block
-			(style (width = 100%) (height = 34px))
+		(hblock
+			(style
+				(width = 100%)
+				(height = 38px)
+				(paddingLeft = "SXS")
+				(backgroundColor = "NO_COLOR")
+				(align = "middle")
+			)
+			(macro MOUSE_EVENTS_DISPATCHER)
 			(name = 'wantToDivision')
 
-			(block
-				(class $FullsizeAbsolute)
-				(element DockSubmenuItem
-					_selected = false
-					_soundSet = 'dropdown'
-					_methods = "[	{	type: 'inputMapping.onAction',
-										name: 'toggleDivisionSeekerStatus',
-										args: { comment: commentWantToDivision, status: isSelfSeeker }},
-									{	type: 'inputMapping.onAction',
-										name: isTipVisible ? 'deactivateTipChain' : '',
-										args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.DIVISIONS_ONBOARDING }}]"
+			(bindcall externalCall "'inputMapping.onAction'"					"['toggleDivisionSeekerStatus',	{ comment: commentWantToDivision, status: isSelfSeeker }]" watch=false on='leftClick')
+			(bindcall externalCall "newTipId ? 'inputMapping.onAction' : ''"	"['deactivateTipChain',			{ tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.DIVISIONS_ONBOARDING }]" watch=false on='leftClick')
 
-				)
-
-				(controller $Tooltip
-					(renderer ='SimpleStatusTooltip')
-					(args
-						_text = "isSelfSeeker	? 'IDS_NOT_VISIBLE_FOR_OTHER_PLAYERS_DIVISION'
-												: 'IDS_VISIBLE_FOR_OTHER_PLAYERS_DIVISION'"
-					)
-					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				)
-
-				(controller $Instance renderer='GuidingTipHub'
-					(bind enabled "isTipVisible")
-					(args
-						_tipId = "newTipId"
-						_tipPositioning = "TIP_POSITION_BOTTOM"
-						_offsetY = "XXS"
-						_hasFinishButton = true
-						_modalWindowName = 'Dock'
-					)
-				)
+			(element SwitchWithLeftLabel
+				_state = "isSelfSeeker"
+				_label = 'IDS_WANT_IN_DIVISION'
+				_labelWidth = 240px
+				_textClass = '$TextDefaultBold18NM'
+				_rollOver = "rollOver"
+				_mouseDown = "mouseDown"
 			)
 
-			(block
-				(name = 'closeSeekDivision')
-				(style (position = "absolute") (hitTest = false) (right = 10px) (top = "SXS"))
-
-				(controller $Instance renderer='CloseButton'
-					(bind enabled "isSelfSeeker")
-				)
-			)
-
-			(hblock
-				(style (hitTest = false) (position = "absolute") (width = 100%) (align = "center|middle") (marginTop = 5px))
-				
-				(block
-					(style
-						(marginTop = "XXS")
-						(marginRight = "XS")
-						(width = 16px)
-						(height = 20px)
-						(bind backgroundImage "'url:../service_kit/divisions_icons/division_wanted_' + (isSelfSeeker ? 'on' : 'off') + '.png'")
-					)
-				)
-
-				(tf
-					(class $TextDefaultBoldNM)
-					(style (bind textColor "isSelfSeeker	? SC.Ui_styles.SERVICE_COLORS.GREEN
-															: SC.Ui_styles.SERVICE_COLORS.WHITE"))
-					(text = 'IDS_WANT_IN_DIVISION')
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "newTipId")
+				(args
+					_tipId =			"newTipId"
+					_tipPositioning =	"TIP_POSITION_BOTTOM"
+					_offsetY =			"XS"
+					_pointerOffset =	"-MS"
+					_hasFinishButton =	true
+					_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
 				)
 			)
 		)
+
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "!isDescriptionTextFieldsBlocked"))
@@ -263,7 +213,13 @@
 	
 	(element DEFAULT_EXPAND_CONTAINER "isSelfSeeker && !isDescriptionTextFieldsBlocked"
 		(block
-			(style (width = 100%) (paddingLeft = "S") (paddingRight = "S") (paddingTop = "S") (paddingBottom = "XS"))
+			(style
+				(width = 100%)
+				(paddingLeft = "SXS")
+				(paddingRight = "SXS")
+				(paddingTop = "S")
+				(paddingBottom = "XS")
+			)
 
 			(element DescriptionInputText
 				_onEnterEvent = 'evDivisionCommentChanged'
@@ -286,7 +242,6 @@
 	(block
 		(class $Fullsize)
 		(bind visible "!_isFromTrainingRoomBtn")
-		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
 
 		(scrollArea
 			(class $Fullsize)
@@ -361,7 +316,7 @@
 			(name = 'searchPlayersDivision')
 			(class $Fullsize)
 			(style
-				(paddingLeft = "S")
+				(paddingLeft = 10px)
 				(align = "middle")
 			)
 
@@ -442,14 +397,17 @@
 
 	(block
 		(style (width = 100%))
-		(style  (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
 
 		(element DEFAULT_EXPAND_CONTAINER "isGroupExpanded"
 
 			(block
 				(bind visible "contacts.length > 0")
-				(style (width = 100%))
-				
+				(style
+					(width = 100%)
+					(padding = "XS")
+					(vgap = "XXS")
+				)
 				
 				(controller $DynamicRepeat renderer='PlayerContactItemWithRollover'
 					(bind count "contacts.length")
@@ -458,7 +416,7 @@
 						_teamId = "_teamId"
 						_playerContext = "_playerContext"
 					)
-					(itemWidth = 100%)
+
 					(itemHeight = 30px)
 					(itemOffset = 60px)
 				)
@@ -502,7 +460,7 @@
 	(block
 		(style (width = 100%) (height = 30px) (align = "middle") (paddingLeft = "SXS"))
 		(tf
-			(class $TextDefaultBold17NM)
+			(class $TextDefaultBold18NM)
 			(style (width = 100%) (textAlign = "center") (alpha = "TC"))
 			(text = 'IDS_MY_CONTACTS')
 		)
@@ -553,7 +511,11 @@
 			(scrollPerItem = true)
 
 			(content
-				(style (width = 100%))
+				(style
+					(width = 100%)
+					(padding = "XS")
+					(vgap = "XXS")
+				)
 
 				(controller $DynamicRepeat renderer='PlayerContactItemWithRollover' name='contactContainer'
 					(bind count "contacts.length")
@@ -564,7 +526,6 @@
 					)
 
 					(itemHeight = 30px)
-					(itemWidth = 100%)
 					(itemOffset = 120px)
 				)
 			)
@@ -639,14 +600,16 @@
 
 		(element DEFAULT_EXPAND_CONTAINER "isGroupExpanded"
 			(block
-				(style (width = 100%))
+				(style
+					(width = 100%)
+					(bind padding "availableClanTeams.length ? XS : 0px")
+				)
 
 				(controller $DynamicRepeat renderer='ClanBattleDivisionsItem'
 					(bind count "availableClanTeams.length")
 					(args
 						_id = "availableClanTeams[$index].id"
 					)
-					(itemWidth = 100%)
 					(itemHeight = 50px)
 					(itemOffset = 100px)
 				)
@@ -670,14 +633,13 @@
 )
 
 (def element SimpleListGroupHeader (_groupLabel:str, _isGroupExpanded:bool=false, _dispatchedEv:str='', _rollOver:bool=false, _mouseDown:bool=false)
-	(scope
-		(event evMenuItemClicked)
+	(style
+		(width = 100%)
+		(height = 33px)
 	)
-	(style (width = 100%) (height = 33px))
 
-	(block
+	(hblock
 		(class $Fullsize)
-		(style (align = "middle"))
 
 		(block
 			(class $FullsizeAbsolute)
@@ -686,25 +648,31 @@
 				_dispatchedEv = "_dispatchedEv"
 				_rollOver = "_rollOver"
 				_mouseDown = "_mouseDown"
+				_isRoundedBorder = false
 			)
 		)
 
-		(hblock
-			(style (width = 100%) (paddingLeft = "S") (align = "middle") (hitTest = false))
-
+		(block
+			(style
+				(marginTop = 9px)
+				(marginLeft = 11px)
+				(marginRight = "XS")
+			)
 			(element ButtonExpand
 				_isInOverState = "_rollOver"
 				_isInDownState = "_mouseDown"
 				_expanded = "_isGroupExpanded"
 			)
-			(block
-				(style (width = 100%) (paddingLeft = "XS"))
-				(tf
-					(class $TextDefaultBoldNM)
-					(style (width = 100%) (alpha = "TC"))
-					(bind text "_groupLabel")
-				)
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(marginTop = 9px)
+				(width = 100%)
+				(alpha = "TC")
 			)
+			(bind text "_groupLabel")
 		)
 
 		(controller $Tooltip
@@ -749,7 +717,7 @@
 		(var isOwnerSelfPlayer:bool = "selfPlayerEntity.accountName.name == ownerName")
 		(var hasClanSquadModifier:bool = "selfPlayerEntity.clanmanSupplyInfo.hasClanSquadModifier" (event "selfPlayerEntity.clanmanSupplyInfo.evHasClanSquadModifierChanged"))
 
-		(var iconType:str = "isOtherDivision ? 'player_ready_division_other_division' : 'player_ready_division'")
+		(var iconType:str = "isOtherDivision ? 'player_ready_other_team' : 'player_ready'")
 		
 
 		(var battleTypeEntity:gfx = "$datahub.getPrimaryEntity(CC.battleType, battleType + '_' + toString(battleTypeGameParamsId))")
@@ -782,9 +750,8 @@
 
 		(macro PULL_SHIP_ID)
 
-		(var battleTypePrefix:str = "isLocked ? '_disabled' : ''")
-		(var battleTypeIcon:str = "battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? eventBattleName + battleTypePrefix
-																						: battleType + battleTypePrefix")
+		(var battleTypeIcon:str = "battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? eventBattleName
+																						: battleType")
 
 		(var formationTextColor:number = " isOtherDivision	|| isDivisionFull	? SC.Ui_styles.SERVICE_COLORS.WHITE
 																				: SC.Ui_styles.SERVICE_COLORS.YELLOW")
@@ -834,6 +801,7 @@
 				(backgroundSize = "cover")
 				(bind backgroundImage "'url:../service_kit/battle_types/' + battleTypeIcon + '_small.png'")
 			)
+			(macro DESATURATION_DEFAULT "!isLocked")
 		)
 
 		(block
@@ -842,6 +810,7 @@
 				(bind class "isOwnerSelfPlayer ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
 				(style
 					(width = 100%)
+					(noTranslate = true)
 					(bind textColor "isOtherDivision	? SC.Ui_styles.SERVICE_COLORS.WHITE
 														: SC.Ui_styles.SERVICE_COLORS.YELLOW")
 				)
@@ -943,19 +912,19 @@
 	
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-			(block
-				(style (width = 100%))
-				
-				(tf
-					(class $TextDefaultBold21NM)
-					(style
-						(width = 100%)
-						(bind textColor "_isOtherTeam	? SC.Ui_styles.SERVICE_COLORS.WHITE
-														: SC.Ui_styles.SERVICE_COLORS.YELLOW")
-					)
-					(bind text "_isInBattle ? 'IDS_IN_BATTLE' : tr('IDS_DIVISION') + (_showClanSquadModifier ? '. ' + tr('IDS_CLAN_SQUAD_' + _squadId) : '')")
+		(block
+			(style (width = 100%))
+			
+			(tf
+				(class $TextDefaultBold22NM)
+				(style
+					(width = 100%)
+					(bind textColor "_isOtherTeam	? SC.Ui_styles.SERVICE_COLORS.WHITE
+													: SC.Ui_styles.SERVICE_COLORS.YELLOW")
 				)
+				(bind text "_isInBattle ? 'IDS_IN_BATTLE' : tr('IDS_DIVISION') + (_showClanSquadModifier ? '. ' + tr('IDS_CLAN_SQUAD_' + _squadId) : '')")
 			)
+		)
 
 		(block
 			(style (width = 100%))
@@ -1023,7 +992,8 @@
 			(bind class "isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
 			(style
 				(width = 100%)
-				(wordWrap = false) (elideMode = true)
+				(wordWrap = false)
+				(elideMode = true)
 				(bind textColor "(isSelf || !_isOtherTeam) && !isMercenary	? SC.Ui_styles.SERVICE_COLORS.YELLOW
 																			: SC.Ui_styles.SERVICE_COLORS.WHITE")
 			)
@@ -1052,6 +1022,7 @@
 		(height = 18px)
 		(align = "center|middle")
 		(bind backgroundImage "'url:../service_kit/divisions_icons/' + _iconType + '.png'")
+		(backgroundSize = "cover")
 	)
 	
 	(tf
@@ -1061,15 +1032,15 @@
 	)
 )
 
-(def element FormationSeekersGroup(_playerContextType:str)
+(def element FormationSeekersGroup (_playerContextType:str)
 	(scope
-		(var divisionEntranceInfoEntity:gfx = "$datahub.getSingleEntity(CC.divisionEntranceInfo)")
+		(event evExpandFormationSeekersGroupChanged)
+
+		(var divisionEntranceInfoEntity:dhEntity = "getSingleEntity(CC.divisionEntranceInfo)")
 		(var IsSeekersListUpdateInProgress:bool = "divisionEntranceInfoEntity.divisionEntranceInfo.IsSeekersListUpdateInProgress" (event "divisionEntranceInfoEntity.divisionEntranceInfo.evIsSeekersListUpdateInProgressChanged"))
 
-		(var divisionSeekersCollection:gfx = "$datahub.getCollection(CC.divisionSeeker)")
-		(var divisionSeekers:array = "divisionSeekersCollection.items ?: []" (event "divisionSeekersCollection.evAdded") (event "divisionSeekersCollection.evRemoved"))
+		(var divisionSeekersCollection:dhCollection = "getCollection(CC.divisionSeeker)")
 
-		(event evExpandFormationSeekersGroupChanged)
 		(var isGroupExpanded:bool = true)
 		(bind isGroupExpanded "!isGroupExpanded" init=false watch=false (event "evExpandFormationSeekersGroupChanged"))
 		(macro MOUSE_HANDLER_SCOPE)
@@ -1085,11 +1056,16 @@
 			_dispatchedEv = 'evExpandFormationSeekersGroupChanged'
 			_rollOver = "rollOver"
 		)
+
 		(block
-			(style (position = "absolute") (right = 9px) (top = "S"))
-			(name = 'UpdateSeekersList')
+			(style
+				(position = "absolute")
+				(right = 11px)
+				(top = "S")
+			)
 
 			(element ImageButton
+				_name = 'UpdateSeekersList'
 				_width = 18px
 				_height = 18px
 				_enabled = "!IsSeekersListUpdateInProgress"
@@ -1113,30 +1089,42 @@
 	)
 	
 	(block
-		(style (width = 100%) (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+		(style
+			(width = 100%)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		)
 
 		(element DEFAULT_EXPAND_CONTAINER "isGroupExpanded"
 			(block
-				(style (width = 100%))
+				(style
+					(width = 100%)
+					(bind padding "divisionSeekersCollection.length ? XS : 0px")
+					(vgap = "XXS")
+				)
 
 				(controller $DynamicRepeat renderer='FormationSeekerPlayer'
-					(bind count "divisionSeekers.length")
+					(bind count "divisionSeekersCollection.length")
 					(args
-						_id = "divisionSeekers[$index].id"
+						_id = "divisionSeekersCollection.getEntityAtIndex($index).id"
 						_playerContextType = "_playerContextType"
 					)
-					(itemWidth = 100%)
 					(itemHeight = 30px)
 					(itemOffset = 60px)
 				)
 			)
 			
 			(block
-				(bind visible "divisionSeekers.length == 0")
-				(style (width = 100%) (align = "middle") (paddingTop = "SXS") (paddingBottom = "SXS") (hitTest = false))
+				(bind visible "divisionSeekersCollection.length == 0")
+				(style
+					(width = 100%)
+					(align = "middle")
+					(paddingTop = "SXS")
+					(paddingBottom = "SXS")
+					(hitTest = false)
+				)
 
 				(controller $Instance renderer='EmptyStatusParagraph'
-					(bind enabled "divisionSeekers.length == 0")
+					(bind enabled "divisionSeekersCollection.length == 0")
 					(args
 						_text = 'IDS_INSTRUCTION_NO_PLAYERS_WANTED_IN_DIVISION'
 						_textClass = '$TextDefaultNM'
@@ -1148,9 +1136,9 @@
 	)
 )
 
-(def element FormationSeekerPlayer(_id:number, _playerContextType:str)
+(def element FormationSeekerPlayer (_id:number, _playerContextType:str)
 	(scope
-		(var divisionSeekerEntity:gfx = "$datahub.getEntity(_id)")
+		(var divisionSeekerEntity:dhEntity = "getEntity(_id)")
 		(var accountId:number = "divisionSeekerEntity.divisionSeeker.accountId")
 		(var seekerComment:str = "divisionSeekerEntity.divisionSeeker.seekerComment" (event "divisionSeekerEntity.divisionSeeker.evSeekerCommentChanged"))
 	)

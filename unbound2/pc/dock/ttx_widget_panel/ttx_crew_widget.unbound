@@ -1,0 +1,438 @@
+(def element DockCrewWidget (_shipId:number, _crewId:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var shipEntity:dhEntity =	"getPrimaryEntity(CC.ship, _shipId)")
+		(var ownShip:dhComponent =	"shipEntity.ownShip")
+		(var isOwned:bool =			"ownShip != null")
+
+		(struct crewFeature =	FEATURES(_state="SC.Common.ACCOUNT_FEATURE.CREW"))
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+
+		(var rarity:number =	"crew.component.rarity" (event "crew.component.evRarityChanged"))
+		(var timeRent:number =	"crew.component.timeRent ?: 0"		(event "crew.component.evTimeRentChanged") (event "crew.component.evChanged"))
+
+		(var canCrewBeUpgradedToElite:bool = "isIn(rarity, SC.Common.UNIFIED_ITEM_RARITY.COMMANDERS_CAN_BECOME_ELITE)")
+		(var isRental:bool = "timeRent > 0")
+
+		(var crewDataEntity:dhEntity =	"getSingleEntity(CC.crewData)")
+		(var crewData:dhComponent =		"crewDataEntity.crewData")
+
+		(var doesPlayerHaveNewEliteBooks:bool =	"crewDataEntity.hasComponent(CC.newItem)")
+
+		(var booksAmount:number =		"crewData.eliteCrewBooksCount ?: 0"		(event "crewData.evEliteCrewBooksCountChanged"))
+		(var doesPlayerHaveBook:bool =	"booksAmount > 0")
+		(var canConvertIntoElite:bool =	"doesPlayerHaveBook && !isRental && canCrewBeUpgradedToElite")
+
+		(var isNewEliteBookMarkerShown:bool =	"doesPlayerHaveNewEliteBooks && canConvertIntoElite")
+
+		(var isCrewAssigned:bool =		"_crewId > 0")
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['featureSeen', { featureIndex: SC.Common.ACCOUNT_FEATURE.CREW }]" on='leftClick')
+
+	(class $TTXWidgetContainer)
+	(style (height = 120px))
+
+	(block
+		(class $FullsizeAbsolute)
+		(element DockWidgetBackground)
+	)
+
+	(block
+		(bind visible "isOwned && isCrewAssigned")
+
+		(class $Fullsize)
+
+		(block
+			(class $FullsizeAbsolute)
+
+			(controller $Instance renderer='ShipTTXAssignedCrew'
+				(bind enabled "isOwned && isCrewAssigned")
+				(args
+					_crewId = "_crewId"
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "isOwned && !isCrewAssigned")
+
+		(class $Fullsize)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(macro MOUSE_EVENTS_DISPATCHER)
+
+		(controller $Instance renderer='ShipTTXEmptyCrew'
+			(bind enabled "isOwned && !isCrewAssigned")
+			(args
+				_currentTTXShipId =	"_shipId"
+				_rollOver =			"rollOver"
+			)
+		)
+	)
+)
+
+(def element ShipTTXAssignedCrew (_crewId:number)
+	(scope
+		(event evMenuItemClicked)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(struct crew =			PULL_CREW(_crewId = "_crewId"))
+		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
+
+		(var hasCrewRestrictions:bool = "permissions.isDisabledBarracks && permissions.isDisabledCrewFire && permissions.isDisabledCrewLevelUp && permissions.isDisabledLearnSkills")
+
+		(var shipId:number =		"crew.component.shipID")
+		(var shipEntity:dhEntity =	"getPrimaryEntity(CC.ship, shipId)")
+		(var shipInfo:dhComponent =	"shipEntity.ship")
+
+		(var baseUrl:str =				"crew.component.baseUrl ?: ''"			(event "crew.component.evRankChanged"))
+		(var overlayUrl:str =			"crew.component.overlayUrl ?: ''"		(event "crew.component.evRankChanged"))
+
+		(var rarity:number =			"crew.component.rarity"					(event "crew.component.evRarityChanged"))
+		(var crewNation:str =			"crew.component.nation ?: ''"			(event "crew.component.evChanged"))
+		(var isCrewElite:bool =			"rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
+		(var isMaxLevel:bool =			"crew.component.isMaxLevel"				(event "crew.component.evLevelUp"))
+		(var skillMatrixId:number =		"crew.component.skillMatrixId ?: 0"		(event "crew.component.evChanged"))
+		(var allSkillPoints:number =	"crew.component.allSkillPoints"			(event "crew.component.evLevelUp"))
+		(var isEliteCrewMaxLevel:bool =	"isCrewElite && isMaxLevel")
+
+		(var eliteCrewLearning:dhComponent =			"crew.entity.eliteCrewLearning")
+		(var isAnyTalentAvailable:bool =				"eliteCrewLearning.isAnyTalentAvailable"				(event "eliteCrewLearning.evIsAnyTalentAvailableChanged"))
+		(var isAnySkillForBoardedShipAvailable:bool =	"eliteCrewLearning.isAnySkillForBoardedShipAvailable"	(event "eliteCrewLearning.evIsAnySkillForBoardedShipAvailableChanged"))
+
+		(var isEliteCrewTalentOrSkillUpgradeAvailable:bool = "isEliteCrewMaxLevel && (isAnyTalentAvailable || isAnySkillForBoardedShipAvailable)")
+
+		(var state:number = "mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+							 rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER
+		_soundSet = "'default_button'"
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['navigateTo', { route: SC.Ui_windows.ROUTE.CREW_MANAGEMENT }]" on='leftClick')
+
+	(name = 'CrewShipPanelBlock')
+
+	(class $Fullsize)
+
+	(element DockTTXWidgetMenuItemBackground
+		_state = "state"
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(block
+			(style
+				(position = "absolute")
+				(width = 340px)
+				(height = 209px)
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(top = -30) 
+
+					(backgroundSize = "cover")
+					(alpha = 0.5)
+					(bind backgroundImage "'url:../nation_flags/big/flag_' + (crewNation ? crewNation + '.png' : '')")
+				)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(height = 116px)
+					(backgroundColor = "NO_COLOR")
+					(borderRadius = "XS")
+				)
+
+				(isMask = true)
+			)
+		)
+
+		(controller $Tooltip
+			(renderer = 'CrewTooltip')
+			(args
+				_crewId =	"_crewId"
+				_fromDock =	true
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
+			(bind enabled "skillMatrixId && !hasCrewRestrictions")
+			(renderer = 'CrewMenuTTX')
+			(args
+				_crewId = "_crewId"
+			)
+			(macro DEFAULT_MENU_BEHAVIOUR "1")
+			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(right = 0px)
+			(bottom = 0px)
+		)
+
+		(element CrewPortraitBig
+			_baseUrl =		"baseUrl"
+			_overlayUrl =	"overlayUrl"
+		)
+	)
+
+	(block
+		(style
+			(width = 180px)
+			(height = 100%)
+			(marginLeft = "M")
+			(paddingTop = 18px)
+			(paddingBottom = "SXS")
+		)
+
+		
+		(block
+			(style
+				(width = 200px)
+				(hitTest = false)
+			)
+
+			(element CrewNameWithIcon
+				_crewId =	"_crewId"
+			)
+		)
+
+		
+		(block
+			(style
+				(position = "absolute")
+				(bottom = 0px)
+				(width = 165px)
+			)
+
+			(block
+				(style (width = 100%))
+
+				(controller $Instance renderer='CrewExperienceBar'
+					(bind enabled "skillMatrixId && !isEliteCrewTalentOrSkillUpgradeAvailable")
+					(args
+						_crewId =		"_crewId"
+						_isFromTTX =	true
+					)
+				)
+			)
+
+			(block
+				(bind visible "isEliteCrewMaxLevel")
+
+				(style
+					(hitTest = false)
+					(marginLeft = "-XS")
+				)
+
+				(controller $Instance renderer='StatusLine'
+					(bind enabled "isEliteCrewTalentOrSkillUpgradeAvailable")
+					(args
+						_textClass =		'$TextDefaultNM'
+						_text =				"isAnyTalentAvailable	? 'IDS_TTX_ELITE_CREW_CAN_GET_TALENT'
+																	: 'IDS_TTX_ELITE_CREW_CAN_UPGRADE_SKILL'"
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.UPGRADE_AVAILABLE"
+					)
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(right = "SXS")
+			(bottom = "S")
+		)
+
+		(controller $Instance renderer='CrewSkillPoints'
+			(bind enabled "allSkillPoints > 0 && skillMatrixId")
+			(args
+				_crewId =		"_crewId"
+				_shipClass =	"shipInfo.subtype"
+				_isBig =		false
+			)
+		)
+	)
+)
+
+(def element ShipTTXEmptyCrew (_currentTTXShipId:number, _rollOver:bool)
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(var ownShipEntity:dhEntity =		"getPrimaryEntity(CC.ownShip, _currentTTXShipId)")
+		(var shipInfo:dhComponent =			"ownShipEntity.ship")
+		(var ownShipInfo:dhComponent =		"ownShipEntity.ownShip")
+
+		(var lastBoardedCrewId:number =		"shipInfo.lastBoardedCrewId"		(event "shipInfo.evUpdate") (event "shipInfo.evLastBoardedCrewIdChanged"))
+		(var isWithoutCrewPenalty:bool =	"shipInfo.isWithoutCrewPenalty"		(event "shipInfo.evUpdate"))
+		(var crewId:number =				"ownShipEntity.ownShip.crewId"		(event "ownShipEntity.ownShip.evCrewChanged"))
+
+		(struct lastBoardedCrew = PULL_CREW(_crewId = "lastBoardedCrewId"))
+		(var lastBoardedCrewShipId:number =	"lastBoardedCrew.component.shipID")
+
+		(var otherShipEntity:dhEntity =			"getPrimaryEntity(CC.ownShip, lastBoardedCrewShipId)")
+		(var otherShipComponent:dhComponent = 	"otherShipEntity.ownShip")
+		(var isOtherShipExist:bool = 			"otherShipEntity != null")
+
+		(var hasLastBoardedCrew:bool =				"lastBoardedCrew.entity != null")
+		(var isReturnLastCrewButtonVisible:bool =	"crewId == 0 && lastBoardedCrewId != 0 && hasLastBoardedCrew")
+		(var lastBoardedCrewSpecID:number =			"lastBoardedCrew.component.specializationID ?: 0"	(event "lastBoardedCrew.component.evChanged"))
+
+		(var isOtherShipInBalancer:bool =		"otherShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"			(event "otherShipComponent.evUpdateLock"))
+		(var isOtherShipReadyForBattle:bool =	"otherShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "otherShipComponent.evUpdateLock"))
+
+		(var isShipInBalancer:bool =			"ownShipInfo.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"					(event "ownShipInfo.evUpdateLock"))
+		(var isShipReadyForBattle:bool =		"ownShipInfo.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"			(event "ownShipInfo.evUpdateLock"))
+
+		(var isLastBoardedCrewLocked:bool =	"isOtherShipExist && (isOtherShipInBalancer || isOtherShipReadyForBattle)")
+		(var canAssignWithoutRetrain:bool =	"(lastBoardedCrewSpecID == _currentTTXShipId) || isWithoutCrewPenalty")
+		(var isButtonDisabled:bool = "isShipInBalancer || isShipReadyForBattle || isLastBoardedCrewLocked")
+	)
+
+	(class $Fullsize)
+
+	(block
+		(visible = "!_rollOver")
+
+		(class $MiddleVHAbsolutely)
+
+		(style
+			(hitTest = false)
+			(width = 100%)
+			(alpha = "_rollOver ? 0 : 1")
+			(visualOffsetY = "_rollOver ? -10px : 0px")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	0.15
+				from =		"{ alpha: 0, visualOffsetY: -10px, visible: false }"
+				to =		"{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				reverse =	"_rollOver"
+				(bind trigger "!_rollOver")
+			)
+		)
+
+		(tf
+			(name = 'No_Crew')
+
+			(class $TextDefaultBold18NM)
+			(style
+				(width = 100%)
+				(textAlign = "center")
+				(textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE")
+			)
+
+			(text = "toUpper(tr('IDS_NO_CREW'))")
+		)
+	)
+
+	(block
+		(visible = "_rollOver")
+
+		(class $MiddleVHAbsolutely)
+
+		(style
+			(width = 200px)
+			(alpha = "_rollOver ? 1 : 0")
+			(visualOffsetY = "_rollOver ? 0px : 10px")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	0.15
+				from =		"{ alpha: 0, visualOffsetY: 10px, visible: false }"
+				to =		"{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				reverse =	"!_rollOver"
+				(bind trigger "_rollOver")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Animation
+				(bindcall play
+					duration =	0.15
+					from =		"{ alpha: 0, visualOffsetY: 10px, visible: false }"
+					to =		"{ alpha: 1, visualOffsetY: 0px, visible: true }"
+					reverse =	"!_rollOver"
+					(bind trigger "_rollOver")
+				)
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text =				'IDS_ASSIGN_OR_RECRUIT_CREW_MOUSE_INSTRUCTION'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element DefaultButton
+				_type =			"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_size =			"SC.Ui_styles.SIZE.MEDIUM"
+				_width =		100%
+				_name =			'AssignCrewButton'
+				_label =		'IDS_ASSIGN_CREW'
+				_methods =		"[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.CREW_MANAGEMENT } }]"
+			)
+		)
+
+		(block
+			(bind visible "isReturnLastCrewButtonVisible")
+
+			(style
+				(width = 100%)
+				(marginTop = "S")
+			)
+
+			(block
+				(style (width = 100%))
+
+				(controller $Tooltip
+					(renderer = 'CrewTooltip')
+					(bind enabled "isReturnLastCrewButtonVisible")
+					(args
+						_crewId =					"lastBoardedCrewId"
+						_targetShipId =				"_currentTTXShipId"
+						_noContextMenuInstruction =	true
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "isReturnLastCrewButtonVisible")
+					(args
+						_type =				"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_size =				"SC.Ui_styles.SIZE.MEDIUM"
+						_width =			100%
+						_label =			'IDS_CREW_HIRE_LAST_CREW'
+						_isTransactionBtn =	true
+						_methods =			"canAssignWithoutRetrain	? [{ type: 'inputMapping.onAction',		name: CREW_ACTIONS.ASSIGN_TO_SHIP,				args: { crewId: lastBoardedCrewId, shipId: _currentTTXShipId } }]
+																		: [{ type: 'inputMapping.onRequest',	name: CREW_ACTIONS.OPEN_CREW_RETRAIN_WINDOW,	args: { crewId: lastBoardedCrewId, shipId: _currentTTXShipId } }]"
+						_enabled =			"!isButtonDisabled"
+					)
+				)
+			)
+		)
+	)
+)

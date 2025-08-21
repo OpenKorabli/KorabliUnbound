@@ -1,0 +1,345 @@
+(def element ArmorWidget (_isShown:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var sessionPrefs:dhComponent = "getSingleComponent(CC.sessionPreference)")
+		(var isArmorWidgetExpanded:bool = "sessionPrefs.armorWidgetExpanded" (event "sessionPrefs.evArmorWidgetExpandedChanged"))
+	)
+	(bindcall externalCall 'inputMapping.onAction' "['onActionArmorWidgetClicked', {isExpanded: !isArmorWidgetExpanded }]" watch=false (event "evClicked"))
+
+	(class $TTXWidgetContainer)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element DockWidgetBackground)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(macro MOUSE_EVENTS_DISPATCHER)
+		(macro SOUND_HANDLER
+			_soundSet = "'dropdown'"
+		)
+
+		(hblock
+			(class $Fullsize)
+			(style
+				(width = 100%)
+				(height = "TTX_EXPAND_CONTAINER_HEADER_HEIGHT")
+				(paddingLeft = "M")
+				(paddingRight = "SXS")
+				(align = "middle")
+				(hitTest = false)
+			)
+
+			(block
+				(style
+					(width = 100%)
+				)
+				(tf
+					(class $TextDefaultBold18NM)
+					(style
+						(width = 100%)
+						(alpha = "TA")
+					)
+					(text = 'IDS_ARMOUR_SCHEME')
+				)
+			)
+
+			(element SwitchWithoutLabel
+				_state = "isArmorWidgetExpanded"
+				_rollOver = "rollOver"
+				_mouseDown = "mouseDown"
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(alpha = "isArmorWidgetExpanded ? 1 : 0")
+			)
+	
+			(controller $Animation
+				(bindcall play
+					delay = "isArmorWidgetExpanded ? 0 : 0.1"
+					duration = 0.15
+					to = "isArmorWidgetExpanded ? { alpha: 1 } : { alpha: 0 }"
+					easing = "Easing.line"
+					(bind trigger "isArmorWidgetExpanded")
+				)
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+	)
+
+	(element DEFAULT_EXPAND_CONTAINER "isArmorWidgetExpanded"
+		(style (width = 100%))
+
+		(element ArmorWidgetContent)
+	)
+)
+
+(def element ArmorWidgetContent ()
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(var armorPickEntity:dhEntity =		"getPrimaryEntity(CC.shipArmorPick, viewedShipId)")
+		(var armorPick:dhComponent =		"armorPickEntity.shipArmorPick")
+		(var selectedPartsMask:number =		"armorPick.selectedPartsMask"			(event "armorPick.evUpdate"))
+		(var thicknessMin:number =			"armorPick.thicknessMin"				(event "armorPick.evUpdate"))
+		(var thicknessMax:number =			"armorPick.thicknessMax"				(event "armorPick.evUpdate"))
+		(var armorRangeStr:str =			"thicknessMin == thicknessMax	? thicknessMin + ' ' + tr('IDS_MILLIMETER')
+																			: thicknessMin + ' – ' + thicknessMax + ' ' + tr('IDS_MILLIMETER')"	(event "armorPick.evUpdate"))
+
+		(var armorConfigEntity:dhEntity =		"getPrimaryEntity(CC.shipArmorConfig, viewedShipId)")
+		(var armorConfig:dhComponent =			"armorConfigEntity.shipArmorConfig")
+		(var armorRanges:array =				"armorConfig.armorRanges ?: []"		(event "armorConfig.evUpdate"))
+
+		(var armorPartsEntity:dhEntity =		"getPrimaryEntity(CC.shipStructuralParts, viewedShipId)")
+		(var armorPartsComponent:dhComponent =	"armorPartsEntity.shipStructuralParts")
+		(var armorParts:array =					"armorPartsComponent.parts ?: []"	(event "armorPartsComponent.evUpdate"))
+
+		(var pickerWidth:number = "armorRanges.length ? round(280 / armorRanges.length) : 0")
+
+		(var showBusyIndicator:bool = "!armorPick && !armorConfig")
+	)
+
+	(style
+		(align = "center")
+		(width = 100%)
+		(paddingTop = "SXS")
+		(paddingBottom = "SXS")
+	)
+
+	(controller $Instance renderer='BusyIndicatorWhite'
+		(bind enabled "showBusyIndicator")
+		(args
+			_className = '$TextDefaultBoldNM'
+			_label = 'IDS_BUSY_LOADING_ARMOUR'
+		)
+	)
+
+	(block
+		(visible = "!showBusyIndicator")
+
+		(style
+			(align = "center")
+			(width = 100%)
+			(alpha = "showBusyIndicator ? 0 : 1")
+		)
+
+		(htile_reverse
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "SXS")
+				(hgap = "SXS")
+			)
+
+			(controller $Repeat renderer='ArmorModulePicker'
+				(bind count "armorParts.length")
+				(args
+					_data =			"armorParts[$index]"
+					_mask =			"selectedPartsMask"
+					_pickersCount =	"armorParts.length"
+				)
+			)
+		)
+
+		(hblock
+			(style
+				(align = "center")
+				(marginBottom = "S")
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+				(borderRadius = "XS")
+			)
+
+			(controller $Repeat renderer='ArmorRangePicker'
+				(bind count "armorRanges.length")
+				(args
+					_data =			"armorRanges[$index]"
+					_pickerWidth =	"pickerWidth"
+					_pickersCount =	"armorRanges.length"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "armorPick && thicknessMax != 0")
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_SHIP_ARMOUR_WHOLE_RANGE'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(style (alpha = "TA"))
+				(bind text "armorRangeStr")
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	0.01
+				from =		"{ alpha: 1, visible: true }"
+				to =		"{ alpha: 0, visible: false }"
+				watch =		false
+				(bind enabled "showBusyIndicator")
+			)
+			(bindcall play
+				duration =	0.15
+				from =		"{ alpha: 0, visible: false }"
+				to =		"{ alpha: 1, visible: true }"
+				watch =		false
+				(bind enabled "!showBusyIndicator")
+			)
+		)
+	)
+)
+
+(def element ArmorModulePicker (_data:dict, _mask:number, _pickersCount:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+
+		
+		(var moduleType:str =		"_data.type")
+		(var moduleIndex:number =	"_data.index")
+
+		(var isSelected:bool =		"(_mask & (1 << moduleIndex)) != 0")
+		(var iconPathUp:str =		"'url:../service_kit/armor_types/armor_' + moduleType + '_up.png'")
+		(var iconPathToggle:str =	"'url:../service_kit/armor_types/armor_' + moduleType + '.png'")
+	)
+
+	(style
+		(width = 38px)
+		(height = 38px)
+		(backgroundColor = "NO_COLOR")
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setShipPartVisible', { index: moduleIndex, visible: !isSelected }]" watch=false on='leftClick')
+
+	
+	
+	
+	
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER
+		_soundSet = "'button_armour'"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =				"tr((isSelected ? 'IDS_HIDE_ARMOUR_' : 'IDS_SHOW_ARMOUR_') + moduleType)"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(backgroundImage = 'url:../service_kit/armor_types/armor_bgr.png')
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(macro MOUSE_OVER_DOWN_COLORTRANSFORM
+			_isActive =		"true"
+			_isSelected =	"false"
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(bind alpha "isSelected ? 0 : 1")
+				(bind backgroundImage "iconPathUp")
+			)
+			
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(bind alpha "isSelected ? 1 : 0")
+				(bind backgroundImage "iconPathToggle")
+			)
+		)
+	)
+)
+
+(def element ArmorRangePicker (_data:dict, _pickerWidth:number, _pickersCount:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var rangeIndex:number =	"_data.index")
+		(var rangeColor:number =	"_data.color")
+		(var rangeMin:number =		"_data.min")
+		(var rangeMax:number =		"_data.max")
+
+		(var overScaleX:number = "_pickerWidth	?	(_pickerWidth + 2) / (_pickerWidth / 100) / 100
+												:	1")
+		(var overScaleY:number = "(12 + 2) / (12 / 100) / 100")
+	)
+	(style (backgroundColor = "NO_COLOR"))
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setArmorRangeVisible', { rangeIdx: rangeIndex, visible: true }]"	watch=false (bind enabled "rollOver"))
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setArmorRangeVisible', { rangeIdx: rangeIndex, visible: false }]"	watch=false (bind enabled "!rollOver"))
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "tr('IDS_SHIP_ARMOUR_IN_RANGE') + ' ' + rangeMin + ' – ' + rangeMax + tr('IDS_MILLIMETER_SPACE')"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(style
+			(paddingTop = "XS")
+			(paddingBottom = "XS")
+			(bind paddingLeft "$index == 0 ? XS : XXS")
+			(bind paddingRight "$index == _pickersCount - 1 ? XS : XXS")
+		)
+
+		(block
+			(style
+				(width = "_pickerWidth")
+				(height = 12px)
+				(alpha = 0.8)
+				(bind backgroundColor "0xFF000000 + rangeColor")
+				(borderRadius = "XXS")
+				(pivotX = 50%)
+				(pivotY = 50%)
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.12
+					to = "rollOver	? { alpha: 1,	visualScaleX: overScaleX, visualScaleY: overScaleY }
+									: { alpha: 0.8,	visualScaleX: 1, visualScaleY: 1 }"
+					watch = false
+					action = "kill"
+					(bind trigger "rollOver")
+				)
+			)
+		)
+	)
+)

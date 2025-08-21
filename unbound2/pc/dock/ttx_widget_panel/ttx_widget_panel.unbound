@@ -1,0 +1,344 @@
+(def css $TTXWidgetContainer ()
+	(width = 340px)
+	(paddingTop = "XXS")
+	(paddingBottom = "XXS")
+)
+
+(def element TTX_WIDGET_EXPAND_CONTAINER (_isExpanded:bool, _isMask:bool = true)
+	(style
+		(width = 100%)
+		(ubScaleY = "_isExpanded ? 1 : 0")
+		(pivotY = 50%)
+		(bind hitTest "_isExpanded")
+	)
+	(alpha = "_isExpanded ? 1 : 0")
+	(visible = "_isExpanded")
+
+	(block
+		(bind visible "_isMask")
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = 0xffffffff))
+		(bind isMask "_isMask")
+	)
+
+	(controller $Animation
+		(bindcall play
+			id = 'ubScaleExpandAnimation'
+			keyframes = "[ { time:0.15,	to:{ ubScaleY:1, visible:true }}]"
+			action = "kill"
+			(bind enabled "_isExpanded")
+		)
+		(bindcall play
+			id = 'ubScaleExpandAnimation'
+			keyframes = "[ { time:0.15,	to:{ ubScaleY:0, visible:false }}]"
+			action = "kill"
+			(bind enabled "!_isExpanded")
+		)
+
+		(bindcall play
+			id = 'visibilityExpandAnimation'
+			keyframes = "[ { time:0.15,	to: _isExpanded ? { alpha:1 } : { alpha:0 }}]"
+			action = "kill"
+			(bind trigger "_isExpanded")
+		)
+	)
+)
+
+(def macro TTX_WIDGET_CONTROL_VISIBLE_ANIMATION (_trigger:expression)
+	(visible = "_trigger")
+	(style
+		(alpha = "_trigger ? 1 : 0")
+		(ubScaleY = "_trigger ? 1 : 0")
+	)
+
+	(controller $Animation
+		(bindcall play
+			id = 'scaleAnim'
+			delay = "!_trigger ? 0.05 : 0"
+			duration = 0.12
+			to = "_trigger	? { visible:true, ubScaleY:1 }
+							: { visible:false, ubScaleY:0 }"
+			easing = "Easing.quad_in"
+			watch = false
+			action = "kill"
+
+			(bind trigger "_trigger")
+		)
+
+		(bindcall play
+			id = 'alphaAnim'
+			delay = "_trigger ? 0.05 : 0"
+			duration = 0.07
+			to = "_trigger	? { alpha:1 }
+							: { alpha:0 }"
+			easing = "Easing.quad_in"
+			watch = false
+			action = "kill"
+
+			(bind trigger "_trigger")
+		)
+	)
+)
+
+
+(def element ShipTTXPanelDock ()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option = "'ui.carousel.carouselAreaHeight'"))
+
+		(var contentHeight:number = 0)
+		(var topWidgetsHeight:number = 0)
+		(var bottomWidgetsHeight:number = 0)
+
+		(var ttxMaxHeight:number = "contentHeight - topWidgetsHeight - bottomWidgetsHeight - TTX_EXPAND_CONTAINER_HEADER_HEIGHT")
+
+		(macro PULL_SHIP_ID)
+		(var verifiedShipId:number = "viewedShipId" watch=false)
+		(bind verifiedShipId "viewedShipId ? viewedShipId : verifiedShipId" init=false watch=false (bind trigger "viewedShipId"))
+
+		(var shipEntity:dhEntity =	"getPrimaryEntity(CC.ship, verifiedShipId)")
+		(var ownShip:dhComponent =	"shipEntity.ownShip")
+		(var isOwned:bool =			"ownShip != null")
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, verifiedShipId)")
+		(var crewId:number = "ownShipEntity.ownShip.crewId" (event "ownShipEntity.ownShip.evCrewChanged"))
+
+		(var repairDockDataEntity:dhEntity =	"getSingleEntity(CC.repairDockData)")
+		(var isRepairingInProgress:bool =		"repairDockDataEntity.repairDockData.isRepairingInProgress" (event "repairDockDataEntity.repairDockData.evIsRepairingInProgressChanged"))
+
+		(var portElementsVisibilityEntity:dhEntity =	"getSingleEntity(CC.portElementsVisibility)")
+		(var portElementsVisibility:dhComponent =		"portElementsVisibilityEntity.portElementsVisibility")
+
+		(var isShipTitleWidgetVisible:bool =		"portElementsVisibility.shipTitleVisible"			(event "portElementsVisibility.evShipTitleVisibleChanged"))
+		(var isCrewWidgetVisible:bool =				"portElementsVisibility.crewVisible"				(event "portElementsVisibility.evCrewVisibleChanged"))
+		(var isEcoBoostWidgetVisible:bool =			"portElementsVisibility.ecoboostsVisible"			(event "portElementsVisibility.evEcoboostsVisibleChanged"))
+		(var isSignalsWidgetVisible:bool =			"portElementsVisibility.signalsVisible"				(event "portElementsVisibility.evSignalsVisibleChanged"))
+		(var isModernizationsWidgetVisible:bool =	"portElementsVisibility.modernizationsVisible"		(event "portElementsVisibility.evModernizationsVisibleChanged"))
+		(var isTTXWidgetVisible:bool =				"portElementsVisibility.ttxVisible"					(event "portElementsVisibility.evTtxVisibleChanged"))
+		(var isShipManagementWidgetVisible:bool =	"portElementsVisibility.shipManagementVisible"		(event "portElementsVisibility.evShipManagementVisibleChanged"))
+		(var isArmorWidgetVisible:bool =			"portElementsVisibility.armorVisible"				(event "portElementsVisibility.evArmorVisibleChanged"))
+		(var isShipShardsWidgetVisible:bool =		"portElementsVisibility.shipShardsVisible"			(event "portElementsVisibility.evShipShardsVisibleChanged"))
+		(var isMaintenanceWidgetVisible:bool =		"portElementsVisibility.maintenanceVisible"			(event "portElementsVisibility.evMaintenanceVisibleChanged"))
+		(var isTestShipLabelVisible:bool =			"portElementsVisibility.testShipLabelVisible"		(event "portElementsVisibility.evTestShipLabelVisibleChanged"))
+
+		(struct routeUpgrades = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.UPGRADES"))
+
+		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
+		(var isCarouselVisible:bool = "playerShipsCollection.length > 0 && portElementsVisibility.carouselVisible" (event "portElementsVisibility.evCarouselVisibleChanged"))
+
+		(var signalWidgetOffset:number = 160)
+		(var shipTTXPanelMinimalPaddingBottom:number = 80)
+	)
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+
+	(element DeclareBlurLayer)
+
+	(block
+		(class $Fullsize)
+		(style
+			(paddingTop = "DOCK_HEADER_HEIGHT + SECONDARY_DOCK_TAB_HEIGHT")
+			(align = "top|right")
+			(paddingRight = "{ 1280: S, 1920: L }")
+			(bind paddingBottom "	routeUpgrades.isActive && stageWidth < 1660 ? carouselAreaHeightPref.value + signalWidgetOffset :
+									isCarouselVisible 							? carouselAreaHeightPref.value
+																				: shipTTXPanelMinimalPaddingBottom")
+		)
+
+		(block
+			(bind contentHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))
+
+			(class $FullsizeAbsolute)
+		)
+
+		(block
+			(style (width = 340px))
+
+			(block
+				(bind topWidgetsHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))
+
+				(style (width = 100%))
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipTitleWidgetVisible"
+					(element TTXShipUpperTitleWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isCrewWidgetVisible" _isMask=false
+					(element DockCrewWidget
+						_shipId = "verifiedShipId"
+						_crewId = "crewId"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isArmorWidgetVisible"
+					(element ArmorWidget
+						_isShown = "isArmorWidgetVisible"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isModernizationsWidgetVisible"
+					(element ModernizationsWidget)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isSignalsWidgetVisible"
+					(element SignalsWidget)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isEcoBoostWidgetVisible"
+					(element EcoboostsWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+			)
+
+			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isTTXWidgetVisible"
+				(element DockTTXWidget
+					_maxHeight = "ttxMaxHeight"
+				)
+			)
+
+			(block
+				(style (width = 100%))
+				(bind bottomWidgetsHeight "$globalLayoutBounds[3]" (event "$evLayoutBoundsChanged"))
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipShardsWidgetVisible"
+					(element ShipShardsWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipManagementWidgetVisible"
+					(element ShipManagementWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isMaintenanceWidgetVisible"
+					(element MaintenanceWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isTestShipLabelVisible"
+					(style
+						(width = 100%)
+						(height = 50px)
+						(align = "center|middle")
+					)
+
+					(element IssuedStamp
+						_text = 'IDS_TEST_SAMPLE'
+						_angleRotation = 0
+					)
+				)
+			)
+		)
+	)
+
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(align = "center|bottom")
+			(bind paddingBottom "carouselAreaHeightPref.value")
+		)
+
+		(element InstructionHintBlock)
+	)
+)
+
+(def element DockWidgetBackground (_roundSize:number = "SIZE.SMALL")
+	(scope
+		(struct highContrast = HIGH_CONTRAST_INFO())
+	)
+	(class $FullsizeAbsolute)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element BlurMapRoundedWithContrastPanel
+			_roundSize = "_roundSize"
+		)
+	)
+
+	(block
+		(bind visible "!highContrast.isEnabled")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+			(bind borderRadius "_roundSize == SIZE.MEDIUM ? S : XS")
+			(alpha = 0.2)
+		)
+	)
+)
+
+(def element InstructionHintBlock ()
+	(scope
+		
+		(event evInstructionShow)
+		(event evInstructionHide)
+
+		
+
+		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
+		(var isExcursionActive:bool = "dockData.excursionVisible" (event "dockData.evExcursionVisibleChanged"))
+
+		(struct shipPreviewRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SHIP_PREVIEW"))
+		(struct browserPreviewRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_PREVIEW"))
+
+		(var isShipPreviewActive:bool = "shipPreviewRoute.isActive || browserPreviewRoute.isActive")
+
+		(var isInstructionVisible:bool = "isExcursionActive || isShipPreviewActive")
+
+		
+		(var instructionText:str = "isExcursionActive	?	'IDS_INSTRUCTION_CAMERA_EXCURSION_RESET'
+														:	'IDS_INSTRUCTION_HIDE_INTERFACE'" watch=false (event "evInstructionShow"))
+	)
+	(dispatch evInstructionShow on='addedToStage' (bind enabled "isInstructionVisible"))
+	(dispatch evInstructionShow (bind enabled "isInstructionVisible") (bind trigger "isExcursionActive"))
+	(dispatch evInstructionShow (bind enabled "isInstructionVisible") (bind trigger "isShipPreviewActive"))
+
+	(hblock
+		(style
+			(alpha = 0)
+			(visualOffsetY = 10px)
+			(hgap = "-XXS")
+			(hitTest = false)
+		)
+
+		(controller $Animation
+			(bindcall play
+				id = 'InstructionShowAnim'
+				duration = 0.15
+				to = "{ alpha: 1, visualOffsetY: 0px }"
+				easing = "Easing.quad_in"
+				action = "killAll"
+				(event "evInstructionShow")
+			)
+			(dispatch evInstructionHide delay=30 reset=true on='evAnimEnded'	(bind enabled "isInstructionVisible")	(bind trigger "isInstructionVisible"))
+			(dispatch evInstructionHide on='evAnimEnded'						(bind enabled "!isInstructionVisible")	(bind trigger "isInstructionVisible"))
+		)
+
+		(controller $Animation
+			(bindcall play
+				id = 'InstructionHideAnim'
+				duration = 0.15
+				to = "{ alpha: 0, visualOffsetY: 10px }"
+				easing = "Easing.quad_out"
+				(event "evInstructionHide")
+			)
+			(bindcall stop id='InstructionHideAnim' init=false (event "evInstructionShow"))
+		)
+
+		(element UnifiedStatusIcon
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT"
+		)
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TA") (marginTop = -1px))
+			(bind text "instructionText")
+		)
+	)
+)

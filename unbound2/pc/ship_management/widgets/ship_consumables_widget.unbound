@@ -1,0 +1,839 @@
+(def constant CONSUMABLE_DRAG_SLOT_ID '150')
+
+(def constant CT_CONSUMABLES_INTERACTION_STATE	"{	SC.Ui_styles.BUTTON_STATE.DOWN:		CT_NONE,
+													SC.Ui_styles.BUTTON_STATE.OVER:		COLOR_TRANSFORM_MOUSE_OVER,
+													SC.Ui_styles.BUTTON_STATE.UP:		CT_NONE }")
+
+(def constant CONSUMABLE_SLOT_PANEL_ALPHA_STATE	"{	SC.Ui_styles.BUTTON_STATE.SELECTED:	1,
+													SC.Ui_styles.BUTTON_STATE.DISABLED:	0 }")
+
+(def element ConsumablesManagementWidget ()
+	(scope
+		(macro PULL_SHIP_ID)
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var isCustomConsumablesOrder:bool = "shipInfo.hasCustomConsOrder" (event "shipInfo.consOrderChanged"))
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var sortedConsumableCollection:dhCollection =	"getCollectionByPath(CC.equipmentSlot, 'bySlotType.' + SC.Ships.SHIP_SLOT_TYPES.ABILITY + '.sortingByCommandId')")
+		(var sortedConsumableCollectionLen:number =		"sortedConsumableCollection.length")
+
+		(var consumablesSlotCustomization:dhComponent = "getSingleComponent(CC.consumablesSlotCustomization)")
+		(var isOrderCustomizationActive:bool = "consumablesSlotCustomization.isActive" (event "consumablesSlotCustomization.evIsActiveChanged"))
+	)
+	(bindcall externalCall 'direct.action' "['setConsumablesOrderCustomizationActivity', { isActive: false }]" on='removedFromStage')
+
+	(element DockWidgetBackground
+		_roundSize = "SIZE.SMALL"
+	)
+
+	(block
+		(class $ShipManagementSectionContainer)
+
+		(hblock
+			(style (width = 100%))
+
+			(block
+				(style (width = 100%))
+
+				(tf
+					(class $ShipManagementSectionHeader)
+					(style (width = 100%))
+					(text = 'IDS_SHIP_MANAGEMENT_CONSUMABLES_BLOCK_HEADER')
+				)
+			)
+
+			(block
+				(visible = "isOrderCustomizationActive")
+				(style
+					(marginRight = "S")
+					(alpha = "isOrderCustomizationActive ? 1 : 0")
+				)
+
+				(controller $Animation
+					(bindcall play
+						duration =	0.1
+						delay =		"isOrderCustomizationActive	? 0.2
+																: 0"
+						to =		"isOrderCustomizationActive	? { alpha: 1, visible: true }
+																: { alpha: 0, visible: false }"
+						easing = "Easing.line"
+						action = "kill"
+						watch = false
+						(bind trigger "isOrderCustomizationActive")
+					)
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_BUTTON_REVERT_CONSUMABLE_ORDER_CHANGES'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(element ImageButton
+					_enabled = "isCustomConsumablesOrder"
+					_width = 16px
+					_height = 16px
+					_backgroundImage = 'url:../service_kit/buttons/hotkey_reset.png'
+					_methods = "[	{	type: 'inputMapping.onAction',
+										name: 'resetSlotsKeyBinding',
+										args: {} }]"
+				)
+			)
+
+			(block
+				(style (marginTop = "XS"))
+
+				(controller $Instance renderer='SwitchWithLeftLabel'
+					(bind enabled "isOwned")
+					(args
+						_label = 'IDS_CONSUMABLES_ORDER_SWITCH_LABEL'
+						_textClass = '$TextDefault14NM'
+						_state = "isOrderCustomizationActive"
+						_methods = "[	{	type: 'direct.action',
+											name: 'setConsumablesOrderCustomizationActivity',
+											args: { isActive: !isOrderCustomizationActive }
+										}]"
+					)
+				)
+
+				(controller $Tooltip
+					(bind enabled "isOwned")
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = "isOrderCustomizationActive	? 'IDS_CONSUMABLES_ORDER_SWITCH_OFF_TOOLTIP'
+															: 'IDS_CONSUMABLES_ORDER_SWITCH_ON_TOOLTIP'	"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+		)
+
+		(block
+			(style (minWidth = 224px))
+
+			(hblock
+				(style
+					(paddingLeft = "{ 1280:-6px, 1920:-S }")
+					(paddingRight = "{ 1280:-6px, 1920:-S }")
+				)
+
+				(controller $Repeat renderer='ConsumableSlotItemAnimWrapper'
+					(bind count "sortedConsumableCollectionLen")
+					(args
+						_consumableCollection = "sortedConsumableCollection"
+						_isOrderCustomizationActive = "isOrderCustomizationActive"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element ConsumableSlotItemAnimWrapper (_consumableCollection:dhCollection, _isOrderCustomizationActive:bool)
+	(scope
+		(var equipmentSlotEntity:dhEntity = "_consumableCollection[$index]")
+		(var equipmentSlot:dhComponent = "equipmentSlotEntity.equipmentSlot")
+		(var isDragSlotVisible:bool = "equipmentSlot.isDragSlotVisible" (event "equipmentSlot.evIsDragSlotVisibleChanged"))
+
+		(var visibilityInitState:number = "isDragSlotVisible ? 1 : 0")
+
+		(var animParams:array = "isDragSlotVisible	?	[	{ time:0.2,		to:{ alpha: 1, ubScaleX: 1, visible: true }, easing:Easing.quad_in }]
+													:	[	{ time:0,		to:{ alpha: 0 }, easing:Easing.sine_out },
+															{ time:0.2,		to:{ alpha: 0, ubScaleX: 0, visible: false }, easing:Easing.quad_in }]")
+	)
+	(visible = "isDragSlotVisible")
+	(style
+		(flow = "horizontal")
+		(alpha = "visibilityInitState")
+		(ubScaleX = "visibilityInitState")
+		(pivotX = 50%)
+	)
+
+	(controller $Animation
+		(bindcall play
+			keyframes = "animParams"
+			action = "kill"
+			watch = false
+			(bind trigger "animParams")
+		)
+	)
+
+	(block
+		(style (width = "{ 1280:6px, 1920:S }"))	
+	)
+
+	(element ConsumableSlotItem
+		_consumableCollection = "_consumableCollection"
+		_isDragAndDropSlot = true
+	)
+
+	(block
+		(style (width = "{ 1280:6px, 1920:S }"))	
+	)
+)
+
+(def element ConsumableSlotItem (_consumableCollection:dhCollection, _isDragAndDropSlot:bool = false)
+	(scope
+		
+		(event evDragElementStarted)
+		(event evDragBitmapAppear)
+		(event evDragElementEnded)
+
+		
+		(event evDragStopped)
+		(event evDragAccept)
+		(event evDragFadeIn)
+		(event evDragFadeOut)
+
+		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(macro PULL_SHIP_ID)
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipComponent:dhComponent = "ownShipEntity.ownShip")
+
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+
+		(var equipmentSlotEntity:dhEntity =	"_consumableCollection[$index]")
+		(var equipmentSlot:dhComponent =	"equipmentSlotEntity.equipmentSlot")
+		(var installedEntityId:number =		"equipmentSlot.installedEntityId"	(event "equipmentSlot.evInstalledEntityIdChanged"))
+		(var slotComandId:number =			"equipmentSlot.commandId"			(event "equipmentSlot.evCommandIdChanged"))
+		(var subCollectionKey:number =		"equipmentSlot.subCollectionKey")
+
+		(var isEmptySlot:bool = "!toBool(installedEntityId)")
+		(var abilityEntity:dhEntity = "getEntity(installedEntityId)")
+		(var ability:dhComponent = "abilityEntity.ability")
+
+		(var name:str = "ability.name" (event "ability.evNameChanged"))
+		(var numConsumables:number = "ability.numConsumables" (event "ability.evNumConsumablesChanged"))
+		(var slotId:number = "ability.slotId")
+		(var isSquadronAbility:bool = "ability.isSquadronAbility")
+
+		(var abilitiesBySlotCollection:dhCollection = "getCollectionByPath(CC.ability, 'shipAbilsBySlotId.' + slotId)")
+		(var hasAlternatives:bool = "abilitiesBySlotCollection.length > 1 && !isShipInBalancer && !isShipReadyForBattle")
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var isAutoConsumable:bool = "ability.isAutoConsumable")
+
+		(var consumablesSlotCustomization:dhComponent = "getSingleComponent(CC.consumablesSlotCustomization)")
+		(var isOrderCustomizationActive:bool = "consumablesSlotCustomization.isActive && !isSquadronAbility" (event "consumablesSlotCustomization.evIsActiveChanged"))
+		(var isDragAndDropSlot:bool = "_isDragAndDropSlot && isOrderCustomizationActive")
+
+		(var consumePostfix:str = "numConsumables == 0 && !isOrderCustomizationActive ? '_empty' : ''")
+		(var itemImageUrl:str = "name ? 'url:../consumables/consumable_' + name + consumePostfix + '.png' : ''")
+
+		(var isBitmapReady:bool = false)
+		(bind isBitmapReady "true"		init=false (event "evDragBitmapAppear"))
+		(bind isBitmapReady "false"		init=false (event "evDragElementEnded"))
+
+		(var isDraggingItem:bool = false)
+		(bind isDraggingItem "true"		init=false (event "evDragElementStarted"))
+		(bind isDraggingItem "false"	init=false (event "evDragElementEnded"))
+
+		(var dragRollOver:bool = false)
+		(bind dragRollOver "true"		init=false (event "evDragFadeIn"))
+		(bind dragRollOver "false"		init=false (event "evDragFadeOut") (event "evDragStopped") (event "evDragAccept") (event "evDragElementEnded"))
+
+		(var isConsumablesInfotipVisible:bool = false)
+
+		(var slotPanelState:number = "isOrderCustomizationActive	? SC.Ui_styles.BUTTON_STATE.SELECTED
+																	: SC.Ui_styles.BUTTON_STATE.DISABLED")
+
+		(var slotPanelAlpha:number = "CONSUMABLE_SLOT_PANEL_ALPHA_STATE[slotPanelState]")
+
+		(var slotRollOver:bool = "isOrderCustomizationActive && (rollOver || dragRollOver)")
+
+		(var selectionState:number = "!isOrderCustomizationActive && hasAlternatives	?	isConsumablesInfotipVisible				? SC.Ui_styles.BUTTON_STATE.SELECTED :
+																							mouseDown								? SC.Ui_styles.BUTTON_STATE.DOWN :
+																							rollOver								? SC.Ui_styles.BUTTON_STATE.OVER
+																																	: SC.Ui_styles.BUTTON_STATE.UP
+																						:	SC.Ui_styles.BUTTON_STATE.DISABLED")
+
+		(var slotState:number = "	!isOrderCustomizationActive	? SC.Ui_styles.BUTTON_STATE.UP :
+									mouseDown 					? SC.Ui_styles.BUTTON_STATE.DOWN :
+									rollOver					? SC.Ui_styles.BUTTON_STATE.OVER
+																: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var slotColorTransform:dict = "CT_CONSUMABLES_INTERACTION_STATE[slotState]")
+
+		(var fillFieldAlpha:number = "isBitmapReady || dragRollOver		? 0.3 : 1")
+		(var dropFieldAlpha:number = "isDraggingItem || dragRollOver	? 0.3 : 0.7")
+		(var isItemShadowActive:bool = "isOrderCustomizationActive && rollOver")
+
+		(var isHotKeyVisible:bool = "slotComandId >= 0 && isDragAndDropSlot && isOrderCustomizationActive")
+		(struct tooltipPosition = SHIP_MANAGEMENT_TOOLTIP_POSITION())
+	)
+	(style (backgroundColor = "NO_COLOR"))
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER
+		_soundSet = "hasAlternatives && !isOrderCustomizationActive ? 'button_consumable' : ''"
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['drag_n_drop', 'over']"		(bind enabled "slotRollOver"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['drag_n_drop', 'click']"	(event "evDragAccept"))
+	(bindcall externalCall "isOrderCustomizationActive && !isEmptySlot ? 'sound.playSetSoundDirect' : ''" "['drag_n_drop', 'press']" watch=false (event "evDragElementStarted"))
+
+	(controller $Tooltip
+		(bind enabled "!isOrderCustomizationActive")
+		(renderer = 'ConsumableTooltip')
+		(args
+			_abilityEntityId = "installedEntityId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		(position = "border")
+		(bind align "tooltipPosition.align")
+	)
+
+	(controller $Tooltip
+		(bind enabled "hasAlternatives && !isOrderCustomizationActive")
+		(renderer = 'ConsumablesInfotip')
+		(args
+			_slotId = "slotId"
+		)
+		(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+		(align = "center|bottom")
+		(hideOnMove = true)
+
+		(bind isConsumablesInfotipVisible "true" on='evStartShow')
+		(bind isConsumablesInfotipVisible "false" on='evHide')
+	)
+
+	(block		
+		(class $ManagementBaseSlotItem)
+		(style
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+				(alpha = "slotPanelAlpha")
+				(borderRadius = "XS")
+				(bind hitTest "!isOrderCustomizationActive")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotPanelState" _alpha="slotPanelAlpha" _duration="0.15")
+		)
+	
+		(controller $Droppable
+			(bind enabled "isDragAndDropSlot")
+			(slotIds = "[CONSUMABLE_DRAG_SLOT_ID]")
+			(dispatch 'evDragStopped'	on='evDragStopped')
+			(dispatch 'evDragAccept'	on='evDragFinished')
+			(dispatch 'evDragFadeIn'	on='evDragIn')
+			(dispatch 'evDragFadeOut'	on='evDragOut')
+
+			(bindcall externalCall "'inputMapping.onAction'" "['swapConsumables', {	dragSlotId: $event['slotId'],
+																					dropSlotId: subCollectionKey,
+																					dragCommandId: $event['commandId'],
+																					dropCommandId: slotComandId}]" watch=false on='evDragFinished')
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (padding = "XXS"))
+
+			(block
+				(style
+					(width = 60px)
+					(height = 60px)
+					(bind hitTest "isOrderCustomizationActive && !isEmptySlot")
+				)
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_CT _colorTransform = "slotColorTransform")
+
+				(controller $Draggable
+					(bind enabled "isDragAndDropSlot")
+					(slotId = "CONSUMABLE_DRAG_SLOT_ID")
+					(args
+						slotId = "subCollectionKey"
+						commandId = "slotComandId"
+					)
+
+					(dispatch 'evDragElementStarted'	on='evDragStarted')
+					(dispatch 'evDragBitmapAppear'		on='evBitmapAppear')
+					(dispatch 'evDragElementEnded'		on='evDragEnded')
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_CONSUMABLE_CHANGE_ORDER_MOUSE_INSTRUCTION'
+						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(block
+					(bind visible "!isEmptySlot")
+					(class $Fullsize)
+					(style
+						(bind backgroundImage "itemImageUrl")
+						(backgroundSize = "cover")
+						(alpha = "fillFieldAlpha")
+
+						(filters
+							(dropShadow
+								(bind distance	"isItemShadowActive ? 4			: 0")
+								(bind angle		"isItemShadowActive ? 90		: 0")
+								(bind color		"isItemShadowActive ? 0x000000	: 0x000000")
+								(bind alpha		"isItemShadowActive ? 0.7		: 0")
+								(bind blurX		"isItemShadowActive ? 4.0		: 2.0")
+								(bind blurY		"isItemShadowActive ? 4.0		: 2.0")
+								(bind strength	"isItemShadowActive ? 0.7		: 1.0")
+								(bind quality	"isItemShadowActive ? 1			: 1")
+							)
+						)
+					)
+					(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="fillFieldAlpha" _alpha="fillFieldAlpha")
+				)
+
+				(block
+					(bind visible "isEmptySlot")
+					(class $FullsizeAbsolute)
+					(style
+						(backgroundImage = 'url:../service_kit/frames/64px_drop_field.png')
+						(alpha = "dropFieldAlpha")
+					)
+					(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="dropFieldAlpha" _alpha="dropFieldAlpha")
+				)
+			)
+		)
+
+		(block
+			(bind visible "numConsumables > 0 && !isOrderCustomizationActive")
+			(style
+				(top = "XS")
+				(right = 5px)
+				(position = "absolute")
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(bind text "numConsumables")
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_NUMCONSUMABLES'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+	(block
+		(style (marginTop = 5px))
+
+		(element SelectionStatePanel
+			_state = "selectionState"
+		)
+	)
+
+	(block
+		(visible = "isHotKeyVisible")
+		(style
+			(position = "absolute")
+			(bottom = -12px)
+			(width = 100%)
+			(align = "center")
+			(hitTest = false)
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = "isHotKeyVisible ? 0.2 : 0"
+				duration = 0.1
+				to = "isHotKeyVisible	? { alpha: 1, visible:true }
+										: { alpha: 0, visible:false }"
+				easing = "Easing.quad_in"
+				watch = false
+				action = "kill"
+
+				(bind trigger "isHotKeyVisible")
+			)
+		)
+
+		(controller $Instance renderer='HotkeyIndicator'
+			(bind enabled "slotComandId >= 0")
+			(args
+				_commandId = "slotComandId"
+				_active = true
+			)
+		)
+	)
+
+	
+	(block
+		(visible = "isAutoConsumable && !isOrderCustomizationActive")
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(bottom = 0px)
+			(width = 100%)
+			(align = "center")
+			(alpha = "TC")
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = "isAutoConsumable && !isOrderCustomizationActive ? 0.2 : 0"
+				duration = 0.1
+				to = "isAutoConsumable && !isOrderCustomizationActive	? { alpha: TC, visible: true }
+																		: { alpha: 0, visible: false }"
+				easing = "Easing.quad_in"
+				watch = false
+				action = "kill"
+
+				(bind trigger "isAutoConsumable && !isOrderCustomizationActive")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold14NM)
+			(text = 'IDS_DOCK_CONSUME_AUTO')
+		)
+	)
+)
+
+(def element BaseConsumableItem (_equipmentSlotEntity:dhEntity)
+	(scope
+		(var installedEntityId:number = "_equipmentSlotEntity.equipmentSlot.installedEntityId" (event "_equipmentSlotEntity.equipmentSlot.evInstalledEntityIdChanged"))
+		(var abilityEntity:dhEntity = "getEntity(installedEntityId)")
+		(var abilityName:str = "abilityEntity.ability.name" (event "abilityEntity.ability.evNameChanged"))
+		(var slotId:number = "abilityEntity.ability.slotId")
+		(var numConsumables:number = "abilityEntity.ability.numConsumables" (event "abilityEntity.ability.evNumConsumablesChanged"))
+
+		(var consumePostfix:str = "numConsumables == 0 ? '_empty' : ''")
+		(var itemImageUrl:str = "'url:../consumables/consumable_' + abilityName + consumePostfix + '.png'")
+
+		(var isSquadronAbility:bool = "abilityEntity.ability.isSquadronAbility")
+
+		(var consumablesSlotCustomization:dhComponent = "getSingleComponent(CC.consumablesSlotCustomization)")
+		(var isOrderCustomizationActive:bool = "consumablesSlotCustomization.isActive && !isSquadronAbility" (event "consumablesSlotCustomization.evIsActiveChanged"))
+
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipComponent:dhComponent = "ownShipEntity.ownShip")
+
+		(var isShipInBalancer:bool = 		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool = 	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+
+		(var abilitiesBySlotCollection:dhCollection = "getCollection(CC.ability).getChildByPath('shipAbilsBySlotId.' + slotId)")
+		(var abilitiesBySlot:array = "abilitiesBySlotCollection.items ?: []")
+		(var hasAlternatives:bool = "abilitiesBySlot.length > 1 && !isShipInBalancer && !isShipReadyForBattle")
+
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(var isConsumablesInfotipVisible:bool = false)
+
+		(var selectionState:number = "!isOrderCustomizationActive && hasAlternatives	?	isConsumablesInfotipVisible				? SC.Ui_styles.BUTTON_STATE.SELECTED :
+																							mouseDown								? SC.Ui_styles.BUTTON_STATE.DOWN :
+																							rollOver								? SC.Ui_styles.BUTTON_STATE.OVER
+																																	: SC.Ui_styles.BUTTON_STATE.UP
+																						:	SC.Ui_styles.BUTTON_STATE.DISABLED")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(class $ManagementBaseSlotItem)
+	(style (align = "center|middle"))
+	(bind visible "installedEntityId > 0")
+
+	(block
+		(style
+			(width = 60px)
+			(height = 60px)
+			(backgroundSize = "fill")
+			(bind backgroundImage "itemImageUrl")
+		)
+
+		(controller $Tooltip
+			(renderer = 'ConsumableTooltip')
+			(args
+				_abilityEntityId = "installedEntityId"
+				_hasAlternatives = "hasAlternatives"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		)
+
+		(controller $Tooltip
+			(bind enabled "hasAlternatives")
+			(renderer = 'ConsumablesInfotip')
+			(args
+				_slotId = "slotId"
+				_isPreview = true
+			)
+			(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
+			(hideOnMove = true)
+
+			(bind isConsumablesInfotipVisible "true" on='evStartShow')
+			(bind isConsumablesInfotipVisible "false" on='evHide')
+		)
+	)
+
+	(block
+		(style (marginTop = 5px))
+
+		(element SelectionStatePanel
+			_state = "selectionState"
+		)
+	)
+
+	(block
+		(bind visible "numConsumables > 0 && !isOrderCustomizationActive")
+		(style (top = "XS") (right = 5px) (position = "absolute") (backgroundColor = "NO_COLOR"))
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style (alpha = "TA"))
+			(bind text "numConsumables")
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = 'IDS_NUMCONSUMABLES'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element ConsumablesInfotip (_slotId:number, _isPreview:bool=false)
+	(scope
+		(struct stageSize = STAGE_SIZE())
+
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipComponent:dhComponent = "ownShipEntity.ownShip")
+
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool = 		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
+		
+		(var statusLineData:dict = " 	isShipInBalancer		?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,
+																		text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER' } :
+										isShipReadyForBattle 	?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																		text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_CHANGE_CONSUMABLES' }
+																: null")
+
+
+		(var isOwned:bool = "ownShipEntity != null")
+
+		(var abilitiesBySlotCollection:dhCollection = "getCollectionByPath(CC.ability, 'shipAbilsBySlotId.' + _slotId)")
+	)
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(style (width = 400px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip="true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
+		(style (width = 100%))
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(bind maxHeight "stageSize.height / 2")
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_wheelScrollAcceleration = "0.8"
+				_isContrastScrollBar = "true"
+			)
+			
+			(content
+				(style
+					(width = 100%)
+					(vgap = "XXS")
+				)
+
+				(controller $Repeat renderer='ConsumablesInfotipItem'
+					(bind count "abilitiesBySlotCollection.length")
+					(args
+						_abilityEntity = "abilitiesBySlotCollection.getEntityAtIndex($index)"
+						_isPreview = "_isPreview"
+					)
+				)
+			)
+		)
+
+		(block
+			(bind visible "isOwned && isShipReadyForBattle")
+			(style (width = 100%))
+			(element ContextMenuHorizontalDivider)
+			
+			(block
+				(style
+					(width = 100%) (marginTop = "SXS") (marginBottom = "SXS")
+					(paddingLeft = "M") (paddingRight = "M")
+				)
+				(element StatusLine
+					_text = "statusLineData.text"
+					_unifiedStatus = "statusLineData.unifiedStatus"
+					_width = 100%
+				)
+			)
+		)
+	)
+)
+
+(def element ConsumablesInfotipItem (_abilityEntity:dhEntity, _isPreview:bool=false)
+	(scope
+		(var slotId:number = "_abilityEntity.ability.slotId")
+		(var isInstalled:bool = "_abilityEntity.ability.isInstalled" (event "_abilityEntity.ability.evIsInstalledChanged"))
+		(var hasLimitation:bool = "_abilityEntity.ability.hasLimitation")
+		(var name:str = "_abilityEntity.ability.name ?: ''" (event "_abilityEntity.ability.evNameChanged"))
+		
+		(var attributesNegative:array = "_abilityEntity.attributes.negative ?: []" (event "_abilityEntity.attributes.evChanged"))
+		(var attributesNeutral:array = "_abilityEntity.attributes.neutral ?: []" (event "_abilityEntity.attributes.evChanged"))
+		(var attributesPositive:array = "_abilityEntity.attributes.positive ?: []" (event "_abilityEntity.attributes.evChanged"))
+		
+		(var equipmentSlotPk:str = "SC.Ships.SHIP_SLOT_TYPES.ABILITY + '_' + slotId + '_'")
+		(var equipmentSlotEntity:dhEntity = "getPrimaryEntity(CC.equipmentSlot, equipmentSlotPk)")
+		(var slotComandId:number = "equipmentSlotEntity.equipmentSlot.commandId" (event "equipmentSlotEntity.equipmentSlot.evCommandIdChanged"))
+
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var ownShipInfo:dhComponent = "ownShipEntity.ownShip")
+
+		(var isShipInBalancer:bool = 		"ownShipInfo.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 				(event "ownShipInfo.evUpdateLock"))
+		(var isShipReadyForBattle:bool = 	"ownShipInfo.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" 	(event "ownShipInfo.evUpdateLock"))
+
+		(var isShipLocked:bool = "isShipInBalancer || isShipReadyForBattle")
+		
+		(var isOwned:bool = "ownShipEntity != null")
+		(var isVerifiedInstalled:bool = "isOwned ? isInstalled : false")
+	)
+	(style (width = 100%))
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(element DockSubmenuItem
+			_selected = "isVerifiedInstalled"
+			_enabled = "isOwned && !isShipLocked && !_isPreview"
+			_dispatchedEv = 'consumableInfotipItemClicked'
+			_soundSet = 'dropdown'
+			_methods = "[ {
+							type:	'inputMapping.onRequest',
+							name:	isOwned && !isShipLocked ? 'consumableClicked' : '',
+							args:	{ abilityId: _abilityEntity.ability.abilId, slotId: slotId }
+						}]"
+		)
+
+		(controller $Tooltip
+			(renderer = 'ConsumableTooltip')
+			(args
+				_abilityEntityId = "_abilityEntity.id"
+				_noMouseInstructions = "_isPreview"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(hblock
+		(style (width = 100%) (padding = "SXS"))
+		
+		(block
+			
+			(block
+				(style
+					(width = 60px)
+					(height = 60px)
+					(backgroundSize = "fill")
+					(hitTest = false)
+					(bind backgroundImage "'url:../consumables/consumable_' + name + '.png'")
+				)
+
+				
+				(block
+					(bind visible "hasLimitation")
+					(style
+						(position = "absolute")
+						(width = 17px)
+						(height = 15px)
+						(bottom = 0px)
+						(right = 0px)
+						(backgroundImage = 'url:../service_kit/unified_status_icons/icon_attention.png')
+					)
+				)
+			)
+
+			
+			(block
+				(bind visible "isVerifiedInstalled")
+				(style
+					(width = 100%)
+					(align = "center")
+					(marginTop = "XS")
+				)
+
+				(element HotkeyIndicator
+					_commandId = "slotComandId"
+					_size = "SIZE.SMALL"
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_HINT_BATTLE_COMMAND_KEY'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+		)
+		
+		(block
+			(style
+				(width = 300px)
+				(hitTest = false)
+				(paddingLeft = "SXS")
+				(marginTop = "XS")
+				)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+				(bind text "toUpper('IDS_DOCK_CONSUME_TITLE_' + name)")
+			)
+
+			(block
+				(bind visible "isVerifiedInstalled")
+				(style
+					(position = "absolute")
+					(right = 0px)
+					(top = -3px)
+					(width = 19px)
+					(height = 19px)
+					(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
+					(backgroundSize = "cover")
+				)
+			)
+
+			(block
+				(style (marginTop = "MS") (width = 100%) (paddingBottom = -11px) (alpha = 0.9))
+
+				(element ParamsModifierList
+					_attributesPositive = "attributesPositive"
+					_attributesNegative = "attributesNegative"
+					_attributesNeutral = "attributesNeutral"
+					_isShrinkHeight = true
+				)
+			)
+		)
+	)
+)

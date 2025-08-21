@@ -45,7 +45,7 @@
 		(element NationFlagsTiny _shipCountry = "crewNation")
 
 		(tf
-			(class $TextDefault17NM)
+			(class $TextDefault18NM)
 			(style (marginLeft = "S") (alpha = "TA"))
 
 			(bind text "isNoNation ? '' : tr(toUpper('IDS_' + crewNation))")
@@ -146,7 +146,7 @@
 (def element CrewPanel (_currentRoute:str, _crewId:number = 0, _shipId:number = 0, _isCrewInfoModalWindow:bool = false)
 	(scope
 		(macro STAGE_SIZE)
-		(var isSmallPanel:bool = "stageHeight < 760")
+		(var isSmallPanel:bool = "stageHeight < CREW_MANAGEMENT_SMALL_HEIGHT_THRESHOLD")
 
 		(macro PULL_SHIP_ID)
 
@@ -217,7 +217,9 @@
 
 	(style (width = 100%) (align = "center"))
 
-	(element CrewStereotypeWithName _size = "size")
+	(element CrewStereotypeWithName
+		_size = "size"
+	)
 
 	(tf
 		(class $TextDefaultNM)
@@ -256,9 +258,10 @@
 		(struct crew =			PULL_CREW(_crewId = "_crewId"))
 		(var retrainingComponent:dhComponent = "crew.entity.retraining")
 
-		(struct ownShipInfo =	PULL_OWN_SHIP(_playerShipId = "_shipId"))
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, _shipId)")
+		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
 
-		(var shipSubtype:str = "ownShipInfo.shipComponent.subtype ?: ''")
+		(var shipSubtype:str = "shipEntity.shipComponent.subtype ?: ''")
 
 		(var isMaxLevel:bool =			"crew.component.isMaxLevel"					(event "crew.component.evLevelUp"))
 		(var specializationID:number =	"crew.component.specializationID ?: 0"		(event "crew.component.evChanged"))
@@ -266,12 +269,12 @@
 		(var skillMatrixId:number =		"crew.component.skillMatrixId ?: 0"			(event "crew.component.evChanged"))
 		(var allSkillPoints:number =	"crew.component.allSkillPoints ?: 0"		(event "crew.component.evLevelUp"))
 		(var crewNation:str =			"crew.component.nation ?: ''"				(event "crew.component.evChanged"))
-		(var classificationId:number =	"crew.component.classificationId"			(event "crew.component.evClassificationIdChanged"))
+		(var rarity:number =			"crew.component.rarity"						(event "crew.component.evRarityChanged"))
 
 		(var isCurrencyDeficit:bool =	"retrainingComponent.allTypesBlocked"		(event "retrainingComponent.evRetrainingUpdated"))
 
-		(var isLocked:bool =		"ownShipInfo.ownShipComponent.isLocked"			(event "ownShipInfo.ownShipComponent.evUpdateLock"))
-		(var isInFormation:bool =	"ownShipInfo.ownShipComponent.isInFormation"	(event "ownShipInfo.ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
 
 		(var isInAdaptation:bool =	"retrainingComponent != null")
 		(var isXpBarVisible:bool =	"crew.component && !isMaxLevel && !isInAdaptation && skillMatrixId")
@@ -281,8 +284,8 @@
 		(var isEmptyCrew:bool = "crewNation == SC.Common.NATION.COMMON")
 		(var isCrewNationSpecialization:bool = "!isCrewSpecialization && !isEmptyCrew")
 
-		(var isCrewElite:bool =					"classificationId == SC.Common.COMMANDER_CLASSIFICATIONS.ELITE")
-		(var canCrewBeUpgradedToElite:bool =	"isIn(classificationId, SC.Common.COMMANDER_CLASSIFICATIONS.CAN_LEARN_ELITE_CREW_BOOK)")
+		(var isCrewElite:bool = "rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
+		(var canCrewBeUpgradedToElite:bool =	"isIn(rarity, SC.Common.UNIFIED_ITEM_RARITY.COMMANDERS_CAN_BECOME_ELITE)")
 
 		(var hasAnySpecialization:bool = "isCrewSpecialization || isCrewNationSpecialization")
 
@@ -293,17 +296,26 @@
 		(var isShipPreparedBlockVisible:bool =				"!isCrewNationSpecializationBlockVisible && isThisShipSpecDiffersFromCrewShipSpec && specializationID != 0 && !isInAdaptation")
 		(var isCrewPanelAssignedBlockVisible:bool =			"_isCrewInfoModalWindow && (!isInAdaptation || (isInAdaptation && isThisShipSpecDiffersFromCrewShipSpec))")
 
-		(var isFastTrainingDisabled:bool = "isInFormation || isLocked || isInAdaptation || isEmptyCrew")
-		(var fastTrainingDenyReason:str = "	isInFormation			?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
-											isLocked				?	'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
-											isInAdaptation			?	'IDS_FAST_TRAINING_DISABLE_REASON_IN_ADAPTATION' :
-											isEmptyCrew				?	'IDS_FAST_TRAINING_DISABLE_REASON_NATION_COMMON'
-																	:	''")
+		(var isFastTrainingDisabled:bool = "isShipReadyForBattle || isShipInBalancer || isInAdaptation || isEmptyCrew ")
 
-		(var finishTrainingDenyReason:str = "	isInFormation		?	'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION' :
-												isLocked			?	'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_BATTLE' :
-												isCurrencyDeficit	?	'IDS_NOT_ENOUGH_FUNDS'
-																	:	''")
+		(var fastTrainingDenyReason:dict = "isShipInBalancer 		? {	text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+											isShipReadyForBattle	? { text: 'IDS_FAST_TRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
+											isInAdaptation			? { text: 'IDS_FAST_TRAINING_DISABLE_REASON_IN_ADAPTATION',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
+											isEmptyCrew				? { text: 'IDS_FAST_TRAINING_DISABLE_REASON_NATION_COMMON',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE }
+																	: null")
+
+		(var finishTrainingDenyReason:dict = "	isShipInBalancer 		? {	text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER',
+																			unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+												isShipReadyForBattle 	? {	text: 'IDS_RETRAINING_DISABLE_REASON_SHIP_IS_IN_FORMATION',
+																			unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
+												isCurrencyDeficit		? {	text: 'IDS_NOT_ENOUGH_FUNDS',
+																			unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } 
+																		: null")
+
 		(var crewStereotypeSize:number = "_isSmallPanel ? SIZE.MEDIUM : SIZE.LARGE")
 		(var isRental:bool = "timeRent > 0")
 
@@ -325,6 +337,12 @@
 
 		(var doesPlayerHaveNewEliteBooks:bool =	"crewDataEntity.hasComponent(CC.newItem)")
 		(var isNewEliteBookMarkerShown:bool =	"doesPlayerHaveNewEliteBooks && canConvertIntoElite")
+
+		(var isCrewInfoVisible:bool = "!_isCrewInfoModalWindow && skillMatrixId")
+
+		(var crewInfoTooltipData:dict = "	!hasAnySpecialization	? {	text: 'IDS_HINT_CREW_WITHOUT_NATION',
+																		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION }
+																	: null")
 	)
 	(macro UNIFIED_STATUS_TO_COLOR_AND_ALPHA "SC.Ui_styles.UNIFIED_STATUS.ATTENTION" "'attentionTextColor'" "'attentionTextAlpha'")
 
@@ -416,8 +434,8 @@
 			(renderer='SimpleStatusTooltip')
 			(bind enabled "isFastTrainingButtonVisible && isFastTrainingDisabled")
 			(args
-				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
-				_text =				"fastTrainingDenyReason"
+				_unifiedStatus =	"fastTrainingDenyReason.unifiedStatus"
+				_text =				"fastTrainingDenyReason.text"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -443,8 +461,8 @@
 			(renderer='SimpleStatusTooltip')
 			(bind enabled "isInAdaptation && finishTrainingDenyReason")
 			(args
-				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
-				_text =				"finishTrainingDenyReason"
+				_unifiedStatus =	"finishTrainingDenyReason.unifiedStatus"
+				_text =				"finishTrainingDenyReason.text"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -453,19 +471,21 @@
 
 	
 	(block
-		(bind visible "!_isCrewInfoModalWindow && skillMatrixId")
+		(bind visible "isCrewInfoVisible")
 
 		(style (width = 100%) (bind marginTop "elemSpacing"))
-
-		(controller $Instance renderer='DefaultButton'
-			(bind enabled "!_isCrewInfoModalWindow && skillMatrixId")
-			(args
-				_enabled =		"hasAnySpecialization && !isInFormation"
-				_size =			"buttonSize"
-				_width =		100%
-				_label =		'IDS_PERSONAL_FILE_BUTTON_LABEL'
-				_methods =		"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_CREW_INFO_WINDOW, args: { _crewId: _crewId } }]"
-				_focusIndex =	1
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='DefaultButton'
+				(bind enabled "isCrewInfoVisible")
+				(args
+					_enabled =		"hasAnySpecialization"
+					_size =			"buttonSize"
+					_width =		100%
+					_label =		'IDS_PERSONAL_FILE_BUTTON_LABEL'
+					_methods =		"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_CREW_INFO_WINDOW, args: { _crewId: _crewId } }]"
+					_focusIndex =	1
+				)
 			)
 		)
 
@@ -479,7 +499,11 @@
 
 			(block
 				(macro DEFAULT_CONTROL_MARKER_ANIMATION "isEliteMentorshipNew || isNewEliteBookMarkerShown")
-				(style (position = "absolute"))
+				(style
+					(position = "absolute")
+					(top = -9px)
+					(right = "_isSmallPanel ? -74px + M : -XL + M")
+				)
 
 				(element MarkerNew)
 			)
@@ -487,12 +511,10 @@
 
 		(controller $Tooltip
 			(renderer='SimpleStatusTooltip')
-			(bind enabled "!hasAnySpecialization || isInFormation")
+			(bind enabled "!hasAnySpecialization")
 			(args
-				_unifiedStatus =	"!hasAnySpecialization		? SC.Ui_styles.UNIFIED_STATUS.ATTENTION
-																: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
-				_text =				"!hasAnySpecialization		? 'IDS_HINT_CREW_WITHOUT_NATION'
-																: 'IDS_HINT_CREW_INFO_UNAVAILABLE_DUE_IN_FORMATION'"
+				_unifiedStatus =	"crewInfoTooltipData.unifiedStatus"
+				_text =				"crewInfoTooltipData.text"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -669,10 +691,16 @@
 (def element CrewPanelCommonButtons (_currentRoute:str, _isSmallPanel:bool = false)
 	(scope
 		(macro PULL_SHIP_ID)
-		(struct shipInfo =			PULL_OWN_SHIP(_playerShipId = "playerShipId"))
-		(var isLocked:bool =		"shipInfo.ownShipComponent.isLocked"		(event "shipInfo.ownShipComponent.evUpdateLock"))
-		(var isInFormation:bool =	"shipInfo.ownShipComponent.isInFormation"	(event "shipInfo.ownShipComponent.evUpdateLock"))
-		(var crewId:number =		"shipInfo.ownShipComponent.crewId"			(event "shipInfo.ownShipComponent.evCrewChanged"))
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+
+		(var crewId:number = "ownShipComponent.crewId" (event "ownShipComponent.evCrewChanged"))
+
+		(var isCrewDemobilizationAccess:bool = "!isShipInBalancer && !isShipReadyForBattle")
 
 		(struct crew =			PULL_CREW(_crewId = "crewId"))
 		(struct permissions =	PULL_CREW_PERMISSIONS(_crew = "crew.component"))
@@ -683,16 +711,20 @@
 		(var freeBarracksSlots:number =		"crewData.freeBarracksSlots ?: 0"	(event "crewData.evFreeBarracksSlotsChanged"))
 		(var canDisassignCrew:bool =		"freeBarracksSlots > 0")
 
-		(var isDisassignButtonEnabled:bool =	"!isLocked && !isInFormation && canDisassignCrew")
+		(var isDisassignButtonEnabled:bool = "!isShipInBalancer && !isShipReadyForBattle && canDisassignCrew")
 
-		(var disassignDisableTooltipText:str =	"	isInFormation		? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_FORMATION' :
-													isLocked			? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_BATTLE' :
-													!canDisassignCrew	? 'IDS_ASSIGN_NEW_CREW_DISABLE_REASON_FULL_BARRACKS'
-																		: ''")
+		(var disassignDisableTooltipText:str =	"	isShipInBalancer		? 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER' :
+													isShipReadyForBattle	? 'IDS_DISASSIGN_CREW_DENY_REASON_IN_FORMATION' :
+													!canDisassignCrew		? 'IDS_ASSIGN_NEW_CREW_DISABLE_REASON_FULL_BARRACKS'
+																			: ''")
 
-		(var fireCrewTooltipText:str =	"isInFormation	? 'IDS_FIRE_CREW_DENY_REASON_IN_FORMATION' :
-										 isLocked		? 'IDS_FIRE_CREW_DENY_REASON_IN_BATTLE'
-														: ''")
+
+		(var fireCrewTooltipText:str =	"	isShipInBalancer		? 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER' :
+											isShipReadyForBattle	? 'IDS_FIRE_CREW_DENY_REASON_IN_FORMATION'
+																	: ''")
+
+		(var disassignDisableTooltipStatus:str =	"isShipInBalancer ? SC.Ui_styles.UNIFIED_STATUS.WARNING : SC.Ui_styles.UNIFIED_STATUS.NEGATIVE")
+		(var fireCrewTooltipStatus:str = 			"isShipInBalancer ? SC.Ui_styles.UNIFIED_STATUS.WARNING : SC.Ui_styles.UNIFIED_STATUS.NEGATIVE")
 
 		(var isCrewAbilitiesInset:bool =	"_currentRoute == SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT")
 		(var crewManagementInset:number =	"isCrewAbilitiesInset ? CREW_MANAGEMENT_ASSIGN_INSET : CREW_MANAGEMENT_ABILITIES_INSET")
@@ -730,7 +762,7 @@
 			(bind enabled "disassignDisableTooltipText != ''")
 			(renderer = 'SimpleStatusTooltip')
 			(args
-				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_unifiedStatus =	"disassignDisableTooltipStatus"
 				_text =				"disassignDisableTooltipText"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
@@ -753,7 +785,7 @@
 				_label =			'IDS_CREW_FIRE'
 				_size =				"buttonSize"
 				_width =			100%
-				_enabled =			"!isLocked"
+				_enabled =			"isCrewDemobilizationAccess"
 				_methods =			"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_FIRE_CREW_WINDOW, args: { crewId: crewId } }]"
 				_isTransactionBtn =	true
 				_focusIndex =		3
@@ -764,7 +796,7 @@
 			(bind enabled "fireCrewTooltipText != ''")
 			(renderer = 'SimpleStatusTooltip')
 			(args
-				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+				_unifiedStatus =	"fireCrewTooltipStatus"
 				_text =				"fireCrewTooltipText"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
@@ -794,20 +826,25 @@
 (def element CrewPanelEmptyButtons (_isSmallPanel:bool = false)
 	(scope
 		(macro PULL_SHIP_ID)
-		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "playerShipId"))
 
-		(var crewData:dhComponent =			"getSingleComponent(CC.crewData)")
-		(var freeBarracksSlots:number =		"crewData.freeBarracksSlots ?: 0"			(event "crewData.evFreeBarracksSlotsChanged"))
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+		(var shipComponent:dhComponent = "shipEntity.ship")
 
-		(var lastBoardedCrewId:number =		"shipInfo.shipComponent.lastBoardedCrewId ?: 0"	(event "shipInfo.shipComponent.evLastBoardedCrewIdChanged")
-																							(event "shipInfo.shipComponent.evUpdate"))
+		(var crewData:dhComponent =		"getSingleComponent(CC.crewData)")
+		(var freeBarracksSlots:number =	"crewData.freeBarracksSlots ?: 0" (event "crewData.evFreeBarracksSlotsChanged"))
 
-		(var isDemoWithoutStats:bool =		"shipInfo.shipComponent.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS || shipInfo.shipComponent.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS_PREM")
-		(var isWithoutCrewPenalty:bool =	"shipInfo.shipComponent && shipInfo.shipComponent.isWithoutCrewPenalty" (event "shipInfo.shipComponent.evUpdate"))
-		(var isLocked:bool =				"shipInfo.ownShipComponent.isLocked"		(event "shipInfo.ownShipComponent.evUpdateLock"))
-		(var isInFormation:bool =			"shipInfo.ownShipComponent.isInFormation"	(event "shipInfo.ownShipComponent.evUpdateLock"))
-		(var crewId:number =				"shipInfo.ownShipComponent.crewId"			(event "shipInfo.ownShipComponent.evCrewChanged"))
-		(var ownShipTimeRent:number =		"shipInfo.ownShipComponent.timeRent ?: 0"	(event "shipInfo.ownShipComponent.evUpdateDockState"))
+		(var lastBoardedCrewId:number =	"shipComponent.lastBoardedCrewId ?: 0"	(event "shipComponent.evLastBoardedCrewIdChanged")
+																				(event "shipComponent.evUpdate"))
+
+		(var isDemoWithoutStats:bool =		"shipComponent.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS || shipComponent.group == SC.Ships.SHIP_GROUPS.DEMO_WITHOUT_STATS_PREM")
+		(var isWithoutCrewPenalty:bool =	"shipComponent.isWithoutCrewPenalty" (event "shipComponent.evUpdate"))
+
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+
+		(var crewId:number =			"ownShipComponent.crewId"			(event "ownShipComponent.evCrewChanged"))
+		(var ownShipTimeRent:number =	"ownShipComponent.timeRent ?: 0"	(event "ownShipComponent.evUpdateDockState"))
 
 		(struct crew =		PULL_CREW(_crewId = "lastBoardedCrewId"))
 		(var hasLastBoardedCrew:bool =					"crew.entity != null")
@@ -816,26 +853,29 @@
 		(var isReturnLastCrewButtonVisible:bool =		"crewId == 0 && lastBoardedCrewId != 0 && hasLastBoardedCrew")
 
 		(var otherShipEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, otherShipId)")
-		(var isOtherShipExist:bool =	"otherShipEntity != null")
-		(var isOtherShipLocked:bool =	"otherShipEntity.ownShip.isLocked" (event "otherShipEntity.ownShip.evUpdateLock"))
+		(var otherShipComponent:dhComponent = "otherShipEntity.ownShip")
 
-		(var isLastBoardedCrewLocked:bool =		"isOtherShipExist && isOtherShipLocked")
+		(var isOtherShipExist:bool =	"otherShipEntity != null")
+		(var isInBalancerOtherShip:bool = "otherShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "otherShipComponent.evUpdateLock"))
+		(var isInDivisionOtherShip:bool = "otherShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "otherShipComponent.evUpdateLock"))
+
+		(var isLastBoardedCrewLocked:bool =		"isOtherShipExist && (isInBalancerOtherShip || isInDivisionOtherShip)")
 		(var canAssignWithoutRetrain:bool =		"lastBoarderCrewSpecializationId == playerShipId || isWithoutCrewPenalty")
-		(var isReturnButtonDisabled:bool =		"isLocked || isInFormation || isLastBoardedCrewLocked")
+		(var isReturnButtonDisabled:bool =		"isShipInBalancer || isShipReadyForBattle || isLastBoardedCrewLocked")
 
 		(var methodType:str =	"canAssignWithoutRetrain ? 'inputMapping.onAction' : 'inputMapping.onRequest'")
 		(var methodName:str =	"canAssignWithoutRetrain ? CREW_ACTIONS.ASSIGN_TO_SHIP : CREW_ACTIONS.OPEN_CREW_RETRAIN_WINDOW")
 
 		(var isRentalOwnShip:bool = "ownShipTimeRent > 0")
 
-		(var lockRecruitReasonStatus:dict = "	(freeBarracksSlots <= 0) && isRentalOwnShip		? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+		(var lockRecruitReasonStatus:dict = "	isShipInBalancer								? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,
+																									text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER' } :
+												(freeBarracksSlots <= 0) && isRentalOwnShip		? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
 																									text: 'IDS_UNABLE_HIRE_CREW_NO_PLACE_IN_BARRACKS_TOOLTIP' } :
 												isDemoWithoutStats								? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
 																									text: 'IDS_RECRUIT_CREW_DENY_REASON_CURRENT_SHIP_IS_DEMO_WITHOUT_STATS' } :
-												isInFormation									? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
-																									text: 'IDS_ASSIGN_CREW_DENY_REASON_CURRENT_SHIP_IN_FORMATION' } :
-												isLocked 										? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
-																									text: 'IDS_ASSIGN_CREW_DENY_REASON_CURRENT_SHIP_IN_BATTLE' }
+												isShipReadyForBattle							? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																									text: 'IDS_ASSIGN_CREW_DENY_REASON_CURRENT_SHIP_IN_FORMATION' }
 																								: null")
 
 		(struct crewHireNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_NEW"))
@@ -844,9 +884,6 @@
 		(var newTipId:number = "crewHireNewTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_NEW :
 								crewHireRepeatNewTip.isActive		? SC.Context_guiding_tip.TIP_TYPE.CREW_HIRE_NEW_REPEAT
 																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
-
-		(var isNewTipVisible:bool =	"newTipId != SC.Context_guiding_tip.TIP_TYPE.NONE")
-
 
 		(var buttonSize:number =	"_isSmallPanel ? SIZE.SMALL : SIZE.MEDIUM")
 		(var buttonMargin:number =	"_isSmallPanel ? S : SXS")
@@ -911,11 +948,13 @@
 		)
 
 		(controller $Instance renderer='GuidingTipHub'
-			(bind enabled "isNewTipVisible")
+			(bind enabled "newTipId")
 			(args
 				_tipId =			"newTipId"
 				_tipPositioning =	"TIP_POSITION_RIGHT"
-				_modalWindowName =	'ModalWindowCrewManagement'
+				_offsetX =			"XS"
+				_pointerOffset =	-118
+				_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
 			)
 		)
 	)

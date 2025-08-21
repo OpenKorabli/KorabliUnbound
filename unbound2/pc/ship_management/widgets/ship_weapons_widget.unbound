@@ -1,0 +1,467 @@
+(def element WeaponManagementWidget ()
+	(scope
+		(event evWeaponItemClicked)
+
+		(var selectedSquadronEntity:dhEntity =	"getSingleEntity(CC.visualSlotData, 'myAirCarrierWeapons')")
+
+		(var weaponCollection:dhCollection =	"getCollectionByPath(CC.visualSlotData, 'byAvatarId.' + DEFAULT_AVATAR_ID)")
+
+		(var selectedWeaponId:number =	"$event.selectedWeaponId	?: 0" watch=false (event "evWeaponItemClicked"))
+		(bind selectedWeaponId			"selectedSquadronEntity.id	?: 0" init=true watch=false (bind trigger "selectedSquadronEntity"))
+	)
+
+	(element DockWidgetBackground
+		_roundSize = "SIZE.SMALL"
+	)
+
+	(hblock
+		(block
+			(class $ShipManagementSectionContainer)
+
+			(block
+				(style (width =  100%))
+
+				(tf
+					(class $ShipManagementSectionHeader)
+					(text = 'IDS_SHIP_MANAGEMENT_WEAPONS_BLOCK_HEADER')
+				)
+			)
+
+			(hblock
+				(style
+					(minWidth = 224px)
+					(hgap = "SHIP_MANAGEMENT_ITEM_HGAP")
+				)
+
+				(controller $Repeat renderer='WeaponSlotItem'
+					(bind count "weaponCollection.length")
+					(args
+						_weaponCollection = "weaponCollection"
+						_selectedWeaponId = "selectedWeaponId"
+					)
+				)
+			)
+		)
+
+		(block
+			(controller $Instance renderer='SquadronWeaponManagementWidget'
+				(bind enabled "toBool(selectedSquadronEntity)")
+				(args
+					_weaponCollection = "weaponCollection"
+					_selectedWeaponId = "selectedWeaponId"
+				)
+			)
+		)
+	)
+)
+
+(def element SquadronWeaponManagementWidget (_weaponCollection:dhCollection, _selectedWeaponId:number)
+	(scope
+		(var selectedSquadronEntity:dhEntity = "getEntity(_selectedWeaponId)")
+		(var selectedSquadronSlotData:dhComponent = "selectedSquadronEntity.visualSlotData")
+		(var selectedSquadronType:str = "selectedSquadronSlotData.squadType" (event "selectedSquadronSlotData.evSquadTypeChanged"))
+
+		(var selectedSquadronWeaponsCollection:dhCollection =	"getCollectionByPath(CC.visualSlotData, 'byAvatarIdAndSquadType.' + DEFAULT_AVATAR_ID + '_' + selectedSquadronType)")
+		(var selectedSquadronWeaponsCollectionLen:number =		"selectedSquadronWeaponsCollection.length ?: 0")
+
+		(var squadronConsumableCollection:dhCollection =	"getCollectionByPath(CC.equipmentSlot, 'squadronAbilitySlotsBySquadType.' + selectedSquadronType)")
+		(var squadronConsumableCollectionLen:number =		"squadronConsumableCollection.length ?: 0")
+
+		(var actualWidth:number = "0")
+		
+		(var initWidth:number = "0")
+		(bind initWidth "initWidth == 0 ? actualWidth : initWidth" watch=false (bind trigger "actualWidth"))
+
+	)
+	(style
+		(bind width "initWidth ? initWidth : auto" watch=false (bind trigger "initWidth"))
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.12
+			to = "{ width: actualWidth }"
+			easing = "Easing.line"
+			watch = false
+			action = "kill"
+			(bind trigger "actualWidth")
+		)
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+			(borderRadiusTopRight = "XS")
+			(borderRadiusBottomRight = "XS")
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(left = "-XS")
+				(width = 4px)
+				(height = 4px)
+				(backgroundImage='url:../service_kit/panel_backgrounds/inner_border_rounded.png')	
+				(alpha = 0.2)
+			)
+		)
+	
+		(block
+			(style
+				(position = "absolute")
+				(bottom = 0)
+				(rotation = 90)
+				(width = 4px)
+				(height = 4px)
+				(backgroundImage='url:../service_kit/panel_backgrounds/inner_border_rounded.png')	
+				(alpha = 0.2)
+			)
+		)
+	)
+
+	(block
+		(class $ShipManagementSectionContainer)
+		(bind actualWidth "$globalLayoutBounds[2]" (event "$evLayoutBoundsChanged"))
+
+		(tf
+			(class $ShipManagementSectionHeader)
+			(text = 'IDS_SQUADRON')
+		)
+
+		(hblock
+			(style
+				(hgap = "SHIP_MANAGEMENT_ITEM_HGAP")
+				(minWidth = 224px)
+			)
+
+			(controller $Animation
+				(bindcall play
+					keyframes = "[
+						{ time:0,		to:{ alpha:0, visualOffsetY: 5px, hitTest: false }},
+						{ time:0.12,	to:{ alpha:0, visualOffsetY: 5px, hitTest: false }},
+						{ time:0.25,	to:{ alpha:1, visualOffsetY: 0px, hitTest: true }, easing:Easing.quad_out }
+					]"
+					action = "kill"
+					(bind trigger "_selectedWeaponId")
+				)
+			)
+
+			(hblock
+				(style (hgap = "SHIP_MANAGEMENT_ITEM_HGAP"))
+
+				(controller $Repeat renderer='WeaponSlotItem'
+					(bind count "selectedSquadronWeaponsCollectionLen")
+					(args
+						_weaponCollection = "selectedSquadronWeaponsCollection"
+						_selectedWeaponId = "_selectedWeaponId"
+					)
+				)
+			)
+
+			(hblock
+				(style (hgap = "SHIP_MANAGEMENT_ITEM_HGAP"))
+
+				(controller $Repeat renderer='ConsumableSlotItem'
+					(bind count "squadronConsumableCollectionLen")
+					(args
+						_consumableCollection = "squadronConsumableCollection"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element BaseWeaponItem (_weaponSlotEntity:dhEntity, _selectedWeaponId:number)
+	(scope
+		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var visualSlotData:dhComponent = "_weaponSlotEntity.visualSlotData")
+		(var weaponType:number = "visualSlotData.weaponType")
+		(var commandId:number = "visualSlotData.commandId")
+		(var iconPath:str = "visualSlotData.iconPath" (event "visualSlotData.evIconPathChanged"))
+
+		(var fireModeSlotEntity:dhEntity = "getSingleEntity(CC.fireModeSlot)")
+		(var fireModeSlot:dhComponent = "fireModeSlotEntity.fireModeSlot")
+		(var isFireModeSlot:bool = "_weaponSlotEntity.id == fireModeSlotEntity.id")
+
+		(var isActiveFireMode:bool = "fireModeSlot.isActive" (event "fireModeSlot.evIsActiveChanged"))
+		(var isSwitchableFireMode:bool = "fireModeSlot.isSwitchable")
+		(var isDrumFire:bool = "fireModeSlot.isDrumFire")
+		(var isCanDrum:bool = "isDrumFire && weaponType == SC.Ships.SHIP_WEAPON_TYPES.ARTILLERY")
+		(var isDrumModeActive:bool = "isSwitchableFireMode && isCanDrum ? isActiveFireMode : isCanDrum")
+		(var isHideFireModeSlot:bool = "isFireModeSlot ? isSwitchableFireMode : true")
+
+		(var strokeIconName:str = "isActiveFireMode ? 'button_selected_slot.png' : 'button_full_slot_up.png'")
+		(var slotState:number = "	mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
+									rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
+															: SC.Ui_styles.BUTTON_STATE.UP")
+		(var slotAlpha:number = "FRAME_SLOT_STATE_ALPHA[slotState]")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(bindcall externalCall "isFireModeSlot ? 'inputMapping.onAction' : ''" "['changeFireModeState', {}]" init=false watch=false on='leftClick')
+	(bind visible "isHideFireModeSlot")
+
+	(class $ManagementBaseSlotItem)
+	(style (align = "center|middle"))
+
+	(block
+		(bind visible "isSwitchableFireMode && isFireModeSlot")
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "'url:../service_kit/slots/' + strokeIconName")
+			(hitTest = false)
+			(alpha = "slotAlpha")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotState" _alpha="slotAlpha")
+	)
+
+	(block
+		(style (width = 60px) (height = 60px))
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (bind backgroundImage "iconPath") (backgroundSize = "fill"))
+			(macro MOUSE_OVER_DOWN_COLORTRANSFORM _isActive="isFireModeSlot" _isSelected="false")
+
+			(controller $Tooltip
+				(renderer = 'WeaponTooltip')
+				(args
+					_slotEntityId = "_weaponSlotEntity.id"
+					_isActiveBurst = "isDrumModeActive"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(block
+			(bind visible "isCanDrum && isDrumModeActive")
+			(class $FullsizeAbsolute)
+			(style (backgroundSize = "fill") (hitTest = false) (backgroundImage = 'url:../consumables/drumMode_indicator.png'))
+		)
+	)
+)
+
+(def element WeaponSlotItem (_weaponCollection:dhCollection, _selectedWeaponId:number)
+	(scope
+		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(macro PULL_SHIP_ID)
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+
+		(var weaponSlotEntity:dhEntity = "_weaponCollection[$index]")
+		(var visualSlotData:dhComponent = "weaponSlotEntity.visualSlotData")
+		(var weaponType:number = "visualSlotData.weaponType")
+		(var iconPath:str = "visualSlotData.iconPath" (event "visualSlotData.evIconPathChanged"))
+
+		(var isSlotInteractive:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.AIRPLANES")
+		(var isSlotSelected:bool = "_selectedWeaponId == weaponSlotEntity.id")
+		(var isSlotActive:bool = "isSlotInteractive && !isSlotSelected")
+
+		(var fireModeSlotEntity:dhEntity =	"getSingleEntity(CC.fireModeSlot)")
+		(var fireModeSlot:dhComponent =		"fireModeSlotEntity.fireModeSlot")
+
+		(var isFireModeSlot:bool =			"weaponSlotEntity.id == fireModeSlotEntity.id")
+		(var isActiveFireMode:bool =		"fireModeSlot.isActive" (event "fireModeSlot.evIsActiveChanged"))
+		(var isSwitchableFireMode:bool =	"fireModeSlot.isSwitchable")
+		(var isDrumFire:bool =				"fireModeSlot.isDrumFire")
+
+		(var isCanDrum:bool =			"isDrumFire && weaponType == SC.Ships.SHIP_WEAPON_TYPES.ARTILLERY")
+		(var isDrumModeActive:bool =	"isSwitchableFireMode && isCanDrum ? isActiveFireMode : isCanDrum")
+		(var isHideFireModeSlot:bool =	"isFireModeSlot ? isSwitchableFireMode : true")
+		(var isFireModeSlotActive:bool = "isSwitchableFireMode && isFireModeSlot")
+
+		(var selectionState:number = "	isSlotInteractive		?	isSlotSelected || (isCanDrum && isDrumModeActive)	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+																	mouseDown											? SC.Ui_styles.BUTTON_STATE.DOWN :
+																	rollOver											? SC.Ui_styles.BUTTON_STATE.OVER
+																														: SC.Ui_styles.BUTTON_STATE.UP	:
+										isFireModeSlotActive	?	isActiveFireMode									? SC.Ui_styles.BUTTON_STATE.SELECTED :
+																	mouseDown											? SC.Ui_styles.BUTTON_STATE.DOWN :
+																	rollOver											? SC.Ui_styles.BUTTON_STATE.OVER
+																														: SC.Ui_styles.BUTTON_STATE.UP
+																:	SC.Ui_styles.BUTTON_STATE.DISABLED")
+
+		(struct tooltipPosition = SHIP_MANAGEMENT_TOOLTIP_POSITION())
+	)
+	(bind visible "isHideFireModeSlot")
+
+	(dispatch 'evWeaponItemClicked' args="{ selectedWeaponId: weaponSlotEntity.id }" dir="EventDirection.UP" on='leftClick' (bind enabled "isSlotActive"))
+	(bindcall externalCall "isFireModeSlot ? 'inputMapping.onAction' : ''" "['changeFireModeState', {}]" watch=false on='leftClick')
+
+	(style (backgroundColor = "NO_COLOR"))
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isSlotActive ? 'button_consumable' : ''")
+
+	(controller $Tooltip
+		(renderer = 'WeaponTooltip')
+		(args
+			_slotEntityId = "weaponSlotEntity.id"
+			_isActiveBurst = "isDrumModeActive"
+			_isWeaponAvailableForSelection = "isSlotActive"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(position = "border")
+		(bind align "tooltipPosition.align")
+	)
+
+	(block
+		(class $ManagementBaseSlotItem)
+		(style (padding = "XXS"))
+
+		(block
+			(style
+				(width = 60px)
+				(height = 60px)
+				(bind backgroundImage "iconPath")
+				(backgroundSize = "fill")
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(hitTest = false)
+					(backgroundImage = 'url:../consumables/drumMode_indicator.png')
+					(backgroundSize = "fill")
+				)
+
+				(macro CONTROL_VISIBLE_STATE_ANIMATION "isCanDrum && isDrumModeActive")
+			)
+		)
+	)
+
+	(block
+		(style (marginTop = 5px))
+
+		(element SelectionStatePanel
+			_state = "selectionState"
+		)
+	)
+)
+
+(def element WeaponTooltip (_slotEntityId:number, _isActiveBurst:bool=false, _isWeaponAvailableForSelection:bool=false)
+	(scope
+		(var visualSlotDataEntity:dhEntity = "getEntity(_slotEntityId)")
+		(var visualSlotDataComponent:dhComponent = "visualSlotDataEntity.visualSlotData")
+		(var iconPath:str = "visualSlotDataComponent.iconPath ?: ''" (event "visualSlotDataComponent.evIconPathChanged"))
+		(var title:str = "visualSlotDataComponent.title ?: ''")
+		(var description:str = "visualSlotDataComponent.description ?: ''")
+		(var subheader:str = "visualSlotDataComponent.subheader ?: ''")
+		
+		(macro PULL_SHIP_ID)
+		(var shipInsetEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
+		(var isOwned:bool = "shipInsetEntity != null")
+		
+		(var isPingerMode:bool = "visualSlotDataComponent.isPingerMode")
+
+		(var isMouseInstructionShowSquadron:bool = "_isWeaponAvailableForSelection && !_isActiveBurst")
+	)
+	(style (width = 340px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageWidth =		60
+			_imageHeight =		60
+			_imageUrl =			"iconPath"
+			_headerText =		"title"
+			_subheaderText =	"subheader"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isOwned"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isOwned")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_COMMON_MOUNTED'
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemHtmlDescriptionText
+			_descriptionText = "tr(description)"
+		)
+
+		(element TooltipSystemHorizontalDivider)	
+		(element AmmoParametersAdapter
+			_ttxDescriptor = "visualSlotDataComponent.id"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isActiveBurst"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isActiveBurst")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.BURST_FIRE"
+					_text = 'IDS_DOCK_FIRE_MODE_TITLE_DRUM'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isActiveBurst"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='FireModeTooltipParams'
+				(bind enabled "_isActiveBurst")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPingerMode"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isPingerMode")
+				(args
+					_text = 'IDS_DOCK_AMMO_TITLE_PINGER'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPingerMode"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='AmmoParametersAdapter'
+				(bind enabled "isPingerMode")
+				(args
+					_ttxDescriptor="'pinger'"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isMouseInstructionShowSquadron"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isMouseInstructionShowSquadron")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text = 'IDS_VIEW_SQUADRON'
+				)
+			)
+		)
+	)
+)

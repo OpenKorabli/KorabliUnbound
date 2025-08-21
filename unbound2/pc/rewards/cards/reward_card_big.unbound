@@ -1,0 +1,1482 @@
+(def css $RewardBigCard ()
+	(minWidth = "REWARD_BIG_CARD_MIN_WIDTH")
+	(height = "REWARD_BIG_CARD_HEIGHT")
+	(align = "center")
+	(backgroundColor = "NO_COLOR")
+)
+
+(def css $EnlargedRewardBigCard ()
+	(width = "ENLARGED_REWARD_BIG_CARD_WIDTH")
+	(height = "REWARD_BIG_CARD_HEIGHT")
+	(align = "center")
+	(backgroundColor = "NO_COLOR")
+)
+
+(def constant REWARD_BIG_CARD_MIN_WIDTH			246px)
+(def constant REWARD_BIG_CARD_HEIGHT			368px)
+(def constant ENLARGED_REWARD_BIG_CARD_WIDTH	504px)
+
+(def constant ANIMATION_REWARD_SHIP_RARITY_NAME 'legendary_ship')
+(def constant ANIMATION_REWARD_SHIP_COMPONENT_RARITY_NAME 'elite_ship_component')
+
+(def constant ANIMATION_SHOW_REWARD_PARAMS "{
+	SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.COMMON:					{ 'delay': 0.35,	'duration': 0.2 },
+	SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.UNCOMMON:				{ 'delay': 0.35,	'duration': 0.2 },
+	SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.RARE:					{ 'delay': 0.65,	'duration': 0.2 },
+	SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.ELITE:					{ 'delay': 0.65,	'duration': 0.2 },
+	SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.ELITE_SHIP_COMPONENT:	{ 'delay': 1.2,		'duration': 0.15 },
+	SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.LEGENDARY:				{ 'delay': 0.9,		'duration': 0.2 },
+	SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.LEGENDARY_SHIP:			{ 'delay': 1.2,		'duration': 0.15 }
+}")
+
+(def constant ANIMATION_REWARD_CARD_STATE "{
+	INIT:		0,
+	EXPAND:		1,
+	SPINE:		2,
+	SHOW:		3,
+	FINISHED:	4
+}")
+
+(def animation KeyframeSkipAnimation ()
+	keyframes = "[
+		{ time:0, 		to:{ alpha:0, visualOffsetY: 0, scaleX: 1 }},
+		{ time:0.2, 	to:{ alpha:0, visualOffsetY: 0, scaleX: 1 }},
+		{ time:1, 		to:{ alpha:1, visualOffsetY: 0, scaleX: 1 }, easing:Easing.cubic_out }
+	]"
+)
+
+(def element AnimationRewardBigCard (_rewardEntityId:number, _countBestRewards:number, _isSkip:bool, _isAnimationBigCardsFinished:bool)
+	(scope
+		(event evStartNexAnimationBigCard)
+
+		(event evNextAnimationState)
+		(event evNextAnimationStateAfterSpine)
+
+		(event evStartExpandAnimation)
+		(event evStartSpineAnimation)
+		(event evStartShowAnimation)
+		(event evAnimationBigCardFinished)
+		(event evAnimationBigCardsFinished)
+
+		(event evSkipAnimation)
+		(event evSetForceStaticSpineAnimation)
+
+		(var rewardEntity:dhEntity = "getEntity(_rewardEntityId)")
+		(var rewardComponent:dhComponent = "rewardEntity.rewardComponent")
+		(var isShipReward:bool = "rewardComponent.category == 'ship'")
+		(var isShipComponentReward:bool = "rewardComponent.type == 'ShipComponent'")
+
+		(var rarity:number = "	isShipReward			? SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.LEGENDARY_SHIP :
+								isShipComponentReward	? SC.Ui_common.ANIMATE_REWARD_ITEM_RARITY.ELITE_SHIP_COMPONENT
+														: rewardComponent.rarity")
+
+		(var activeIndex:number = -1)
+		(bind activeIndex "$event.index" init=false (event "evStartNexAnimationBigCard"))
+		(var isActiveAnimationCard:bool = "$index == activeIndex")
+		(var isLastCard:bool = "$index == _countBestRewards - 1")
+
+		(var rarityName:str = "	isShipReward 			? ANIMATION_REWARD_SHIP_RARITY_NAME :
+								isShipComponentReward	? ANIMATION_REWARD_SHIP_COMPONENT_RARITY_NAME
+														: toLower(SC.Common.UNIFIED_ITEM_RARITY.VALUE_TO_NAME[rarity])")
+
+		(var rarityAnimationParams:dict =	"ANIMATION_SHOW_REWARD_PARAMS[rarity]")
+		(var animationState:number =		"ANIMATION_REWARD_CARD_STATE.INIT")
+
+		(var isActiveAnimation:bool	=			"!_isSkip && isActiveAnimationCard")
+		(var isActiveInitState:bool =			"isActiveAnimation && animationState == ANIMATION_REWARD_CARD_STATE.INIT")
+		(var isActiveExpandState:bool =			"isActiveAnimation && animationState == ANIMATION_REWARD_CARD_STATE.EXPAND")
+		(var isActiveSpineState:bool =			"isActiveAnimation && animationState == ANIMATION_REWARD_CARD_STATE.SPINE")
+		(var isActiveShowCardState:bool	=		"isActiveAnimation && animationState == ANIMATION_REWARD_CARD_STATE.SHOW")
+		(var isActiveFinishCardState:bool	=	"animationState == ANIMATION_REWARD_CARD_STATE.FINISHED")
+		(var isAnimationFinished:bool =			"_isSkip || isActiveFinishCardState")
+
+		
+		(bind animationState "isAnimationFinished ? animationState : animationState + 1" init=false watch=false (event "evNextAnimationState"))
+		(bind animationState "isAnimationFinished ? animationState : animationState + 1" init=false watch=false (event "evNextAnimationStateAfterSpine"))
+
+		(var effectPath:str = "rarity ? 'url:../animations/spine/rewards/reward_effects_by_rarity/' + rarityName + '/' + rarityName + '.skel' : ''")
+	)
+	(dispatch evNextAnimationState				dir="EventDirection.NONE"							(bind enabled "isActiveInitState")			(bind trigger "isActiveAnimation"))
+
+	(dispatch evSkipAnimation					dir="EventDirection.NONE"							(bind enabled "_isSkip")					(bind trigger "_isSkip"))
+	(dispatch evSetForceStaticSpineAnimation	dir="EventDirection.NONE" delay=0.1					(event "evSkipAnimation"))
+
+	(dispatch evStartExpandAnimation			dir="EventDirection.NONE"							(bind enabled "isActiveExpandState")		(bind trigger "isActiveExpandState"))
+	(dispatch evStartSpineAnimation				dir="EventDirection.NONE"							(bind enabled "isActiveSpineState")			(bind trigger "isActiveSpineState"))
+	(dispatch evStartShowAnimation				dir="EventDirection.NONE"							(bind enabled "isActiveShowCardState")		(bind trigger "isActiveShowCardState"))
+	(dispatch evAnimationBigCardFinished		dir="EventDirection.UP" args="{ index: $index }"	(bind enabled "isActiveFinishCardState")	(bind trigger "isActiveFinishCardState"))
+
+	
+	(dispatch evAnimationBigCardsFinished		dir="EventDirection.UP" delay=0.5					(bind enabled "isLastCard")					(event "evAnimationBigCardFinished"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['barge_reward', rarity]" watch=false (event "evStartExpandAnimation"))
+
+	(style
+		(paddingLeft =	"isLastCard		? 0px
+										: REWARDS_OFFSET / 2")
+		(paddingRight = "$index == 0	? 0px
+										: REWARDS_OFFSET / 2")
+		(bind hitTest "_isAnimationBigCardsFinished")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (align = "center|middle") (paddingBottom = 1px))
+
+		(controller $Animation
+			(bindcall play
+				keyframes = "[
+						{ time:0, 		to:{ alpha:0 }},
+						{ time:0.2, 	to:{ alpha:0 }},
+						{ time:1, 		to:{ alpha:1 }, easing:Easing.cubic_out }
+					]"
+				action = "killAll"
+
+				(event "evSkipAnimation")
+			)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(width = 1920px)
+				(height = 1080px)
+				(bind backgroundImage "effectPath")
+			)
+
+			(controller $Spine
+				(mergeLayers = true)
+
+				(bindcall play sequence="{ name:'hidden',			repeatCount:1			}" init=true)
+				(bindcall play sequence="{ name:'show_reward',		repeatCount:1			}" notify=true append=true	(event "evStartSpineAnimation"))
+				(bindcall play sequence="{ name:'static_reward',	repeatCount:-1,	mix:0.3	}" append=true				(event "evStartSpineAnimation"))
+
+				(bindcall play sequence="{ name:'static_reward',	repeatCount:-1			}" (event "evSetForceStaticSpineAnimation"))
+
+				(dispatch evNextAnimationStateAfterSpine dir="EventDirection.NONE" on='started')
+			)
+		)
+	)
+
+	(block
+		(block
+			(class $FullsizeAbsolute)
+			(isMask = true)
+			(style (backgroundColor = 0xFFFFFFFF))
+		)
+
+		(block
+			(style
+				(alpha = 0)
+				(scaleX = 0)
+				(visualOffsetY = 10px)
+			)
+
+			(controller $Animation
+				(controllerEvents onExpandAnimationEnded onShowAnimationEnded)
+
+				(bindcall play
+					duration	= 0.3
+					to			= "{ scaleX:1 }"
+					easing		= "Easing.line"
+					action		= "kill"
+					watch		= false
+					onEndedEvent = 'onExpandAnimationEnded'
+
+					(event "evStartExpandAnimation")
+				)
+
+				(bindcall play
+					delay		= "rarityAnimationParams['delay']"
+					duration	= "rarityAnimationParams['duration']"
+					to			= "{ alpha:1, visualOffsetY: 0 }"
+					easing		= "Easing.quad_in"
+					action		= "kill"
+					watch		= false
+					onEndedEvent = 'onShowAnimationEnded'
+
+					(event "evStartShowAnimation")
+				)
+
+				(bindcall play
+					name = 'KeyframeSkipAnimation'
+					action = "kill"
+					(event "evSkipAnimation")
+				)
+
+				(dispatch evNextAnimationState dir="EventDirection.NONE" on='onExpandAnimationEnded')
+				(dispatch evNextAnimationState dir="EventDirection.NONE" on='onShowAnimationEnded')
+			)
+
+			(element RewardBigCard
+				_rewardEntityId = "_rewardEntityId"
+				_hasRarityLine = false
+				_hasAnimatedBg = true
+				_isEnlargedShipCard = true
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(align = "bottom")
+					(alpha = 0)
+				)
+
+				(controller $Animation
+					(bindcall play
+						delay		= "rarityAnimationParams['delay'] + rarityAnimationParams['duration']"
+						duration	= 0.2
+						to			= "{ alpha:1 }"
+						easing		= "Easing.quad_in"
+						action		= "kill"
+						watch		= false
+
+						(event "evStartShowAnimation")
+					)
+					
+					(bindcall play
+						name = 'KeyframeSkipAnimation'
+						action = "kill"
+						(event "evSkipAnimation")
+					)
+				)
+
+				(controller $Instance renderer='RewardRarityLine'
+					(bind enabled "rewardComponent.rarity > 0")
+					(args
+						_rarity = "rewardComponent.rarity"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element RewardBigCard (_rewardEntityId:number, _isEnlargedShipCard:bool = false, _hasRarityLine:bool = true, _hasAnimatedBg:bool = false, _compendiumDataReward:dict = null)
+	(scope
+		(var rewardEntity:dhEntity = "getEntity(_rewardEntityId)")
+		(var rewardComponent:dhComponent = "rewardEntity.rewardComponent")
+		(var reward:dict = "_compendiumDataReward != null	? _compendiumDataReward
+															: {	id:			rewardComponent.id,
+																type:		rewardComponent.type,
+																subtype:	rewardComponent.subtype,
+																name:		rewardComponent.name,
+																amount:		rewardComponent.amount,
+																params:		rewardComponent.params,
+																isPRMP:		true,
+																rarity:		rewardComponent.rarity}" (event "rewardComponent.evUpdate"))
+
+		(var overlayPath:str = "reward.rarity	? 'url:../rewards_cards_overlay/overlay_' + toLower(SC.Common.UNIFIED_ITEM_RARITY.VALUE_TO_NAME[reward.rarity]) +'.png' : ''")
+
+		(var selectedRenderItem:str = "reward.type in REWARD_ELEMENT_BY_TYPE ? REWARD_ELEMENT_BY_TYPE[reward.type].rewardBigCard : ''")
+		(var isAvailableForRender:bool = "selectedRenderItem && reward && reward.name != null")
+	)
+	(class $RewardBigCard)
+
+	(controller $Instance renderer='RewardCardOverlay'
+		(bind enabled "overlayPath && !_hasAnimatedBg")
+		(args
+			_overlayPath = "overlayPath"
+		)
+	)
+
+	(block
+		(style
+			(minWidth = "REWARD_BIG_CARD_MIN_WIDTH")
+			(height = 100%)
+		)
+		(controller $Instance
+			(bind renderer "selectedRenderItem")
+			(bind enabled "isAvailableForRender")
+			(args
+				_reward = "reward"
+				_isEnlargedShipCard = "_isEnlargedShipCard"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(height = 4px)
+		)
+
+		(controller $Instance renderer='RewardRarityLine'
+			(bind enabled "reward.rarity > 0 && _hasRarityLine")
+			(args
+				_rarity = "reward.rarity"
+			)
+		)
+	)
+)
+
+(def element RewardExteriorBigCard (_reward:dict)
+	(scope
+		
+		(var exteriorEntity:dhEntity = "getPrimaryEntity(CC.exteriorConfig, _reward.id)")
+		(var exteriorConfig:dhComponent = "exteriorEntity.exteriorConfig")
+		(var exteriorName:str = "exteriorConfig.name")
+
+		(var isAvailableFakeColorSchemes:bool = "'colorsNum' in _reward.params && _reward.params.colorsNum")
+		(var fakeColorScheme:dict = "isAvailableFakeColorSchemes ?  _reward.params : null")
+
+		(var ownCamouflage:dhComponent = "exteriorEntity.ownCamouflage")
+		(var camoColorSchemesDH:array = "ownCamouflage.camoColorSchemes" (event "ownCamouflage.evUpdated"))
+
+		(var isAvailableCamoColorSchemes:bool = "camoColorSchemesDH.length > 0")
+		(var useRepaintedIcon:bool = "isAvailableCamoColorSchemes || isAvailableFakeColorSchemes")
+
+		(var isUnlinkedMSkin:bool = "exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !('shipId' in _reward.params)")
+		
+		(var ecoBoostEntity:dhEntity = "getPrimaryEntity(CC.ecoBoost, _reward.id)")
+		(var ecoBoostComponent:dhComponent = "ecoBoostEntity.ecoBoost")
+		(var isMultiBoost:bool = "_reward.subtype == SC.Common.REWARD_SUBTYPE.MULTIBOOST")
+		(var shipLevel:str = "ecoBoostEntity && isMultiBoost ? ecoBoostEntity.shipListRestrictions.levelString : ''")
+		(var multiBoostName:str = "subst('IDS_MULTIBOOST_WITH_LEVEL_TITLE', [], { levelRange: shipLevel })")
+		(var ecoBoostRarity:number = "ecoBoostComponent.rarity ?: 0")
+		(var ecoBoostName:str = "ecoBoostComponent.name")
+
+		
+		(var signalEntity:dhEntity = "getPrimaryEntity(CC.signal, _reward.id)")
+		(var signalComponent:dhComponent = "signalEntity.signal")
+		(var signalRarity:number =	"signalComponent.rarity ?: 0")
+		(var signalName:str =		"signalComponent.name")
+
+		
+		(var ensignEntity:dhEntity = "getPrimaryEntity(CC.ensign, _reward.id)")
+		(var ensignName:str = "ensignEntity.ensign.name")
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _reward.params.shipId)")
+		(var shipNameIDS:str = "shipEntity ? toUpper(tr(shipEntity.ship.nameIDS)) : ''")
+
+		(var itemName:str = "	exteriorEntity	? toUpper('IDS_' + exteriorName) :
+								ecoBoostEntity	? isMultiBoost	? multiBoostName
+																: 'IDS_' + toUpper(ecoBoostName) :
+								ensignEntity	? toUpper('IDS_' + ensignName) :
+								signalEntity	? tr('IDS_' + toUpper(signalName) + '_' + signalRarity)
+												: ''")
+
+		(var exteriorLevelFiltersRoman:str ="exteriorEntity.shipListRestrictions.levelString" (event "exteriorEntity.shipListRestrictions.evUpdate"))
+		(var doesExteriorHaveLevelRestrictions:bool = "exteriorLevelFiltersRoman.length > 0")
+		(var ecoboostLevelFiltersRoman:str ="ecoBoostEntity.shipListRestrictions.levelString" (event "ecoBoostEntity.shipListRestrictions.evUpdate"))
+		(var doesEcoBoostHaveLevelRestrictions:bool = "ecoboostLevelFiltersRoman.length > 0")
+		(var hasLevelRestrictions:bool = "doesExteriorHaveLevelRestrictions || doesEcoBoostHaveLevelRestrictions")
+
+		(var basicTitleWithShipName:str = "isMultiBoost	? 'IDS_MULTIBOOST_WITH_SHIP_TITLE'
+														: 'IDS_EXTERIOR_NAME_WITH_SHIP'")
+		(var basicTitleWithShipLevel:str = "isMultiBoost	? 'IDS_MULTIBOOST_WITH_LEVEL_TITLE'
+															: 'IDS_EXTERIOR_NAME_WITH_LEVEL'")
+		(var romanLevel:str = "doesExteriorHaveLevelRestrictions ? exteriorLevelFiltersRoman : ecoboostLevelFiltersRoman")
+
+		
+		(var selectedRenderRewardItem:str = "_reward.subtype in RENDER_REWARD_EXTERIOR_ITEMS	? RENDER_REWARD_EXTERIOR_ITEMS[_reward.subtype].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.subtype in RENDER_REWARD_EXTERIOR_ITEMS	? RENDER_REWARD_EXTERIOR_ITEMS[_reward.subtype].tooltip : ''")
+
+		(var title:str = "	_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.GLOBALBOOST	? 'IDS_GLOBALBOOST_TITLE' :
+							shipEntity															? subst(basicTitleWithShipName, [], {exteriorName: tr(itemName), shipName: shipNameIDS}) :
+							hasLevelRestrictions												? subst(basicTitleWithShipLevel, [], {exteriorName: tr(itemName), levelRange: romanLevel})
+																								: tr(itemName)")
+
+		(var subtype:str = "_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.FLAGS			? tr('IDS_BATTLE_SIGNAL_RARITY_' + signalRarity) :
+							isIn(_reward.subtype, SC.Ui_common.REWARD_EXTERIOR_TYPE.SHIP_PAINT)	? tr('IDS_EXTERIOR_TYPE_' + _reward.subtype) :
+							_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.ENSIGN			? ensignEntity.ensign.group	? 'IDS_ENSIGN_GROUP_SUBTYPE_' + ensignEntity.ensign.group
+																															: 'IDS_SEASON_ENSIGN' :
+							_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.CAMOBOOST		? tr('IDS_ECONOMIC_BOOST_TYPE_EXPENDABLE_' + ecoBoostRarity) :
+							_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.MULTIBOOST ||
+							_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.GLOBALBOOST		? 'IDS_ECONOMIC_BOOST_TYPE_MULTIBOOST'
+																								: itemName + '_DESCRIPTION'")
+
+		(var imagePathBgReward:str = "	selectedRenderRewardItem == 'EnsignRewardWithBackView'		? 'url:../reward_icons/big/flag_bg.png' :
+										selectedRenderRewardItem == 'CamouflageRewardWithBackView'	? 'url:../reward_icons/big/camo_bg.png'
+																									: null")
+
+		(var imagePath:str = "	imagePathBgReward	? imagePathBgReward :
+								ecoBoostEntity		? _reward.subtype == 'Multiboost'	? 'url:../reward_icons/big/multiboost.png'
+																						: 'url:../reward_icons/big/' + ecoBoostName + '.png' :
+								exteriorEntity		? 'url:../reward_icons/big/exteriors/' + exteriorName + '.png' :
+								signalEntity		? 'url:../reward_icons/big/' + signalName + '.png'
+													: ''")
+
+		(var data:dict = "	selectedRenderRewardItem == 'EnsignRewardWithBackView'		? {ensignName: ensignName, rewardSubtype: _reward.subtype} :
+							selectedRenderRewardItem == 'CamouflageRewardWithBackView'	? {	id: _reward.id,
+																							rewardSubtype: _reward.subtype,
+																							amount: _reward.amount,
+																							exteriorName: exteriorName,
+																							fakeColorScheme: fakeColorScheme,
+																							useRepaintedIcon: useRepaintedIcon,
+																							exteriorType: exteriorConfig.type,
+																							peculiarity: exteriorConfig.peculiarity,
+																							isUnlinkedMSkin: isUnlinkedMSkin }
+																						: null")
+	)
+	(class $RewardBigCard)
+	(block
+		(style
+			(paddingTop = "M")
+		)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "imagePath"
+				_data = "data"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "title"
+				_subtype = "subtype"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_id = "_reward.id"
+			_isReward = true
+			_amount = "_reward.amount"
+			_fakeColorScheme = "fakeColorScheme"
+			_noMouseInstructions = true
+			_rewardShipId = "toNumber(_reward.params.shipId)"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardModernizationBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+
+		(var title:str = "'IDS_TITLE_' + _reward.params.item.title")
+
+		(var subtype:str =  "'IDS_MODERNIZATION_' + SC.Common.UNIFIED_ITEM_RARITY.VALUE_TO_NAME[_reward.params.item.rarity]")
+		(var imagePath:str = "'url:../modernization_icons/icon_modernization_' + _reward.params.item.title + '.png'")
+	)
+
+	(class $RewardBigCard)
+	(block
+		(style
+			(paddingTop = "M")
+		)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "imagePath"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "title"
+				_subtype = "subtype"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(controller $Tooltip
+			(bind enabled "selectedRenderRewardTooltip")
+			(bind renderer "selectedRenderRewardTooltip")
+			(args
+				_rewardItem = "_reward"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element RewardShipBigCard (_reward:dict, _isEnlargedShipCard:bool = false)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE		? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE		? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _reward.id)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+
+		(var isSupership:bool = "shipInfo.level == SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var shipSubtype:str = "shipInfo.subtype" (event "shipInfo.evUpdate"))
+		(var shipClass:str = "tr('IDS_' + toUpper(shipSubtype) + (isSupership ? '_LEGENDARY' : ''))")
+		(var levelRome:str = "shipInfo.levelRome" (event "shipInfo.evUpdate"))
+
+		(var subheader:str = "isSupership	? shipClass	: subst('IDS_SHIP_LEVEL', [], {_shipClass: shipClass, _shipLevel: levelRome})")
+
+		(var rentDuration:number =	"'rentDuration' in _reward.params	? _reward.params.rentDuration : 0")
+		(var rentUntil:number =		"'rentUntil' in _reward.params		? _reward.params.rentUntil : 0")
+	)
+	(bind class "_isEnlargedShipCard ? '$EnlargedRewardBigCard' : '$RewardBigCard'")
+
+	(block
+		(class $Fullsize)
+		(style
+			(align = "center|middle")
+			(paddingTop = 29px)
+		)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_shipId = "_reward.id"
+				_size = "_isEnlargedShipCard ? SC.Ui_styles.SIZE.EXTRA_LARGE : SC.Ui_styles.SIZE.MEDIUM"
+				_hasWater = true
+				_hasSmoke = false
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind height "_isEnlargedShipCard ? auto : 100px")
+		)
+
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_shipId = "_reward.id"
+				_subheader = "subheader"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter && !_isEnlargedShipCard")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipExtendedTooltip')
+		(args
+			_shipId = "_reward.id"
+			_isRewards = true
+			_rewardRentDuration = "rentDuration"
+			_rewardRentUntil = "rentUntil"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardResourceBigCard (_reward:dict)
+	(scope
+		(struct rewardSubtype = CORRECT_REWARD_RESOURCE_SUBNAME(_subtype = "_reward.subtype"))
+		(var isEventumCNReward:bool = "rewardSubtype.value == SC.Common.CURRENCIES.EVENTUM_CN")
+		(var selectedRenderRewardResourceItem:str = "rewardSubtype.value in REWARD_RESOURCE_ELEMENT ? REWARD_RESOURCE_ELEMENT[rewardSubtype.value].rewardBigCard : ''")
+		(var selectedRenderRewardResourceItemTooltip:str = "rewardSubtype.value in REWARD_RESOURCE_ELEMENT ? REWARD_RESOURCE_ELEMENT[rewardSubtype.value].tooltip : ''")
+		(var isAvailableForRender:bool = "_reward && selectedRenderRewardResourceItem")
+	)
+
+	(controller $Instance
+		(bind renderer "selectedRenderRewardResourceItem")
+		(bind enabled "isAvailableForRender")
+		(args
+			_reward = "_reward"
+		)
+	)
+
+	(controller $Tooltip
+		(bind renderer "selectedRenderRewardResourceItemTooltip")
+		(bind enabled "selectedRenderRewardResourceItemTooltip")
+		(args
+			_rewardItem = "_reward"
+			_currency = "rewardSubtype.value"
+			_amount = "_reward.amount ?: 1"
+			_isReward = true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardSimpleResourceBigCard (_reward:dict)
+	(scope
+		(var isEventumReward:bool = "_reward.subtype in SC.Common.CURRENCIES.IS_EVENT_CURRENCY")
+		(var selectedRenderRewardItem:str = "_reward.subtype in REWARD_RESOURCE_ELEMENT	? REWARD_RESOURCE_ELEMENT[_reward.subtype].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.subtype in REWARD_RESOURCE_ELEMENT	? REWARD_RESOURCE_ELEMENT[_reward.subtype].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.subtype in REWARD_RESOURCE_ELEMENT	? REWARD_RESOURCE_ELEMENT[_reward.subtype].rewardCounterText : ''")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "'url:../reward_icons/big/' + _reward.subtype + '.png'"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "tr('IDS_REWARD_' + toUpper(_reward.subtype) + '_TITLE')"
+				_subtype = "isEventumReward ? 'IDS_CURRENCY_EVENTUM_SUBTYPE' : 'IDS_CURRENCY_SUBTYPE'"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+)
+
+
+(def element PremiumResourceRewardBigCard (_reward:dict)
+	(scope
+		(struct rewardSubtype = CORRECT_REWARD_RESOURCE_SUBNAME(_subtype = "_reward.subtype"))
+		(var selectedRenderRewardItem:str = "rewardSubtype.value in REWARD_RESOURCE_ELEMENT		? REWARD_RESOURCE_ELEMENT[rewardSubtype.value].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "rewardSubtype.value in REWARD_RESOURCE_ELEMENT		? REWARD_RESOURCE_ELEMENT[rewardSubtype.value].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "rewardSubtype.value in REWARD_RESOURCE_ELEMENT	? REWARD_RESOURCE_ELEMENT[rewardSubtype.value].rewardCounterText : ''")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "'url:../reward_icons/big/' + rewardSubtype.value + '.png'"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "tr('IDS_REWARD_' + toUpper(rewardSubtype.value) + '_TITLE')"
+				_subtype = 'IDS_CURRENCY_SUBTYPE'
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatTime(_reward.amount, 'HIGHESTDAYS', '', true)"
+			)
+		)
+	)
+)
+
+(def element RewardUnitBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE		? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE		? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+		(var imagePath:str = "	_reward.params.item.uiState			?	'url:../modules/icon_module' +	_reward.params.item.type + _reward.params.item.uiState + '.png' :
+								_reward.params.item.moduleIconName	?	'url:../modules/event/' +		_reward.params.item.type + '/icon_module_' + _reward.params.item.moduleIconName + '.png'
+																	:	'url:../modules/icon_module' +	_reward.params.item.type + '.png'")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "_reward.params.item.type ? imagePath : ''"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "tr(toUpper('IDS_'+ _reward.params.item.name))"
+				_subtype = "tr(toUpper('IDS_MODULE_TYPE' + _reward.params.item.type))"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_rewardItem = "_reward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardCrewBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+
+
+		(struct crewHistory =	PULL_CREW_HISTORY_INFO(_crewHistoryId = "_reward.params.primaryKey"))
+		(var rarity:number =	"crewHistory.component.rarity ?: 0")
+		(var rankIDS:str =		"crewHistory.component.rankIDS ?: ''" (event "crewHistory.component.evLevelUp"))
+
+		(var isCrewLegendary:bool =	"rarity == SC.Common.UNIFIED_ITEM_RARITY.LEGENDARY")
+		(var isCrewAdvanced:bool =	"rarity == SC.Common.UNIFIED_ITEM_RARITY.RARE")
+		(var isCrewElite:bool =		"rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
+		(var isCrewCommon:bool =	"rarity == SC.Common.UNIFIED_ITEM_RARITY.COMMON")
+
+		(var crewRank:str = "crewHistory.component	?	isCrewCommon	? crewHistory.component.hasRank	? rankIDS
+																										: ''
+																		:	isCrewLegendary	? 'IDS_LEGENDARY_CREW_STATUS' :
+																			isCrewElite		? 'IDS_ELITE_CREW_STATUS' :
+																			isCrewAdvanced	? 'IDS_RARE_CREW_STATUS'
+																							: 'IDS_UNCOMMON_CREW_STATUS'
+													: ''"	(event "crewHistory.component.evRankChanged"))
+
+		(var crewName:str =			"crewHistory.component.fullName ?: 'IDS_NO_CREW'")
+		(var hasCrewName:bool =		"rarity != SC.Common.UNIFIED_ITEM_RARITY.COMMON")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = 'url:../reward_icons/big/crew_bg.png'
+				_data = "{ crewHistoryId: _reward.params.primaryKey }"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "hasCrewName ? crewName : null"
+				_subtype = "crewRank"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_crewHistoryId = "_reward.params.primaryKey"
+			_noMouseInstruction = true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardAchievementBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+
+		(var achievementEntity:dhEntity =	"getPrimaryEntity(CC.achievement, _reward.id)")
+		(var achievementInfo:dhComponent =	"achievementEntity.achievementInfo ")
+		(var achievementPath:str =			"achievementInfo ? 'url:../achievements/icon_achievement_' + achievementInfo.name + '.png' : ''")
+		(var typeIDS:str =					"achievementInfo ? toUpper('IDS_ACHIEVEMENT_TYPE_' + achievementInfo.uiType) : ''")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "achievementPath"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "achievementInfo.nameIDS"
+				_subtype = "typeIDS"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_id = "achievementEntity.id"
+			_amountText = "formatSeparator(_reward.amount ?: 1)" 
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardLootboxBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+		(var isLootboxPremium:bool = "_reward.params.isPremium")
+		(var subtype:str = "isLootboxPremium ? 'IDS_LOOTBOX_PREMIUM' : 'IDS_LOOTBOX'")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "'url:../reward_icons/big/' + _reward.subtype + '.png'"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "'IDS_REWARD_LOOTBOX_' + toUpper(_reward.subtype) + '_TITLE_SHORT'"
+				_subtype = "subtype"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(controller $Tooltip
+			(bind enabled "selectedRenderRewardTooltip")
+			(bind renderer "selectedRenderRewardTooltip")
+			(args
+				_rewardItem = "_reward"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element RewardUnlockBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+		(var rewardShipClasses:array = "_reward.params.shipClasses ?: []")
+		(var imagePath:str = "rewardShipClasses.length > 0	?	('url:../reward_icons/reward_unlocks/big/' + toLower(tr(_reward.name)) + '_' + toLower(tr(rewardShipClasses[0])) + '.png')
+															:	('url:../reward_icons/reward_unlocks/big/' + toLower(tr(_reward.name)) + '.png')")
+		(var title:str = "	tr('IDS_REWARD_' + toUpper(tr(_reward.name)) + (_reward.params.nation	? '_' + toUpper(tr(_reward.params.nation))
+																									: ''))")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "imagePath"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "title"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_rewardItem = "_reward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardDogTagBigCard (_reward:dict)
+	(scope
+		(var dogTagEntity:dhEntity =		"getPrimaryEntity(CC.dogTagComponent, _reward.id)")
+		(var dogTagComponent:dhComponent =	"dogTagEntity.dogTagComponent")
+		(var gpName:str =					"dogTagComponent.gpName"		(event "dogTagComponent.evUpdate"))
+		(var categoryId:number =			"dogTagComponent.categoryId"	(event "dogTagComponent.evUpdate"))
+		(var isColorizableShape:bool =		"dogTagComponent.isColorizable"	(event "dogTagComponent.evUpdate"))
+
+		(var title:str = "tr(toUpper('IDS_DOGTAG_' + gpName + '_NAME'))")
+		(var subtype:str = "tr('IDS_DOGTAG_COMPONENT_REWARD_CATEGORY_' + categoryId)")
+		(var iconPath:str = "gpName ? 'url:../dogTags/big/' + gpName +  (isColorizableShape ? '/PCNT001' : '') + '.png' : ''")
+
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip
+																						: ''")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "iconPath"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style (align = "middle|center"))
+
+			(controller $Instance renderer = 'IssuedStampBig'
+				(bind enabled "_reward.params.isDuplicate")
+				(args
+					_text = 'IDS_DUPLICATE_STAMP'
+					_angleRotation = -3
+					_alpha = 1.2
+				)
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "title"
+				_subtype = "subtype"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(controller $Tooltip
+			(bind enabled "selectedRenderRewardTooltip")
+			(bind renderer "selectedRenderRewardTooltip")
+			(args
+				_rewardItem = "_reward"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element RewardCollectionBigCard (_reward:dict)
+	(scope
+		(var isRandomCollectionItem:bool = "_reward.subtype == SC.Common.REWARD_SUBTYPE.RANDOMCOLLECTIONCARD")
+		(var iconPath:str ="isRandomCollectionItem	? 'url:../collections/collection_icons/big/' + _reward.params.item.title + '.png'
+													: 'url:' + _reward.params.item.iconPath")
+		(var isCollectionCard:bool = "_reward.subtype == SC.Common.REWARD_SUBTYPE.COLLECTIONCARD")
+		(var title:str = "isRandomCollectionItem ? 'IDS_COLLECTION_RANDOM_ITEM' : 'IDS_' + _reward.params.item.title")
+		(var collectionNameQuotes:str = "tr('IDS_' + _reward.params.collectionName + '_QUOTES')")
+		(var description:str = "isRandomCollectionItem || isCollectionCard	? 'IDS_ITEM_COLLECTION'
+																			: 'IDS_ITEM_TYPE_COLLECTION'")
+
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+	)
+	(class $RewardBigCard)
+
+	(block
+		(block
+			(style (paddingTop = "M"))
+
+			(controller $Instance
+				(bind enabled "selectedRenderRewardItem")
+				(bind renderer "selectedRenderRewardItem")
+				(args
+					_imagePath = "iconPath"
+					_size = "SC.Ui_styles.SIZE.LARGE"
+				)
+			)
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style (align = "middle|center"))
+
+			(controller $Instance renderer = 'IssuedStampBig'
+				(bind enabled "_reward.params.isDuplicate")
+				(args
+					_text = 'IDS_DUPLICATE_STAMP'
+					_angleRotation = -3
+					_alpha = 1.2
+				)
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "title"
+				_subtype = "description"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(controller $Tooltip
+			(bind enabled "selectedRenderRewardTooltip")
+			(bind renderer "selectedRenderRewardTooltip")
+			(args
+				_rewardItem = "_reward"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element RewardSSETaskBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+		(var title:str = "_reward.subtype == SC.Ui_styles.SSE_TYPES.CHALLENGE ? 'IDS_PERSONAL_CHALLENGE' : 'IDS_PERSONAL_BATTLE_TASK'")
+	)
+
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = 'url:../reward_icons/sse.png'
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "title"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_rewardItem = "_reward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardCampaignStarBigCard (_reward:dict)
+	(scope
+		(var taskEntity:dhEntity =		"getPrimaryEntity(CC.campaignTaskParams, _reward.params.taskId)")
+		(var missionEntity:dhEntity =	"getPrimaryEntity(CC.campaignMissionParams, taskEntity.campaignTaskParams.missionID)")
+		(var campaignMissionParams:dhComponent = "missionEntity.campaignMissionParams")
+
+		(var campaignEntity:dhEntity =		"getPrimaryEntity(CC.campaignParams, campaignMissionParams.campaignID)")
+		(var campaignParams:dhComponent =	"campaignEntity.campaignParams")
+		(var campaignNameIDS:str = "'IDS_' + campaignParams.name + '_TITLE'")
+
+		
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+
+		(var subheader:str = "tr(subst('IDS_CAMPAIGN_STARS_DESCRIPTION', [], { _campaignName: tr(campaignNameIDS), _missionNumber: campaignMissionParams.uiNumber }))")
+	)
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = 'url:../reward_icons/big/campaign_star.png'
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = 'IDS_REWARD_CAMPAIGNSTAR_TITLE'
+				_subtype = "subheader"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind renderer "selectedRenderRewardTooltip")
+		(bind enabled "selectedRenderRewardTooltip")
+		(args
+			_rewardItem = "_reward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardDummyBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+	)
+
+	(class $RewardBigCard)
+	(block
+		(style (paddingTop = "M"))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "'url:../reward_icons/' + _reward.subtype + '.png'"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "'IDS_REWARD_' + _reward.subtype + '_TITLE'"
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_rewardItem = "_reward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardShipComponentBigCard (_reward:dict, _isEnlargedShipCard:bool = false)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE		? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE		? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _reward.params.shipID)")
+		(var shipShortName:str = "shipEntity.ship.shortName ?: ''")
+		(var imagePath:str = "shipShortName ? 'url:../ships_silhouettes/repair_dock/' + shipShortName + '.png' : ''")
+	)
+	(bind class "_isEnlargedShipCard ? '$EnlargedRewardBigCard' : '$RewardBigCard'")
+	(block
+		(class $Fullsize)
+		(style
+			(align = "center")
+			(bind paddingTop "_isEnlargedShipCard ? M : XL")
+		)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "imagePath"
+				_data = "{shipShortName: shipShortName}"
+				_size = "_isEnlargedShipCard ? SC.Ui_styles.SIZE.LARGE : SC.Ui_styles.SIZE.SMALL"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind height "_isEnlargedShipCard ? auto : 100px")
+		)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_shipId = "_reward.params.shipID"
+				_subheader = 'IDS_SHIPCOMPONENT_FULL_TITLE'
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter && !_isEnlargedShipCard")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_shipId = "_reward.params.shipID"
+			_hasShipImage = true
+			_isRewards = true
+			_isShipComponent = true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element RewardShipMaterialBigCard (_reward:dict)
+	(scope
+		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
+		(var selectedRenderRewardInfo:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardBigCardInfo : ''")
+		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounterText : ''")
+		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+		(var shipLevel:number = "_reward.params.shipLevel ?: 0")
+		(var imagePath:str = "_reward ? 'url:../reward_icons/big/' + _reward.type + '_' + shipLevel + '.png' : ''")
+	)
+	(class $RewardBigCard)
+	(block
+		(style
+			(paddingTop = "M")
+		)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardItem")
+			(bind renderer "selectedRenderRewardItem")
+			(args
+				_imagePath = "imagePath"
+				_size = "SC.Ui_styles.SIZE.LARGE"
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(controller $Instance
+			(bind enabled "selectedRenderRewardInfo")
+			(bind renderer "selectedRenderRewardInfo")
+			(args
+				_title = "subst('IDS_CURRENCY_SHIPMATERIAL', [], {_shipLevel: shipLevelsToRoman([shipLevel], true)})"
+				_subtype = 'IDS_SHIPMATERIAL_SHORT_TITLE'
+			)
+		)
+	)
+	(block
+		(style (width = 100%))
+		(controller $Instance
+			(bind enabled "selectedRenderRewardCounter")
+			(bind renderer "selectedRenderRewardCounter")
+			(args
+				_amountText = "formatSeparator(_reward.amount ?: 1)"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind enabled "selectedRenderRewardTooltip")
+		(bind renderer "selectedRenderRewardTooltip")
+		(args
+			_rewardItem = "_reward"
+			_imageUrl = "imagePath"
+			_headerText = "subst('IDS_CURRENCY_SHIPMATERIAL', [], {_shipLevel: shipLevelsToRoman([shipLevel], true)})"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)

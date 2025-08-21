@@ -1,0 +1,770 @@
+(def constant LOOTBOX_SIZE 142px)
+(def constant LOOTBOX_CAROUSEL_SCROLL_AREA 36px)
+(def constant LOOTBOX_CAROUSEL_PADDING 24px)
+(def constant LOOTBOX_ITEM_OFFSET "SXS")
+
+(def constant LOOTBOX_CARD_SIZE 256)
+(def constant LOOTBOX_CARD_SIZE_WITH_OFFSET "LOOTBOX_CARD_SIZE + LOOTBOX_ITEM_OFFSET")  
+
+(def macro LOOTBOX_BUTTONS_ANIMATION (_trigger:expression)
+	(alpha = "_trigger ? 1 : 0")
+	(visible = "_trigger")
+	(style (visualOffsetY = "_trigger ? 0px : 5px"))
+
+	(controller $Animation
+		(bindcall play	delay = 0.2
+						duration = 0.12
+						from = { alpha: 0, visualOffsetY: 5px, visible: false }
+						to = { alpha: 1, visualOffsetY: 0px, visible: true }
+						action = "kill"
+						(bind enabled "_trigger")
+		)
+		(bindcall play	duration = 0.12
+						from = { alpha: 1, visualOffsetY: 0px, visible: true }
+						to = { alpha: 0, visualOffsetY: -5px, visible: false }
+						action = "kill"
+						(bind enabled "!_trigger")
+		)
+	)
+)
+
+(def constant SKIP_ANIM_BG_ROUTES "[
+	SC.Ui_windows.ROUTE.SSE,
+	SC.Ui_windows.ROUTE.SSE_SHIP_ACES,
+	SC.Ui_windows.ROUTE.SSE_OPEN_ENDED,
+	SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS,
+	SC.Ui_windows.ROUTE.SSE_BATTLEPASS,
+	SC.Ui_windows.ROUTE.CAMPAIGNS,
+	SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_CAMPAIGN,
+	SC.Ui_windows.ROUTE.CAMPAIGNS_CHOOSE_TASK,
+	SC.Ui_windows.ROUTE.RESEARCH,
+	SC.Ui_windows.ROUTE.CREW_MANAGEMENT,
+	SC.Ui_windows.ROUTE.CREW_ABILITIES_MANAGEMENT,
+	SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT,
+	SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT_SHIPS,
+	SC.Ui_windows.ROUTE.CREW_ASSIGNMENTS_MANAGEMENT_RESERVE,
+	SC.Ui_windows.ROUTE.ECOBOOSTS
+]")
+
+(def struct SKIP_SHOW_ANIMATION (_previousRoute:str)
+	(var dynamicRouteEntity:dhEntity = "getPrimaryEntity(CC.dynamicRoute, _previousRoute)")
+	(var isSkip:bool = "dynamicRouteEntity != null || isIn(_previousRoute, SKIP_ANIM_BG_ROUTES)")
+)
+
+(def element BargeMainInset (_previousRoute:str)
+	(scope
+		(event evDelayedUpdate)
+
+		(event evShowBargeContent)
+		(event evHideBargeContent)
+
+		(struct skipDelayAnimation = SKIP_SHOW_ANIMATION(_previousRoute = "_previousRoute"))
+		(var isVerifiedSkipDelayAnimation:bool = "skipDelayAnimation.isSkip" watch=false on='addedToStage')
+		(bind isVerifiedSkipDelayAnimation "true" init=false watch=false (event "evHideBargeContent"))
+
+		(var lootboxOpeningStateEntity:dhEntity = "getSingleEntity(CC.lootboxOpeningState)")
+		(var lootboxOpeningState:dhComponent= "lootboxOpeningStateEntity.lootboxOpeningState")
+		(var lootboxOpenedCount:number = "lootboxOpeningState.lootboxOpened" (event "lootboxOpeningState.evLootboxOpenedChanged"))
+		(var lastOpenedRewardsEntityId:number = "lootboxOpeningState.lastOpenRewards" (event "lootboxOpeningState.evLootboxesOpenEnded"))
+
+		(var lootboxTypesEntities:dhCollection = "getCollection(CC.lootboxTypeInfoComponent).getChildByPath('sorted')")
+		(var lootboxesTypesCount:number = "lootboxTypesEntities.length ?: 0")
+
+		(var lootboxEntity:dhEntity = "getSingleEntity(CC.lootboxConfigComponent)")
+		(var lootboxStorageComponent:dhComponent = "lootboxEntity.lootboxStorageComponent")
+		(var selectedContainerType:number = "lootboxStorageComponent.selectedLootbox" (event "lootboxStorageComponent.evSelectedLootboxChanged"))
+
+		(var isAnimationActive:bool = "lootboxEntity.lootboxAnimationState.active" (event "lootboxEntity.lootboxAnimationState.evUpdate"))
+		(var isAnimationOpen:bool = "lootboxEntity.lootboxAnimationState.open" (event "lootboxEntity.lootboxAnimationState.evUpdate"))
+
+		
+		(var lootboxesInStorage:number = "lootboxStorageComponent.inStorage ?: 0" (event "lootboxEntity.lootboxStorageComponent.evUpdate"))
+
+		(var visibleLootboxesCount:number = "lootboxesInStorage" watch=false (event "evDelayedUpdate"))
+
+		(var windowManagerSingleComponent:dhComponent = "getSingleComponent(CC.windowManager)")
+		(var currentTopWindowName:str = "windowManagerSingleComponent.topWindowNodeName" (event "windowManagerSingleComponent.evTopWindowNodeNameChanged"))
+		(var isRewardContainerOpened:bool = "currentTopWindowName == SC.Ui_windows.MODAL.REWARD_CONTAINER")
+	)
+	(dispatch evShowBargeContent 					(bind enabled "!isRewardContainerOpened") (bind trigger "isRewardContainerOpened"))
+	(dispatch evShowBargeContent on='addedToStage'	(bind enabled "!isRewardContainerOpened") (event "lootboxOpeningState.evLootboxesOpenFailed"))
+	(dispatch evHideBargeContent 					(bind enabled "isRewardContainerOpened") (bind trigger "isRewardContainerOpened"))
+
+	(dispatch evDelayedUpdate delay="lootboxesInStorage > 0 ? 0 : 0.22" (bind trigger "lootboxesInStorage"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'barge']" on='addedToStage')
+
+	(class $Fullsize)
+
+	(style
+		
+		(bind alpha "0"				on='addedToStage' on='removedFromStage')
+		(bind hitTest "false"		on='addedToStage' on='removedFromStage' (event "lootboxOpeningState.evLootboxesOpenStarted"))
+		(bind visualOffsetY "10px"	on='addedToStage' on='removedFromStage')
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.15
+			to = { alpha: 0, visualOffsetY: 10px, hitTest: false }
+			action = "kill"
+			(event "evHideBargeContent")
+		)
+		(bindcall play
+			delay = "isVerifiedSkipDelayAnimation ? 0.15 : 1.9"
+			duration = 0.3
+			from = { alpha: 0, visualOffsetY: 10px, hitTest: false }
+			to = { alpha: 1, visualOffsetY: 0px, hitTest: true }
+			action = "kill"
+			(event "evShowBargeContent")
+		)
+	)
+
+	(block
+		(class $DockInsetPageHeaderOffset)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(backgroundImage = 'url:../bg/Vignette.png')
+				(backgroundSize = "fill")
+			)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+
+		
+		(block
+			(style
+				(height = 100%)
+				(align = "bottom")
+				(paddingBottom = "{720:L, 2160:768px}")
+				(marginLeft = "LOOTBOX_CAROUSEL_SCROLL_AREA + LOOTBOX_CAROUSEL_PADDING")
+			)
+
+			(element LootboxWidget
+				_selectedContainerType = "selectedContainerType"
+				_isOpenBtnEnabled = "!isAnimationActive"
+			)
+		)
+
+		
+		(block
+			(style
+				(width = 100%)
+				(paddingLeft = "LOOTBOX_CAROUSEL_PADDING")
+				(paddingRight = "LOOTBOX_CAROUSEL_PADDING")
+				(marginBottom = "LM")
+			)
+
+			
+			(hblock
+				(style
+					(paddingLeft = "LOOTBOX_CAROUSEL_SCROLL_AREA")
+					(marginBottom = "SXS")
+					(bind hitTest "!isAnimationActive")
+				)
+
+				(macro LOOTBOX_BUTTONS_ANIMATION "lootboxesInStorage > 0")
+
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(alpha = "TA")
+						(marginRight = "S")
+						(marginTop = 4px)
+					)
+
+					(text = 'IDS_OWNED_LOOTBOXES')
+				)
+
+				(tf
+					(class $TextDefaultBold18NM)
+					(style
+						(alpha = "TA")
+						(marginRight = "SXS")
+						(marginTop = 4px)
+					)
+
+					(bind text "visibleLootboxesCount")
+				)
+
+				(element DefaultButton
+					_name = 'openAllLootBoxes'
+					_enabled = "!isAnimationActive"
+					_label = 'IDS_OPEN_ALL_LOOTBOXES'
+					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_width = 118px
+					_size =	"SIZE.SMALL"
+					_isTransactionBtn = true
+					_focusIndex = 4
+					_methods = "[{ type: 'inputMapping.onRequest', name: 'showOpenAllLootboxesConfirmation', args: {} }]"
+				)
+			)
+
+			(element LootboxesCarousel
+				_isAnimationActive = "isAnimationOpen"
+			)
+		)
+	)
+)
+
+(def element LootboxWidget (_selectedContainerType:number, _isOpenBtnEnabled:bool)
+	(scope
+		(struct highContrast = HIGH_CONTRAST_INFO())
+
+		(var selectedLootboxEntity:dhEntity = "getPrimaryEntity(CC.lootboxTypeInfoComponent, _selectedContainerType)")
+		(var selectedLootbox:dhComponent = "selectedLootboxEntity.lootboxTypeInfoComponent")
+		(var containerType:number = "selectedLootbox.containerType")
+		(var subtype:str = "selectedLootbox.subtype")
+		(var title:str = "'IDS_REWARD_LOOTBOX_' + subtype + '_TITLE_SHORT'")
+		(var amount:number = "selectedLootbox.amount" (event "selectedLootbox.evAmountChanged"))
+		(var selectedLootboxUrl:str = "selectedLootbox.url" (event "selectedLootbox.evUrlChanged"))
+		(var presenceState:number = "selectedLootbox.presenceState" (event "selectedLootbox.evPresenceStateChanged"))
+
+		(var isArmory:bool = "selectedLootbox.buyLocation == SC.Ui_common.LOOTBOX_BUY_LOCATION.ARMORY")
+		(var isReferral:bool = "selectedLootbox.buyLocation == SC.Ui_common.LOOTBOX_BUY_LOCATION.REFERRAL")
+
+		(var isInStorage:bool = "amount > 0")
+		(var isLinkAvailable:bool = "selectedLootbox.isLinkAvailable")
+
+		(var valueToBestReward:number = "selectedLootbox.currentProgressSavePoint" (event "selectedLootbox.evAmountChanged"))
+		(var maxValueToBestReward:number = "selectedLootbox.maxProgressSavePoint" (event "selectedLootbox.evAmountChanged"))
+		(var currentValueToBestReward:number = "maxValueToBestReward - valueToBestReward")
+		(var hasProgressToBestReward:bool = "maxValueToBestReward > 0")
+
+		(var lootboxEventDescriptionEntity:dhEntity = "getEntity(selectedLootboxEntity.id)")
+		(var lootboxEventDescription:dhComponent = "lootboxEventDescriptionEntity.lootboxEventDescription")
+		(var description:str = "lootboxEventDescription.description" (event "lootboxEventDescription.evDescriptionChanged"))
+
+
+		(struct lootboxOpenNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN"))
+		(struct lootboxOpenRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN_REPEAT"))
+
+		(var newTipId:number = "lootboxOpenNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN :
+								lootboxOpenRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN_REPEAT
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+
+	(style (width = 420px))
+
+	(block
+		(bind visible "highContrast.isEnabled")
+		(class $FullsizeAbsolute)
+		(style (padding = "-L"))
+		(block
+			(class $Fullsize)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.CONTRAST_PANEL")
+				(borderRadius = "XS")
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "{ 720: MS, 1080: LM }")
+		)
+		
+		(block
+			(style
+				(width = 100%)
+				(marginBottom = "{ 720: M, 1080: L }")
+			)
+
+			(tf
+				(class $TextDefault20NM)
+				(style
+					(bind alpha "selectedLootbox.isPremium ? TC : 0")
+					(marginBottom = "M")
+				)
+				(text = 'IDS_LOOTBOX_PREMIUM')
+			)
+
+			(tf
+				(class $TextDefaultBold36NM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+					(leading = -4)
+				)
+				(bind text "selectedLootboxEntity ? toUpper(tr(title)) : 'IDS_NO_LOOTBOXES'")
+			)
+		)
+
+		(tf
+			(bind visible "description && !isInStorage")
+			(class $TextDefault20NM)
+			(style
+				(width = 100%)
+				(alpha = "TA")
+				(leading = -2)
+				(bind marginBottom "isLinkAvailable ? MS : 0")
+			)
+			(bind text "description")
+		)
+
+		
+		(hblock
+			(style (width = 100%))
+
+			(hblock
+				(bind visible "isInStorage")
+
+				(tf
+					(class $TextDefault20NM)
+					(style
+						(alpha = "TC")
+						(marginRight = "S")
+					)
+
+					(text = 'IDS_OWNED_LOOTBOXES_BY_TYPE')
+				)
+
+				(tf
+					(class $TextDefaultBold22NM)
+					(style
+						(alpha = "TA")
+						(marginTop = -1px)
+					)
+
+					(bind text "amount")
+				)
+			)
+
+			(block
+				(bind visible "isLinkAvailable && isInStorage")
+				(style
+					(height = 24px)
+					(width = 1px)
+					(marginLeft = "SXS")
+					(marginRight = "SXS")
+					(marginTop = "-S")
+					(backgroundImage = 'url:../service_kit/tabs/main/divider.png')
+				)
+			)
+
+			(block
+				(controller $Instance renderer='LinkWithIcon'
+					(bind enabled "isLinkAvailable")
+					(args
+						_label = 'IDS_LOOTBOX_REWARDS_PROBABILITIES'
+						_textClass = '$TextDefault20NM'
+						_methods = "[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: SC.Ui_windows.ROUTE.OVERLAY_BROWSER, data: { url: SC.Ui_windows.GUI_URL.LOOTBOX_CONTENTS, lootboxId: containerType } } }]"
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "hasProgressToBestReward")
+
+			(style (marginTop = "{720: SXS, 1080: M}"))
+
+			(tf
+				(class $TextDefault20NM)
+				(style
+					(alpha = "TC")
+					(marginBottom = "SXS")
+				)
+				(bind text "tr('IDS_LOOTBOXES_BEST_REWARD_PROGRESS') + ' ' + toString(currentValueToBestReward)")
+			)
+
+			(block
+				(style (width = 248px) (height = 4px))
+				(controller $Instance renderer='DefaultProgressBar'
+					(bind enabled "hasProgressToBestReward")
+					(args
+						_progress = "valueToBestReward / maxValueToBestReward"
+						_height = 5px
+					)
+				)
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				keyframes = "[
+					{ time:0,	to:{ alpha:0, visualOffsetY: 8px }},
+					{ time:0.2,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.sine_out}
+				]"
+				action = "kill"
+				on='addedToStage'
+				(bind trigger "_selectedContainerType")
+			)
+		)
+	)
+
+	
+	(block
+		(style (height = 92px))
+		(block
+			
+			(controller $Instance renderer='DefaultButton'
+				(bind enabled "!isInStorage && selectedLootboxUrl")
+				(args
+					_enabled = "_isOpenBtnEnabled"
+					_name = 'referralLootbox'
+					_label = "isReferral ? 'IDS_TO_REFERRAL' : 'IDS_LOOTBOXES_GO_TO_METASHOP'"
+					_type = "SC.Ui_styles.BUTTON_TYPE.ACCENT"
+					_width = 260px
+					_size = "SIZE.LARGE"
+					_isTransactionBtn = true
+					_focusIndex = 3
+					_methods = "isReferral || isArmory	? [{type: 'inputMapping.onAction',
+															name: 'navigateTo',
+															args: {route: SC.Ui_windows.ROUTE.ARMORY, data: { url: selectedLootboxUrl, outerParams: null, skipURLTranslation: true } } }]
+														: [{type: 'inputMapping.onRequest',
+															name: 'showMetashopItemWindow',
+															args: {itemId: containerType}}]"
+				)
+			)
+		)
+
+		(block
+			(bind visible "isInStorage")
+
+			(style (marginBottom = "{ 720: SXS, 1080: MS }"))
+
+			(controller $Instance renderer='GuidingTipHub'
+				(bind enabled "isInStorage && newTipId")
+				(args
+					_tipId =			"newTipId"
+					_tipPositioning =	"TIP_POSITION_RIGHT"
+					_noPointer =		"lootboxOpenRepeatNewTip.isActive"
+					_offsetX =			"M"
+					_pointerOffset =	-150
+					_hasNextButton =	"lootboxOpenRepeatNewTip.isActive"
+					_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+				)
+			)
+
+			(controller $Instance renderer='DefaultButton'
+				(bind enabled "isInStorage")
+				(args
+					_enabled = "_isOpenBtnEnabled"
+					_name = 'openLootBox'
+					_label = 'IDS_OPEN_LOOTBOX'
+					_width = 260px
+					_size = "SIZE.LARGE"
+					_isTransactionBtn = true
+					_focusIndex = 0
+					_defaultFocused = true
+					_methods = "[{type: 'inputMapping.onAction', name: 'LootboxProxy.openLootbox', args: {}}]"
+				)
+			)
+		)
+
+		(block
+			(controller $Instance renderer='DefaultButton'
+				(bind enabled "amount > 1")
+				(args
+					_enabled = "_isOpenBtnEnabled"
+					_name = 'openLootBox'
+					_label = "subst('IDS_SUBST_PL_OPEN_N_CONTAINERS', [], { count: amount }, amount)"
+					_width = 260px
+					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_isTransactionBtn = true
+					_focusIndex = 1
+					_methods = "[	{	type: 'inputMapping.onAction', name: 'LootboxProxy.openLootboxesByType', args: { lootboxType: containerType, count: amount}}]"
+				)
+			)
+		
+			(controller $Animation
+				(bindcall play
+					keyframes = "[
+						{ time:0,	to:{ alpha:0, visualOffsetY: 5px }},
+						{ time:0.1,	to:{ alpha:0, visualOffsetY: 5px }},
+						{ time:0.3,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.sine_out}
+					]"
+					(bind  enabled "amount > 1")
+				)
+			)
+		)
+	)
+)
+
+(def element LootboxesCarousel (_isAnimationActive:bool)
+	(scope
+		(event evScrollToPrev)
+		(event evScrollToNext)
+		(event evScrollToIndex)
+		(event evScrollToBegin)
+		(event evScrollToEnd)
+
+		(event evCarouselScrollValueChanged)
+		(event evCarouselCanScrollChanged)
+		(event evChangeSelectedLootboxType)
+
+		(var lootboxEntity:dhEntity = "getSingleEntity(CC.lootboxConfigComponent)")
+		(var lootboxStorageComponent:dhComponent = "lootboxEntity.lootboxStorageComponent")
+		(var lootboxesInStorage:number = "lootboxStorageComponent.inStorage")
+
+		(var lootboxTypesEntities:dhCollection = "getCollection(CC.lootboxTypeInfoComponent).getChildByPath('sorted')")
+		(var lootboxesTypesCount:number = "lootboxTypesEntities.length")
+
+		(var selectedContainerType:number = "lootboxStorageComponent.selectedLootbox" (event "lootboxStorageComponent.evSelectedLootboxChanged"))
+
+		(var carouselCanScrollLeft:bool =	"$event ? $event.down	: false"	(event "evCarouselCanScrollChanged"))
+		(var carouselCanScrollRight:bool =	"$event ? $event.up		: false"	(event "evCarouselCanScrollChanged"))
+		(var carouselScrollEnabled:bool =	"$event ? $event.down || $event.up : true" (event "evCarouselCanScrollChanged"))
+
+		(struct lootboxCarouselTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL"))
+		(struct lootboxCarouselRepeatTip = 	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL_REPEAT"))
+
+		(var newTipId:number = "lootboxCarouselTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL :
+								lootboxCarouselRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL_REPEAT
+																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+	)
+
+	(bind name "'carouselLootboxes'")
+	(style
+		(width = 100%)
+		(height = "LOOTBOX_SIZE")
+		(paddingLeft = "XS")
+		(paddingRight = "XS")
+	)
+
+	(dispatch evScrollToIndex args="{value: 0}" on='addedToStage')
+	(dispatch evCarouselScrollChanged dir="EventDirection.DOWN" (event "evCarouselScrollValueChanged"))
+	(element DeclareBlurLayer)
+
+	
+	(hblock
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "newTipId")
+			(args
+				_tipId =			"newTipId"
+				_tipPositioning =	"TIP_POSITION_TOP"
+				_offsetY =			"XS"
+				_hasFinishButton =	true
+				_noPointer =		true
+				_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+			)
+		)
+
+		(class $Fullsize)
+
+		(element ScrollButton
+			_scrollEnabled = "carouselScrollEnabled"
+			_canScroll = "carouselCanScrollLeft"
+			_clickDispatchedEv = 'evScrollToPrev'
+			_doubleClickDispatchedEv = 'evScrollToBegin'
+			_buttonCarouselName = 'buttonCarouselLeft'
+			_direction = "CAROUSEL_BTN_ICON.LEFT"
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(bind height "LOOTBOX_SIZE")
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+				_singleStep = "LOOTBOX_CARD_SIZE"
+				_wheelScrollAcceleration = "0.7"
+				_isScrollBarVisible = "false"
+				_canScrollChangedEvent = "'evCarouselCanScrollChanged'"
+				_valueChangedEvent = "'evCarouselScrollValueChanged'"
+			)
+
+			(scrollPerItem = true)
+
+			(repeatController = 'lootboxesCarouselContainer')
+
+			(content
+				(style
+					(flow = "horizontal")
+					(width = 100%)
+					(height = 100%)
+					(hgap = "LOOTBOX_ITEM_OFFSET")
+				)
+				(controller $DynamicRepeat renderer='LootboxCarouselItem' name='lootboxesCarouselContainer'
+					(bind count "lootboxesTypesCount")
+					(args
+						_entityId = "lootboxTypesEntities.getEntityAtIndex($index).id"
+						_selectedContainerType = "selectedContainerType"
+						_isAnimationActive = "_isAnimationActive"
+						_hasLootboxesInStorage = "lootboxesInStorage > 0"
+					)
+
+					(itemWidth = "LOOTBOX_SIZE")
+					(itemHeight = "LOOTBOX_SIZE")
+					(itemOffset = "LOOTBOX_SIZE")
+				)
+			)
+
+			(bindcall scrollTo		index="$event.value" rememberIndex=true (event "evScrollToIndex"))
+			(bindcall scrollLeft	(event "evScrollToPrev"))
+			(bindcall scrollRight	(event "evScrollToNext"))
+
+			(bindcall scrollToBegin	(event "evScrollToBegin"))
+			(bindcall scrollToEnd	(event "evScrollToEnd"))
+		)
+
+		(element ScrollButton
+			_scrollEnabled = "carouselScrollEnabled"
+			_canScroll = "carouselCanScrollRight"
+			_clickDispatchedEv = 'evScrollToNext'
+			_doubleClickDispatchedEv = 'evScrollToEnd'
+			_buttonCarouselName = 'buttonCarouselRight'
+			_direction = "CAROUSEL_BTN_ICON.RIGHT"
+		)
+	)
+)
+
+(def constant LOOTBOX_CAROUSEL_PROMO_SLOT_BG_ALPHA {	SC.Ui_styles.BUTTON_STATE.SELECTED	: 1.4,
+														SC.Ui_styles.BUTTON_STATE.DOWN 		: 0.85,
+														SC.Ui_styles.BUTTON_STATE.OVER		: 1.1,
+														SC.Ui_styles.BUTTON_STATE.UP		: 0.5
+})
+
+(def constant LOOTBOX_CAROUSEL_PROMO_SLOT_BORDER_ALPHA {	SC.Ui_styles.BUTTON_STATE.SELECTED:	1.5,
+															SC.Ui_styles.BUTTON_STATE.DOWN:		0.65,
+															SC.Ui_styles.BUTTON_STATE.OVER:		0.8,
+															SC.Ui_styles.BUTTON_STATE.UP:		0.5
+})
+
+(def constant LOOTBOX_CAROUSEL_SLOT_BG_ALPHA {	SC.Ui_styles.BUTTON_STATE.SELECTED	: 1,
+												SC.Ui_styles.BUTTON_STATE.DOWN 		: 0.65,
+												SC.Ui_styles.BUTTON_STATE.OVER		: 0.8,
+												SC.Ui_styles.BUTTON_STATE.UP		: 0.3
+})
+
+(def constant LOOTBOX_CAROUSEL_SLOT_BORDER_ALPHA {	SC.Ui_styles.BUTTON_STATE.SELECTED:	1,
+													SC.Ui_styles.BUTTON_STATE.DOWN:		0.65,
+													SC.Ui_styles.BUTTON_STATE.OVER:		0.8,
+													SC.Ui_styles.BUTTON_STATE.UP:		0.3
+})
+
+(def element LootboxCarouselItem (_entityId:number, _selectedContainerType:number, _isAnimationActive:bool = false, _hasLootboxesInStorage:bool = false)
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var lootboxEntity:dhEntity = "getEntity(_entityId)")
+		(var lootboxTypeInfoComponent:dhComponent = "lootboxEntity.lootboxTypeInfoComponent")
+		(var containerType:number = "lootboxTypeInfoComponent.containerType")
+		(var subtype:str = "lootboxTypeInfoComponent.subtype	?: ''")
+		(var amount:number = "lootboxTypeInfoComponent.amount	?: 0" (event "lootboxTypeInfoComponent.evAmountChanged"))
+		(var presenceState:number = "lootboxTypeInfoComponent.presenceState" (event "lootboxTypeInfoComponent.evPresenceStateChanged"))
+
+		(var isPromo:bool = "	lootboxTypeInfoComponent.buyLocation == SC.Ui_common.LOOTBOX_BUY_LOCATION.REFERRAL ||
+								lootboxTypeInfoComponent.buyLocation == SC.Ui_common.LOOTBOX_BUY_LOCATION.ARMORY")
+
+		(var isSelected:bool = "_selectedContainerType == containerType")
+
+		(var state:number = "	isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var slotBgAlpha:number = "isPromo	? LOOTBOX_CAROUSEL_PROMO_SLOT_BG_ALPHA[state]
+											: LOOTBOX_CAROUSEL_SLOT_BG_ALPHA[state]")
+		(var slotBorderAlpha:number = "isPromo	? LOOTBOX_CAROUSEL_PROMO_SLOT_BORDER_ALPHA[state]
+												: LOOTBOX_CAROUSEL_SLOT_BORDER_ALPHA[state]")
+	)
+	(bind name "'LootBoxId_' + subtype")
+
+	(style
+		(width = "LOOTBOX_SIZE")
+		(height = "LOOTBOX_SIZE")
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+		(block
+			(bind visible "isHighContrast")
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_high_contrast.png')
+				(scale9grid = 3)
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(controller $Instance renderer='BlurMapRoundedPanel'
+				(bind enabled "!isHighContrast")
+			)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(alpha = "slotBgAlpha")
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="slotBgAlpha" _alpha="slotBgAlpha" _duration="0.07")
+		
+			(block
+				(class $Fullsize)
+				(style
+					(backgroundImage = 'url:../service_kit/panel_backgrounds/lootbox_carousel_slot_bg.png')
+					(borderRadius = "XS")
+				)
+				(bind colorTransform "isPromo ?	COLOR_TRANSFORM_WHITE_TO_YELLOW	: CT_NONE")
+			)
+		)
+	)
+
+	(block
+		(class $MiddleVHAbsolutely)
+		(style
+			(width = 120px)
+			(height = 120px)
+			(bind backgroundImage "'url:../reward_icons/big/' + subtype + '.png'")
+			(backgroundSize = "cover")
+		)
+	)
+	(block
+		(style
+			(position = "absolute")
+			(right = "XS")
+			(bottom = "XS")
+		)
+
+		(controller $Instance renderer='ImageItemsCounter'
+			(bind enabled "amount > 0")
+			(args
+				_amount = "amount"
+				_size = "SIZE.MEDIUM"
+			)
+		)
+
+		(block
+			(bind visible "amount <= 0")
+			(style
+				(width = 33px)
+				(align = "center")
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/counter.png')
+				(scale9grid = 4)
+			)
+
+			(block
+				(style
+					(width = 24px)
+					(height =  24px)
+					(bind backgroundImage "lootboxTypeInfoComponent.buyLocation == SC.Ui_common.LOOTBOX_BUY_LOCATION.REFERRAL
+												?	'url:../service_kit/currencies/icon_recruitment_points.png'
+												:	'url:../service_kit/icons/icon_armory_medium.png'")
+					(backgroundSize = "fill")
+				)
+			)
+		)
+	)
+
+	(macro MOUSE_HANDLER
+		_enabled = "!_isAnimationActive && !isSelected"
+		_soundSet = "'lootbox_carousel'"
+		_methods = "[{	type: 'inputMapping.onAction',
+						name: 'LootboxProxy.moveToBargeByType',
+						args: { lootboxType: containerType }
+					}]"
+	)
+)

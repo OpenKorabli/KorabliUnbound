@@ -1,7 +1,9 @@
-(def element ModalWindowSse ()
-	(macro MODAL_WINDOW_INIT)
+(def element SseMainInset (_previousRoute:str)
 	(scope
+		(macro CAROUSEL_HEIGHT_SCOPE)
 		(macro SERVER_TIME_SCOPE)
+
+		(struct skipBGAnimationData = SKIP_SHOW_ANIMATION(_previousRoute = "_previousRoute"))
 
 		(var sseWindowState:dhComponent = "getSingleComponent(CC.sseWindowState)")
 		(var selectedCategoryId:str = "sseWindowState.selectedTag" (event "sseWindowState.evChanged"))
@@ -28,15 +30,6 @@
 
 		(var isCommonSse:bool = "!sseShipAcesRoute.isActive && !sseOpenEndedRoute.isActive && !sseNewbieQuestsRoute.isActive && !campaignsRoute.isActive")
 
-		(var sseTitle:str = "isCommonSse	? sseTagName						? sseTagName
-																				: 'IDS_BATTLE_TASKS'
-											: sseNewbieQuestsRoute.isActive		? 'IDS_NEWBIE_QUESTS_COMMON_TITLE'
-											: sseOpenEndedRoute.isActive		? 'IDS_PORTAL_SSE_COMMON_TITLE'
-											: isShipAcesSeasonNation 			? 'IDS_SHIP_ACES_NATION_TITLE'
-											: isShipAcesSeasonShipType			? 'IDS_SHIP_ACES_SHIP_TYPE_TITLE'
-											: campaignsRoute.isActive			? 'IDS_CAMPAIGNS_TITLE'
-																				: 'IDS_SHIP_ACES_COMMON_TITLE'")
-
 		(var backgroundSelectedCategory:str = "	sseShipAcesRoute.isActive										? 'ship_aces'	:
 												campaignsRoute.isActive											? 'campaign'	:
 												sseOpenEndedRoute.isActive || sseNewbieQuestsRoute.isActive		? 'default'		:
@@ -53,7 +46,7 @@
 		(var renderStatusItem:str = "sseNewbieQuestsRoute.isActive 												? 'NewbieQuestsCategoryStatus' :
 									isCommonSse || sseShipAcesRoute.isActive || sseOpenEndedRoute.isActive		? 'SseCategoryStatus'
 																												: ''")
-	
+
 		(struct carouselAreaHeightPref = GET_PREF_NUMBER(_option="'ui.carousel.carouselAreaHeight'"))
 
 		(var activeTasksCollection:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active')")
@@ -63,17 +56,20 @@
 		(var activeDoneTasksLen:number = "activeDoneTasksCollection.length")
 		(var hasActiveUnfinishedTasks:bool = "activeTasksLen - activeDoneTasksLen > 0")
 	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'sse']" on='addedToStage')
+
 	(class $Fullsize)
 
 	(block
-		(class $FullsizeAbsolute)
+		(class $DockInsetPageHeaderOffset)
+		(macro DEFAULT_CACHED_SHOW_ANIMATION_BG
+			_isSkip = "skipBGAnimationData.isSkip"
+		)
 
-		(element ModalWindowAnimatedBackground
+		(element AnimatedBackground
 			_selectedCategory = "backgroundSelectedCategory"
 			_type = "SC.Ui_styles.ANIMATED_BG.SSE"
-			_hideTime = 0.2
-			_hideDelay = 0.25
-			_modalWindowName = 'ModalWindowSse'
 		)
 	)
 
@@ -81,82 +77,49 @@
 		(class $Fullsize)
 
 		(block
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-			(style (width = 100%))
-
-			(block
-				(style (width = 100%))
-
-				(element ModalWindowHeaderFullSize
-					_windowName = "toUpper(tr(sseTitle))"
-					_name = 'sse_header'
-					_paddingRight = "M"
-					_paddingLeft = "M"
-					_methods = "[ { type:	'inputMapping.onAction',
-									name:	'navigateTo',
-									args:	{ route: SC.Ui_windows.ROUTE.MAIN }
-								}]"
-				)
+			(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
+			(style
+				(width = 100%)
+				(height = 24px)
+				(paddingRight = "{1280: 22px, 1920: 42px}")
+				(paddingTop = 6px)
+				(align = "right")
 			)
-			(block
-				(style (width = 100%) (height = 48px))
-				
-				(block 
-					(bind visible "	isCommonSse && activeTasks ||
-									isBattlePassCategory && (activeTasks || serverTime <= bpFinishTime) ||
-									sseShipAcesRoute.isActive ||
-									sseOpenEndedRoute.isActive ||
-									sseNewbieQuestsRoute.isActive && newbieQuestsExpireTimer >= 0")
-					(style (width = 100%))
 
-					(block
-						(style (width = 100%) (align = "center") (marginTop = "M") (marginBottom = "M"))
-
-						(controller $Animation
-							(bindcall play
-								keyframes = "[
-									{ time:0,		to:{ alpha:0, visualOffsetY: 10px }},
-									{ time:0.15,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_out}
-								]"
-								action = "kill"
-								(bind trigger "sseTitle")
-							)
-						)
-
-						(controller $Instance
-							(bind enabled "renderStatusItem && !((isCommonTaskCategory && isCommonSse) || !sseTitle)")
-							(bind renderer "renderStatusItem")
+			(block 
+				(bind visible "	isCommonSse && activeTasks ||
+								isBattlePassCategory && (activeTasks || serverTime <= bpFinishTime) ||
+								sseShipAcesRoute.isActive ||
+								sseOpenEndedRoute.isActive ||
+								sseNewbieQuestsRoute.isActive && newbieQuestsExpireTimer >= 0")
+				(block
+					(controller $Animation
+						(bindcall play
+							keyframes = "[
+								{ time:0,		to:{ alpha:0, visualOffsetY: 10px }},
+								{ time:0.15,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_out}
+							]"
+							action = "kill"
+							(bind trigger "sseRoute.activeChild")
 						)
 					)
-					(block
-						(bind visible "!(isCommonTaskCategory && isCommonSse) && sseTitle")
-						(style (position = "absolute") (bottom = 0) (width = 100%))
 
-						(controller $Animation
-							(bindcall play
-								delay = 0.03
-								keyframes = "[
-									{ time:0,		to:{ alpha:0, visualOffsetY: 10px }},
-									{ time:0.15,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_out}
-								]"
-								action = "kill"
-								(bind trigger "sseTitle")
-							)
-						)
-						
-						(element HorizontalDividerTwoPx)
+					(controller $Instance
+						(bind enabled "renderStatusItem && !((isCommonTaskCategory && isCommonSse))")
+						(bind renderer "renderStatusItem")
 					)
 				)
 			)
 		)
+
 		(block
 			(class $Fullsize)
+			(macro DEFAULT_CACHED_SHOW_ANIMATION 2)
 			(style
-				(paddingRight = "M")
-				(paddingLeft = "M")
-				(paddingTop = "{ 720:M, 1080:L }")
-				(bind paddingBottom  "campaignsRoute.isActive && hasActiveUnfinishedTasks	? carouselAreaHeightPref.value
-																							: { 720:M, 1080:LM }")
+				(paddingRight = "{1280: SXS, 1920: L}")
+				(paddingTop = "{ 720:0px, 1080:M }")
+				(bind paddingBottom  "campaignsRoute.isActive	? carouselAreaHeight - 16
+																: { 720:M, 1080:LM }")
 			)
 
 			(element ModalWindowSseContent)
@@ -209,10 +172,11 @@
 
 		
 		(var detailedViewEntity:dhEntity = "getPrimaryEntity(CC.sseCore, itemToShow)")
-		
-		(macro STAGE_SIZE)
-		(var centeredIndent:number = "((stageWidth - SSE_DEFAULT_CONTENT_WIDTH) / 2) - SSE_NAVIGATION_WIDTH")
+
+		(struct stageSize = STAGE_SIZE())
+		(var centeredIndent:number = "((stageSize.width - SSE_DEFAULT_CONTENT_WIDTH) / 2) - SSE_NAVIGATION_WIDTH")
 		(var isSmallStageWidth:bool = "centeredIndent <= 0")
+		(var isRightAligned:bool = "stageSize.width <= 1920")
 
 		(struct sseShipAcesRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_SHIP_ACES"))
 		(struct sseOpenEndedRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_OPEN_ENDED"))
@@ -227,15 +191,15 @@
 	(dispatch evBroadcastSelectedCategoryDownwards dir="EventDirection.DOWN" (event "evBroadcastSelectedCategoryUpwards"))
 
 	(class $Fullsize)
-	(style (flow = "horizontal"))
+	(style (flow = "horizontal") (bind align "isRightAligned ? right : left"))
 
 	(block 
-		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(macro DEFAULT_CACHED_SHOW_ANIMATION 2)
 		(style
 			(width = "{ 1280:250px, 1920:320px }")
 			(height = 100%)
-			(marginLeft = "-M")
 			(marginRight = "{ 1280:M, 1920:L }")
+			(marginLeft = "{ 1280:0px, 1920:20px}")
 		)
 
 		(scrollArea
@@ -246,34 +210,36 @@
 
 			(content
 				(style (width = 100%))
-
 				(element SseCategories)
 			)
 		)
 	)
 
 	(block
-		(style
-			(height = 100%)
-			(bind width "isSmallStageWidth		? 100%	: SSE_DEFAULT_CONTENT_WIDTH")
-			(bind marginLeft "isSmallStageWidth	? 0		: centeredIndent")
-		)
-
-		(controller $Instance
-			(bind enabled "renderChild")
-			(bind renderer "renderChild")
-			(args
-				_isEmptyCategory = "isEmptyCategory"
-				_parentLength = "parentLength"
-				_entityDetailedId = "detailedViewEntity.id"
-				_isEpic = "isEpic"
-				_isChain = "isChain"
-				_itemsByCategory = "itemsByCategoryCollection"
-				_epicTasks = "epicTasksCollection"
-				_chainTasks = "chainTasksCollection"
-				_activeTaskIndex = "activeTaskIndex"
+		(class $Fullsize) 
+		(style (bind align "isRightAligned ? right : left"))
+		(block
+			(style
+				(height = 100%)
+				(bind width "isSmallStageWidth		? 100%	: SSE_DEFAULT_CONTENT_WIDTH")
+				(bind marginLeft "isSmallStageWidth	? 0		: centeredIndent")
 			)
-			(reuseElement = true)
+			(controller $Instance
+				(bind enabled "renderChild")
+				(bind renderer "renderChild")
+				(args
+					_isEmptyCategory = "isEmptyCategory"
+					_parentLength = "parentLength"
+					_entityDetailedId = "detailedViewEntity.id"
+					_isEpic = "isEpic"
+					_isChain = "isChain"
+					_itemsByCategory = "itemsByCategoryCollection"
+					_epicTasks = "epicTasksCollection"
+					_chainTasks = "chainTasksCollection"
+					_activeTaskIndex = "activeTaskIndex"
+				)
+				(reuseElement = true)
+			)
 		)
 	)
 )
