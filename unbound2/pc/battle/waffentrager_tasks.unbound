@@ -1,0 +1,396 @@
+(def constant BATTLE_UI_TASKS_PANEL {
+	BG_INTENSE:			0x80081225,
+	BG_LIGHT:			0x4D081225,
+	BG_ULTRA_LIGHT:		0x26081225,
+	SECTOR_EMPTY:		0xFFFFFFFF,
+	SHIELD_BAR:			0xFFFFFFFF
+})
+
+(def element WaffentragerConditionItem (_conditionName:str, _conditionParam:str)
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+	)
+	(block
+		(style (width = 100%))
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(alpha = "TC")
+			)
+
+			(bind text "_conditionName")
+		)
+	)
+
+	(tf
+		(class $TextDefaultBoldNM)
+		(style
+			(width = 74px)
+			(textAlign = "right")
+		)
+
+		(bind text "_conditionParam")
+	)
+)
+
+(def element WaffentragerTasksContainer ()
+	(scope
+		(macro STAGE_SIZE)
+
+		(var battleDataEntity:dhEntity =	"getSingleEntity(CC.battleData)")
+		(var battleState:number =			"battleDataEntity.battleState.battleState" (event "battleDataEntity.battleState.evBattleStateChanged"))
+
+		(var selfAvatarEntity:dhEntity =	"getSingleEntity(CC.playerAvatar)")
+		(var avatarComponent:dhComponent =	"selfAvatarEntity.avatar")
+		(var teamId:number =				"avatarComponent.teamId")
+
+		(struct zonesCounter =				PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.SHIELD_MODULE"))
+		(struct nullFieldCharge =			PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.NULL_FIELD_CHARGE"))
+		(struct nullFieldMaxCharge =		PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.NULL_FIELD_CHARGE_SCORE"))
+		(struct scorePerDestroyerSlain =	PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.PER_DESTROYER_SLAYED_SCORE"))
+		(struct scorePerCruiserSlain =		PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.PER_CRUISER_SLAYED_SCORE"))
+		(struct scorePerBattleshipSlain =	PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.PER_BATTLESHIP_SLAYED_SCORE"))
+		(struct damageDispersion =			PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.DAMAGE_DISPERSION"))
+
+		(var capturePointsCollectionSorted:dhCollection =	"getCollection(CC.capturePoint).getChildByPath('sorted.visible')")
+		(var capturePointsCollectionSortedItemsCount:number =	"capturePointsCollectionSorted.length ?: 3")
+		(var isCapturingPointsIndicatorVisible:bool =			"capturePointsCollectionSortedItemsCount > 0")
+
+		(var capturePointsCollectionAlly:dhCollection =		"getCollection(CC.capturePoint).getChildByPath('sorted.visible.byRelation.' + SC.Battle.PLAYER_RELATION.ALLY)")
+		(var capturePointsCollectionEnemy:dhCollection =	"getCollection(CC.capturePoint).getChildByPath('sorted.visible.byRelation.' + SC.Battle.PLAYER_RELATION.ENEMY)")
+
+		(var isHound:bool = "teamId == 0")
+		(var isEnoughScreenSpace:bool = "stageHeight >= 900")
+		(var shieldCT:dict = "isHound ? TWO_TEAMS_COLOR_TRANSFORMS['enemy'] : TWO_TEAMS_COLOR_TRANSFORMS['ally']")
+
+		(var currentCapturePointsCount:number =	"battleState != SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN	? isHound	? capturePointsCollectionEnemy.length
+																													: capturePointsCollectionAlly.length
+																										: 3")
+		(var maxCapturePointsCount:number = "capturePointsCollectionSortedItemsCount")
+
+		(var mainTaskIconName:str = "isHound ? 'attack_enemy_icon' : 'null_field_icon'")
+
+		(var allyCollection:dhCollection = "getCollectionByPath(CC.avatar, 'team.ally.sortedAlive')")
+	)
+
+	(style
+		(width = 340px)
+		(alpha = 0)
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.3
+			delay = 0.2
+			from = {alpha:0}
+			to = {alpha:1}
+			on='addedToStage'
+		)
+	)
+
+	(hblock 
+		(style
+			(width = 100%)
+			(marginBottom = "XXS")
+			(paddingTop = "M")
+			(paddingBottom = "M")
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+			(borderRadius = "XS")
+			(backgroundColor = "BATTLE_UI_TASKS_PANEL.BG_LIGHT")
+		)
+
+		(block
+			(style
+				(width = 36px)
+				(height = 36px)
+				(backgroundSize = "cover")
+				(marginRight = "SXS")
+				(bind backgroundImage "'swf:../events/waffentrager/waffentrager.swf:' + mainTaskIconName")
+			)
+			(bind colorTransform "isHound ? TWO_TEAMS_COLOR_TRANSFORMS['enemy'] : {}")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				
+			)
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(width = 100%)
+					(leading = -2)
+				)
+
+				(text = "'IDS_WAFFENTRAGER_TASK_DESCRIPTION_' + teamId")
+			)
+		)
+
+		(tf
+			(style
+				(width = 90px)
+				(textAlign = "right")
+			)
+			(class $TextDefaultBoldNM)
+			(bind text "min(nullFieldCharge.value, nullFieldMaxCharge.value) + ' / ' + nullFieldMaxCharge.value")
+		)
+	)
+
+	(block 
+		(bind visible "!isHound")
+		(style
+			(width = 100%)
+			(vgap = "SXS")
+			(marginBottom = "XXS")
+			(paddingTop = "M")
+			(paddingBottom = "M")
+			(paddingRight = "SXS")
+			(paddingLeft = "SXS")
+			(borderRadius = "XS")
+			(backgroundColor = "BATTLE_UI_TASKS_PANEL.BG_INTENSE")
+		)
+
+		(element WaffentragerConditionItem 
+			_conditionName	= 'IDS_WAFFENTRAGER_NULL_FIELD_CHARGE_SPEED'
+			_conditionParam	= 'IDS_WAFFENTRAGER_NULL_FIELD_CHARGE_SPEED_VALUE'
+		)
+
+		(element WaffentragerConditionItem  
+			_conditionName	= 'IDS_WAFFENTRAGER_NULL_FIELD_DESTROYER_FRAG_BOOST'
+			_conditionParam	= "tr('+' + scorePerDestroyerSlain.value)"
+		)
+
+		(element WaffentragerConditionItem  
+			_conditionName	= 'IDS_WAFFENTRAGER_NULL_FIELD_CRUISER_FRAG_BOOST'
+			_conditionParam	= "tr('+' + scorePerCruiserSlain.value)"
+		)
+
+		(element WaffentragerConditionItem  
+			_conditionName	= 'IDS_WAFFENTRAGER_NULL_FIELD_BATTLESHIP_FRAG_BOOST'
+			_conditionParam	= "tr('+' + scorePerBattleshipSlain.value)"
+		)
+	)
+	
+	(hblock	
+		(style
+			(align = "middle")
+			(width = 100%)
+			(padding = "SXS")
+			(marginBottom = "{900:M, 1080:LS}")
+			(borderRadius = "XS")
+			(backgroundColor = "BATTLE_UI_TASKS_PANEL.BG_LIGHT")
+		)
+
+		(block
+			(style
+				(width = 36px)
+				(height = 36px)
+				(marginRight = "SXS")
+			)
+			
+
+			(block
+				(style
+					(position = "absolute")
+					(top = 6px)
+					(left = 6px)
+					(width = 24px)
+					(height = 24px)
+					(backgroundImage = 'swf:../battle_tasks_svg/battle_tasks_svg.swf:icon_WT_resist')
+				)
+
+				(bind colorTransform "shieldCT")
+			)
+
+
+			(block
+				(style
+					(position = "absolute")
+					(top = 18px)
+					(left = 18px)
+					(rotation = -150)
+				)
+
+				(controller $Instance renderer='CircleProgressDiagram'
+					(args
+						_currentElementsCount =	"currentCapturePointsCount"
+						_maxElementsCount =		"maxCapturePointsCount"
+						_activeColor =			"isHound ? C_ENEMY : C_ALLY"
+						_inactiveColor =		"BATTLE_UI_TASKS_PANEL.BG_INTENSE"
+					)
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(width = 100%)
+					(leading = -2)
+				)
+				(text = 'IDS_WAFFENTRAGER_SHIELD_MODULE')
+			)
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 74px)
+				(textAlign = "right")
+			)
+			(bind text "toString(damageDispersion.value + '%')")
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Repeat renderer='WaffentragerEarsPlayerItem'
+			(bind enabled "isHound && isEnoughScreenSpace")
+			(bind count "allyCollection.length")
+			(args
+				_avatarEntity = "allyCollection[$index]"
+			)
+		)
+	)
+)
+
+(def element WaffentragerEarsPlayerItem (_avatarEntity:dhEntity, _isFogOfWar:bool=false)
+	(scope
+		(var avatarEntity:dhEntity = "_avatarEntity")
+		(var avatarComponent:dhComponent = 	"avatarEntity.avatar")
+		(var healthComponent:dhComponent = 	"avatarEntity.health")
+		(var name:str = 	"avatarComponent.name")
+		(var pureName:str = "avatarComponent.pureName")
+		(var isBot:bool = 	"avatarComponent.isBot")
+		(var shipId:number = "avatarComponent.ship.ref.ship.id" (event "avatarComponent.evShipRefChanged"))
+
+		(var relation:number = "avatarEntity.relation.value" (event "avatarEntity.relation.evChanged"))
+		(var isSelf:bool = "relation == SC.Battle.DIPLOMACY_RELATIONS.SELF")
+		(var isEnemy:bool = "relation == SC.Battle.PLAYER_RELATION.ENEMY")
+
+
+		(struct shipData = SHIP_DATA_SCOPE("shipId"))
+		(struct avatarHealth = GET_AVATAR_HEALTH_PROGRESS("healthComponent"))
+
+		(var divisionMemberComponent:dhComponent = "avatarEntity.divisionMember")
+		(var isInSameDivision:bool = "divisionMemberComponent.isInSameDivision" (event "divisionMemberComponent.evDivisionChanged"))
+
+		(macro PULL_PLAYER_COLOR _isSelf="isSelf" _isInSameDivision="isInSameDivision")
+		(var playerShipColor:number = "!isSelf && isInSameDivision && avatarHealth.isAlive	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																							: SC.Ui_styles.SERVICE_COLORS.WHITE")
+
+		(var alphaOfText:number = "avatarHealth.isAlive ? TA : 0.3")
+
+		(var alphaOfShip:number = "avatarHealth.isAlive ? TA : TS")
+
+		(var vehicleComponent:dhComponent = "avatarEntity.vehicle")
+		(var visibilityFlags:number = "vehicleComponent.visibilityFlags ?: 0" (event "vehicleComponent.evVisibilityFlagsChanged"))
+
+		(macro GET_PREF 'showLampVisibility' "'ui.showLampVisibility'")
+		(var isLampVisibility:bool = "visibilityFlags > 0 && showLampVisibility")
+
+		(var shipIconColorName:str = "	!avatarHealth.isAlive		? '_sunk' :
+										isInSameDivision && !isSelf	? '_division'
+																	: ''")
+		(var shipIconName:str = "toLower(shipData.subType) + shipIconColorName")
+	)
+
+	(style
+		(width = 100%)
+		(marginBottom = "XXS")
+		(align = "middle")
+		(flow = "horizontal")
+		(borderRadius = "XS")
+		(bind backgroundColor "isSelf					? 0x77FFFFFF :
+								avatarHealth.isAlive	? BATTLE_UI_TASKS_PANEL.BG_LIGHT
+														: BATTLE_UI_TASKS_PANEL.BG_ULTRA_LIGHT")
+	)
+
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(height = 100%)
+			(backgroundColor = "C_ALLY")
+			(alpha = "0.5")
+			(borderRadius = "XS")
+			(bind width "avatarHealth.healthProgress + '%'")
+		)
+	)
+
+	
+	(block
+		(style
+			(width = 100%)
+			(paddingLeft = "SXS")
+			(bind alpha "alphaOfText")
+		)
+		(element PlayerNameAndClanTag
+			_isSelf =			"isSelf"
+			_isInSameDivision =	"isInSameDivision"
+			_playerName =		"pureName"
+			_isBot =			"isBot"
+			_isTextBold =		"isSelf"
+			_isDead =			"!avatarHealth.isAlive"
+		)
+	)
+
+	
+	(block
+		(style
+			(width = "SHIP_LEVEL_AND_NAME_EARS_CONTAINER_WIDTH")
+		)
+
+		(element ShipIconAndLevelAndName
+			_shipIDS = "shipData.shipIDS"
+			_shipLevelRome = "shipData.shipLevelRome"
+			_shipLevelIcon = "shipData.shipLevelIcon"
+			_shipType = "shipData.subType ? toLower(shipData.subType): ''"
+			_name = "name"
+			_isSelf = "isSelf"
+			_isDead = "!avatarHealth.isAlive"
+			_isInSameDivision = "isInSameDivision"
+			_alpha = "alphaOfShip"
+			_playerShipColor = "playerShipColor"
+			_showShipIcon = false
+		)
+	)
+
+	
+	(block
+		(style
+			(pivotX = 50%)
+			(pivotY = 50%)
+			(paddingRight = "S")
+		)
+		(block
+			(style
+				(position = "absolute")
+				(left = -1px)
+			)
+			(controller $Instance renderer='ShipVisibilityIcon'
+				(bind enabled "isLampVisibility && avatarHealth.isAlive")
+				(args
+					_isLampVisibility = "isLampVisibility"
+					_shipType = "shipData.subType ? toLower(shipData.subType): ''"
+				)
+			)
+		)
+		(block
+			(style
+				(bind backgroundImage "shipData.subType ? 'swf:../service_kit/ship_classes_svg/ship_classes_svg.swf:icon_default_' + shipIconName : ''")
+				(width = "SHIP_ICON_SIZE.WIDTH")
+				(height = "SHIP_ICON_SIZE.HEIGHT")
+			)
+		)
+	)
+)

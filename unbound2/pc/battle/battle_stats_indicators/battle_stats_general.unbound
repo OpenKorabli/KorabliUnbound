@@ -1,13 +1,23 @@
-(def element BattleStatsContainer () layout=true
+(def element BattleStatsContainer ()
 	(scope
-		(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
-		(var gameModeId:number = "battleDataEntity.battleInfo.gameModeId")
+		(event evShowStats)
+		(var battleDataEntity:dhEntity =		"getSingleEntity(CC.battleData)")
 
-		(var battleState:number = "battleDataEntity.battleState.battleState" (event "battleDataEntity.battleState.evBattleStateChanged"))
-		(var isNotBattleIdling:bool = "battleState != SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
+		(var battleInfoComponent:dhComponent =	"battleDataEntity.battleInfo")
+		(var battleStateComponent:dhComponent =	"battleDataEntity.battleState")
+
+		(var gameModeId:number = "battleInfoComponent.gameModeId")
+
+		(var battleState:number =		"battleStateComponent.battleState"		(event "battleStateComponent.evBattleStateChanged"))
+		(var isNotBattleIdling:bool =	"battleState != SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
+		(var isNotBattleStateCountdown:bool =	"battleState != SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN")
 
 		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
+
 		
+		(var isBossHPBarEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.BOSS_FIGHT_HP_BAR) > 0")
+		(var isCustomCountdownEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.CUSTOM_COUNTDOWN) > 0")
+
 		
 		(var isHeaderShipListVisible:bool = "!((disabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.HEADER_SHIP_LIST) > 0)")
 		
@@ -37,10 +47,37 @@
 		(var timerInHudItem:gfx = "taskWithTimer ? taskWithTimer.items[0] : null" (event "taskWithTimer.evAdded") (event "taskWithTimer.evUpdated")) 
 		(var isTaskTimerBigVisible:bool = "timerInHudItem ? true : false")
 	)
+
+	(style (alpha = "isCustomCountdownEnabled ? 0 : 1"))
+
+	(dispatch evShowStats dir="EventDirection.NONE" on='addedToStage' (bind enabled "isNotBattleStateCountdown && isCustomCountdownEnabled"))
+	(dispatch evShowStats dir="EventDirection.NONE" (bind enabled "isNotBattleStateCountdown && isCustomCountdownEnabled") (bind trigger "isNotBattleStateCountdown"))
+	
+	(controller $Animation
+		(bindcall play
+			duration = 0.3
+			delay = 1.8
+			action="kill"
+			from = {alpha:0}
+			to = {alpha:1}
+			(event "evShowStats")
+		)
+	)
+
 	(block
 		(style (bind marginTop "isHeaderShipListVisible ? XS : 0"))
 		(controller $Instance renderer='HeaderShipList'
 			(bind enabled "isHeaderShipListVisible")
+		)
+	)
+
+	(block
+		(bind visible "isBossHPBarEnabled")
+
+		(style (marginTop = "L"))
+
+		(controller $Instance renderer='WaffentragerBattleDataGeneral'
+			(bind enabled "isBossHPBarEnabled")
 		)
 	)
 
@@ -98,8 +135,9 @@
 	)
 )
 
-(def element CapturingPointsIndicator (_gameModeId:number, _capturePointsCollection:gfx) layout=true  
+(def element CapturingPointsIndicator (_gameModeId:number, _capturePointsCollection:gfx)	
 	(name = 'base_capture')
+
 	(hblock
 		(block $enabled = "_gameModeId == SC.Battle.GAME_MODE.ARMS_RACE"
 			(style
@@ -116,13 +154,13 @@
 		)
 
 		(hblock
-			(controller $Repeat count="_capturePointsCollection.items.length" layout=true
-				(exprs
-					(element CapturePointIndicator _markerEntity="_capturePointsCollection.items[$index]" _isBattleStatsElement="true"
-						(style
-							(bind marginLeft "$index == 0 ? 0 : M")
-						)
-					)
+			(style (hgap = "M"))
+
+			(controller $Repeat renderer='CapturePointIndicator'
+				(bind count "_capturePointsCollection.items.length")
+				(args
+					_markerEntity =				"_capturePointsCollection.items[$index]"
+					_isBattleStatsElement =		true
 				)
 			)
 		)
@@ -143,7 +181,7 @@
 	)
 )
 
-(def element BattleResourceIndicator (_resourcesCollection:gfx) layout=true  
+(def element BattleResourceIndicator (_resourcesCollection:gfx)		
 	(scope
 		(var barWidth:number = "180")
 

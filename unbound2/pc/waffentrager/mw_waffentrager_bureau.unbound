@@ -1,0 +1,668 @@
+(def constant WT_BUREAU_CARD_WIDTH 298px)
+
+(def constant WAFFENTRAGER_BOOSTER_BUTTON "{
+	PURCHASE: 0,
+	ACTIVATE: 1,
+	UPGRADE: 2,
+	NONE: -1
+}")
+
+(def css $WTBureauContent ()
+	(width = 100%)
+	(paddingLeft = "{1280: SXS, 1920: LS}")
+	(paddingRight = "{1280: SXS, 1920: LS}")
+)
+
+(def element ModalWindowWaffentragerBureau ()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(macro PULL_SHIP_ID)
+		(struct waffentrager = PULL_WAFFENTRAGER_SHIP(_playerShipId="playerShipId"))
+
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+		(var eventFlags:number = "waffentragerEvent.eventFlags" (event "waffentragerEvent.evEventFlagsChanged"))
+		(var relay:number = "waffentragerEvent.relay ?: 0" (event "waffentragerEvent.evChanged"))
+		(var isDeficit:bool = "relay == 0")
+
+		(var isBureauOnboardingSeen:bool = "toBool(eventFlags & SC.Common.WAFFENTRAGER_EVENT_FLAGS.BUREAU_ONBOARDING_SEEN)")
+	)
+	(name = 'ModalWindowWaffentragerBureau')
+
+	(bindcall externalCall
+		"isBureauOnboardingSeen ? '' : 'inputMapping.onRequest'"
+		"['openWaffentragerOnboarding', { type: 'bureau'}]"
+		(event "startShow")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../events/waffentrager/bg/bureau.jpg')
+			(backgroundSize = "cover")
+		)
+		(alpha = 0)
+		(controller $Animation
+			(bindcall play	duration = 0.2
+							to = "{ alpha: 1 }"
+							(event "startShow")
+			)
+			(bindcall play	duration = 0.2
+							delay = 0.25
+							to = "{ alpha: 0 }"
+							action="kill"
+							(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element ModalWindowAnimatedBackground
+			_selectedCategory = 'bureau'
+			_type = "SC.Ui_styles.ANIMATED_BG.WAFFENTRAGER"
+			_hideTime = 0.2
+			_hideDelay = 0.3
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(marginBottom = "{720:M, 1080:LS}")
+		)
+
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_WT_BUREAU_TITLE'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_backButtonText = 'IDS_BACK'
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(right = "XLL")
+				(bottom = "{720: M, 1080: 20px}")
+			)
+			(element PriceTag
+				_priceInfo = "{ finalPrice: relay, currency: SC.Common.CURRENCIES.WAFFENTRAGER_RELAY }"
+				_size = "SIZE.MEDIUM"
+			)
+			(controller $Tooltip
+				(renderer = 'CurrencyTooltip')
+				(args
+					_currency = "SC.Common.CURRENCIES.WAFFENTRAGER_RELAY"
+					_amount = "relay"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(class $WTBureauContent)
+		(style
+			(marginBottom = "{720:MS, 1280:XLM}")
+			(align = "right")
+		)
+		(element DefaultButton
+			_width = 136px
+			_label = 'IDS_WT_BUREAU_BUTTON_ONBOARDING'
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_enabled = true
+			_focusIndex = 1
+			_size = "SIZE.LARGE"
+			_methods = "[	{	type: 'inputMapping.onRequest',
+								name: 'openWaffentragerOnboarding',
+								args: { type: 'bureau'}}]"
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+		(class $WTBureauContent)
+		(style
+			(gap = "{1280: 20px, 1920:LS}")
+			(align = "center")
+		)
+		(controller $Repeat renderer='WaffentragerBureauCardsColumn'
+			(count = "WAFFENTRAGER_BOOSTERS.length")
+			(args
+				_type = "WAFFENTRAGER_BOOSTERS[$index]"
+				_isWaffentragerSelected = "waffentrager.isSelected"
+				_isDeficit = "isDeficit"
+			)
+		)
+	)
+)
+
+(def element WaffentragerBureauCardsColumn (_type:str = '', _isWaffentragerSelected:bool = false, _isDeficit:bool = false)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var waffentragerBoosters:dhCollection = "getCollectionByPath(CC.waffentragerBooster, 'byType.' + _type)")
+		(var activeBoosters:dhCollection = "waffentragerBoosters.child('active')")
+		(struct waffentragerBoosterTotals = PULL_WAFFENTRAGER_TOTAL_ACTIVE_BOOSTERS())
+		(var isLastColumn:bool = "$index == WAFFENTRAGER_BOOSTERS.length-1")
+	)
+
+	(macro DEFAULT_MODAL_WINDOW_ANIMATION_EXPRESSION "$index")
+
+	(style
+		(width = "WT_BUREAU_CARD_WIDTH")
+		(align = "center")
+	)
+
+	(hblock
+		(block
+			(bind visible "toBool(activeBoosters.length)")
+			(style
+				(width = 19px)
+				(height = 19px)
+				(marginTop = "-XXS")
+				(marginRight = "XS")
+				(backgroundSize = "cover")
+				(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
+			)
+		)
+		(tf
+			(class $TextDefaultBold20NM)
+			(style
+				(marginBottom = "M")
+				(alpha = "TA")
+			)
+			(bind text "toUpper(tr('IDS_PARAMS_MODIFIER_' + _type))")
+		)
+	)
+
+
+	(block
+		(style (vgap = "SXS"))
+		(controller $Repeat renderer='WaffentragerBureauCardTemplate'
+			(bind count "waffentragerBoosters.length")
+			(args
+				_type = "_type"
+				_entityId = "waffentragerBoosters[$index].id"
+				_isDeficit = "_isDeficit"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = "WT_BUREAU_CARD_WIDTH")
+			(bind marginTop "waffentragerBoosterTotals.attributes.hasActiveBoosters ? SXS : MS")
+		)
+
+		(controller $Instance renderer='WaffentragerBureauSummaryBoosters'
+			(bind enabled "isLastColumn && waffentragerBoosterTotals.attributes.hasActiveBoosters")
+			(args
+				_isWaffentragerSelected = "_isWaffentragerSelected"
+			)
+		)
+
+		(controller $Instance renderer='WaffentragerBureauInfo'
+			(bind enabled "isLastColumn && !waffentragerBoosterTotals.attributes.hasActiveBoosters")
+		)
+	)
+)
+
+(def element WaffentragerBureauCardTemplate (_type:str = '', _entityId:number = 0, _isDeficit:bool = false)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+		(var relay:number = "waffentragerEvent.relay" (event "waffentragerEvent.evChanged"))
+
+		(struct waffentragerBooster = PULL_WAFFENTRAGER_BOOSTER(_entityId = "_entityId"))
+
+		(var level:number = "waffentragerBooster.state < SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.UPGRADED	? SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.BASE
+																												: SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.UPGRADED")
+		(var waffentragerBoosterLevelEntity:dhEntity = "getPrimaryEntity(CC.waffentragerBoosterLevel, _entityId + '_' + level)")
+		(var waffentragerBoosterLevel:dhComponent = "waffentragerBoosterLevelEntity.waffentragerBoosterLevel")
+		(var attributes:dhComponent = "waffentragerBoosterLevelEntity.attributes")
+
+		(var isNotPurchasedBooster:bool = "waffentragerBooster.state == SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.NOT_PURCHASED")
+		(var isDefaultBooster:bool = "waffentragerBooster.state == SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.BASE")
+		(var isUpgradedBooster:bool = "waffentragerBooster.state == SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.UPGRADED")
+		(var isActivatedBoosterState:bool = "waffentragerBooster.component.isActive" (event "waffentragerBooster.component.evChanged"))
+
+		(var boosterTitle:str = "'IDS_WT_BUREAU_' + _type + '_' + $index")
+		(var boosterState:number = "	isNotPurchasedBooster		? WAFFENTRAGER_BOOSTER_BUTTON.PURCHASE :
+										!isActivatedBoosterState	? WAFFENTRAGER_BOOSTER_BUTTON.ACTIVATE :
+										isDefaultBooster			? WAFFENTRAGER_BOOSTER_BUTTON.UPGRADE
+																	: WAFFENTRAGER_BOOSTER_BUTTON.NONE")
+		(var finalPrice:number = "isNotPurchasedBooster ? waffentragerBooster.cost : waffentragerBooster.upgradeCost")
+		(var buttonData:dict = "{
+			WAFFENTRAGER_BOOSTER_BUTTON.PURCHASE:	{	width: 114px,
+														type: SC.Ui_styles.BUTTON_TYPE.DEFAULT,
+														isStaticDisplay: false,
+														label: 'IDS_WT_BUREAU_CARD_BUTTON_PURCHASE',
+														isEnabled: relay >= waffentragerBooster.cost,
+														requestName: 'openWaffentragerBoosterUpgradeModal',
+														requestParams: {	boosterTitle: boosterTitle,
+																			boosterType: _type,
+																			boosterEntityId: _entityId,
+																			typeMW: SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.NOT_PURCHASED},
+														actionName: ''},
+			WAFFENTRAGER_BOOSTER_BUTTON.ACTIVATE:	{	width: 128px,
+														type: SC.Ui_styles.BUTTON_TYPE.SECONDARY,
+														isStaticDisplay: true,
+														label: 'IDS_WT_BUREAU_CARD_BUTTON_ACTIVATE',
+														isEnabled: true,
+														requestName: '',
+														actionName: 'WaffentragerProxyUSS.activateWaffentragerBooster'},
+			WAFFENTRAGER_BOOSTER_BUTTON.UPGRADE:	{	width: 104px,
+														type: SC.Ui_styles.BUTTON_TYPE.SECONDARY,
+														isStaticDisplay: true,
+														label: 'IDS_WT_BUREAU_CARD_BUTTON_UPGRADE',
+														isEnabled: relay >= waffentragerBooster.upgradeCost,
+														requestName: 'openWaffentragerBoosterUpgradeModal',
+														requestParams: {	boosterTitle: boosterTitle,
+																			boosterEntityId: _entityId,
+																			typeMW: SC.Common.WAFFENTRAGER_BOOSTER_PURCHASE_STATE.UPGRADED},
+														actionName: ''}
+		}")
+
+		(var cardAlpha:number = "	isNotPurchasedBooster							? 0.6 :
+									isDefaultBooster && !isActivatedBoosterState	? 0.85
+																					: 1")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(block
+		(style
+			(width = "WT_BUREAU_CARD_WIDTH")
+			(height = 147px)
+			(bind alpha "rollOver ? 1 : cardAlpha")
+		)
+		(controller $Animation
+			(bindcall play
+				duration = 0.1
+				from = "{alpha: cardAlpha}"
+				to = "{ alpha: 1}"
+				easing = "Easing.quad_out"
+				action = "kill"
+				reverse = "!rollOver"
+				(bind trigger "rollOver")
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = 0x1F000000))
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(element BlurMapWithLayerContrastPanel)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(alpha = 0.1)
+				(scale9grid = 2)
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(backgroundColor = 0x4DF266FF)
+				(alpha = "isActivatedBoosterState ? 1 : 0")
+				(visualScaleX = "isActivatedBoosterState ? 1 : 0")
+			)
+			(controller $Animation
+				(bindcall play
+					duration = 0.1
+					from = "{alpha: 0, visualScaleX: 0}"
+					to = "{ alpha: 1, visualScaleX: 1}"
+					easing = "Easing.quad_out"
+					action = "kill"
+					reverse = "!isActivatedBoosterState"
+					(bind trigger "isActivatedBoosterState")
+				)
+			)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(align = "center")
+				(position = "absolute")
+				(left = -5px)
+				(top = -6px)
+				(width = 16px)
+				(height = 159px)
+				(backgroundImage = 'url:../events/waffentrager/card_line.png')
+				(alpha = "isActivatedBoosterState ? 1 : 0")
+				(visualScaleX = "isActivatedBoosterState ? 1 : 0")
+			)
+			(controller $Animation
+				(bindcall play
+					duration = 0.1
+					from = "{alpha: 0, visualScaleX: 0}"
+					to = "{ alpha: 1, visualScaleX: 1}"
+					easing = "Easing.quad_out"
+					action = "kill"
+					reverse = "!isActivatedBoosterState"
+					(bind trigger "isActivatedBoosterState")
+				)
+			)
+		)
+
+		(block
+			(bind visible "isActivatedBoosterState")
+			(style
+				(position = "absolute")
+				(top = 18px)
+				(right = "M")
+				(bind visualOffsetY "isActivatedBoosterState ? 0px : 10px")
+				(bind alpha "isActivatedBoosterState ? 1 : 0")
+			)
+			(element CloseButton
+				_tooltipText = 'IDS_WT_BUREAU_CARD_BUTTON_DEACTIVATE_TOOLTIP'
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				_name = 'deactivateWaffentragerBooster'
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'WaffentragerProxyUSS.deactivateWaffentragerBooster',
+									args: { boosterID: waffentragerBooster.boosterID }}]"
+			)
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from = "{alpha: 0, visualOffsetY: 10px}"
+					to = "{alpha: 1, visualOffsetY: 0px}"
+					watch = false
+					action = "kill"
+					reverse = "!isActivatedBoosterState"
+					(bind trigger "isActivatedBoosterState")
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(paddingTop = "M")
+				(paddingRight = "M")
+				(paddingBottom = "SXS")
+				(paddingLeft = 20px)
+			)
+
+			(tf
+				(class $TextDefaultBold20NM)
+				(style
+					(width = 100%)
+					(maxWidth = 240px)
+					(minHeight = 51px)
+					(marginBottom = "XXS")
+					(leading = -3)
+					(alpha = "TA")
+				)
+				(bind text "boosterTitle")
+			)
+
+			(hblock
+				(style
+					(width = 100%)
+					(height = 32px)
+					(marginBottom = "XS")
+					(align = "middle")
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(width = 100%)
+						(alpha = 0.6)
+					)
+					(bind text "subst('IDS_WT_BUREAU_TECH_LEVEL', [], { _level: level })")
+				)
+
+				(hblock
+					(style
+						(align = "middle")
+						(bind alpha "buttonData[boosterState].isStaticDisplay ? 1 : 0")
+						(bind visualOffsetY "buttonData[boosterState].isStaticDisplay ? 0 : S")
+					)
+					(controller $Animation
+						(bind enabled "!buttonData[boosterState].isStaticDisplay")
+						(bindcall play
+							duration = 0.1
+							from = "{alpha: 0, visualOffsetY: S}"
+							to = "{ alpha: 1, visualOffsetY: 0px }"
+							easing = "Easing.quad_out"
+							action = "kill"
+							reverse = "!rollOver && !isActivatedBoosterState"
+							(bind trigger "rollOver || isActivatedBoosterState")
+						)
+					)
+
+					(block
+						(style (marginRight = "S"))
+						(controller $Instance renderer='PriceTag'
+							(bind enabled "isNotPurchasedBooster || isActivatedBoosterState && isDefaultBooster")
+							(args
+								_priceInfo =	"{ finalPrice: finalPrice, currency: SC.Common.CURRENCIES.WAFFENTRAGER_RELAY }"
+								_isDeficit =	"!buttonData[boosterState].isEnabled"
+							)
+						)
+					)
+
+					(block
+						(controller $Instance renderer='DefaultButton'
+							(bind enabled "boosterState != WAFFENTRAGER_BOOSTER_BUTTON.NONE")
+							(args
+								_width = "buttonData[boosterState].width"
+								_size = "SIZE.SMALL"
+								_enabled = "buttonData[boosterState].isEnabled"
+								_label = "buttonData[boosterState].label"
+								_type = "buttonData[boosterState].type"
+								_methods = "[	{	type: 'inputMapping.onRequest',
+													name: buttonData[boosterState].requestName,
+													args: buttonData[boosterState].requestParams},
+												{	type: 'inputMapping.onAction',
+													name: buttonData[boosterState].actionName,
+													args: {boosterID: waffentragerBooster.boosterID}}]"
+							)
+						)
+						(controller $Tooltip
+							(renderer='SimpleStatusTooltip')
+							(bind enabled "!buttonData[boosterState].isEnabled")
+							(args
+								_text = 'IDS_NOT_ENOUGH_FUNDS'
+								_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+							)
+							(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+						)
+					)
+				)
+			)
+
+			(element HorizontalDividerTwoPx)
+
+			(block
+				(style (marginTop = "S"))
+				(element WaffentragerLevelBoosterList
+					_entityId = "_entityId"
+					_level = "level"
+				)
+			)
+		)
+	)
+)
+
+(def element WaffentragerBureauSummaryBoosters (_isWaffentragerSelected:bool = false)
+	(scope
+		(struct waffentragerBoosterTotals = PULL_WAFFENTRAGER_TOTAL_ACTIVE_BOOSTERS())
+	)
+	(style (width = 100%))
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = 0.1)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element BlurMapWithLayerContrastPanel)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(paddingTop = "M")
+			(paddingBottom = "M")
+			(paddingLeft = 20px)
+			(paddingRight = 20px)
+		)
+
+		(tf
+			(bind visible "!_isWaffentragerSelected")
+			(class $TextDefaultBold20NM)
+			(style
+				(width = 100%)
+				(marginBottom = "SXS")
+				(textAlign = "center")
+				(alpha = "TA")
+			)
+			(bind text "toUpper(tr('IDS_WT_BUREAU_ACTIVE_TECH_TITLE'))")
+		)
+
+		(htile
+			(style
+				(width = 100%)
+				(marginBottom = "SXS")
+				(gap = "S")
+			)
+
+			(controller $Repeat renderer='WaffentragerBureauBooster'
+				(bind count "waffentragerBoosterTotals.attributes.positive.length")
+				(args
+					_dataItem = "waffentragerBoosterTotals.attributes.positive[$index]"
+					_width = 124px
+				)
+			)
+
+			(controller $Repeat renderer='WaffentragerBureauBooster'
+				(bind count "waffentragerBoosterTotals.attributes.negative.length")
+				(args
+					_dataItem = "waffentragerBoosterTotals.attributes.negative[$index]"
+					_width = 124px
+				)
+			)
+
+			(controller $Repeat renderer='WaffentragerBureauBooster'
+				(bind count "waffentragerBoosterTotals.attributes.neutral.length")
+				(args
+					_dataItem = "waffentragerBoosterTotals.attributes.neutral[$index]"
+					_width = 124px
+				)
+			)
+		)
+
+		(element HorizontalDividerTwoPx)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "SXS")
+			)
+			(element WaffentragerBureauDescriptionBlock
+				_text = "_isWaffentragerSelected ? 'IDS_WT_BUREAU_WARNING' : 'IDS_WT_BUREAU_ACTIVE_TECH_TEXT'"
+				_isWaffentragerSelected = "_isWaffentragerSelected"
+			)
+		)
+	)
+)
+
+(def element WaffentragerBureauInfo ()
+	(style (width = 100%))
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(width = 100%)
+			(marginBottom = "SXS")
+			(alpha = "TA")
+		)
+		(text = 'IDS_WT_BUREAU_SUMMARY_BOOSTERS_TITLE')
+	)
+
+	(element WaffentragerBureauDescriptionBlock
+		_text = 'IDS_WT_BUREAU_SUMMARY_BOOSTERS_TEXT'
+	)
+
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(width = 100%)
+			(marginTop = 20px)
+			(marginBottom = "SXS")
+			(alpha = "TA")
+		)
+		(text = 'IDS_WT_BUREAU_SUMMARY_WT_TITLE')
+	)
+
+	(element WaffentragerBureauDescriptionBlock
+		_text = 'IDS_WT_BUREAU_SUMMARY_WT_TEXT'
+	)
+)
+
+(def element WaffentragerBureauDescriptionBlock (_text:str = '', _isWaffentragerSelected:bool = false)
+	(style (width = 100%))
+	(tf
+		(bind class "_isWaffentragerSelected ? '$TextDefault20NM' : '$TextDefaultNM'")
+		(style
+			(width = 100%)
+			(multiline = true)
+			(leading = -1)
+			(styleSheet = '.p_spacing { font-size: 12px; }')
+			(bind textColor "_isWaffentragerSelected ? SC.Ui_styles.SERVICE_COLORS.RED :  SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(bind alpha "_isWaffentragerSelected ? 1 : TA")
+		)
+		(bind htmlText "tr(_text)")
+	)
+)
+
+(def element WaffentragerLevelBoosterList (_entityId:number = 0, _level:number = 0)
+	(scope
+		(var waffentragerBoosterLevelEntity:dhEntity = "getPrimaryEntity(CC.waffentragerBoosterLevel, _entityId + '_' + _level)")
+		(var waffentragerBoosterLevel:dhComponent = "waffentragerBoosterLevelEntity.waffentragerBoosterLevel")
+		(struct levelBooster = PULL_WAFFENTRAGER_ATTRIBUTES(_entityId="waffentragerBoosterLevelEntity.id"))
+	)
+	(style
+		(flow = "horizontal")
+		(gap = "SXS")
+	)
+
+	(controller $Repeat renderer='WaffentragerBureauBooster'
+		(bind count "levelBooster.positive.length")
+		(args
+			_dataItem = "levelBooster.positive[$index]"
+			_width = 120px
+		)
+	)
+
+	(controller $Repeat renderer='WaffentragerBureauBooster'
+		(bind count "levelBooster.negative.length")
+		(args
+			_dataItem = "levelBooster.negative[$index]"
+			_width = 120px
+		)
+	)
+
+	(controller $Repeat renderer='WaffentragerBureauBooster'
+		(bind count "levelBooster.neutral.length")
+		(args
+			_dataItem = "levelBooster.neutral[$index]"
+			_width = 120px
+		)
+	)
+)

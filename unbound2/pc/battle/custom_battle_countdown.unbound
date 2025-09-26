@@ -1,0 +1,186 @@
+(def element CustomStartBattleCountdown (_battleState:number, _countdownBattleTime:number=0)
+	(scope
+		(event evShowDisciplineTask)
+		(event evHideDisciplineTask)
+		(event evShowFirstDigit)
+		(event evShowSecondDigit)
+		(event evTimerHittedZero)
+		(event evPlaySound)
+
+		(macro BATTLE_TIMER_SCOPE)
+
+		
+		(var selfAvatarEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var avatarComponent:dhComponent = "selfAvatarEntity.avatar")
+		(var teamId:number = "avatarComponent.teamId")
+		(var isHound:bool = "teamId == 0")
+		(var playerRole:str = "isHound ? 'HOUND' : 'WAFFENTRAGER'")
+
+
+		(var battleDataEntity:dhEntity = "getSingleEntity(CC.battleData)")
+		(var labelGameModeDescription:str = "battleDataEntity.battleInfo.gameModeDescription")
+
+		(var isCountdownBattleState:bool = "_battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN ")	
+
+		
+		(var currentTimeCeil:number = "ceil(max((_countdownBattleTime-1), 0))")
+		(var currentTimeCeilStr:str = "toString(currentTimeCeil)")
+
+		(var firstDigit:str = "currentTimeCeil < 10	? DIGIT_ZERO : currentTimeCeilStr[0]" init=false)
+		(var secondDigit:str = "currentTimeCeil < 10 ? currentTimeCeilStr[0] : currentTimeCeilStr[1]" init=false)
+
+		(var isTimerHittedZero:bool = "currentTimeCeil == 0")
+		(bind firstDigit "DIGIT_MINUS_ONE" watch=false (event "evTimerHittedZero"))
+		(bind secondDigit "DIGIT_MINUS_ONE" watch=false (event "evTimerHittedZero"))
+
+		(var isDisciplineTaskVisible:bool = "$event ? $event._isVisible : false" watch=false (event "evShowDisciplineTask") (event "evHideDisciplineTask"))
+
+		
+		(var textOnActivationDuration:number = "0.15")
+		(var iconOnActivationDuration:number = "0.15")
+		(var textOnActivationDelay:number = "iconOnActivationDuration + 0.1")
+		(var iconOnActivationDelay:number = "textOnActivationDuration + 0.1")
+
+		(var motionBlurValue:number = "0")
+		(controller $Animation 
+			(bindcall play
+				duration="textOnActivationDuration - 0.05"
+				from="{motionBlurValue: 15}"
+				to="{motionBlurValue: 0}"
+				reverse="isTimerHittedZero"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+		)
+	)
+
+	(style (width = 720px))
+
+	
+	(dispatch evTimerHittedZero delay="1" (bind trigger "isTimerHittedZero"))
+	(dispatch evShowDisciplineTask args="{_isVisible: true}" delay="1" on='addedToStage' (bind enabled "isCountdownBattleState"))
+	(dispatch evHideDisciplineTask args="{_isVisible: false}" (bind enabled "isDisciplineTaskVisible") (event "evTimerHittedZero"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['halloween2020_rule_message', 'regular']" init=false watch=false (event "evShowDisciplineTask"))
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(alpha = 0)
+			(pivotY = 50%)
+			(pivotX = 50%)
+			(bind backgroundImage "'url:../events/waffentrager/PCVE030_start_task_' + toLower(playerRole) + '.png'")
+			(backgroundSize = "autosize")
+		)
+		(controller $Animation 
+			(bindcall play
+				duration="iconOnActivationDuration"
+				from="{alpha: 0, scaleX: 0.5, scaleY: 0.5}"
+				to="{alpha: 1, scaleX: 1, scaleY: 1}"
+				reverse="isTimerHittedZero"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefaultBold28NM)
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(textAlign = "center")
+			(top = 58px)
+			(alpha = 0)
+			(filters 
+				(blur
+					(bind blurX "motionBlurValue")
+					(blurY = 0.0)
+					(quality = 1)
+				)
+			)
+		)
+		(controller $Animation 
+			(bindcall play
+				duration="textOnActivationDuration"
+				from="{alpha: 0, marginLeft: -280}"
+				to="{alpha: 1, marginLeft: 0}"
+				reverse="isTimerHittedZero"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+		)
+		(text = 'IDS_TASK_UPPER')
+	)
+
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(textAlign = "center")
+			(top = 93px)
+			(alpha = 0)
+			(filters 
+				(blur
+					(bind blurX "motionBlurValue")
+					(blurY = 0.0)
+					(quality = 1)
+				)
+			)
+		)
+		(controller $Animation 
+			(bindcall play
+				duration="textOnActivationDuration"
+				from="{alpha: 0, marginLeft: 280}"
+				to="{alpha: 1, marginLeft: 0}"
+				reverse="isTimerHittedZero"
+				watch=false
+				(event "evShowDisciplineTask")
+				(event "evHideDisciplineTask")
+			)
+		)
+		(bind text "'IDS_PCVE030_START_TASK_' + playerRole")
+	)
+
+	(dispatch evShowFirstDigit init=true args="{_firstDigit: firstDigit}" on=addedToStage delay="PREBATTLE_TIMER_DELAY" (bind enabled "firstDigit != DIGIT_MINUS_ONE") (bind trigger "firstDigit"))
+	(dispatch evShowSecondDigit init=true args="{_secondDigit: secondDigit}" on=addedToStage delay="PREBATTLE_TIMER_DELAY" (bind enabled "secondDigit != DIGIT_MINUS_ONE") (bind trigger "secondDigit"))
+	(dispatch evPlaySound init=false delay="PREBATTLE_TIMER_DELAY" (bind enabled "currentTimeCeil >= 0 && currentTimeCeil < 11 && isCountdownBattleState") (bind trigger "currentTimeCeilStr"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['prebattleTimer', 'regular']" (event "evPlaySound"))
+
+	(hblock
+		(class $MiddleAlignedAbsolutely)
+		(style (top = 132px))
+		(block
+			(style
+				(width = 42px)
+				(height = 76px)
+				(marginRight = "XS")
+			)
+			(controller $FxInstance renderer='PrebattleTextTimerDigit' lifetime="11"
+				(bindcall create (event "evShowFirstDigit"))
+				(args
+					_skin = "$event._firstDigit"
+					_digit = "firstDigit"
+				)
+			)
+		)
+		
+		(block
+			(style
+				(width = 42px)
+				(height = 76px)
+			)
+			(controller $FxInstance renderer='PrebattleTextTimerDigit' lifetime="2"
+				(bindcall create (event "evShowSecondDigit"))
+				(args
+					_skin = "$event._secondDigit"
+					_digit = "secondDigit"
+				)
+			)
+		)
+	)
+)

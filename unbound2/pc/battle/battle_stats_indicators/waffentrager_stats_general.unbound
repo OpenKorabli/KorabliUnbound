@@ -1,0 +1,167 @@
+(def element WaffentragerBattleDataGeneral ()
+	(scope
+		(var selfAvatarEntity:dhEntity =	"getSingleEntity(CC.playerAvatar)")
+		(var avatarComponent:dhComponent =	"selfAvatarEntity.avatar")
+		(var teamId:number =				"avatarComponent.teamId")
+		(var isWaffentragerTeam:bool =		"teamId == 1")
+	)
+
+	(style
+		(width = 486px)
+		(align = "center")
+		(hitTest = false)
+	)
+
+	(tf
+		(class $TextDefaultBold24NM)
+		(style (marginBottom = 20px))
+
+		(text = "'IDS_WAFFENTRAGER_BATTLE_STATS_GENERAL_HEADER_' + teamId")
+	)
+
+	(block
+		(bind visible "!isWaffentragerTeam")
+
+		(style
+			(width = 100%)
+			(marginBottom = "S")
+		)
+
+		(controller $Instance renderer='WaffentragerHPBarCentral'
+			(bind enabled "!isWaffentragerTeam")
+		)
+	)
+
+	(element WaffentragerNullFieldBarCentral)
+)
+
+(def element WaffentragerHPBarCentral ()
+	(scope
+		(event evBarTweenStart)
+		(event onBarTweenStart)
+		(event onBarTweenEnd)
+		(event onDamageTweenEnd)
+
+
+		(var enemyAvatarCollection:dhCollection =	"getCollection(CC.avatar).getChildByPath('team.enemy')")
+		(var waffentrager:dhEntity =				"enemyAvatarCollection.getEntityAtIndex(0)")
+		(var health:dhComponent =					"waffentrager.health")
+		(var visibilityComponent:dhComponent =		"waffentrager.visibility")
+		(var isVisible:bool =						"visibilityComponent.visible" (event "visibilityComponent.evChanged"))
+
+		(var healthMax:number =		"health.max ?: 0"		(event "health.evMaxChanged"))
+		(var healthValue:number =	"health.value ?: 0"		(event "health.evValueChanged") (event "waffentrager.visibility.evChanged"))
+		(var healthDelta:number =	"health.delta ?: 0"		(event "health.evDeltaChanged"))
+
+		(var healthRatio:number =	"healthMax ? healthValue / healthMax : -1")
+
+		(var isDirty:bool = false)			
+		(bind isDirty "true"		(event "health.evValueChanged") (event "health.evMaxChanged"))
+		(bind isDirty "false"		(event "onBarTweenStart"))
+		
+		(var isDamageShown:bool = false)	
+		(bind isDamageShown "true"	(event "onBarTweenStart"))
+		(bind isDamageShown "false"	(event "onDamageTweenEnd"))
+
+		(var targetBarScale:number = 0)		
+		(bind targetBarScale "healthRatio" watch=false (event "onBarTweenStart"))
+
+		(var healthCT:dict = "TWO_TEAMS_COLOR_TRANSFORMS['enemy']")
+	)
+
+	(dispatch evBarTweenStart dir="EventDirection.NONE" args="{}" (event "onDamageTweenEnd") (bind enabled "isDirty"))		
+
+	(style
+		(width = 100%)
+		(height = 24px)
+		(padding = 4px)
+		(backgroundImage = 'url:../events/waffentrager/waffentrager_progressbar_bg.png')
+		(scale9grid = "[6, 6, 6, 6]")
+		(backgroundSize = "fill")
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(bind alpha "isDamageShown ? 1 : 0")
+				(scaleX = "healthRatio")
+				(borderRadius = 2px)
+				(bind backgroundColor "0xFFFFFFFF")
+				(backgroundSize = "fill")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = "DAMAGE_BAR_TWEEN_DURATION"
+					delay = "DAMAGE_BAR_TWEEN_DELAY"
+					action="killAll"
+					watch=false
+					easing="Easing.quad_in"
+					to = "{scaleX: targetBarScale}"
+					(event "onBarTweenEnd")
+				)
+				(dispatch onDamageTweenEnd args="{}" on=evAnimEnded)
+			)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(scaleX = "1")
+
+			(style
+				(bind backgroundColor "0xFFFFFFFF")
+				(backgroundSize = "fill")
+				(borderRadius = 2px)
+			)
+
+			(bind colorTransform "healthCT")
+
+			(controller $Animation
+				(bind enabled "!(isDamageShown)")
+				(bindcall play	duration = "HEALTH_BAR_TWEEN_DURATION"
+								action="killAll"
+								watch=false
+								to = "{ scaleX: healthRatio }"
+								(event "health.evValueChanged")
+								(event "health.evMaxChanged")
+								(event "evBarTweenStart")
+				)
+				(dispatch onBarTweenStart	args="{}"	on=evAnimStarted)
+				(dispatch onBarTweenEnd		args="{}"	on=evAnimEnded)
+			)
+		)
+	)
+)
+
+(def element WaffentragerNullFieldBarCentral ()
+	(scope
+		(struct nullFieldCharge =		PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.NULL_FIELD_CHARGE"))
+		(struct nullFieldMaxCharge =	PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.NULL_FIELD_CHARGE_SCORE"))
+
+		(var filledValue:number = "nullFieldMaxCharge.value ? min(100, (nullFieldCharge.value / nullFieldMaxCharge.value) * 100) : 0")
+	)
+
+	(style
+		(width = 100%)
+		(height = 16px)
+		(padding = 4px)
+		(backgroundImage = 'url:../events/waffentrager/waffentrager_progressbar_bg.png')
+		(scale9grid = "[6, 6, 6, 6]")
+		(backgroundSize = "fill")
+	)
+
+	(block
+		(style
+			(bind width "filledValue + '%'")
+			(height = 100%)
+			(borderRadius = 2px)
+			(backgroundColor = "BATTLE_UI_TASKS_PANEL.SHIELD_BAR")
+		)
+	)
+)

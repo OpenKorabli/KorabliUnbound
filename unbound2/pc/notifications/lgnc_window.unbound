@@ -13,101 +13,121 @@
 (def constant LGNC_MESSAGE_WIDTH 400)
 (def constant LGNC_BANNER_IMAGE_HEIGHT 225)
 
-(def element LgncMessageContainer ()
+(def element LGNCWindow ()
+	(macro MODAL_WINDOW_INIT)
+
+	(scope
+		(event evLgncMessageOpen)
+		(event evLgncMessageClose)
+
+		(var lgncTooltipState:dhComponent = "getSingleComponent(CC.lgncTooltipState)")
+		(var isLgncMessageVisible:bool = "lgncTooltipState.isVisible" (event "lgncTooltipState.evIsVisibleChanged"))
+
+		(struct lgncPositionX = GET_PREF_NUMBER(_option="'ui.lgnc.positionX'"))
+		(struct lgncPositionY = GET_PREF_NUMBER(_option="'ui.lgnc.positionY'"))
+
+		(struct stageSize = STAGE_SIZE())
+
+		(var verifiedLgncPositionX:number = "lgncPositionX.value ?: (stageSize.width / 2)")
+		(var verifiedLgncPositionY:number = "lgncPositionY.value ?: stageSize.height * 0.6")
+	)
+
+	(dispatch evLgncMessageOpen		dir="EventDirection.NONE" on='addedToStage' (bind enabled "isLgncMessageVisible"))
+	(dispatch evLgncMessageOpen		dir="EventDirection.NONE" (bind enabled "isLgncMessageVisible") (bind trigger "isLgncMessageVisible"))
+	(dispatch evLgncMessageClose	dir="EventDirection.NONE" (bind enabled "!isLgncMessageVisible") (bind trigger "isLgncMessageVisible"))
+
+	(controller $Tooltip
+		(renderer = 'LgncMessageInfotip')
+
+		(bindcall show animation =	{	duration:	0.3,
+										easing:		"Easing.cubic_out",
+										from:		{ alpha: 0, top: 10px },
+										to:			{ alpha: 1, top: 0px }} (event "evLgncMessageOpen"))
+
+		(bindcall hide animation =	{	duration:	0.15,
+										easing:		"Easing.cubic_out",
+										from:		{ alpha: 1, top: 0px },
+										to:			{ alpha: 0, top: -5px }} (event "evLgncMessageClose"))
+
+		(hideAnimation = {	duration:	0.15,
+							easing:		"Easing.cubic_out",
+							from:		{ alpha: 1, top: 0px },
+							to:			{ alpha: 0, top: -5px} })
+
+		(screenBoundsOffset = 6px)
+
+		(bind dragPos "{ x: verifiedLgncPositionX, y: verifiedLgncPositionY }")
+
+		(align = "top|center")
+		(position = "draggable")
+		(tooltipType = "interactive")
+
+		(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.lgnc.positionX', $event.x ]]" init=false on='evDragPosChanged')
+		(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.lgnc.positionY', $event.y ]]" init=false on='evDragPosChanged')
+	)
+)
+
+(def element LgncMessageInfotip ()
 	(scope
 		(event evRadioButtonSelected)
-		(event evRemovedLgncMessage)
-
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 
-		(var lgncTooltipStateEntity:gfx = "$datahub.getSingleEntity(CC.lgncTooltipState)")
-		(var isLgncMessageVisible:bool = "lgncTooltipStateEntity.lgncTooltipState.isVisible" (event "lgncTooltipStateEntity.lgncTooltipState.evIsVisibleChanged"))
+		(var lgncMessageCollection:dhCollection = "getCollectionByPath(CC.lgncSysMsgToBeRendered, 'reversed')")
+		(var lgncMessageCollectionLen:number = "lgncMessageCollection.length")
 
-		(var lgncMessageCollection:gfx = "$datahub.getCollection(CC.lgncSysMsgToBeRendered).getChildByPath('reversed')")
-		(var lgncMessageArray:array = "lgncMessageCollection ? lgncMessageCollection.items : []" (event "lgncMessageCollection.evAdded") (event "evRemovedLgncMessage"))
-		(var hasManyMessages:bool = "lgncMessageArray.length > 1")
+		(var lgncMessageLocalLength:number = "lgncMessageCollectionLen" watch=false)
+		(bind lgncMessageLocalLength "lgncMessageCollectionLen ?: lgncMessageLocalLength" init=false watch=false (bind trigger "lgncMessageCollectionLen"))
 
-		(var lastItemIndex:number = "lgncMessageArray.length > 0 ? lgncMessageArray.length - 1 : 0")
+		(var hasManyMessages:bool = "lgncMessageLocalLength > 1")
+
+		(var lastItemIndex:number = "lgncMessageLocalLength > 0 ? lgncMessageLocalLength - 1 : 0")
 		(var selectedIndex:number = "0")
 		
 		(bind selectedIndex "0" init=false watch=false (event "lgncMessageCollection.evAdded"))
 		(bind selectedIndex "$event.index" init=false watch=false (event "evRadioButtonSelected"))
-		(bind selectedIndex "selectedIndex > lastItemIndex ? lastItemIndex : selectedIndex" init=false watch=false (event "evRemovedLgncMessage"))
+		(bind selectedIndex "selectedIndex > lastItemIndex ? lastItemIndex : selectedIndex" init=false watch=false (bind trigger "lgncMessageLocalLength"))
 
-		
-		(var lgncMessageArrayLength:number = "lgncMessageCollection.items.length" (event "lgncMessageCollection.evAdded") (event "lgncMessageCollection.evRemoved"))
-		(var isNotLastElement:bool = "lgncMessageArrayLength < lgncMessageArray.length && lgncMessageArrayLength > 0")
-		
+		(var lgncEntity:dhEntity = "lgncMessageCollection.getEntityAtIndex(selectedIndex)")
+		(var contentEntitiesIds:array = "lgncEntity.sysMessageCore.contentEntitiesIds ?: []" (event "lgncEntity.sysMessageCore.evContentEntitiesIdsChanged"))
+		(var verifiedContentEntitiesIds:array = "contentEntitiesIds" watch=false)
+		(bind verifiedContentEntitiesIds "contentEntitiesIds ?: verifiedContentEntitiesIds" init=false watch=false (bind trigger "contentEntitiesIds"))
 	)
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
 	(style (width = "LGNC_MESSAGE_WIDTH"))
 
 	
-	(dispatch evRemovedLgncMessage init=false watch=false (bind trigger "lgncMessageArrayLength") (bind enabled "isNotLastElement"))
-	
-
-	
 	(block
-		(dispatch evStartShow dir="EventDirection.DOWN" init=false watch=false (bind enabled "isLgncMessageVisible")	(bind trigger "isLgncMessageVisible"))
-		(dispatch evStartHide dir="EventDirection.DOWN" init=false watch=false (bind enabled "!isLgncMessageVisible")	(bind trigger "isLgncMessageVisible"))
-		
 		(class $FullsizeAbsolute)
 		(style (hitTest = false))
 
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
 	)
 
+	(block
+		(name = 'lgncMessageDragZone')
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(dragZone = true)
+	)
+
 	
 	(block
 		(style (width = 100%))
-		(controller $Instance renderer='LgncMessageContent'
-			(bind enabled "lgncMessageArray.length")
-			(bindcall recreate (bind trigger "lgncMessageArray[selectedIndex]"))
+
+		(controller $Repeat renderer = 'LgncMessageItem'
+			(bind count "verifiedContentEntitiesIds.length")
 			(args
-				_lgncEntity = "lgncMessageArray[selectedIndex]"
+				_contentEntitiesIds = "verifiedContentEntitiesIds"
 			)
 		)
 	)
 
 	
-	(block
-		(style
-			(width = 100%)
-			(alpha = "hasManyMessages ? 1 : 0")
-			(ubScaleY = "hasManyMessages ? 1 : 0")
-			(bind hitTest "hasManyMessages")
-		)
-		(block
-			(class $FullsizeAbsolute)
-			(isMask = true)
-			(style (backgroundColor = 0xFFFFFFFF))
-		)
-
-		(controller $Animation
-			(bindcall play to="{alpha:0}" duration=0.1 easing="Easing.line" action="kill" (bind enabled "!hasManyMessages"))
-			(bindcall play to="{alpha:1}" duration=0.1 easing="Easing.line" action="kill" (bind enabled "hasManyMessages"))
-		)
-		(controller $Animation
-			(bindcall play to="{ubScaleY:0, visible:false}" delay=0.15 duration=0.3 easing="Easing.quint_out" action="kill" (bind enabled "!hasManyMessages"))
-			(bindcall play to="{ubScaleY:1, visible:true}" duration=0.3 easing="Easing.quint_out" action="kill" (bind enabled "hasManyMessages"))
-		)
-
+	(element DEFAULT_EXPAND_CONTAINER "hasManyMessages"
 		(element HorizontalDividerTwoPx)
 		(element LgncMessageRadioButtonContainer
-			_count = "lgncMessageArray.length"
+			_count = "lgncMessageLocalLength"
 			_selectedIndex = "selectedIndex"
-		)
-	)
-)
-
-(def element LgncMessageContent (_lgncEntity:gfx)
-	(scope
-		(var contentEntitiesIds:array = "_lgncEntity ? _lgncEntity.sysMessageCore.contentEntitiesIds : []" (event "_lgncEntity.sysMessageCore.evContentEntitiesIdsChanged"))
-	)
-	(style (width = 100%))
-	(controller $Repeat renderer = 'LgncMessageItem'
-		(bind count "contentEntitiesIds.length")
-		(args
-			_contentEntitiesIds = "contentEntitiesIds"
 		)
 	)
 )

@@ -71,7 +71,7 @@
 	FULL 		: { width: 280px }
 })
 
-(def element ShipTypeCounter(_shipType:str)
+(def element ShipTypeCounter (_shipType:str)
 	(scope
 		(var balancerInfoComponent:dhComponent = "getSingleComponent(CC.balancerInfo)")
 
@@ -102,7 +102,7 @@
 		(bind name "'ship_type_counter_' + _shipType")
 		(class $TextDefaultBold18NM)
 		(style (alpha = "TC"))
-		(bind text "hasCount ? count : '-'")
+		(bind text "hasCount ? count : '–'")
 	)
 )
 
@@ -110,6 +110,7 @@
 	(var selectedBattleTypeEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
 	(var battleTypeComponent:dhComponent = 	"selectedBattleTypeEntity.battleType")
 	(var selectedEventBattleName:str = 		"selectedBattleTypeEntity.eventBattleState.name")
+	(var selectedEventBattleId:number =		"selectedBattleTypeEntity.eventBattleState.eventId")
 
 	(var battleTypeGameParamId:number = "battleTypeComponent.battleTypeGameParamId ?: 0")
 	(var battleType:str = 				"battleTypeComponent.type" (event "battleTypeComponent.evBattleTypeChanged"))
@@ -168,10 +169,13 @@
 		(var shipTypesAll:dhCollection = "getCollectionByPath(CC.shipFilterItem, 'byFilterType.shipType')")
 		(var shipTypeCount:number = "shipTypeFilters.length ?: shipTypesAll.length")
 
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+		(var waffentragerEventIndex:str = "waffentragerEvent.eventIndex" (event "waffentragerEvent.evChanged"))
+		(var isWaffentragerBattle:bool = "waffentragerEventIndex ? balancerHeaderData.battleName == waffentragerEventIndex : false")
 
 		(var accountLevelComponent:dhComponent = "getSingleComponent(CC.accountLevel)")
 		(var curAccountLevel:number = "accountLevelComponent.level" (event "accountLevelComponent.evLevelChanged"))
-		(var isShowShipCounters:bool = "!balancerHeaderData.isClanBattle && curAccountLevel >= SC.Common.ACCOUNT_LEVEL.WEB_STORAGE")
+		(var isShowShipCounters:bool = "!balancerHeaderData.isClanBattle && curAccountLevel >= SC.Common.ACCOUNT_LEVEL.WEB_STORAGE && !isWaffentragerBattle")
 
 
 		(struct currentTopWindow = CURRENT_TOP_WINDOW())
@@ -211,6 +215,8 @@
 	
 	(dispatch evDisplayTimeOfTheElementHasEnded delay=0.285 reset=true (bind enabled "!isBalancerShows") (bind trigger "isBalancerShows"))
 	(bindcall externalCall 'direct.action' "['setSessionPref', {prefName: 'BalancerHideAnimationFinished', newValue: isBalancerHideAnimationFinished}]" init=true)
+
+	(bindcall externalCall "restrictionsComponentId ? 'inputMapping.onAction' : ''" "['createRestrictionsSubCollection', { componentId: restrictionsComponentId }]" watch=false on='addedToStage' (bind trigger "restrictionsComponentId"))
 
 	(style
 		(align = "center")
@@ -497,7 +503,7 @@
 
 			
 			(block
-				(bind visible "isShowShipCounters || !isButtonLeaveBattleVisible")
+				(bind visible "isShowShipCounters || !isButtonLeaveBattleVisible || isWaffentragerBattle")
 				
 				(style
 					(marginTop = "M")
@@ -507,13 +513,13 @@
 				)
 
 				(controller $Instance renderer='HorizontalDividerTwoPx'
-					(bind enabled "isShowShipCounters || !isButtonLeaveBattleVisible")
+					(bind enabled "isShowShipCounters || !isButtonLeaveBattleVisible || isWaffentragerBattle")
 				)
 			)
 
 			
 			(hblock
-				(bind visible "isShowShipCounters")
+				(bind visible "isShowShipCounters || isWaffentragerBattle")
 
 				(style
 					(marginTop = "S")
@@ -530,6 +536,13 @@
 					(args
 						_shipType = "shipTypeFilters.length ? shipTypeFilters[$index].shipFilterItem.field
 															: shipTypesAll[$index].shipFilterItem.field"
+					)
+				)
+
+				(controller $Instance renderer='WaffentragerBalancerContent'
+					(bind enabled "isWaffentragerBattle")
+					(args
+						_playerShipId = "playerShipId"
 					)
 				)
 			)
@@ -560,7 +573,6 @@
 					(paddingLeft = "BALANCER_PADDING_LEFT_RIGHT")
 					(paddingRight = "BALANCER_PADDING_LEFT_RIGHT")
 				)
-
 				(controller $Instance renderer='StatusLine'
 					(bind enabled "!isButtonLeaveBattleVisible")
 					(args
@@ -748,4 +760,88 @@
 	)
 
 	(element UpperSlidingBalancer)
+)
+
+(def element WaffentragerBalancerContent (_playerShipId:number = 0)
+	(scope
+		(struct waffentrager = PULL_WAFFENTRAGER_SHIP(_playerShipId="_playerShipId"))
+
+		(var balancerInfoComponent:dhComponent = "getSingleComponent(CC.balancerInfo)")
+		(var playersInRange:number = "balancerInfoComponent.playersInRange ?: 0" (event "balancerInfoComponent.evPlayersInRangeChanged"))
+		(var playersTotal:number = "balancerInfoComponent.playersTotal ?: 0" (event "balancerInfoComponent.evPlayersTotalChanged"))
+		(var enemyTeamShipsCount:number = "playersTotal-playersInRange")
+		(var houndsCount:number = "waffentrager.isSelected ? enemyTeamShipsCount : playersInRange")
+		(var waffentragersCount:number = "waffentrager.isSelected ? playersInRange : enemyTeamShipsCount")
+	)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+	)
+	(hblock
+		(style (width = 110px))
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 100%)
+				(marginRight = 6px)
+				(marginTop = 6px)
+				(alpha = "TC")
+			)
+			(text = 'IDS_WT_FRACTION_HOUND')
+		)
+
+		(block
+			(style (align = "center"))
+			(element NationFlagsTiny
+				_shipCountry = 'the_alliance'
+			)
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(marginTop = "XS")
+					(alpha = "TC")
+				)
+				(bind text "houndsCount > 0 ? houndsCount : '–'")
+			)
+		)
+	)
+
+	(block
+		(style
+			(height = 42px)
+			(marginLeft = "M")
+			(marginRight = "M")
+		)
+		(element VerticalDivider)
+	)
+
+	(hblock
+		(style (width = 110px))
+
+		(block
+			(style (align = "center"))
+			(element NationFlagsTiny
+				_shipCountry = 'waffentrager'
+			)
+			(tf
+				(class $TextDefaultBoldNM)
+				(style
+					(marginTop = "XS")
+					(alpha = "TC")
+				)
+				(bind text "waffentragersCount > 0 ? waffentragersCount : '–'")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 100%)
+				(marginTop = 6px)
+				(textAlign = "right")
+				(alpha = "TC")
+			)
+			(text = 'IDS_WT_FRACTION_WAFFENTRAGER')
+		)
+	)
 )

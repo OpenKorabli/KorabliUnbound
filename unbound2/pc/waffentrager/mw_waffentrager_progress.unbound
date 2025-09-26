@@ -1,0 +1,1438 @@
+(def constant WT_REWARD_SIZE 112px)
+
+(def constant WT_REWARDS_CAROUSEL_HEIGHT 146px)
+
+(def constant WAFFENTRAGER_THRESHOLDS_TO_SHOW_BEFORE_CURRENT_LEVEL 4)
+
+(def struct WT_SCREEN_SIZE ()
+	(struct stageSize = STAGE_SIZE())
+	(var isSmallScreen:bool = "stageSize.width <= 1440 && stageSize.height <= 900")
+)
+
+(def css $WTProgressContent ()
+	(width = 100%)
+	(paddingLeft = "{1280:20px, 1920:XLM}")
+	(paddingRight = "{1280:20px, 1920:XLM}")
+)
+
+
+(def element ModalWindowWaffentragerProgress ()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(struct stageSize = STAGE_SIZE())
+		(var isSmallScreen:bool = "stageSize.width <= 1440 && stageSize.height <= 900")
+
+		(struct qualityGraphicsPref = GET_PREF_STR(_option="'graphics.preset'"))
+		(var qualityGraphics:str = "qualityGraphicsPref.value")
+		(var isStatic:bool = "qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.LOW || qualityGraphics == SC.Ui_prefs.GRAPHICS_PRESET.MINIMUM")
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var wtEventum:number = "resourceEntity.accountResource.eventum_2 ?: 0" (event "resourceEntity.accountResource.evChangedEventum_2"))
+
+		(var waffentragerEventEntity:dhEntity = "getSingleEntity(CC.waffentragerEvent)")
+		(var waffentragerEvent:dhComponent = "waffentragerEventEntity.waffentragerEvent")
+		(var eventFlags:number = "waffentragerEvent.eventFlags" (event "waffentragerEvent.evEventFlagsChanged"))
+		(var rewardsClaimUntil:number = "waffentragerEvent.rewardsClaimUntil ?: 0" (event "waffentragerEvent.evChanged"))
+		(var relay:number = "waffentragerEvent.relay ?: 0" (event "waffentragerEvent.evChanged"))
+		(var activationKeys:number = "waffentragerEvent.activationKeys ?: 0" (event "waffentragerEvent.evChanged"))
+		(var pinnedThresholdId:number = "waffentragerEvent.pinnedThresholdId" (event "waffentragerEvent.evPinnedThresholdIdChanged"))
+
+		(struct waffentragerState = PULL_WAFFENTRAGER_EVENT_STATE(_component = "waffentragerEvent"))
+		(struct waffentragerTimer = PULL_WAFFENTRAGER_EVENT_TIMER(_component = "waffentragerEvent"))
+		(struct waffentragerProgression = PULL_WAFFENTRAGER_PROGRESSION(_component = "waffentragerEvent"))
+
+		(struct serverTime = SERVER_TIME())
+		(struct countdownRewardsClaimUntil = COUNTDOWN(_time = "rewardsClaimUntil ?: 0" _serverTime = "serverTime.value" _format = "'HIGHEST'"))
+		(var eventFinishText:str = "(rewardsClaimUntil - serverTime.value) < HOUR_IN_SEC	? 'IDS_WT_PROGRESS_EVENT_FINISH_TIME_LEFT_MINUTES'
+																							: 'IDS_WT_PROGRESS_EVENT_FINISH_TIME_LEFT'")
+
+		(struct fraction = GET_PREF_STR(_option="'ui.waffentrager.fraction'"))
+
+		
+		(var waffentragerFractionEntity:dhEntity = "getPrimaryEntity(CC.waffentragerFraction, SC.Common.WAFFENTRAGER_FRACTION.WAFFENTRAGER)")
+		(var waffentragerFraction:dhComponent = "waffentragerFractionEntity.waffentragerFraction")
+		(var tasksWaffentrager:number = "waffentragerFraction.doneCount" (event "waffentragerFraction.evChanged"))
+
+		(var houndFractionEntity:dhEntity = "getPrimaryEntity(CC.waffentragerFraction, SC.Common.WAFFENTRAGER_FRACTION.HOUND)")
+		(var houndFraction:dhComponent = "houndFractionEntity.waffentragerFraction")
+		(var tasksHound:number = "houndFraction.doneCount" (event "houndFraction.evChanged"))
+
+		(var isProgressionOnboardingSeen:bool = "toBool(eventFlags & SC.Common.WAFFENTRAGER_EVENT_FLAGS.PROGRESSION_ONBOARDING_SEEN)")
+
+		(var isTakeAllRewardsButtonVisible:bool = "waffentragerProgression.isCompleted && waffentragerState.hasAvailableRewards")
+	)
+	(name = 'ModalWindowWaffentragerProgress')
+
+	(bindcall externalCall
+		"isProgressionOnboardingSeen ? '' : 'inputMapping.onRequest'"
+		"['openWaffentragerOnboarding', { type: 'progress'}]"
+		(event "startShow")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../events/waffentrager/bg/fractions.png')
+			(backgroundSize = "cover")
+		)
+		(alpha = 0)
+		(controller $Animation
+			(bindcall play	duration = 0.2
+							to = "{ alpha: 1 }"
+							(event "startShow")
+			)
+			(bindcall play	duration = 0.2
+							delay = 0.25
+							to = "{ alpha: 0 }"
+							action="kill"
+							(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:../bg/animated/waffentrager/progress/' + fraction.value +'.skel'")
+		)
+		(controller $Spine
+			(bindcall pause init=true (bind enabled "isStatic"))
+			(bindcall resume (bind enabled "!isStatic"))
+		)
+		(controller $Animation
+			(bindcall play	duration = 0.5
+							from = "{ alpha: 0 }"
+							to = "{ alpha: 1 }"
+							(bind trigger "fraction.value")
+							(event "startShow")
+			)
+			(bindcall play	duration = 0.3
+							delay = 0.1
+							from = "{ alpha: 1 }"
+							to = "{ alpha: 0 }"
+							action = "kill"
+							(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(marginBottom = "{720:S, 1080:MS}")
+		)
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_WT_MW_PROGRESS_TITLE'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_backButtonText = 'IDS_BACK'
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(class $WTProgressContent)
+		(style (marginBottom = "{720:S, 1080:LS}"))
+
+		(block
+			(style (width = 100%))
+
+			(hblock
+				(style
+					(marginBottom = "{720:S, 1080:20px}")
+					(gap = "MS")
+				)
+
+				(element WaffentragerProgressPriceTag
+					_price = "wtEventum"
+					_currency = "SC.Common.CURRENCIES.EVENTUM_2"
+				)
+
+				(element WaffentragerProgressPriceTag
+					_price = "relay"
+					_currency = "SC.Common.CURRENCIES.WAFFENTRAGER_RELAY"
+				)
+
+				(block
+					(controller $Instance renderer='WaffentragerProgressPriceTag'
+						(bind enabled "waffentragerState.isActive")
+						(args
+							_price = "activationKeys"
+							_currency = "SC.Common.CURRENCIES.WAFFENTRAGER_ACTIVATION_KEYS"
+						)
+					)
+				)
+			)
+
+			(element DefaultButton
+				_label = 'IDS_WT_PROGRESS_BTN_GO_TO_METASHOP'
+				_width = 203px
+				_type = "waffentragerState.isFinalStatsTimeReached ? SC.Ui_styles.BUTTON_TYPE.DEFAULT : SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_size = "SIZE.MEDIUM"
+				_methods = "[	{	type: 'inputMapping.onRequest', name: 'closeWaffentragerProgress', args: {}},
+								{	type: 'inputMapping.onRequest', name: 'openMetashop', args: { url: SC.Ui_windows.GUI_URL.WAFFENTRAGER_METASHOP }}]"
+			)
+		)
+
+		(block
+			(class $MiddleAlignedAbsolutely)
+			(controller $Instance renderer='WaffentragerEventTimer'
+				(bind enabled "waffentragerState.isActive")
+				(args
+					_mainProgressionUntil = "waffentragerTimer.mainProgressionUntil"
+				)
+			)
+
+			(block
+				(bind visible "waffentragerState.isFinalStatsTimeReached")
+				(style (align = "center"))
+
+				(tf
+					(class $TextDefaultBold22NM)
+					(style
+						(marginBottom = "{720:MS, 1080:L}")
+						(alpha = "TA")
+					)
+					(bind text "toUpper(tr('IDS_WT_PROGRESS_STATUS_EVENT_FINISH_SKIP'))")
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(width = 380px)
+						(textAlign = "center")
+						(bind textColor "SC.Ui_styles.SERVICE_COLORS.ORANGE")
+					)
+					(bind text "subst(eventFinishText, [], {_timeLeft: countdownRewardsClaimUntil.value}, countdownRewardsClaimUntil.value)")
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(class $Fullsize)
+		(style
+			(minHeight = 375px)
+			(maxHeight = 515px)
+			(align = "middle")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../events/waffentrager/bg/tasks.png')
+				(backgroundSize = "cover")
+			)
+		)
+
+		(block
+			(class $WTProgressContent)
+			(style (align = "center"))
+
+			(block
+				(bind visible "waffentragerState.isActive")
+				(style
+					(position = "absolute")
+					(left = 0)
+					(top = "{720:0px, 1080:-MS}")
+				)
+
+				(hblock
+					(style (marginBottom = "{720:S, 1080:M}"))
+
+					(tf
+						(class $TextDefaultBold20NM)
+						(style (alpha = "TA"))
+						(bind text "toUpper(tr('IDS_BATTLE_TASKS'))")
+					)
+
+					(block
+						(style
+							(width = 19px)
+							(height = 19px)
+							(marginTop = -3px)
+							(marginLeft = "XS")
+							(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png')
+						)
+					)
+
+					(controller $Tooltip
+						(renderer = 'WaffentragerProgressInfoTemplateTooltip')
+						(args
+							_headerText = 'IDS_BATTLE_TASKS'
+							_descriptionText = 'IDS_WT_BATTLE_TASKS_TOOLTIP_TEXT'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(marginBottom = "{720:S, 1080:SXS}")
+						(styleSheet = '.bold { font-weight: bold }')
+						(alpha = "TC")
+					)
+					(bind htmlText "subst('IDS_WT_PROGRESS_TASKS_COUNT_HOUND',[], {_count: tasksHound})")
+				)
+
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(styleSheet = '.bold { font-weight: bold }')
+						(alpha = "TC")
+					)
+					(bind htmlText "subst('IDS_WT_PROGRESS_TASKS_COUNT_WAFFENTRAGER',[], {_count: tasksWaffentrager})")
+				)
+			)
+
+			(controller $Instance renderer='WaffentragerEventActive'
+				(bind enabled "waffentragerState.isActive")
+				(args
+					_isSmallScreen = "isSmallScreen"
+				)
+			)
+
+			(controller $Instance renderer='WaffentragerEventFinished'
+				(bind enabled "waffentragerState.isFinalStatsTimeReached")
+				(args
+					_tasksHound = "tasksHound"
+					_tasksWaffentrager = "tasksWaffentrager"
+				)
+			)
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+		(class $WTProgressContent)
+		(style
+			(marginTop = "{720:XS, 1080:MS}")
+			(marginBottom = "{720:XS, 1080:LS}")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(bind flow "isSmallScreen ? horizontal : vertical")
+			)
+
+			(hblock
+				(style
+					(backgroundColor = "NO_COLOR")
+					(marginRight = "M")
+					(bind marginBottom "isSmallScreen ? 0px : M")
+				)
+
+				(tf
+					(class $TextDefaultBold20NM)
+					(style
+						(marginRight = "XS")
+						(alpha = "TA")
+					)
+					(bind text "toUpper(tr('IDS_WT_PROGRESS_STEPS_TEXT'))")
+				)
+
+				(block
+					(style
+						(width = 19px)
+						(height = 19px)
+						(marginTop = "-XXS")
+						(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png')
+					)
+				)
+
+				(controller $Tooltip
+					(renderer = 'WaffentragerProgressInfoTemplateTooltip')
+					(args
+						_headerText = 'IDS_WT_PROGRESS_STEPS_TEXT'
+						_descriptionText = 'IDS_WT_PROGRESS_STEPS_TOOLTIP_TEXT'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(element WaffentragerProgressStatus
+				_isSmallScreen = "isSmallScreen"
+			)
+		)
+
+		(hblock
+			(block
+				(style (bind marginRight "isTakeAllRewardsButtonVisible ? MS : 0px"))
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "isTakeAllRewardsButtonVisible")
+					(args
+						_name = 'waffentrager_take_rewards'
+						_width = "isSmallScreen ? 180px: 232px"
+						_size = "isSmallScreen ? SIZE.SMALL : SIZE.MEDIUM"
+						_dispatchedEv = 'evTakeRewardsButtonClicked'
+						_defaultFocused = true
+						_focusIndex = 0
+						_isTransactionBtn = true
+						_label = 'IDS_WT_PROGRESS_TAKE_ALL_REWARDS_BUTTON'
+						_methods = "[	{	type: 'inputMapping.onAction',
+											name: 'WaffentragerProxyUSS.claimAllWaffentragerRewards',
+											args: { }},
+										{	type: 'inputMapping.onRequest',
+											name: 'openRewardsModalWithoutAnimation',
+											args: {	rewardsEntityId: waffentragerEventEntity.id,
+													header: 'IDS_RECEIVED_LOOTBOXES_REWARDS'}}]"
+					)
+				)
+			)
+
+			(element DefaultButton
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_width = "isSmallScreen ? 180px: 232px"
+				_size = "isSmallScreen ? SIZE.SMALL : SIZE.MEDIUM"
+				_focusIndex = 1
+				_label = 'IDS_WT_MW_PROGRESS_BUTTON_ONBOARDING'
+				_methods = "[	{	type: 'inputMapping.onRequest',
+									name: 'openWaffentragerOnboarding',
+									args: { type: 'progress'}}]"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
+		(style
+			(width = 100%)
+			(marginBottom = "{720:L, 1080:LS}")
+		)
+		(element WaffentragerRewardsCarousel)
+	)
+)
+
+(def element WaffentragerEventTimer (_mainProgressionUntil:number = 0)
+	(scope
+		(struct serverTime = SERVER_TIME())
+
+		(var timeLeft:number = "_mainProgressionUntil - serverTime.value")
+		(var days:number= "floor(timeLeft/DAY_IN_SEC) ?: 0")
+		(var hours:number = "floor((timeLeft - days * DAY_IN_SEC)/HOUR_IN_SEC) ?: 0")
+		(var minutes:number = "floor((timeLeft - days * DAY_IN_SEC - hours * HOUR_IN_SEC)/MINUTE_IN_SEC) ?: 0")
+	)
+	(style (align = "center"))
+
+	(hblock
+		(style
+			(backgroundColor = "NO_COLOR")
+			(marginBottom = "{720:S, 1080:20px}")
+		)
+
+		(block
+			(style
+				(width = 19px)
+				(height = 19px)
+				(marginTop = -3px)
+				(marginRight = "XS")
+				(backgroundImage = 'url:../service_kit/unified_status_icons/icon_info.png')
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TC"))
+			(bind text "toUpper(tr('IDS_WT_PROGRESS_TIMER'))")
+		)
+
+		(controller $Tooltip
+			(renderer = 'WaffentragerProgressInfoTemplateTooltip')
+			(args
+				_headerText = 'IDS_WT_PROGRESS_TIMER_TOOLTIP_TITLE'
+				_descriptionText = 'IDS_WT_PROGRESS_TIMER_TOOLTIP_TEXT'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(hblock
+		(element WaffentragerTimerItem
+			_timer = "days"
+			_text = 'IDS_PL_DAY_FULL'
+		)
+
+		(tf
+			(class $TextDefaultBold32NM)
+			(style
+				(marginLeft = "S")
+				(marginRight = "SXS")
+				(alpha = "TA")
+			)
+			(text = 'IDS_COLON')
+		)
+
+		(element WaffentragerTimerItem
+			_timer = "hours"
+			_text = 'IDS_PL_HOUR_FULL'
+		)
+
+		(tf
+			(class $TextDefaultBold32NM)
+			(style
+				(marginLeft = "S")
+				(marginRight = "SXS")
+				(alpha = "TA")
+			)
+			(text = 'IDS_COLON')
+		)
+
+		(element WaffentragerTimerItem
+			_timer = "minutes"
+			_text = 'IDS_PL_MINUTE_FULL'
+		)
+	)
+)
+
+(def element WaffentragerTimerItem (_timer:number = 0, _text:str = '')
+	(style (align = "center"))
+
+	(tf
+		(class $TextDefaultBold40NM)
+		(style
+			(marginBottom = "{720:XS, 1080:S}")
+			(letterSpacing = 4px)
+			(alpha = "TA")
+		)
+		(bind text "_timer >= 10 ? _timer : ('0' + _timer)")
+	)
+
+	(tf
+		(class $TextDefault18NM)
+		(style (alpha = "TC"))
+		(bind text "trPlural(_text, _timer)")
+	)
+)
+
+(def element WaffentragerProgressPriceTag (_currency:str, _price:number = 0)
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(marginBottom = "SXS")
+			(alpha = "TA")
+		)
+		(bind text "'IDS_CURRENCY_' + _currency")
+	)
+
+	(block
+		(element PriceTag
+			_priceInfo = "{finalPrice: _price, currency: _currency}"
+			_size = "SIZE.MEDIUM"
+		)
+		(controller $Tooltip
+			(renderer = 'CurrencyTooltip')
+			(args
+				_currency = "_currency"
+				_amount = "_price"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element WaffentragerEventFinished (_tasksHound:number = 0, _tasksWaffentrager:number = 0)
+	(style (width = 540px))
+
+	(tf
+		(class $TextDefault22NM)
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+			(alpha = "TA")
+			(multiline = true)
+			(leading = -4)
+			(styleSheet = '.p_spacing { font-size: 12px; }')
+		)
+		(bind htmlText "tr('IDS_WT_PROGRESS_EVENT_FINISHED_TEXT')")
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(hblock
+		(style
+			(width = 100%)
+			(marginTop = "MS")
+			(gap = "{1280:LS, 1920: XLL}")
+		)
+
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(styleSheet = '.bold { font-weight: bold }')
+				(alpha = "TC")
+			)
+			(bind htmlText "subst('IDS_WT_PROGRESS_TASKS_COUNT_HOUND',[], {_count: _tasksHound})")
+		)
+
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(styleSheet = '.bold { font-weight: bold }')
+				(alpha = "TC")
+			)
+			(bind htmlText "subst('IDS_WT_PROGRESS_TASKS_COUNT_WAFFENTRAGER',[], {_count: _tasksWaffentrager})")
+		)
+	)
+)
+
+(def element WaffentragerEventActive (_isSmallScreen:bool = false)
+	(scope
+		(event evTabClicked)
+		(struct fraction = GET_PREF_STR(_option="'ui.waffentrager.fraction'"))
+
+		(var selectedTab:str = "fraction.value" watch=false)
+		(bind selectedTab "$event.fraction" init=false (event "evTabClicked"))
+	)
+	(style
+		(align = "center")
+		(vgap = "{720:S, 1080:M}")
+	)
+
+	(element MAIN_TAB_BUTTONS_BLOCK
+		(element MainTabButton
+			_label = 'IDS_WT_FRACTION_HOUND'
+			_width = "MAIN_TAB_BUTTON_WIDTH.MEDIUM"
+			_isSelected = "selectedTab == SC.Common.WAFFENTRAGER_FRACTION.HOUND"
+			_dispatchedEv = 'evTabClicked'
+			_dispatchParams = "{ fraction: SC.Common.WAFFENTRAGER_FRACTION.HOUND }"
+			_methods = "[	{	type: 'direct.action',
+								name: 'option.set',
+								args: ['ui.waffentrager.fraction', SC.Common.WAFFENTRAGER_FRACTION.HOUND] }]"
+		)
+		(element MainTabButton
+			_label = 'IDS_WT_FRACTION_WAFFENTRAGER'
+			_width = "MAIN_TAB_BUTTON_WIDTH.MEDIUM"
+			_isSelected = "selectedTab == SC.Common.WAFFENTRAGER_FRACTION.WAFFENTRAGER"
+			_dispatchedEv = 'evTabClicked'
+			_dispatchParams = "{ fraction: SC.Common.WAFFENTRAGER_FRACTION.WAFFENTRAGER }"
+			_methods = "[	{	type: 'direct.action',
+								name: 'option.set',
+								args: ['ui.waffentrager.fraction', SC.Common.WAFFENTRAGER_FRACTION.WAFFENTRAGER] }]"
+		)
+	)
+
+	(block
+		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID
+			_id = "selectedTab"
+			_positionY = 0
+		)
+		(element WaffentragerEventTabContent
+			_fraction = "selectedTab"
+			_tasksCount = 0
+			_isSmallScreen = "_isSmallScreen"
+		)
+	)
+)
+
+(def element WaffentragerEventTabContent (_fraction:str = '', _isSmallScreen:bool = false)
+	(scope
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+		(var waffentragerEventIndex:str = "waffentragerEvent.eventIndex" (event "waffentragerEvent.evChanged"))
+
+		(var fractionTasks:dhCollection = "getCollectionByPath(CC.waffentragerTask, 'byFraction.' + _fraction)")
+
+		(var waffentragerFractionEntity:dhEntity = "getPrimaryEntity(CC.waffentragerFraction, _fraction)")
+		(var fraction:dhComponent = "waffentragerFractionEntity.waffentragerFraction")
+		(var restrictionsEntityId:number = "fraction.restrictions" (event "fraction.evChanged"))
+
+		(var restrictionsEntity:dhEntity = "getEntity(restrictionsEntityId)")
+		(var battleTypes:array = "restrictionsEntity.battleTypesView.viewList  ?: []" (event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
+		(var isPVEModifierApplied:bool = "restrictionsEntity.sseConditions.pveModifier != PVE_DEFAULT_MODIFIER_COEFF" (event "restrictionsEntity.sseConditions.evChanged"))
+	)
+	(style (align = "center"))
+
+	(hblock
+		(style
+			(width = 100%)
+			(align = "center")
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginTop = 6px)
+				(marginRight = "S")
+				(alpha = "TA")
+			)
+			(text = 'IDS_SSE_TASK_RESTRICTIONS_COLON')
+		)
+
+		(block
+			(style
+				(marginRight = 6px)
+				(marginTop = 1px)
+				(width = 23px)
+				(height = 23px)
+				(backgroundSize = "cover")
+				(bind backgroundImage "'url:../service_kit/battle_types/' + waffentragerEventIndex + '_tiny.png'")
+			)
+
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(args
+					_text = "'IDS_' + waffentragerEventIndex"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(block
+			(style
+				(height = 100%)
+				(marginRight = "S")
+			)
+			(element VerticalDivider)
+		)
+
+		(element ShipRestrictions
+			_restrictionsEntityId = "restrictionsEntityId"
+			_isCompactListShips = "_fraction == SC.Common.WAFFENTRAGER_FRACTION.HOUND"
+			_isShipsListFlowHorizontal = true
+		)
+	)
+
+	(hblock
+		(style
+			(marginTop = "{720:S, 1080:M}")
+			(gap = "{1280:M, 1920:MS}")
+		)
+		(controller $Repeat renderer='WaffentragerTaskCard'
+			(bind count "fractionTasks.length")
+			(args
+				_isSmallScreen = "_isSmallScreen"
+				_entityId = "fractionTasks[$index].id"
+			)
+		)
+	)
+)
+
+(def element WaffentragerTaskCard (_entityId:number = 0,  _isSmallScreen:bool = false)
+	(scope
+		(struct highContrast = HIGH_CONTRAST_INFO())
+
+		(var fractionTaskEntity:dhEntity = "getEntity(_entityId)")
+		(var fractionTask:dhComponent = "fractionTaskEntity.waffentragerTask")
+		(var fraction:str = "fractionTask.fraction")
+		(var difficulty:str = "fractionTask.difficulty")
+		(var rewards:array = "fractionTask.rewards")
+		(var conditions:number = "fractionTask.conditions")
+
+		(var sseConditionEntity:dhEntity = "getEntity(conditions)")
+		(var sseTask:dhComponent = "sseConditionEntity.sseConditions")
+		(var isSingleBattle:bool = "sseTask.isSingleBattle" (event "sseTask.evConditionSetChanged"))
+		(var taskDescriptionData:dict = "sseTask.taskDescriptionData" (event "sseTask.evConditionSetChanged"))
+		(var taskDescription:str = "taskDescriptionData.ids")
+		(var ribbons:array = "taskDescriptionData.ribbons ?: []")
+		(var isSubRibbon:bool = "taskDescriptionData.isSubRibbon")
+
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+		(var taskRerollPrice:number = "waffentragerEvent.taskRerollPrice" (event "waffentragerEvent.evChanged"))
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountGold:number	= "resourceEntity.accountResource.gold ?: 0" (event "resourceEntity.accountResource.evChangedGold"))
+		(var isDeficit:bool = "taskRerollPrice > accountGold")
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimple:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+		(var isReadyInDivision:bool = "preBattlePlayerSimple.isReady" (event "preBattlePlayerSimple.evIsReadyChanged"))
+
+		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
+
+		(var warningsArr:array = "	isReadyInDivision	?	[ 'IDS_SET_UNREADY_DIVISION_FIRST_TO_CHANGE_WT_TASK'] :
+									isInBalancer		?	['IDS_UNABLE_TO_SET_WHILE_IN_BALANCER_CHANGE_WT_TASK']
+														:	[]")
+	)
+	(style (width = 296px))
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element BlurMapRoundedWithLayerContrastPanel)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../events/waffentrager/task_bg.png')
+				(backgroundSize = "cover")
+				(borderRadius = "XS")
+				(alpha = 0.75)
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(paddingTop = "{720:SXS, 1080:MS}")
+			(paddingBottom = "{720:SXS, 1080:20px}")
+			(paddingLeft = "{720:SXS, 1080:20px}")
+			(paddingRight = "{720:SXS, 1080:20px}")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(height = 104px)
+				(marginBottom = "{720:S, 1080:M}")
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(alpha = "TA")
+					(width = 100%)
+					(bind marginBottom "toBool(ribbons.length) ? SXS : M")
+				)
+				(bind text "taskDescriptionData.ids")
+			)
+
+			(htile
+				(bind visible "toBool(ribbons.length)")
+
+				(style
+					(width = 100%)
+					(vgap = "S")
+				)
+
+				(controller $Repeat renderer='RibbonIconItem'
+					(bind count "ribbons.length")
+					(args
+						_ribbonId = "ribbons[$index]"
+						_isSubRibbon = "isSubRibbon"
+					)
+				)
+			)
+
+			(tf
+				(bind visible "isSingleBattle")
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(marginTop = "S")
+					(alpha = "TA")
+				)
+				(text = 'IDS_SINGLE_BATTLE_TASK')
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='SseProgress'
+					(bind enabled "!isSingleBattle")
+					(args
+						_sseId="sseConditionEntity.id"
+						_conditionId="sseConditionEntity.id"
+					)
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginBottom = "{720:S, 1080:M}")
+			)
+			(element HorizontalDividerTwoPx)
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style (alpha = "TC"))
+			(text = 'IDS_WT_PROGRESS_REWARD_FOR_FINISHING_TASK')
+		)
+
+		(hblock
+			(style
+				(width = 100%)
+				(marginBottom = "{720:S, 1080:19px}")
+			)
+			(controller $Repeat renderer='RewardItemAdapter'
+				(bind count "rewards.length")
+				(args
+					_entityId = "rewards[$index]"
+					_iconMargin = 0
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(element DefaultButton
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_width = 100%
+				_size = "SIZE.SMALL"
+				_label = 'IDS_WT_PROGRESS_CHANGE_TASK'
+				_enabled = "!isReadyInDivision && !isInBalancer"
+				_methods = "[{	type: 'inputMapping.onRequest',
+								name: 'changeWaffentragerTask',
+								args: {	fraction: fraction,
+										difficulty: difficulty} }]"
+			)
+			(controller $Tooltip
+				(bind enabled "warningsArr.length != 0")
+				(renderer = 'ChangeTaskButtonWarningsTooltip')
+				(args
+					_warningsArr = "warningsArr"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+)
+
+(def element WaffentragerProgressStatus ()
+	(scope
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+
+		(struct waffentragerState = PULL_WAFFENTRAGER_EVENT_STATE(_component = "waffentragerEvent"))
+		(struct waffentragerProgression = PULL_WAFFENTRAGER_PROGRESSION(_component = "waffentragerEvent"))
+
+		(var participatedText:str = "subst('IDS_WT_PROGRESS_FINISH_STATUS_SEVERAL_STEPS_COMPLETED', [], {_count: waffentragerProgression.currentThresholdId}, waffentragerProgression.currentThresholdId)")
+		(var statusText:str = "	waffentragerProgression.isCompleted			?'IDS_WT_PROGRESS_FINISH_STATUS_EARLY_DONE' :
+								waffentragerState.isFinalStatsTimeReached	? waffentragerProgression.isParticipated	? participatedText
+																														: 'IDS_WT_PROGRESS_FINISH_STATUS_NOT_PARTICIPATED'
+																			: 'IDS_WT_PROGRESS_TILL_NEXT_LEVEL'")
+		(var isPriceTagVisible:bool = "waffentragerState.isActive && !waffentragerProgression.isCompleted")
+	)
+	(style (flow = "horizontal"))
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(marginRight = "XS")
+			(alpha = "TA")
+		)
+		(bind text "statusText")
+	)
+	(block
+		(controller $Instance renderer='PriceTag'
+			(bind enabled "isPriceTagVisible")
+			(args
+				_priceInfo = "{ finalPrice: waffentragerProgression.pointsTillNext, currency: SC.Common.CURRENCIES.WAFFENTRAGER_RELAY}"
+				_size = "SIZE.MEDIUM"
+			)
+		)
+	)
+)
+
+(def element WaffentragerRewardsCarousel ()
+	(scope
+		(event evCarouselScrollValueChanged)
+		(event evCarouselBoundsChanged)
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+		(var pinnedThresholdId:number = "waffentragerEvent.pinnedThresholdId" (event "waffentragerEvent.evPinnedThresholdIdChanged"))
+
+		(var scrollPosition:number = 0)
+		(var carouselWidth:number = 0)
+		(bind scrollPosition "$event.newValue" init=false (event "evCarouselScrollValueChanged"))
+		(bind carouselWidth "$event.bounds[2]" init=false (event "evCarouselBoundsChanged"))
+	)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(gap = "XXS")
+	)
+
+	(element WaffentragerProgressWithRewards)
+
+	(element WaffentragerRewardCarouselItemFixed
+		_pinnedThresholdId = "pinnedThresholdId"
+		_carouselWidth = "carouselWidth"
+		_scrollPosition = "scrollPosition"
+	)
+)
+
+(def element WaffentragerProgressWithRewards ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evScrollToIndex)
+		(event evForceScrollToIndex)
+
+		(var waffentragerEvent:dhComponent = "getSingleComponent(CC.waffentragerEvent)")
+		(struct waffentragerProgression = PULL_WAFFENTRAGER_PROGRESSION(_component = "waffentragerEvent"))
+
+		
+		(var thresholdToScrollTo:number = "clamp(waffentragerProgression.currentThresholdId - WAFFENTRAGER_THRESHOLDS_TO_SHOW_BEFORE_CURRENT_LEVEL, 1, waffentragerProgression.mainProgressionLen)")
+		(var indexToScrollTo:number = "thresholdToScrollTo - 1")
+	)
+
+	(dispatch evScrollToIndex args="{value: indexToScrollTo}" on='addedToStage')
+	(dispatch evScrollToIndex args="{value: indexToScrollTo}" (bind trigger "waffentragerProgression.progressPoints"))
+	(dispatch 'evCarouselBoundsChanged' dir="EventDirection.UP" args="{bounds: $globalLayoutBounds}" (event "$evLayoutBoundsChanged"))
+
+	(style
+		(width = 100%)
+		(height = "{720:144px, 1080:148px}")
+	)
+
+	(scrollArea
+		(class $Fullsize)
+
+		(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+			_singleStep = "WT_REWARD_SIZE"
+			_wheelScrollSpeed = "0.7"
+			_wheelScrollAcceleration = "0.8"
+			_valueChangedEvent = "'evCarouselScrollValueChanged'"
+		)
+
+		(repeatController = 'WaffentragerRewardCarouselItem')
+		(scrollPerItem = true)
+
+		(content
+			(style
+				(width = 100%)
+				(height = "{720:144px, 1080:148px}")
+				(flow = "horizontal")
+				(gap = "XXS")
+			)
+
+			(controller $DynamicRepeat renderer='WaffentragerRewardCarouselItem' name='WaffentragerRewardCarouselItem'
+				(bind count "waffentragerProgression.mainProgressionLen")
+				(args
+					_waffentragerProgressEntityId = "waffentragerProgression.mainProgression.getEntityAtIndex($index).id"
+					_isProgressCompleted = "waffentragerProgression.isCompleted"
+				)
+				(bind itemOffset "WT_REWARD_SIZE")
+				(bind itemWidth "WT_REWARD_SIZE")
+			)
+		)
+		(bindcall scrollTo index="$event.value" (event "evScrollToIndex"))
+	)
+)
+
+(def element WaffentragerRewardCarouselItem (_waffentragerProgressEntityId:number = 0, _isProgressCompleted:bool = false)
+	(scope
+		(var waffentragerThresholdEntity:dhEntity = "getEntity(_waffentragerProgressEntityId)")
+		(var waffentragerThresholdComponent:dhComponent = "waffentragerThresholdEntity.waffentragerThreshold")
+		(struct waffentragerThreshold = PULL_WAFFENTRAGER_THRESHOLD(_component = "waffentragerThresholdComponent"))
+
+		(var thresholdAlpha:number = "	waffentragerThreshold.isCurrent	? TA :
+										waffentragerThreshold.isPassed	? TS
+																		: TC")
+	)
+	(dispatch evShowIconCheck dir="EventDirection.DOWN" (event "waffentragerThresholdComponent.evChanged"))
+
+	(style (align = "center"))
+
+	(block
+		(style (height = 17px))
+		(tf
+			(class $TextDefaultBold14NM)
+			(style
+				(bind alpha "thresholdAlpha")
+			)
+			(bind text "waffentragerThreshold.thresholdId +1")
+		)
+	)
+
+	(element DefaultProgressBar
+		_progress = "waffentragerThreshold.progressRatio"
+		_isBorderless = true
+	)
+
+	(block
+		(style (marginTop = "XXS"))
+		(element WaffentragerRewardRenderer
+			_rewards = "waffentragerThreshold.rewards"
+			_rewardsState = "waffentragerThreshold.rewardsState"
+			_isWaffentragerRewardsContainer = "waffentragerThreshold.isWaffentragerRewardsContainer"
+			_thresholdId = "waffentragerThreshold.thresholdId"
+			_isPassed = "waffentragerThreshold.isPassed"
+			_isProgressCompleted = "_isProgressCompleted"
+		)
+	)
+)
+
+(def element WaffentragerRewardCarouselItemFixed (	_pinnedThresholdId:number = 0,
+													_isProgressCompleted:bool = false,
+													_carouselWidth:number=0,
+													_scrollPosition:number=0)
+	(scope
+		(var waffentragerThresholdEntity:dhEntity = "getPrimaryEntity(CC.waffentragerThreshold, _pinnedThresholdId)")
+		(var waffentragerThresholdComponent:dhComponent = "waffentragerThresholdEntity.waffentragerThreshold")
+		(struct waffentragerThreshold = PULL_WAFFENTRAGER_THRESHOLD(_component = "waffentragerThresholdComponent"))
+
+		(var waffentragerProgression:dhCollection = "getCollection(CC.waffentragerThreshold)")
+		(var waffentragerFinalProgressionCollection:dhCollection = "waffentragerProgression.getChildByPath('byThresholdType.' + SC.Common.WAFFENTRAGER_THRESHOLD_TYPE.FINAL)")
+		(var waffentragerFinalProgressionEntity:dhEntity = "waffentragerFinalProgressionCollection.getEntityAtIndex(0)")
+		(var waffentragerFinalProgression:dhComponent = "waffentragerFinalProgressionEntity.waffentragerThreshold")
+		(var waffentragerFinalThresholdId:number = "waffentragerFinalProgression.thresholdId" (event "waffentragerFinalProgression.evChanged"))
+
+		(var isPostProgression:bool = "_pinnedThresholdId == waffentragerFinalThresholdId")
+		(var isUnavailable:bool = true)
+		(var thresholdText:str = "isPostProgression ? 'IDS_ACHIEVEMENT_TYPE_COMMON' : toString(waffentragerThreshold.thresholdId +1)")
+		(var thresholdAlpha:number = "	waffentragerThreshold.isCurrent	? TA :
+										waffentragerThreshold.isPassed	? TS
+																		: TC")
+		(var mid:number = "(_carouselWidth + _scrollPosition) / WT_REWARD_SIZE")
+		(var minThresholdToPin:number = "round(mid)")
+	)
+	(bindcall externalCall
+		"'direct.action'"
+		"['updatePinnedThreshold', {minLevelToPin: minThresholdToPin-1}]"
+		init=true watch=false
+		(bind trigger "minThresholdToPin")
+	)
+
+	(style (align = "center"))
+
+	(block
+		(style (height = 17px))
+		(tf
+			(class "isPostProgression ? '$TextDefault14NM' : '$TextDefaultBold14NM'")
+			(style
+				(bind alpha "thresholdAlpha")
+			)
+			(bind text "thresholdText")
+		)
+	)
+
+	(element DefaultProgressBar
+		_progress = "waffentragerThreshold.progressRatio"
+		_isBorderless = true
+	)
+
+	(block
+		(style (marginTop = "XXS"))
+
+		(controller $Tooltip
+			(renderer='WaffentragerProgressInfoTemplateTooltip')
+			(bind enabled "isPostProgression && !waffentragerThreshold.isPassed")
+			(args
+				_headerText = 'IDS_ACHIEVEMENT_TYPE_COMMON'
+				_descriptionText = 'IDS_WT_POST_PROGRESS_TOOLTIP_TEXT'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element WaffentragerRewardRenderer
+			_rewards = "waffentragerThreshold.rewards"
+			_rewardsState = "waffentragerThreshold.rewardsState"
+			_isWaffentragerRewardsContainer = "waffentragerThreshold.isWaffentragerRewardsContainer"
+			_thresholdId = "waffentragerThreshold.thresholdId"
+			_isPassed = "waffentragerThreshold.isPassed"
+			_isProgressCompleted = "_isProgressCompleted"
+			_withTooltip = "isPostProgression && waffentragerThreshold.isPassed"
+		)
+	)
+)
+
+(def element WaffentragerRewardRenderer (	_rewards:array = [],
+											_rewardsState:array = [],
+											_withTooltip:bool = true,
+											_isWaffentragerRewardsContainer:bool = false,
+											_isProgressCompleted:bool = false,
+											_thresholdId:number = 0,
+											_isPassed:bool = false
+											)
+	(scope
+		(event evShowIconCheck)
+
+		(var isClaimed:bool = "isIn(SC.Common.WAFFENTRAGER_REWARD_STATE.CLAIMED, _rewardsState)")
+	)
+	(style (align = "center"))
+
+	(block
+		(style
+			(width = "WT_REWARD_SIZE")
+			(height = "WT_REWARD_SIZE")
+			(align = "center|middle")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = 0x3DFFFFFF))
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(scale9grid = 2)
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(bind alpha "isClaimed ? 0 : 0.24")
+			)
+		)
+
+		(block
+			(bind class "_isWaffentragerRewardsContainer ? '$Fullsize' : null")
+			(style (align = "center|middle"))
+			(controller $Repeat renderer='WaffentragerRewardItemAdapter'
+				(bind enabled "!_isWaffentragerRewardsContainer")
+				(bind count "_rewards.length")
+				(args
+					_rewards = "_rewards"
+					_isReceived = "isClaimed"
+					_withTooltip = "_withTooltip"
+				)
+			)
+
+			(controller $Instance renderer='WaffentragerRewardsContainer'
+				(bind enabled "_isWaffentragerRewardsContainer")
+				(args
+					_rewards = "_rewards"
+					_rewardsState = "_rewardsState"
+					_thresholdId = "_thresholdId"
+					_isPassed = "_isPassed"
+					_isProgressCompleted = "_isProgressCompleted"
+				)
+			)
+		)
+
+		(block
+			(bind visible "isClaimed")
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(align = "center|middle")
+			)
+
+			(block
+				(style
+					(width = 48px)
+					(height = 48px)
+					(pivotX = 50%)
+					(pivotY = 50%)
+					(backgroundImage = 'url:../reward_categories/icon_check.png')
+				)
+				(controller $Animation
+					(bindcall play
+						duration = 0.5
+						from = "{ visualScaleX: 2, visualScaleY: 2, alpha: 0 }"
+						to = "{ visualScaleX: 1, visualScaleY: 1, alpha: 1 }"
+						(event "evShowIconCheck")
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element WaffentragerRewardsContainer (	_rewards:array = [],
+											_rewardsState:array = [],
+											_thresholdId:number = 0,
+											_isPassed:bool = false,
+											_isProgressCompleted:bool = false)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var isClaimed:bool = "isIn(SC.Common.WAFFENTRAGER_REWARD_STATE.CLAIMED, _rewardsState)")
+		(var hasRewardAnimation:bool = "_isPassed && !isClaimed")
+		(var isChoiceButtonVisible:bool = "hasRewardAnimation && !_isProgressCompleted")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(class $Fullsize)
+	(style
+		(align = "center|middle")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer = 'WaffentragerRewardsContainerTooltip')
+		(args
+			_rewards = "_rewards"
+			_rewardsState = "_rewardsState"
+			_isProgressCompleted = "_isProgressCompleted"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(bind visible "hasRewardAnimation")
+		(class $MiddleVHAbsolutely)
+		(style
+			(hitTest = false)
+			(width = 175px)
+			(height = 175px)
+			(backgroundSize = "cover")
+			(bind backgroundImage "hasRewardAnimation ? 'url:../animations/spine/rewards/reward_states/available.skel' : ''")
+		)
+		(controller $Spine (bind enabled "hasRewardAnimation"))
+	)
+
+	(block
+		(style
+			(width = 50px)
+			(height = 64px)
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+				(borderRadius = "XS")
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+				(scale9grid = 5)
+				(bind alpha "isClaimed ? 0.5 : 0.9")
+			)
+			(bind colorTransform "isChoiceButtonVisible ? COLOR_TRANSFORM_WHITE_TO_YELLOW : CT_NONE")
+		)
+
+		(block
+			(style
+				(width = 48px)
+				(height = 48px)
+				(marginTop = "XS")
+				(marginLeft = 1px)
+				(bind backgroundImage "'url:../reward_categories/choice' + (isChoiceButtonVisible ? '_claim' : '') + '.png'")
+				(bind alpha "isClaimed ? 0.5 : 1")
+				(filters
+					(colorMatrix
+						(bind matrix "isClaimed ? [ 0, -50, 0, -15 ] : [0, 0, 0, 0]")
+					)
+				)
+			)
+
+			(block
+				(style
+					(width = 16px)
+					(height = 2px)
+					(marginLeft = 16px)
+					(marginTop = 48px)
+					(backgroundColor = 0xE6FFFFFF)
+				)
+				(bind colorTransform "isChoiceButtonVisible ? COLOR_TRANSFORM_WHITE_TO_YELLOW : CT_NONE")
+			)
+		)
+	)
+
+	(block
+		(visible = false)
+		(class $FullsizeAbsolute)
+		(style
+			(align = "center|middle")
+			(visualOffsetY = 10px)
+			(alpha = 0)
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isChoiceButtonVisible")
+			(args
+				_width = 96px
+				_label = 'IDS_TOOLTIP_REWARDS_TITLE'
+				_methods = "[{	type: 'inputMapping.onRequest',
+								name: 'chooseWaffentragerReward',
+								args: {thresholdId: _thresholdId} }]"
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.2
+				from = "{ alpha: 0, visualOffsetY: 10px, visible: false }"
+				to = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				action = "kill"
+				reverse = "!rollOver"
+				(bind trigger "rollOver")
+			)
+		)
+	)
+)
+
+(def element WaffentragerRewardsContainerTooltip (	_rewards:array = [], _rewardsState:array = [], _isProgressCompleted:bool = false)
+	(scope
+		(var areAllClaimed:bool = "	_rewardsState[0] == SC.Common.WAFFENTRAGER_REWARD_STATE.CLAIMED &&
+									_rewardsState[1] == SC.Common.WAFFENTRAGER_REWARD_STATE.CLAIMED")
+		(var isAnyRewardClaimed:bool = "isIn(SC.Common.WAFFENTRAGER_REWARD_STATE.CLAIMED, _rewardsState)")
+		(var text:str = "	areAllClaimed			? 'IDS_REWARDS_RECEIVED' :
+							_isProgressCompleted	? 'IDS_WT_REWARDS_CONTAINER_TOOLTIP_STATUS_CLAIM_REWARDS' :
+							isAnyRewardClaimed		? 'IDS_WT_PROGRESS_CHOOSE_REWARD_INFO'
+													: 'IDS_WT_REWARDS_CONTAINER_TOOLTIP_STATUS_NOT_CLAIMED'")
+		(var unifiedStatus:str = "areAllClaimed ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.INFO")
+	)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_WT_REWARDS_CONTAINER_TOOLTIP_TITLE'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "unifiedStatus"
+			_text = "text"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(hblock
+			(style
+				(width = 100%)
+				(gap = "S")
+			)
+			(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
+			(controller $Repeat renderer='WaffentragerRewardItemAdapter'
+				(bind count "_rewards.length")
+				(args
+					_rewards = "_rewards"
+					_isUnavailable = "_rewardsState[$index] == SC.Common.WAFFENTRAGER_REWARD_STATE.CLAIMED"
+					_isReceivedStatic = "_rewardsState[$index] == SC.Common.WAFFENTRAGER_REWARD_STATE.CLAIMED"
+					_isBattlePassSmallIconView = true
+				)
+			)
+		)
+	)
+)
+
+(def element WaffentragerRewardItemAdapter (	_rewards:array = [],
+												_isUnavailable:bool = false,
+												_isReceived:bool = false,
+												_isReceivedStatic:bool = false,
+												_withTooltip:bool = false)
+	(scope
+		(var rewardEntity:dhEntity = "getEntity(_rewards[$index])")
+		(var reward:dict = "{	id:			rewardEntity.rewardComponent.id,
+								amount:		rewardEntity.rewardComponent.amount,
+								name:		rewardEntity.rewardComponent.name,
+								type:		rewardEntity.rewardComponent.type,
+								subtype:	rewardEntity.rewardComponent.subtype,
+								params:		rewardEntity.rewardComponent.params,
+								isPRMP:		rewardEntity.rewardComponent.isPRMP }")
+	)
+	(element RewardItem
+		_reward = "reward"
+		_isUnavailable = "_isUnavailable || _isReceived"
+		_isReceived = "_isReceivedStatic"
+		_isBattlePassSmallIconView = true
+		_withTooltip = "_withTooltip"
+	)
+)
+
+(def element ChangeTaskButtonWarningsTooltip (_warningsArr:array)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemStatusMultiparagraph
+			_unifiedStatus		= "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+			_paragraphs			= "_warningsArr"
+			_paragraphRenderer	= "'ItemOfStartButtonWarningTooltip'"
+		)
+	)
+)
+
+(def element WaffentragerProgressInfoTemplateTooltip (_headerText:str, _descriptionText:str)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "_headerText"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemHtmlDescriptionText
+			_descriptionText = "_descriptionText"
+		)
+	)
+)
