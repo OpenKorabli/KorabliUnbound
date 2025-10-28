@@ -1,0 +1,598 @@
+(def constant ACCOUNT_COMPLETION_REGISTRATION_WINDOW_WIDTH 800px)
+(def constant SERVER_TIMEOUT_TIME 35)
+(def constant ACCOUNT_COMPLETION_STATE "{
+	REGISTRATION:	'EmailModal',
+	CONFIRMATION:	'CodeModal',
+	DONE:			'AccountDoneModal'
+}")
+
+(def element ModalWindowCompleteAccount ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(name = 'window_ModalWindowCompleteAccount')
+
+	(scope
+		(event evEmailChanged)
+		(event evPasswordChanged)
+
+		(var incompleteAccountComponent:dhComponent = "getSingleComponent(CC.incompleteAccount)")
+		(var isCodeSent:bool = "incompleteAccountComponent.codeSent" (event "incompleteAccountComponent.evCodeSent"))
+
+		(var userEmail:str = "$event.value ?: ''" watch=false (event "evEmailChanged"))
+		(var password:str = "$event.value ?: ''" watch=false (event "evPasswordChanged"))
+
+		(var renderer:str= "	incompleteAccountComponent == null	? ACCOUNT_COMPLETION_STATE.DONE :
+								isCodeSent							? ACCOUNT_COMPLETION_STATE.CONFIRMATION
+																	: ACCOUNT_COMPLETION_STATE.REGISTRATION")
+	)
+
+	(style (align = "center"))
+
+	(controller $Instance
+		(bind renderer "renderer")
+		(args
+			_userEmail = "userEmail"
+			_password = "password"
+		)
+	)
+)
+
+
+(def element EmailModal (_userEmail:str, _password:str)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evToggleShowPassword)
+		(event evEmailChanged)
+		(event evPasswordChanged)
+		(event evEmailWrongInput)
+		(event evPassWrongInput)
+		(event evRestartServerTimeout)
+		(event evGotError)
+		(event evShowError)
+		(event evHideError)
+		(event evHideWrongMessage)
+		(event evCompleteAccount)
+		(event evCheckLoginInput)
+		(event evCheckPasswordInput)
+
+		(struct serverTime = SERVER_TIME())
+
+		(var realmConstantsComponent:dhComponent=	"getSingleComponent(CC.realmConstants)")
+		(var loginMaxLengthLgr:number =				"realmConstantsComponent.loginMaxLengthLgr")
+		(var loginRestrictRegexp:str =				"realmConstantsComponent.loginRestrictRegexp")
+		(var passMaxLengthLgr:number =				"realmConstantsComponent.passMaxLengthLgr")
+		(var passMinLengthLgr:number =				"realmConstantsComponent.passMinLengthLgr")
+		(var passRestrictRegexp:str =				"realmConstantsComponent.passRestrictRegexp")
+
+		(var incompleteAccountComponent:dhComponent = "getSingleComponent(CC.incompleteAccount)")
+
+		(var error:str =						"incompleteAccountComponent.error"							(event "incompleteAccountComponent.evErrorCodeChanged"))
+		(var errorIDS:str =						"incompleteAccountComponent.errorIDS"						(event "incompleteAccountComponent.evErrorCodeChanged"))
+		(var isPasswordInvalid:bool =			"incompleteAccountComponent.isPasswordInvalid"				(event "incompleteAccountComponent.evValidationUpdate"))
+		(var isPasswordValidationRunning:bool =	"incompleteAccountComponent.isPasswordValidationRunning"	(event "incompleteAccountComponent.evValidationUpdate"))
+		(var isLoginInvalid:bool =				"incompleteAccountComponent.isLoginInvalid"					(event "incompleteAccountComponent.evValidationUpdate"))
+		(var isLoginValidationRunning:bool =	"incompleteAccountComponent.isLoginValidationRunning"		(event "incompleteAccountComponent.evValidationUpdate"))
+
+		(var loginValidationState:str = "	_userEmail.empty			? VALIDATION_STATES.NONE:
+											isLoginValidationRunning 	? VALIDATION_STATES.VALIDATION :
+											isLoginInvalid				? VALIDATION_STATES.INVALID
+																		: VALIDATION_STATES.VALID")
+		(var passwordValidationState:str = "_password.empty				? VALIDATION_STATES.NONE :
+											isPasswordValidationRunning ? VALIDATION_STATES.VALIDATION :
+											isPasswordInvalid 			? VALIDATION_STATES.INVALID
+																		: VALIDATION_STATES.VALID")
+
+		(var isPassword:bool = true)
+		(bind isPassword "!isPassword" init=false watch=false (event "evToggleShowPassword"))
+
+		(var timerTimeStamp:number = 0)
+		(bind timerTimeStamp "serverTime.value + SERVER_TIMEOUT_TIME" init=false watch=false (event "evRestartServerTimeout"))
+
+		(var isServerTimeout:bool = "serverTime.value < timerTimeStamp")
+		(struct countdownText = COUNTDOWN(_time = "timerTimeStamp ?: 0" _serverTime = "serverTime.value" _format = "'mm:ss'"))
+
+		(var isSendButtonEnabled:bool = "loginValidationState == VALIDATION_STATES.VALID && passwordValidationState == VALIDATION_STATES.VALID && !isServerTimeout")
+
+		(var isInvalidLogin:bool = "loginValidationState == VALIDATION_STATES.INVALID")
+		(var isInvalidPassword:bool = "passwordValidationState == VALIDATION_STATES.INVALID")
+
+		(var isLoginLastInput:bool = "false")
+		(bind isLoginLastInput "true" (event "evEmailChanged"))
+		(bind isLoginLastInput "false" (event "evPasswordChanged"))
+
+		(var isPasswordLastInput:bool = "false")
+		(bind isPasswordLastInput "true" (event "evPasswordChanged"))
+		(bind isPasswordLastInput "false" (event "evEmailChanged"))
+
+		(var errorText:str = "$event.value ?: ''" watch=false (event "evGotError"))
+		(bind errorText "''" (event "evHideWrongMessage") (event "evPasswordChanged") (event "evEmailChanged"))
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['SteamContext.completeAccount', {login: _userEmail, password: _password }]" watch=false (event "evCompleteAccount"))
+	(bindcall externalCall "'inputMapping.onAction'" "['SteamContext.loginChange', {login: _userEmail}]" watch=false (event "evCheckLoginInput"))
+	(bindcall externalCall "'inputMapping.onAction'" "['SteamContext.passwordChange', {password: _password }]" watch=false (event "evCheckPasswordInput"))
+	(bindcall externalCall "'inputMapping.onAction'" "['SteamContext.clearErrors', {}]" (event "evHideWrongMessage"))
+
+	(dispatch evRestartServerTimeout dir="EventDirection.NONE" (bind enabled "isSendButtonEnabled") (event "evCompleteAccount"))
+
+	
+	(dispatch evCheckLoginInput delay=0.2 (event "evEmailChanged"))
+	(dispatch evCheckPasswordInput delay=0.2 (event "evPasswordChanged"))
+
+	
+	(dispatch evShowError dir="EventDirection.NONE" (bind enabled "toBool(errorText)") (bind trigger "errorText") (event "evGotError"))
+	(dispatch evHideError dir="EventDirection.NONE" (event "evHideWrongMessage"))
+
+	(dispatch evGotError args="{ value: tr('IDS_ACCOUNT_COMPLETION_EMAIL_WRONG_CHARACTERS')}" dir="EventDirection.NONE" (event "evEmailWrongInput"))
+	(dispatch evGotError args="{ value: tr('IDS_ACCOUNT_ERROR_LOGIN_INVALID')}" dir="EventDirection.NONE" (bind enabled "isInvalidLogin && isLoginLastInput") (event "incompleteAccountComponent.evValidationUpdate"))
+
+	(dispatch evGotError args="{ value: tr('IDS_ACCOUNT_COMPLETION_PASSWORD_WRONG_CHARACTERS')}" dir="EventDirection.NONE" (event "evPassWrongInput"))
+	(dispatch evGotError args="{ value: subst('IDS_ACCOUNT_ERROR_PASSWORD_MIN_LENGTH', [], {minCharsPwd: passMinLengthLgr})}" dir="EventDirection.NONE" watch=false (bind enabled "isInvalidPassword && isPasswordLastInput") (event "incompleteAccountComponent.evValidationUpdate"))
+
+	(dispatch evGotError args="{ value: errorIDS}" dir="EventDirection.NONE" (event "incompleteAccountComponent.evErrorCodeChanged"))
+
+	(class $EyeLevelAligned)
+
+	(style
+		(width = "ACCOUNT_COMPLETION_REGISTRATION_WINDOW_WIDTH")
+		(align = "center")
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0.5)
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+
+		
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_ACCOUNT_COMPLETION_SEND_EMAIL_HEADER'
+			_hideBackButton = true
+			_hideCloseButton = true
+		)
+	)
+
+	(block
+		(style
+			(width = 686px)
+			(align = "center")
+		)
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+
+			(style
+				(width = 100%)
+				(marginBottom = "XL")
+			)
+			(tf
+				(class $TextDefault20NM)
+				(style
+					(textAlign = "center")
+					(width = 100%)
+					(maxWidth = 686px)
+					(alpha = "TA")
+				)
+				(text = 'IDS_ACCOUNT_COMPLETION_SEND_EMAIL_DESCRIPTION')
+			)
+		)
+
+		(block
+			(controller $Tooltip
+				(bind enabled "toBool(errorText)")
+				(renderer = 'WrongTextInputNotificationInfotip')
+				(args
+					_text = "errorText"
+				)
+
+				(macro CUSTOM_INFOTIP_BEHAVIOUR "evShowError")
+				(macro TOOLTIP_HIDE_ON_EVENT "evHideError")
+			)
+		)
+
+		
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (marginBottom = "MS"))
+
+			(element InputTextDefault
+				_name = 'emailField'
+				_width = '300px'
+				_defaultText="_userEmail"
+				_placeholderText = 'IDS_ACCOUNT_COMPLETION_EMAIL_DEFAULT_TEXT'
+				_focusIndex = 0
+				_maxChars = "loginMaxLengthLgr"
+				_restrict = "loginRestrictRegexp"
+				_hideButtonEnter = true
+				_onInputChangedEvent = 'evEmailChanged'
+				_onWrongSymbolInputedEvent = 'evEmailWrongInput'
+				_onEnterEvent = 'evCompleteAccount'
+			)
+
+			(block
+				(style (marginLeft = "S"))
+
+				(element ValidationState _validationState="loginValidationState")
+			)
+		)
+
+		
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.2)
+			(style (marginBottom = "LM"))
+
+			(element InputTextDefault
+				_name = 'passwordField'
+				_width = '300px'
+				_defaultText="_password"
+				_placeholderText = 'IDS_ACCOUNT_COMPLETION_PASSWORD_DEFAULT_TEXT'
+				_focusIndex = 1
+				_maxChars = "passMaxLengthLgr"
+				_restrict = "passRestrictRegexp"
+				_isPassword = "isPassword"
+				_hideButtonEnter = true
+				_onInputChangedEvent = 'evPasswordChanged'
+				_onWrongSymbolInputedEvent = 'evPassWrongInput'
+				_onEnterEvent = 'evCompleteAccount'
+			)
+
+			(block
+				(bind visible "_password")
+				(style
+					(marginLeft = "-MS")
+					(marginTop = 6px)
+				)
+
+				(element ImageButton
+					_width = 15px
+					_height = 15px
+					_backgroundImage = "isPassword ? 'url:../service_kit/buttons/password/eye.png' : 'url:../service_kit/buttons/password/eye_off.png'"
+					_dispatchedEv = 'evToggleShowPassword'
+				)
+
+			)
+			(block
+				(style (marginLeft = "S"))
+				(element ValidationState _validationState="passwordValidationState")
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+		(style
+			(width = 100%)
+			(marginBottom = "LS")
+		)
+		(element HorizontalDividerTwoPx)
+	)
+
+	(hblock
+		(style
+			(width = 100%)
+			(align = "center")
+			(marginBottom = "L")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+			(style (marginRight = "M"))
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(bind enabled "isServerTimeout")
+				(args
+					_text = "countdownText.value"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+			)
+
+			(element DefaultButton
+				_name = 'completeBtn'
+				_width = 180px
+				_enabled = "isSendButtonEnabled"
+				_dispatchedEv = 'evRestartServerTimeout'
+				_label = 'IDS_ACCOUNT_COMPLETION_SEND_EMAIL_BUTTON'
+				_focusIndex = 2
+				_methods = "[{ type: 'inputMapping.onAction', name: 'SteamContext.completeAccount', args: {login: _userEmail, password: _password}}]"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+			(element DefaultButton
+				_width = 180px
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_label = 'IDS_CLOSE_UPPER_CASE'
+				_name = 'btn_cancel'
+				_focusIndex = 1
+			)
+		)
+	)
+)
+
+
+(def element CodeModal (_userEmail:str, _password:str)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+
+	(scope
+		(event evRestartServerTimeout)
+		(event evHideWrongMessage)
+		(event evCodeChanged)
+		(event evCodeEntered)
+		(event evCloseMessageWindow)
+		(struct serverTime = SERVER_TIME())
+
+		(var incompleteAccountComponent:dhComponent = "getSingleComponent(CC.incompleteAccount)")
+		(var error:str = "incompleteAccountComponent.error" (event "incompleteAccountComponent.evErrorCodeChanged"))
+		(bind error "''" init=false (event "evCloseMessageWindow"))
+
+		(var errorIDS:str = "incompleteAccountComponent.errorIDS" (event "incompleteAccountComponent.evErrorCodeChanged"))
+
+		(var realmConstantsComponent:dhComponent=	"getSingleComponent(CC.realmConstants)")
+		(var loginRestrictRegexp:str =				"realmConstantsComponent.loginRestrictRegexp")
+
+		(var code:str = '')
+		(bind code "$event.value" init=false (event "evCodeChanged"))
+
+		(var timerTimeStamp:number = 0)
+		(bind timerTimeStamp "serverTime.value + SERVER_TIMEOUT_TIME" init=false watch=false (event "evRestartServerTimeout"))
+
+		(var isServerTimeout:bool = "serverTime.value < timerTimeStamp")
+		(struct countdownText = COUNTDOWN(_time = "timerTimeStamp ?: 0" _serverTime = "serverTime.value" _format = "'mm:ss'"))
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['SteamContext.activateAccount', {activationCode: code }]" watch=false (event "evCodeEntered"))
+
+	(class $EyeLevelAligned)
+
+	(style
+		(width = "ACCOUNT_COMPLETION_REGISTRATION_WINDOW_WIDTH")
+		(align = "center")
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+
+		
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_ACCOUNT_COMPLETION_CONFIRMATION_CODE_HEADER'
+			_hideCloseButton = true
+			_backButtonText = 'IDS_ACCOUNT_COMPLETION_BACK_BUTTON'
+			_methods = "[{type: 'inputMapping.onAction', name: 'SteamContext.resetCompletion', args: {}}]"
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+
+		(style
+			(align = "center")
+			(marginBottom = "LM")
+			(width = 100%)
+		)
+		(tf
+			(class $TextDefault20NM)
+			(style
+				(textAlign = "center")
+				(width = 100%)
+				(maxWidth = 686px)
+				(alpha = "TA")
+			)
+			(bind htmlText "subst('IDS_ACCOUNT_COMPLETION_CONFIRMATION_CODE_DESCRIPTION', [], {login: _userEmail})")
+		)
+	)
+
+	
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style
+			(align = "middle")
+			(marginBottom = "MS")
+		)
+
+		(element InputTextDefault
+			_name = 'codeConfirmationField'
+			_placeholderText = 'IDS_ACCOUNT_COMPLETION_CONFIRMATION_KEY'
+			_width = '150px'
+			_defaultFocused = true
+			_hideButtonEnter = true
+			_restrict = "loginRestrictRegexp"
+			_onInputChangedEvent = 'evCodeChanged'
+			_onEnterEvent = 'evCodeEntered'
+		)
+	)
+
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+		(style (marginBottom = "LM"))
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(bind enabled "isServerTimeout")
+			(args
+				_text = "countdownText.value"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "_userEmail")
+			(args
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_width = 150px
+				_size = "SIZE.SMALL"
+				_label = 'IDS_ACCOUNT_COMPLETION_CONFIRMATION_CODE_RESEND'
+				_dispatchedEv = 'evRestartServerTimeout'
+				_enabled = "!isServerTimeout"
+				_focusIndex = 2
+				_methods = "[	{	type:	'inputMapping.onAction',
+									name:	'SteamContext.completeAccount',
+									args:	{login: _userEmail, password: _password}}]"
+			)
+		)
+
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style
+			(width = 100%)
+			(marginBottom = "LS")
+		)
+		(element HorizontalDividerTwoPx)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+
+		(style
+			(width = 100%)
+			(align = "center")
+		)
+
+		(block
+			(style (marginRight = "M"))
+
+			(element DefaultButton
+				_name = 'completeBtn'
+				_width = 180px
+				_dispatchedEv = 'evRestartServerTimeout'
+				_label = 'IDS_ACCOUNT_COMPLETION_CONFIRMATION_CODE_BUTTON'
+				_focusIndex = 1
+				_methods = "[{ type: 'inputMapping.onAction', name: 'SteamContext.activateAccount', args: {activationCode: code}}]"
+			)
+		)
+
+		(element DefaultButton
+			_width = 180px
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_label = 'IDS_CLOSE_UPPER_CASE'
+			_name = 'btn_cancel'
+			_focusIndex = 2
+		)
+	)
+
+	(block
+		(class $MiddleVHAbsolutely)
+
+		(controller $Instance renderer='ServerMessage'
+			(bind enabled "!error.empty")
+			(args
+				_messageText = "errorIDS"
+				_dispatchedEvOnClose = 'evCloseMessageWindow'
+			)
+		)
+	)
+)
+
+
+(def element AccountDoneModal()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+
+	(scope
+		(var rewards:array = "getSingleComponent(CC.completionRewards).rewards")
+	)
+
+	(block
+		(class $EyeLevelAligned)
+		(style
+			(width = "ACCOUNT_COMPLETION_REGISTRATION_WINDOW_WIDTH")
+			(align = "center")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(element ModalWindowHeaderFullSize
+				_windowName = 'IDS_ACCOUNT_COMPLETION_FINISH_HEADER'
+				_hideBackButton = true
+				_hideCloseButton = true
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(width = 100%)
+				(marginBottom = "LM")
+			)
+
+			(tf
+				(class $TextDefault20NM)
+				(style
+					(width = 100%)
+					(height = 50px)
+					(textAlign = "center")
+					(alpha = "TA")
+				)
+				(text = 'IDS_ACCOUNT_COMPLETION_FINISH_DESCRIPTION')
+			)
+		)
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(align = "center|middle")
+				(marginBottom = "LM")
+				(hgap = "SXS")
+			)
+
+			(controller $Repeat renderer='AccountCompletionRewardItem' count="rewards.length"
+				(args
+					_rewardEntityId = "rewards[$index]"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+			(style
+				(width = 100%)
+				(marginBottom = "LS")
+			)
+			(element HorizontalDividerTwoPx)
+		)
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+			(style
+				(width = 100%)
+				(align = "center")
+			)
+
+			(block
+				(style (marginRight = "M"))
+
+				(element DefaultButton
+					_width = 180px
+					_label = 'IDS_ACCOUNT_COMPLETION_TAKE_REWARD'
+					_name = 'btn_cancel'
+					_focusIndex = 0
+					_defaultFocused = true
+				)
+			)
+
+			(element DefaultButton
+				_width = 180px
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_label = 'IDS_CLOSE_UPPER_CASE'
+				_name = 'btn_cancel'
+				_focusIndex = 1
+			)
+		)
+	)
+)

@@ -71,9 +71,10 @@
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
 	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
 		(class $Fullsize)
+
 		(block
-			(class $Fullsize)
 			(bind visible "isActiveFormationWidget")
+			(class $Fullsize)
 
 			(controller $Instance renderer='FormationWidget'
 				(bind enabled "isActiveFormationWidget || isCacheFormationWidget")
@@ -88,8 +89,8 @@
 		)
 
 		(block
-			(class $Fullsize)
 			(bind visible "isActiveSearchResultsList")
+			(class $Fullsize)
 
 			(controller $Instance renderer='SearchResultsList'
 				(bind enabled "isActiveSearchResultsList")
@@ -104,7 +105,9 @@
 		)
 
 		(block
+			(bind visible "!isChatServerAvailable && _isFromTrainingRoomBtn")
 			(class $Fullsize)
+
 			(controller $Instance renderer='ServerIsUnavailable'
 				(bind enabled "!isChatServerAvailable && _isFromTrainingRoomBtn")
 			)
@@ -121,6 +124,8 @@
 (def element FormationWidget(_searchRequests:array, _resultsDisplay:array, _playerContext:dict, _isFromTrainingRoomBtn:bool, _teamId:number)
 	(scope
 		(event evDivisionCommentChanged)
+
+		(macro MOUSE_HANDLER_SCOPE)
 
 		(var chatEntity:gfx = "$datahub.getSingleEntity(CC.chat)")
 		(var isChatServerAvailable:bool = "chatEntity.chat.isConnected" (event "chatEntity.chat.evConnected") (event "chatEntity.chat.evDisConnected"))
@@ -152,35 +157,32 @@
 		(var isClanBattleDivisionsListVisible:bool = "clanman != null && !_isFromTrainingRoomBtn && isChatServerAvailable")
 		(var isTrainingRoomContextGroupVisible:bool = "_isFromTrainingRoomBtn && isChatServerAvailable")
 
-		(struct divisionSeekingTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_SEEKING"))
-		(struct divisionAlreadySeekingTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_ALREADY_SEEKING"))
 
-		(var newTipId:number = "divisionSeekingTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_SEEKING :
-								divisionAlreadySeekingTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_ALREADY_SEEKING
-																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
-
-		(macro MOUSE_HANDLER_SCOPE)
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_SEEKING,
+																												SC.Context_guiding_tip.TIP_TYPE.DIVISIONS_ONBOARDING_ALREADY_SEEKING ]"))
 	)
 
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'commentWantTo_division', value: $event.value }]" init=false watch=false (event "evDivisionCommentChanged"))
-	(bindcall externalCall "'inputMapping.onAction'" "['updateSeekerComment', { comment: $event.value }]" init=false watch=false (event "evDivisionCommentChanged"))
+	(bindcall externalCall "'inputMapping.onAction'"	"['setUserPref', { name: 'commentWantTo_division', value: $event.value }]"	init=false watch=false		(event "evDivisionCommentChanged"))
+	(bindcall externalCall "'inputMapping.onAction'"	"['updateSeekerComment', { comment: $event.value }]"						init=false watch=false		(event "evDivisionCommentChanged"))
 
 	(class $Fullsize)
 
 	(element DEFAULT_EXPAND_CONTAINER "divisionDataEntity == null && !_isFromTrainingRoomBtn"
 		(hblock
+			(macro MOUSE_EVENTS_DISPATCHER)
+			(name = 'wantToDivision')
+
+			(bindcall externalCall "'inputMapping.onAction'"							"['toggleDivisionSeekerStatus',	{ comment: commentWantToDivision, status: isSelfSeeker }]"						watch=false		on='leftClick')
+			(bindcall externalCall "checkedTipId.value ? 'inputMapping.onAction' : ''"	"['deactivateTipChain',			{ tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.DIVISIONS_ONBOARDING }]"	watch=false		on='leftClick')
+
 			(style
+				(align = "middle")
 				(width = 100%)
 				(height = 38px)
 				(paddingLeft = "SXS")
 				(backgroundColor = "NO_COLOR")
-				(align = "middle")
 			)
-			(macro MOUSE_EVENTS_DISPATCHER)
-			(name = 'wantToDivision')
-
-			(bindcall externalCall "'inputMapping.onAction'"					"['toggleDivisionSeekerStatus',	{ comment: commentWantToDivision, status: isSelfSeeker }]" watch=false on='leftClick')
-			(bindcall externalCall "newTipId ? 'inputMapping.onAction' : ''"	"['deactivateTipChain',			{ tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.DIVISIONS_ONBOARDING }]" watch=false on='leftClick')
 
 			(element SwitchWithLeftLabel
 				_state = "isSelfSeeker"
@@ -192,9 +194,9 @@
 			)
 
 			(controller $Instance renderer='GuidingTipHub'
-				(bind enabled "newTipId")
+				(bind enabled "checkedTipId.value")
 				(args
-					_tipId =			"newTipId"
+					_tipId =			"checkedTipId.value"
 					_tipPositioning =	"TIP_POSITION_BOTTOM"
 					_offsetY =			"XS"
 					_pointerOffset =	"-MS"
@@ -750,7 +752,13 @@
 
 		(macro PULL_SHIP_ID)
 
-		(var battleTypeIcon:str = "battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? eventBattleName
+		(var operationEntity:dhEntity = "getPrimaryEntity(CC.operation, battleTypeGameParamsId)")
+		(var operationComponent:dhComponent = "operationEntity.operation")
+
+		(var pveOperationCustomIconName:str = "operationComponent.customIconName ?: ''" (event "operationComponent.evStatusChanged"))
+
+		(var battleTypeIcon:str = "	pveOperationCustomIconName							? pveOperationCustomIconName :
+									battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? eventBattleName
 																						: battleType")
 
 		(var formationTextColor:number = " isOtherDivision	|| isDivisionFull	? SC.Ui_styles.SERVICE_COLORS.WHITE

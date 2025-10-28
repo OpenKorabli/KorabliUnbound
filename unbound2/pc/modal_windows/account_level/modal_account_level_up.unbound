@@ -1,0 +1,642 @@
+(def constant ACCOUNT_LEVEL_UP_ICON_SIZE 256px)
+
+(def constant ACCOUNT_LEVEL_ICON_CT {
+	WHITE:
+			{	redMultiplier:		1,
+				greenMultiplier:	1,
+				blueMultiplier:		1,
+				alphaMultiplier:	1,
+				redOffset:			150,
+				greenOffset:		150,
+				blueOffset:			150,
+				alphaOffset:		0 },
+	WHITE_ALPHA_OFFSET:
+			{	redMultiplier:		1,
+				greenMultiplier:	1,
+				blueMultiplier:		1,
+				alphaMultiplier:	1,
+				redOffset:			150,
+				greenOffset:		150,
+				blueOffset:			150,
+				alphaOffset:		0.7 },
+})
+
+(def element BoomAnimation ()
+	(scope
+		(event evDelayedStart)
+		(var isVisible:bool = false)
+		(bind isVisible "true" init=false (event "evDelayedStart"))
+	)
+	(dispatch evDelayedStart delay=0.5 on='addedToStage')
+
+	(style
+		(width = 760px)
+		(height = 760px)
+		(backgroundSize = "fill")
+		(backgroundImage = 'url:../animations/spine/account_leveling/explosion/explosion.skel')
+		(bind alpha "toNumber(isVisible)")
+	)
+
+	(controller $Spine
+		(bindcall play sequence={name:'animation', repeatCount:1} (event "evDelayedStart"))
+	)
+)
+
+(def element ModalWindowAccountLevelUp (_isNewLevelGained:bool, _promoRewardId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+	(scope
+		(event evFeatureAnimationEnded)
+
+		(var hasPromoReward:bool =			"_promoRewardId != null")
+		(var accountLevel:dhComponent =		"getSingleComponent(CC.accountLevel)")
+		(var curAccountLevel:number =		"accountLevel.level" (event "accountLevel.evLevelChanged"))
+		(var isFeatureAnimationEnded:bool = "!_isNewLevelGained")
+		(bind isFeatureAnimationEnded "true" init=false (event "evFeatureAnimationEnded"))
+	)
+	(bindcall externalCall "hasPromoReward ? '' : 'inputMapping.onRequest'" "['closeModalWindowAccountLevelUp', {}]" watch=false (event "evFeatureAnimationEnded"))
+
+	(class $Fullsize)
+	(style (align = "center"))
+
+	(element ModalWindowHeaderFullSize
+		_paddingRight =	"M"
+		_paddingLeft =	"M"
+		_hideDivider =	true
+		_methods = "[	{	type: 'inputMapping.onRequest',
+							name: 'closeModalWindowAccountLevelUp',
+							args: {}}]"
+	)
+
+	(block
+		(class $EyeLevelAligned)
+
+		(controller $Instance renderer='AccountLevelUpFeatureUnlock'
+			(bind enabled "_isNewLevelGained && curAccountLevel > 1")
+			(args
+				_isLastElement = "!_promoRewardId"
+			)
+		)
+
+		(controller $Instance renderer='AccountLevelUpPromoUnlock'
+			(bind enabled "_promoRewardId && isFeatureAnimationEnded")
+			(args
+				_promoRewardId = "_promoRewardId"
+			)
+		)
+	)
+)
+
+(def element AccountLevelUpFeatureUnlock (_isLastElement:bool)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+
+	(scope
+		(event evAccountLevelUpAfterProgressIconAppear)
+		(event evAccountLevelUpTextHeaderAppear)
+		(event evAccountLevelUpTextDescriptionAppear)
+
+		(event evAccountLevelUpAfterProgressIconAppearSFX)
+		(event evAccountLevelUpTextHeaderAppearSFX)
+		(event evAccountLevelUpIconMoveSFX)
+		(event evAccountLevelUpTextDescriptionAppearSFX)
+
+		(event evOnVoicePrompt)
+
+		(event evFeatureAnimationEnded)
+
+		(var accountLevel:dhComponent =				"getSingleComponent(CC.accountLevel)")
+		(var curAccountLevel:number =				"accountLevel.level" (event "accountLevel.evLevelChanged"))
+		(var accountLevelingStepEntity:dhEntity =	"getPrimaryEntity(CC.accountLevelingStep, curAccountLevel)")
+		(var stepFeatures:number =					"accountLevelingStepEntity.accountLevelingStep.features" (event "accountLevelingStepEntity.accountLevelingStep.evFeaturesChanged"))
+		(var featureEntity:dhEntity =				"getPrimaryEntity(CC.accountFeature, stepFeatures)")
+		(var featureIndex:number =					"featureEntity.accountFeature.featureIndex" (event "featureEntity.accountFeature.evStateChanged"))
+		(var voicePrompt:dhComponent =				"getSingleComponent(CC.voicePrompt)")
+		(var isPlaying:bool =						"voicePrompt.isPlaying" (event "voicePrompt.evPlay") (event "voicePrompt.evStop"))
+	)
+	
+	(dispatch evAccountLevelUpAfterProgressIconAppear	delay=1.5 on='addedToStage' dir="EventDirection.NONE")
+	(dispatch evAccountLevelUpTextHeaderAppear			delay=3 dir="EventDirection.NONE" (event "evAccountLevelUpAfterProgressIconAppear"))
+	(dispatch evAccountLevelUpTextDescriptionAppear		delay=2.2 dir="EventDirection.NONE" (event "evAccountLevelUpTextHeaderAppear"))
+	(dispatch evFeatureAnimationEnded					delay=5.3 dir="EventDirection.UP" (event "evAccountLevelUpTextDescriptionAppear"))
+
+	
+	(dispatch evAccountLevelUpAfterProgressIconAppearSFX	delay=0.2 dir="EventDirection.NONE" (event "evAccountLevelUpAfterProgressIconAppear"))
+	(dispatch evAccountLevelUpIconMoveSFX					delay=1.7 dir="EventDirection.NONE" (event "evAccountLevelUpAfterProgressIconAppearSFX"))
+	(dispatch evAccountLevelUpTextHeaderAppearSFX			delay=2.2 dir="EventDirection.NONE" (event "evAccountLevelUpIconMoveSFX"))
+	(dispatch evAccountLevelUpTextDescriptionAppearSFX		delay=0.7 dir="EventDirection.NONE" (event "evAccountLevelUpTextHeaderAppearSFX"))
+
+	
+	(dispatch evOnVoicePrompt delay=0.8 dir="EventDirection.NONE" (event "evAccountLevelUpIconMoveSFX"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpAfterProgressIconAppear']"	(event "evAccountLevelUpAfterProgressIconAppear"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpIconMove']"					(event "evAccountLevelUpIconMoveSFX"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpTextHeaderAppear']"			(event "evAccountLevelUpTextHeaderAppearSFX"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpTextAvailableAppear']"		(event "evAccountLevelUpTextDescriptionAppearSFX"))
+
+	(bindcall externalCall 'inputMapping.onAction' "['playVoicePrompt', {level: curAccountLevel}]" watch=false (event "evOnVoicePrompt"))
+
+	(style
+		(width = 980px)
+		(align = "center|middle")
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration	= 0.3
+			from		= {alpha: 1}
+			to			= {alpha: 0}
+			easing		= "Easing.quad_out"
+			action		= "kill"
+			(event "evFeatureAnimationEnded")
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(marginTop = -50%)
+		)
+		(controller $Instance renderer='AccountLevelUpLineProgress')
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(right = -256px)
+			(marginTop = -50%)
+		)
+
+		(controller $FxInstance lifetime="5"
+			(renderer = 'BoomAnimation')
+			(bindcall create (event "evAccountLevelUpAfterProgressIconAppear"))
+		)
+	)
+
+	
+	(block
+		(style
+			(right = 128px)
+			(position = "absolute")
+			(alpha = 0)
+			(visualScaleX = 1.9)
+			(visualScaleY = 1.9)
+			(rotation = -12)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(marginTop = -50%)
+				(marginLeft = -50%)
+				(width = 700px)
+				(height = 700px)
+				(backgroundSize = "fill")
+				(backgroundImage = 'url:../animations/spine/account_leveling/fog/fog.skel')
+			)
+			(controller $Spine)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(marginTop = -50%)
+				(marginLeft = -50%)
+			)
+
+			(element IconAccountLevelUpItem
+				_featureIndex = "featureIndex"
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay		= 0.2
+				keyframes	= "[
+					{time:0.5,	to: {alpha:1, visualScaleX:0.98, visualScaleY:0.98, rotation:0, colorTransform: CT_NONE}},
+					{time:0.6,	to: {visualScaleX:1.02, visualScaleY:1.02, colorTransform: ACCOUNT_LEVEL_ICON_CT.WHITE}},
+					{time:0.8,	to: {visualScaleX:1, visualScaleY:1, colorTransform: ACCOUNT_LEVEL_ICON_CT.WHITE_ALPHA_OFFSET}},
+					{time:2,	to: {colorTransform: CT_NONE, visualOffsetX: 0px}},
+					{time:2.7,	to: {visualOffsetX: -690px}}
+				]"
+				easing		= "Easing.quad_out"
+				action		= "kill"
+				(event "evAccountLevelUpAfterProgressIconAppear")
+			)
+		)
+	)
+
+	(hblock
+		(style
+			(position = "absolute")
+			(left = 300px)
+			(width = 600px)
+			(marginTop = -50%)
+		)
+		(tf
+			(class $TextDefaultBold36NM)
+			(style
+				(maxWidth = 600px)
+				(visualOffsetY = 10px)
+				(alpha = 0)
+			)
+			(bind text 'IDS_ACCESS_LEVEL_RISES')
+
+			(controller $Animation
+				(bindcall play
+					duration	= 0.3
+					to			= {alpha: 0.9, visualOffsetY: 0px}
+					easing		= "Easing.quad_out"
+					action		= "kill"
+					(event "evAccountLevelUpTextHeaderAppear")
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 65)
+			(bind visible "isPlaying")
+
+			(style
+				(marginLeft = "L")
+				(marginTop = "S")
+			)
+
+			(mc audio_prompt)
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay		= 2
+				duration	= 0.2
+				to			= {alpha: 0}
+				easing		= "Easing.quad_out"
+				action		= "kill"
+				(event "evAccountLevelUpTextHeaderAppear")
+			)
+		)
+	)
+
+	(hblock
+		(style
+			(position = "absolute")
+			(left = 300px)
+			(width = 600px)
+			(marginTop = -50%)
+		)
+
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(maxWidth = 600px)
+				(visualOffsetY = 10px)
+				(alpha = 0)
+				(leading = -3px)
+				(textAlign = "left")
+				(styleSheet = "'h3{font-size: 36; font-family: $DefaultFontBold}'")
+			)
+			(bind htmlText "'IDS_UNLOCKS_LEVEL_UP_' + featureIndex")
+
+			(controller $Animation
+				(bindcall play
+					duration	= 0.3
+					to			= {alpha: 0.9, visualOffsetY: 0px}
+					easing		= "Easing.quad_out"
+					action		= "kill"
+					(event "evAccountLevelUpTextDescriptionAppear")
+				)
+			)
+		)
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 95)
+			(bind visible "isPlaying")
+
+			(style
+				(marginLeft = "L")
+				(marginTop = "L")
+			)
+
+			(mc audio_prompt)
+		)
+	)
+)
+
+(def element AccountLevelUpPromoUnlock (_promoRewardId:number)
+	(scope
+		(event evAccountLevelUpIconAppear)
+		(event evAccountLevelUpTextHeaderAppear)
+		(event evAccountLevelUpTextAvailableAppear)
+		(event evPromoUnlockAnimationEnded)
+
+		(var accountPromoRewardBannerComponent:dhComponent =	"getEntity(_promoRewardId).accountPromoRewardBanner")
+		(var rewardHeader:str =				"accountPromoRewardBannerComponent.title" (event "accountPromoRewardBannerComponent.evChanged"))
+		(var promoRewardImageBig:str =		"accountPromoRewardBannerComponent.imageBig" (event "accountPromoRewardBannerComponent.evChanged"))
+		(var imageEntity:dhEntity =			"getPrimaryEntity(CC.externalImage, promoRewardImageBig)")
+		(var promoImageUrl:str =			"imageEntity.externalImage.isLoaded	? 'img://embedded:byteImage?url=' + imageEntity.externalImage.url
+																				: ''" (event "imageEntity.externalImage.evIsLoadedChanged"))
+	)
+	(dispatch evAccountLevelUpIconAppear			delay=1 dir="EventDirection.NONE" on='addedToStage')
+	(dispatch evAccountLevelUpTextHeaderAppear		delay=1.2 dir="EventDirection.NONE" (event "evAccountLevelUpIconAppear"))
+	(dispatch evAccountLevelUpTextAvailableAppear	delay=0.5 dir="EventDirection.NONE" (event "evAccountLevelUpTextHeaderAppear"))
+	(dispatch evPromoUnlockAnimationEnded			delay=2.3 dir="EventDirection.NONE" (event "evAccountLevelUpTextAvailableAppear"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpIconAppear']"			(event "evAccountLevelUpIconAppear"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpTextHeaderAppear']"		(event "evAccountLevelUpTextHeaderAppear"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpTextAvailableAppear']"	(event "evAccountLevelUpTextAvailableAppear"))
+
+	(bindcall externalCall 'inputMapping.onRequest' "['closeModalWindowAccountLevelUp', {}]" (event "evPromoUnlockAnimationEnded"))
+
+	(style
+		(width = 980px)
+		(align = "center|middle")
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(left = -220px)
+			(marginTop = -50%)
+		)
+
+		(controller $FxInstance lifetime="5"
+			(renderer = 'BoomAnimation')
+			(bindcall create (event "evAccountLevelUpIconAppear"))
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(left = 128px)
+			(marginLeft = 34px)
+			(visualScaleX = 1.9)
+			(visualScaleY = 1.9)
+			(alpha = 0)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(marginTop = -50%)
+				(marginLeft = -50%)
+				(width = 700px)
+				(height = 700px)
+				(backgroundSize = "fill")
+				(backgroundImage = 'url:../animations/spine/account_leveling/fog/fog.skel')
+			)
+			(controller $Spine)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(marginTop = -50%)
+				(marginLeft = -50%)
+			)
+			(element IconAlDataItem
+				_imageData = "promoImageUrl"
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				keyframes 	= "[
+					{time:0.5,	to: {alpha:1, visualScaleX:0.98, visualScaleY:0.98, colorTransform: CT_NONE}},
+					{time:0.6,	to: {visualScaleX:1.02, visualScaleY:1.02, colorTransform: ACCOUNT_LEVEL_ICON_CT.WHITE}},
+					{time:0.8,	to: {visualScaleX:1, visualScaleY:1, colorTransform: ACCOUNT_LEVEL_ICON_CT.WHITE_ALPHA_OFFSET}},
+					{time:2,	to: {colorTransform: CT_NONE}}
+				]"
+				easing		= "Easing.quad_out"
+				action		= "kill"
+				(event "evAccountLevelUpIconAppear")
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(top = -116px)
+			(left = 290px)
+			(width = 600px)
+			(marginTop = "L")
+			(marginLeft = "L")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginBottom = "M")
+				(visualOffsetY = 30px)
+				(alpha = 0)
+			)
+
+			(tf
+				(class $TextDefaultBold36NM)
+				(style
+					(maxWidth = 600px)
+					(alpha = "TA")
+				)
+
+				(bind text "rewardHeader")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration	= 0.3
+					to			= {alpha: 0.9, visualOffsetY: 0px}
+					easing		= "Easing.quad_out"
+					action		= "kill"
+					(event "evAccountLevelUpIconAppear")
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(visualScaleX = 4)
+				(visualScaleY = 4)
+				(visualOffsetX = -150px)
+				(visualOffsetY = -50px)
+				(alpha = 0)
+			)
+
+			(element StatusLine
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+				_text = 'IDS_REWARD_IS_TAKEN'
+				_width = 100%
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration	= 0.3
+					to			= {alpha: 1, visualScaleX:1, visualScaleY:1, visualOffsetX:0, visualOffsetY:0}
+					easing		= "Easing.quad_out"
+					action		= "kill"
+					(event "evAccountLevelUpTextAvailableAppear")
+				)
+			)
+		)
+	)
+)
+
+(def element AccountLevelUpLineProgress ()
+	(scope
+		(event evLineProgressDelayedStart)
+		(event evLineFill)
+		(event evLineShinyEndAnimate)
+		(event evLineBlink)
+
+		(var elementWidth:number = 710px)
+	)
+	(dispatch evLineProgressDelayedStart	delay=0.3 on='addedToStage')
+	(dispatch evLineFill					delay=0.3 (event "evLineProgressDelayedStart"))
+	(dispatch evLineShinyEndAnimate			delay=0.3 (event "evLineFill"))
+	(dispatch evLineBlink					delay=0.9 (event "evLineShinyEndAnimate"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['levelUpAnimation', 'AccountLevelUpLineProgress']" init=false (event "evLineProgressDelayedStart"))
+
+	(style
+		(align = "center|middle")
+		(height = 37px)
+		(alpha = 0)
+		(flow = "horizontal")
+	)
+
+	(controller $Animation
+		(bindcall play
+			delay		= 0.2
+			keyframes	= [
+					{time:0,	to:{alpha: 0}},
+					{time:0.7,	to:{alpha: 1}},
+					{time:3.1,	to:{alpha: 1}},
+					{time:3.3,	to:{alpha: 0}}
+				]
+			(event "evLineProgressDelayedStart")
+		)
+	)
+
+	(block
+		(style
+			(width = 1px)
+			(height = 100%)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = 0.5)
+		)
+	)
+
+	(block
+		(style
+			(height = 31px)
+			(backgroundImage = 'url:../accountLevel/progressBarIcons/ALBigProgressRepeaterBG.png')
+			(backgroundRepeatX = true)
+			(align = "middle")
+			(width = "elementWidth")
+		)
+
+		(block
+			(style
+				(width = 71px)
+				(height = 27px)
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration	= 0.8
+					from		= "{width: 71px}"
+					to			= "{width: elementWidth}"
+					easing		= "Easing.quad_out"
+					action		= "kill"
+					(event "evLineFill")
+				)
+			)
+
+			(block
+				(style
+					(height = 27px)
+					(alpha = 0.6)
+					(backgroundSize = "fill")
+					(backgroundImage = 'url:../accountLevel/progressBarIcons/ALBigProgressShinyMiddle.png')
+					(bind width "elementWidth")
+				)
+			)
+
+			(block
+				(style
+					(position = "absolute")
+					(right = 0)
+					(width = 71px)
+					(height = 27px)
+					(alpha = 0.8)
+					(backgroundSize = "fill")
+					(backgroundImage = 'url:../accountLevel/progressBarIcons/ALBigProgressShinyEnd.png')
+				)
+
+				(controller $Animation
+					(bindcall play
+						duration	= 0.8
+						from		= {width: 71px}
+						to			= {width: 30px}
+						easing		= "Easing.quad_out"
+						action		= "kill"
+						(event "evLineShinyEndAnimate")
+					)
+				)
+			)
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(alpha = 0)
+				)
+
+				(controller $Animation
+					(bindcall play
+						keyframes	= [
+								{time:0,	to:{alpha: 0}},
+								{time:0.4,	to:{alpha: 1}},
+								{time:0.8,	to:{alpha: 0}}
+							]
+						easing		= "Easing.quad_out"
+						action		= "kill"
+						(event "evLineBlink")
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 1px)
+			(height = 100%)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = 0.5)
+		)
+	)
+)
+
+(def element IconAccountLevelUpItem (_featureIndex:number)
+	(style
+		(width = "ACCOUNT_LEVEL_UP_ICON_SIZE")
+		(height = "ACCOUNT_LEVEL_UP_ICON_SIZE")
+		(backgroundSize = "cover")
+		(bind backgroundImage "'url:../accountLevel/unlocks/icon_' + _featureIndex + '_big.png'")
+	)
+)
+
+(def element IconAlDataItem (_imageData:str)
+	(style
+		(width = "ACCOUNT_LEVEL_UP_ICON_SIZE")
+		(height = "ACCOUNT_LEVEL_UP_ICON_SIZE")
+		(backgroundSize = "cover")
+		(bind backgroundImage "_imageData")
+	)
+)

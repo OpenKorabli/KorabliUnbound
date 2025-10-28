@@ -91,7 +91,7 @@
 	(dispatch evHideBargeContent 					(bind enabled "isRewardContainerOpened") (bind trigger "isRewardContainerOpened"))
 
 	(dispatch evDelayedUpdate delay="lootboxesInStorage > 0 ? 0 : 0.22" (bind trigger "lootboxesInStorage"))
-	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'barge']" on='addedToStage')
+	(macro SOUND_DOCK_INSET_HANDLER "SC.Ui_windows.ROUTE.LOOTBOXES")
 
 	(class $Fullsize)
 
@@ -240,12 +240,11 @@
 		(var description:str = "lootboxEventDescription.description" (event "lootboxEventDescription.evDescriptionChanged"))
 
 
-		(struct lootboxOpenNewTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN"))
-		(struct lootboxOpenRepeatNewTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN_REPEAT"))
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN,
+																												SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN_REPEAT ]"))
 
-		(var newTipId:number = "lootboxOpenNewTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN :
-								lootboxOpenRepeatNewTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN_REPEAT
-																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(var isLootboxOpenRepeatNewTip:bool = "checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_OPEN_REPEAT")
 	)
 
 	(style (width = 420px))
@@ -375,12 +374,15 @@
 			)
 
 			(block
-				(style (width = 248px) (height = 4px))
+				(style
+					(width = 248px)
+					(height = 3px)
+				)
+
 				(controller $Instance renderer='DefaultProgressBar'
 					(bind enabled "hasProgressToBestReward")
 					(args
 						_progress = "valueToBestReward / maxValueToBestReward"
-						_height = 5px
 					)
 				)
 			)
@@ -431,14 +433,14 @@
 			(style (marginBottom = "{ 720: SXS, 1080: MS }"))
 
 			(controller $Instance renderer='GuidingTipHub'
-				(bind enabled "isInStorage && newTipId")
+				(bind enabled "isInStorage && checkedTipId.value")
 				(args
-					_tipId =			"newTipId"
+					_tipId =			"checkedTipId.value"
 					_tipPositioning =	"TIP_POSITION_RIGHT"
-					_noPointer =		"lootboxOpenRepeatNewTip.isActive"
+					_noPointer =		"isLootboxOpenRepeatNewTip"
 					_offsetX =			"M"
 					_pointerOffset =	-150
-					_hasNextButton =	"lootboxOpenRepeatNewTip.isActive"
+					_hasNextButton =	"isLootboxOpenRepeatNewTip"
 					_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
 				)
 			)
@@ -470,10 +472,10 @@
 					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
 					_isTransactionBtn = true
 					_focusIndex = 1
-					_methods = "[	{	type: 'inputMapping.onAction', name: 'LootboxProxy.openLootboxesByType', args: { lootboxType: containerType, count: amount}}]"
+					_methods = "[{ type: 'inputMapping.onRequest', name: 'showOpenLootboxesByTypeConfirmation', args: { _lootboxEntityId: _selectedContainerType } }]"
 				)
 			)
-		
+
 			(controller $Animation
 				(bindcall play
 					keyframes = "[
@@ -513,12 +515,10 @@
 		(var carouselCanScrollRight:bool =	"$event ? $event.up		: false"	(event "evCarouselCanScrollChanged"))
 		(var carouselScrollEnabled:bool =	"$event ? $event.down || $event.up : true" (event "evCarouselCanScrollChanged"))
 
-		(struct lootboxCarouselTip = 		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL"))
-		(struct lootboxCarouselRepeatTip = 	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL_REPEAT"))
 
-		(var newTipId:number = "lootboxCarouselTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL :
-								lootboxCarouselRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL_REPEAT
-																	: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL,
+																												SC.Context_guiding_tip.TIP_TYPE.LOOTBOXES_CAROUSEL_REPEAT ]"))
 	)
 
 	(bind name "'carouselLootboxes'")
@@ -536,9 +536,9 @@
 	
 	(hblock
 		(controller $Instance renderer='GuidingTipHub'
-			(bind enabled "newTipId")
+			(bind enabled "checkedTipId.value")
 			(args
-				_tipId =			"newTipId"
+				_tipId =			"checkedTipId.value"
 				_tipPositioning =	"TIP_POSITION_TOP"
 				_offsetY =			"XS"
 				_hasFinishButton =	true
@@ -676,6 +676,14 @@
 		(height = "LOOTBOX_SIZE")
 	)
 
+	(controller $Tooltip
+		(renderer = 'LootboxContainerTooltip')
+		(args
+			_lootboxEntityId = "_entityId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
 	
 	(block
 		(class $FullsizeAbsolute)
@@ -714,14 +722,19 @@
 	)
 
 	(block
-		(class $MiddleVHAbsolutely)
-		(style
-			(width = 120px)
-			(height = 120px)
-			(bind backgroundImage "'url:../reward_icons/big/' + subtype + '.png'")
-			(backgroundSize = "cover")
+		(class $FullsizeAbsolute)
+		(style (align = "center|middle"))
+
+		(block
+			(style
+				(width = 120px)
+				(height = 120px)
+				(bind backgroundImage "'url:../reward_icons/big/' + subtype + '.png'")
+				(backgroundSize = "cover")
+			)
 		)
 	)
+
 	(block
 		(style
 			(position = "absolute")
@@ -742,14 +755,14 @@
 			(style
 				(width = 33px)
 				(align = "center")
-				(backgroundImage = 'url:../service_kit/panel_backgrounds/counter.png')
-				(scale9grid = 4)
+				(backgroundColor = 0xFF212222)
+				(borderRadius = "XXS")
 			)
 
 			(block
 				(style
 					(width = 24px)
-					(height =  24px)
+					(height = 24px)
 					(bind backgroundImage "lootboxTypeInfoComponent.buyLocation == SC.Ui_common.LOOTBOX_BUY_LOCATION.REFERRAL
 												?	'url:../service_kit/currencies/icon_recruitment_points.png'
 												:	'url:../service_kit/icons/icon_armory_medium.png'")
@@ -766,5 +779,44 @@
 						name: 'LootboxProxy.moveToBargeByType',
 						args: { lootboxType: containerType }
 					}]"
+	)
+)
+
+
+(def element LootboxContainerTooltip (_lootboxEntityId:number)
+	(scope
+		(var lootboxComponent:dhComponent = "getEntity(_lootboxEntityId).lootboxTypeInfoComponent")
+		(var amount:number = "lootboxComponent.amount ?: 0" (event "lootboxComponent.evAmountChanged"))
+		(var canBuyWithBrotherhood:bool = "lootboxComponent.buyLocation == SC.Ui_common.LOOTBOX_BUY_LOCATION.REFERRAL")
+	)
+	(style (width = 340px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemLootboxItem
+			_lootboxEntityId =	"_lootboxEntityId"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemCounterLine'
+				(bind enabled "amount > 0")
+				(args
+					_title = 'IDS_IN_WAREHOUSE'
+					_count = "amount"
+					_isAutoWidth = true
+				)
+			)
+
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "amount == 0")
+				(args
+					_text = "canBuyWithBrotherhood ? 'IDS_BUY_IN_ARMORY_BROTHERHOOD' : 'IDS_BUY_IN_ARMORY_STATUS'"
+					_unifiedStatus = "canBuyWithBrotherhood ? SC.Ui_styles.UNIFIED_STATUS.BROTHERHOOD : SC.Ui_styles.UNIFIED_STATUS.TO_ARMORY"
+				)
+			)
+		)
 	)
 )

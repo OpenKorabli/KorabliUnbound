@@ -1,10 +1,5 @@
 (def constant EXTERIOR_CONTENT_WIDTH 452px)
-
-(def constant EXTERIOR_CONTENT_CAROUSEL_OFFSET 12px)
-(def constant EXTERIOR_CONTENT_ROUNDED_OFFSET 8px)
 (def constant EXTERIOR_SMALL_CONTAINER_HEIGHT 29px)
-
-(def constant CAMOUFLAGE_CONTENT_OFFSET "EXTERIOR_CONTENT_CAROUSEL_OFFSET + EXTERIOR_SMALL_CONTAINER_HEIGHT")
 
 (def animation KeyframeExteriorAnimShipChanged ()
 	keyframes = "[
@@ -85,29 +80,21 @@
 
 		(var isShipLock:bool = "isShipReadyForBattle || isShipInBalancer || isNeedRepair")
 
-		(var maxScrollHeight:number = 0)
 
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2,
+																												SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT,
+																												SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3,
+																												SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_FINAL_REPEAT,
+																												SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_CANT_INSTALL_CAMO,
+																												SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_BLOCKED_MAINTENANCE ]"))
 
-		(struct permoCamoTip =					PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2"))
-		(struct permoCamoRepeatTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT"))
-		(struct expendableCamoTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3"))
-		(struct exteriorFinalRepeatTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_FINAL_REPEAT"))
-		(struct exteriorCantInstallTip =		PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_CANT_INSTALL_CAMO"))
-		(struct exteriorBlockedMaintenanceTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_BLOCKED_MAINTENANCE"))
+		(var hasNextButton:bool =			"isIn(checkedTipId.value, [	SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2,
+																		SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT,
+																		SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3 ])")
+		(var isDockStatusLockedTip:bool =	"isIn(checkedTipId.value, [	SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_CANT_INSTALL_CAMO,
+																		SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_BLOCKED_MAINTENANCE ])")
 
-		(var newTipId:number = "permoCamoTip.isActive					? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2 :
-								permoCamoRepeatTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT :
-								expendableCamoTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3 :
-								exteriorFinalRepeatTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_FINAL_REPEAT :
-								exteriorCantInstallTip.isActive			? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_CANT_INSTALL_CAMO :
-								exteriorBlockedMaintenanceTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_BLOCKED_MAINTENANCE
-																		: SC.Context_guiding_tip.TIP_TYPE.NONE")
-
-		(var hasNextButton:bool = "isIn(newTipId, [	SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2,
-													SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_2_REPEAT,
-													SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_DESC_3 ])")
-
-		(var isDockStatusLockedTip:bool = "exteriorCantInstallTip.isActive || exteriorBlockedMaintenanceTip.isActive")
 
 		(struct topGuidingOffset =	ADAPTIVE_VERTICAL_SIZE(
 			_minStageHeight =	720px
@@ -119,10 +106,10 @@
 	)
 
 	(class $Fullsize)
-	(style (bind paddingBottom "carouselAreaHeight"))
+	(style (bind paddingBottom "carouselAreaHeight + SXS"))
 
 	(bindcall externalCall 'sound.playSetSoundDirect' "['exterior', 'main']" on='addedToStage')
-	(bindcall externalCall 'sound.playSetSoundDirect' "['dock_inset', 'camouflages']" on='addedToStage')
+	(macro SOUND_DOCK_INSET_HANDLER "SC.Ui_windows.ROUTE.CAMOUFLAGE")
 
 	
 	(bindcall externalCall "previewExteriorId ? 'inputMapping.onAction' : ''" "['setUserPref', { name: 'previewExteriorId', value: 0 }]" watch=false	on='removedFromStage'
@@ -166,9 +153,9 @@
 			)
 
 			(controller $Instance renderer='GuidingTipHub'
-				(bind enabled "newTipId && isDockStatusLockedTip")
+				(bind enabled "checkedTipId.value && isDockStatusLockedTip")
 				(args
-					_tipId =			"newTipId"
+					_tipId =			"checkedTipId.value"
 					_tipPositioning =	"TIP_POSITION_BOTTOM"
 					_offsetY =			"M"
 					_noPointer =		true
@@ -180,12 +167,14 @@
 		(block
 			(bind visible "!isAvailableHideExteriors")
 			(class $Fullsize)
-			(bind maxScrollHeight "$globalLayoutBounds[3] - CAMOUFLAGE_CONTENT_OFFSET" (event "$evLayoutBoundsChanged"))
 			
 			(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
 
 			(block
-				(style (width = 100%))
+				(style
+					(width = 100%)
+					(maxHeight = 100%)
+				)
 
 				(block
 					(class $FullsizeAbsolute)
@@ -205,7 +194,7 @@
 				(scrollArea
 					(style
 						(width = 100%)
-						(bind maxHeight "maxScrollHeight")
+						(maxHeight = 100%)
 						(backgroundColor = "NO_COLOR")
 					)
 					
@@ -242,15 +231,15 @@
 			)
 
 			(controller $Instance renderer='GuidingTipHub'
-				(bind enabled "newTipId && !isDockStatusLockedTip")
+				(bind enabled "checkedTipId.value && !isDockStatusLockedTip")
 				(args
-					_tipId =			"newTipId"
+					_tipId =			"checkedTipId.value"
 					_tipPositioning =	"TIP_POSITION_RIGHT"
 					_offsetX =			"XS"
 					_offsetY =			"topGuidingOffset.value"
 					_noPointer =		true
 					_hasNextButton =	"hasNextButton"
-					_hasFinishButton =	"exteriorFinalRepeatTip.isActive"
+					_hasFinishButton =	"checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_FINAL_REPEAT"
 					_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
 				)
 			)

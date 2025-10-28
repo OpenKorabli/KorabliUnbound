@@ -1,19 +1,26 @@
 (def constant QUICK_COMMANDS_NEAR_SLOTS_COUNT 8)
 (def constant QUICK_COMMANDS_FAR_SLOTS_COUNT 4)
 
-(def element ModalQuickCommandsFullscreenContainer () layout=true
+
+(def element ModalQuickCommandsFullscreenContainer (_isVisible:bool=true)
 	(scope
 		(macro IS_ALIVE)
 		(macro IS_ON_PLANE)
 	)
+	(class $FullsizeAbsolute)
+
+	(bind visible "_isVisible")
+
 	(controller $Instance renderer='ModalWindowQuickCommandsFullscreen'
 		(bind enabled "isAlive || isOnPlane")
 	)
 )
 
-(def element ModalWindowQuickCommandsFullscreen () layout=true
+(def element ModalWindowQuickCommandsFullscreen ()
 	(scope
 		(event evCommandChanged)
+		(event evEnableCommandUpdate)
+
 		(var quickCommandsPanelEntity:gfx = "$datahub.getSingleEntity(CC.quickCommandsPanel)")
 		(var panelComponent:gfx = "quickCommandsPanelEntity.quickCommandsPanel")
 		(var commandsData:array = "quickCommandsPanelEntity.quickCommandsPanel.commandsData" (event "quickCommandsPanelEntity.quickCommandsPanel.evChanged"))
@@ -29,26 +36,45 @@
 
 		(var curCommandId:number = "currentSelectedCommandIndex > -1 && isActive ? commandsData[currentSelectedCommandIndex].commandId : -1")
 		(var stageSmallerDimension:number = "min(stageWidth, stageHeight)")
+
+		(var isCommandUpdateEnabled:bool = false)
+		(bind isCommandUpdateEnabled "false" init=false (bind enabled "!isActive") (bind trigger "isActive"))
+		(bind isCommandUpdateEnabled "true" init=false (event "evEnableCommandUpdate"))
 	)
-	(style
-		(position="absolute")
-		(bind width "stageWidth")
-		(bind height "stageHeight")
-	)
+
+	(class $FullsizeAbsolute)
 
 	(alpha = 0)
 	(visible = false)
+
 	(controller $Animation
-		(bindcall play duration=0.1 delay=0 from={alpha:0, visible:false} to={alpha:1, visible:true} action="killAll" (bind enabled "isActive"))
-		(bindcall play duration=0.1 delay=0 from={alpha:1, visible:true} to={alpha:0, visible:false} action="killAll" (bind enabled "!isActive"))
+		(controllerEvents evModalActivatedAnimEnded)
+		(bindcall play
+			onEndedEvent = 'evModalActivatedAnimEnded'
+			duration = 0.1
+			delay = 0
+			from = {alpha:0, visible:false}
+			to = {alpha:1, visible:true}
+			action = "kill"
+			(bind enabled "isActive")
+		)
+		(bindcall play
+			duration = 0.1
+			delay = 0
+			from = {alpha:1, visible:true}
+			to = {alpha:0, visible:false}
+			action = "kill"
+			(bind enabled "!isActive")
+		)
+		(dispatch evEnableCommandUpdate on='evModalActivatedAnimEnded')
 	)
 
-	(bindcall externalCall 'direct.action' "['battle.quickCommand', [curCommandId]]" init=false (event "evCommandChanged"))
-	(dispatch evCommandChanged args="{ commandIndex: -1 }" dir="EventDirection.UP"  (bind trigger "isActive"))
+	(bindcall externalCall 'direct.action' "['battle.quickCommand', [curCommandId]]" init=false (bind enabled "isCommandUpdateEnabled") (event "evCommandChanged"))
+	(dispatch evCommandChanged args="{ commandIndex: -1 }" dir="EventDirection.UP" (bind trigger "isActive"))
 
 	(block
 		(style
-			(position="absolute")
+			(position = "absolute")
 			(width = 100%)
 			(height = 100%)
 			(backgroundColor = 0xCCCCCC)
@@ -68,7 +94,10 @@
 			(class $CenterAbsolute)
 			(controller $Repeat renderer='QCSectorFar'
 				(bind count "commandsData.length > 0 ? QUICK_COMMANDS_FAR_SLOTS_COUNT : 0")
-				(args _stageWidth="stageWidth" _stageHeight="stageHeight")
+				(args
+					_stageWidth 	= "stageWidth"
+					_stageHeight 	= "stageHeight"
+				)
 			)
 		)
 		(block
@@ -76,18 +105,16 @@
 			(mouseChildren = false)
 			(controller $Repeat renderer='QCItem'
 				(bind count "commandsData.length")
-				(args _stageWidth="stageWidth" _stageHeight="stageHeight")
+				(args
+					_stageWidth 	= "stageWidth"
+					_stageHeight 	= "stageHeight"
+				)
 			)
-		)
-
-		(mc quick_command_crosshair
-			(class $CenterAbsolute)
-			(alpha = 0.6)
 		)
 	)
 )
 
-(def element QCSector (_stageSmallerDimension:number = 1) layout=true
+(def element QCSector (_stageSmallerDimension:number = 1)
 	(scope
 		(event evCommandChanged)
 		(var quickCommandsPanelEntity:gfx = "$datahub.getSingleEntity(CC.quickCommandsPanel)")
@@ -106,23 +133,37 @@
 
 	(alpha = 0.25)
 	(controller $Animation
-		(bindcall play duration=0.05 delay=0 from={alpha:0.25} to={alpha:0.40} action="killAll" (bind enabled "(selected || (rollOver && commandsData[$index].enabled))"))
-		(bindcall play duration=0.05 delay=0 from={alpha:0.40} to={alpha:0.25} action="killAll" (bind enabled "!(selected || (rollOver && commandsData[$index].enabled))"))
+		(bindcall play
+			duration = 0.05
+			delay = 0
+			from = {alpha:0.25}
+			to = {alpha:0.40}
+			action = "kill"
+			(bind enabled "selected || (rollOver && commandsData[$index].enabled)")
+		)
+		(bindcall play
+			duration = 0.05
+			delay = 0
+			from = {alpha:0.40}
+			to = {alpha:0.25}
+			action = "kill"
+			(bind enabled "!(selected || (rollOver && commandsData[$index].enabled))")
+		)
 	)
 
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(dispatch evCommandChanged args="{ commandIndex: (commandsData[$index].enabled ? $index : -1) }" dir="EventDirection.UP" (bind trigger "rollOver"))
 
 	(block
-		(style 
+		(style
 			(position = "absolute")
 			(bind rotation "$index * 45 - 22.5")
 		)
 		(block
-			(style 
+			(style
 				(position = "absolute")
-				(top = "1")
-				(left = "2")
+				(top = 1px)
+				(left = 2px)
 			)
 			(controller $Sector
 				(bind color "0x000000")
@@ -133,9 +174,7 @@
 		)
 	)
 	(block
-		(style 
-			(position = "absolute")
-		)
+		(style (position = "absolute"))
 		(isMask = true)
 		(controller $Sector
 			(bind color "0x000000")
@@ -146,7 +185,7 @@
 	)
 )
 
-(def element QCSectorFar (_stageWidth:number = 1, _stageHeight:number = 1) layout=true
+(def element QCSectorFar (_stageWidth:number = 1, _stageHeight:number = 1)
 	(scope
 		(event evCommandChanged)
 		(var stageSmallerDimension:number = "min(_stageWidth, _stageHeight)")
@@ -154,29 +193,41 @@
 
 		(macro MOUSE_HANDLER_SCOPE)
 	)
-	(style
-		(position = "absolute")
-	)
+	(style (position = "absolute"))
 
 	(alpha = 0.25)
 	(controller $Animation
-		(bindcall play duration=0.05 delay=0 from={alpha:0.25} to={alpha:0.40} action="killAll" (bind enabled "rollOver"))
-		(bindcall play duration=0.05 delay=0 from={alpha:0.40} to={alpha:0.25} action="killAll" (bind enabled "!(rollOver)"))
+		(bindcall play
+			duration = 0.05
+			delay = 0
+			from = {alpha:0.25}
+			to = {alpha:0.40}
+			action = "kill"
+			(bind enabled "rollOver")
+		)
+		(bindcall play
+			duration = 0.05
+			delay = 0
+			from = {alpha:0.40}
+			to = {alpha:0.25}
+			action = "kill"
+			(bind enabled "!rollOver")
+		)
 	)
 
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(dispatch evCommandChanged args="{ commandIndex: $index+8 }" dir="EventDirection.UP" (bind trigger "rollOver"))
 
 	(block
-		(style 
+		(style
 			(position = "absolute")
 			(bind rotation "$index * 90")
 		)
 		(block
-			(style 
+			(style
 				(position = "absolute")
-				(top = "1")
-				(left = "1")
+				(top = 1px)
+				(left = 1px)
 			)
 			(controller $Sector
 				(bind color "0x000000")
@@ -259,8 +310,8 @@
 				(bind visible "commandsData[$index].icon != null")
 				(style
 					(marginLeft = -50%)
-					(width = 51)
-					(height = 51)
+					(width = 51px)
+					(height = 51px)
 					(bind backgroundImage "iconPath")
 				)
 			)
@@ -271,7 +322,7 @@
 					(marginLeft = -50%)
 					(textAlign = "center")
 					(textColor = 0xffffff)
-					(bind width "150")
+					(width = 150px)
 				)
 				(bind text "displayText")
 			)
@@ -284,10 +335,10 @@
 			(controller $Instance renderer='HotkeyIndicator'
 				(bind enabled "commandName")
 				(args
-					_commandId="commandId"
-					_size="SIZE.SMALL"
-					_active=true
-					_fxOnDown="false"
+					_commandId 	= "commandId"
+					_size 		= "SIZE.SMALL"
+					_active 	= true
+					_fxOnDown 	= false
 				)
 			)
 		)

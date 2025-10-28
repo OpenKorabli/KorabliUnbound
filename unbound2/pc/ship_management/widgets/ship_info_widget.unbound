@@ -21,6 +21,9 @@
 		(var expDeficit:number = "upgradableShipInfo.expDeficit" (event "upgradableShipInfo.evUpdate"))
 		(var isDependencyResearched:bool = "upgradableShipInfo.dependencyResearched" (event "upgradableShipInfo.evUpdate"))
 
+		(var shipRole:str = "shipEntity.ship.shipRole ?: ''")
+		(var hasShipRole:bool = "!shipRole.empty")
+
 		(var shipInfo:dhComponent = "shipEntity.ship")
 		(var isEventLike:bool = "shipInfo.isEventLike" (event "shipInfo.evUpdate"))
 		(var previousShipId:number =	"shipInfo.previousShipId"	(event "shipInfo.evUpdate"))
@@ -56,15 +59,11 @@
 		(var isModulesShipManagementContainerVisible:bool = "isPurchasable && !isResearchSuperShipInfoVisible && !isEarlyAccess")
 		
 
-
-		(struct freeXpShipTip =				PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP"))
-		(struct freeXpFinalTip =			PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_FINAL"))
-		(struct freeXpShipFinalRepeatTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_FINAL_REPEAT"))
-
-		(var newTipId:number = "freeXpShipTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP :
-								freeXpFinalTip.isActive				? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_FINAL :
-								freeXpShipFinalRepeatTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_FINAL_REPEAT
-																	: SC.Context_guiding_tip.TIP_TYPE.NONE ")
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP,
+																												SC.Context_guiding_tip.TIP_TYPE.FREE_XP_FINAL,
+																												SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_FINAL_REPEAT,
+																												SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_FEATURES_SHIPS_ROLES ]"))
 	)
 
 	(block
@@ -85,7 +84,7 @@
 			(marginTop = "S")
 			(marginLeft = 6px)
 		)
-		
+
 		(controller $Tooltip
 			(renderer = 'ShipExtendedTooltip')
 			(args
@@ -121,10 +120,34 @@
 			)
 
 			(block
-				(style (paddingTop = "S"))
+				(style (paddingTop = "{ 720:0px,1080:S }"))
 
 				
 				(block
+					(controller $Tooltip
+						(bind enabled "hasShipRole")
+						(renderer = 'HeaderDescriptionInstructionTooltip')
+						(args
+							_headerText = "'IDS_SHIP_ROLE_' + shipRole"
+							_descriptionText = "'IDS_SHIP_ROLE_' + shipRole + '_DESC'"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(controller $Instance renderer='ShipRole'
+						(bind enabled "hasShipRole")
+						(args
+							_shipRole = "shipRole"
+							_size = "SIZE.LARGE"
+						)
+					)
+				)
+
+				
+				(block
+					(bind visible "isNotEventGroup")
+					(style (bind marginTop "hasShipRole ? SXS : 0px"))
+
 					(controller $Instance renderer='ComplexityLevel'
 						(bind enabled "isNotEventGroup")
 						(args
@@ -142,6 +165,17 @@
 					(bind visible "isOwned")
 
 					(style (marginTop = "SXS"))
+
+					(controller $Tooltip
+						(bind enabled "isOwned")
+						(renderer = 'CurrencyTooltip')
+						(args
+							_currency = "SC.Common.CURRENCIES.XP"
+							_amount = "ownShipExp"
+							_hasMouseInstruction = false
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
 
 					(controller $Instance renderer='PriceTagWithLabel'
 						(bind enabled "isOwned")
@@ -188,19 +222,25 @@
 						_size = "SIZE.MEDIUM"
 						_width = 136px
 						_label = 'IDS_ARMOUR_SCHEME'
-						_methods = "[	{	type: 'inputMapping.onAction',
-											name: 'navigateTo',
-											args: { route: SC.Ui_windows.ROUTE.SHIP_PREVIEW }
-										},
-										{	type: 'inputMapping.onAction',
-											name: 'selectShip',
-											args: { shipId: viewedShipId }
-										}]"
+						_methods = "[	{ type: 'inputMapping.onAction',	name: 'navigateTo',		args: { route: SC.Ui_windows.ROUTE.SHIP_PREVIEW } },
+										{ type: 'inputMapping.onAction',	name: 'selectShip',		args: { shipId: viewedShipId } }]"
 					)
 
 					
 					(block
 						(bind visible "isNotEventGroup")
+
+						(controller $Instance renderer='GuidingTipHub'
+							(bind enabled "hasShipRole && checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_FEATURES_SHIPS_ROLES")
+							(args
+								_tipId =				"SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_FEATURES_SHIPS_ROLES"
+								_tipPositioning =		"TIP_POSITION_RIGHT"
+								_offsetX =				12px
+								_offsetY =				-3px
+								_pointerOffset =		-90px
+								_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
+							)
+						)
 
 						(element DefaultButton
 							_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
@@ -209,7 +249,11 @@
 							_label = 'IDS_SHIP_BRANCHES_FEATURE'
 							_methods = "[	{	type: 'inputMapping.onRequest',
 												name: 'showModalShipsBranchesFeatures',
-												args: { _branchId: shipInfo.branchId, _shipId: viewedShipId }}]"
+												args: { _branchId: shipInfo.branchId, _shipId: viewedShipId }},
+											{	type: 'inputMapping.onAction',
+												name: 'deactivateTipChain',
+												args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SHIP_ROLES_OLD_PLAYER }
+											}]"
 						)
 					)
 				)
@@ -231,15 +275,15 @@
 		)
 
 		(controller $Instance renderer='GuidingTipHub'
-			(bind enabled "newTipId")
+			(bind enabled "checkedTipId.value && checkedTipId.value != SC.Context_guiding_tip.TIP_TYPE.TUTORIAL_FEATURES_SHIPS_ROLES")
 			(args
-				_tipId =				"newTipId"
+				_tipId =				"checkedTipId.value"
 				_tipPositioning =		"TIP_POSITION_BOTTOM"
 				_offsetY =				"XS"
 				_screenOffsetLeft =		"M"
 				_noPointer =			true
-				_hasNextButton =		"freeXpShipTip.isActive"
-				_hasFinishButton =		"freeXpFinalTip.isActive || freeXpShipFinalRepeatTip.isActive"
+				_hasNextButton =		"checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP"
+				_hasFinishButton =		"isIn(checkedTipId.value, [SC.Context_guiding_tip.TIP_TYPE.FREE_XP_FINAL, SC.Context_guiding_tip.TIP_TYPE.FREE_XP_SHIP_FINAL_REPEAT])"
 				_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			)
 		)
@@ -326,9 +370,9 @@
 		(macro MODULES_ALPHA_STATE "isDependencyResearched")
 		(class $StrokeLink)
 		(style
+			(height = 16px)
 			(marginTop = "S")
 			(marginLeft = 20px)
-			(height = 16px)
 		)
 	)
 )
@@ -473,12 +517,12 @@
 
 (def element BattleTypeRestriction (_battleType:str)
 	(style
-		(marginRight = 6px)
-		(marginTop = 1px)
 		(width = 23px)
 		(height = 23px)
-		(bind backgroundImage "'url:../service_kit/battle_types/' + _battleType + '_tiny.png'")
+		(marginRight = 6px)
+		(marginTop = 1px)
 		(backgroundSize = "cover")
+		(bind backgroundImage "'url:../service_kit/battle_types/' + _battleType + '_tiny.png'")
 	)
 )
 
@@ -523,8 +567,8 @@
 	(style
 		(height = 40px)
 		(width = 40px)
-		(bind backgroundImage "imageURL")
 		(backgroundSize = "cover")
+		(bind backgroundImage "imageURL")
 	)
 
 	(controller $Tooltip

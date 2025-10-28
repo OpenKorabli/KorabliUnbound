@@ -1,6 +1,7 @@
-(def element TaskBattleTypeRestriction (_battleType:str, _isPVEModifierApplied:bool = false, _customIcon:str = '', _isTrial:bool = false)
+(def element TaskBattleTypeRestriction (_battleType:str, _isPVEModifierApplied:bool = false, _customIcon:str = '', _isTrial:bool = false, _availabilityState:number="SC.Common.SSE_BATTLE_TYPES_AVAILABILITIES.AVAILABLE", _requiredLevel:number=0)
 	(scope
 		(var isPVEModifierVisible:bool = "_isPVEModifierApplied")
+		(var isAvailable:bool = "_availabilityState == SC.Common.SSE_BATTLE_TYPES_AVAILABILITIES.AVAILABLE")
 
 		(var battleTypeIcon:str = "_customIcon 	? _isTrial	? _battleType
 															: _customIcon
@@ -11,45 +12,103 @@
 		(marginTop = 1px)
 		(width = 23px)
 		(height = 23px)
-		(bind backgroundImage "'url:../service_kit/battle_types/' + battleTypeIcon + '_tiny.png'")
-		(backgroundSize = "cover")
 	)
+
 	(block
-		(style (position = "absolute") (bottom = "XXS") (right = "XXS"))
+		(class $Fullsize)
+		(style
+			(bind backgroundImage "'url:../service_kit/battle_types/' + battleTypeIcon + '_tiny.png'")
+			(backgroundSize = "cover")
+			(macro DESATURATION_BATTLE_TYPE "isAvailable")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(bottom = "XXS")
+			(right = "XXS")
+			(filters
+				(colorMatrix
+					(bind matrix "isAvailable ? [0, 0, 0, 0] : [ 0, -50, -65, -0 ]")
+				)
+			)
+		)
+
 		(controller $Instance renderer='PVEModifier'
 			(bind enabled "isPVEModifierVisible")
 		)
 	)
+
 	(controller $Tooltip
 		(renderer='SimpleStatusTooltip')
-		(bind enabled "!isPVEModifierVisible")
+		(bind enabled "isAvailable && !isPVEModifierVisible")
 		(args
 			_text = "tr('IDS_' + toUpper(_battleType))"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
+
 	(controller $Tooltip
-		(renderer='PVEModifierTooltip')
-		(bind enabled "isPVEModifierVisible")
-		(args _battleType = "_battleType")
+		(renderer='TaskBattleTypeRestrictionTooltip')
+		(bind enabled "isPVEModifierVisible || !isAvailable")
+		(args 
+			_battleType =			"_battleType"
+			_availabilityState =	"_availabilityState"
+			_requiredLevel =		"_requiredLevel"
+			_isPVEModifierVisible =	"isPVEModifierVisible"
+		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )
 
-(def element PVEModifier () layout=true
+(def element PVEModifier ()
 	(style (width = 12px) (height = 12px) (backgroundImage = 'url:../service_kit/unified_status_icons/icon_pve_modifier.png'))
 )
 
-(def element PVEModifierTooltip (_battleType:str) layout=true
+(def element TaskBattleTypeRestrictionTooltip (_battleType:str, _availabilityState:number, _requiredLevel:number, _isPVEModifierVisible:bool=false) 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-	(style (width = 340px))
+	(scope
+		(var warningText:str = "_availabilityState == SC.Common.SSE_BATTLE_TYPES_AVAILABILITIES.LOW_LEVEL				? subst('IDS_AVAILABILITY_STATE_LOW_LEVEL', [], { _level: _requiredLevel }) :
+								_availabilityState == SC.Common.SSE_BATTLE_TYPES_AVAILABILITIES.CURRENTLY_UNAVAILABLE	? 'IDS_AVAILABILITY_STATE_CURRENTLY_UNAVAILABLE' : 
+								_availabilityState == SC.Common.SSE_BATTLE_TYPES_AVAILABILITIES.MISMATCH				? 'IDS_AVAILABILITY_STATE_MISMATCH'
+																														: ''")
+	)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText _headerText = "tr('IDS_' + toUpper(_battleType))")
 
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemStatusLine
-			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PVE_MODIFIER"
-			_text = 'IDS_PVE_MODIFIER_TOOLTIP_DESC_TASK'
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "warningText"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "warningText")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.LOCK"
+					_text = "warningText"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_isPVEModifierVisible"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "_isPVEModifierVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PVE_MODIFIER"
+					_text = 'IDS_PVE_MODIFIER_TOOLTIP_DESC_TASK'
+				)
+			)
 		)
 	)
 )

@@ -8,11 +8,10 @@
 	(scope
 		(var isPremiumType:bool = "_shipType == SC.Ships.SHIP_GROUPS.PREMIUM")
 
-		(struct shipClassesDestroyerTip =	PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.SHIP_CLASSES_DESTROYER"))
-		(var newTipId:number =				"shipClassesDestroyerTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.SHIP_CLASSES_DESTROYER
-																				: SC.Context_guiding_tip.TIP_TYPE.NONE")
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.SHIP_CLASSES_DESTROYER ]"))
 
-		(var isShipClassesGuidingTipVisible:bool = "newTipId && _shipType == SC.Common.SHIP_TYPE.DESTROYER")
+		(var isShipClassesGuidingTipVisible:bool = "checkedTipId.value && _shipType == SC.Common.SHIP_TYPE.DESTROYER")
 	)
 
 	(bindcall externalCall "isShipClassesGuidingTipVisible ? 'inputMapping.onAction' : ''" "[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SHIP_CLASSES_ONBOARDING } ]" init=false watch=false on='rollOver')
@@ -46,7 +45,7 @@
 		(controller $Instance renderer='GuidingTipHub'
 			(bind enabled "isShipClassesGuidingTipVisible")
 			(args
-				_tipId =			"newTipId"
+				_tipId =			"checkedTipId.value"
 				_tipPositioning =	"TIP_POSITION_BOTTOM"
 				_offsetY =			"MS"
 				_pointerOffset =	"-L"
@@ -67,7 +66,7 @@
 	)
 )
 
-(def element ShipTypeWithText (_shipType:str, _textClass:str='$TextDefaultNM', _textAlpha:number = "TC", _iconSize:number = 27)
+(def element ShipTypeWithText (_shipType:str, _isUpperCase:bool = false, _textClass:str='$TextDefaultNM', _textAlpha:number = "TC", _iconSize:number = 27)
 	(style (flow = "horizontal") (align = "middle"))
 
 	(block
@@ -86,15 +85,13 @@
 	(tf
 		(bind class "_textClass")
 		(bind alpha "_textAlpha")
-		(bind text "tr('IDS_' + _shipType + 'S')")
+		(bind text "_isUpperCase ? toUpper(tr('IDS_' + _shipType + 'S'))  : 'IDS_' + _shipType + 'S'")
 	)
 )
 
 (def element ShipsBranchesFeaturesInfoIcon (_branchId:number, _country:str, _useClassGap:bool, _arrowDirection:number)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
-		(struct researchGuidingTip = PULL_GUIDING_TIP(_type="SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_RESEARCH_ICON"))
-		(var isFeaturesResearchTipVisible:bool = "researchGuidingTip.isActive && _branchId == researchGuidingTip.targetId")
 
 		(var classGapOffset:number = "_useClassGap ? (SHIP_TREE_BLOCK_WIDTH / 2) : 0")
 
@@ -110,8 +107,19 @@
 									rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
 												: SC.Ui_styles.BUTTON_STATE.UP")
 		(var btnAlpha:number = "ICON_FEATURE_ALPHA_STATE[alphaState]")
+
+
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_RESEARCH_ICON ]"))
+
+		(var isFeaturesResearchTipVisible:bool = "checkedTipId.value && _branchId == activeTip.targetId")
 	)
-	(style (width = "INFO_ICON_SIZE") (height = "INFO_ICON_SIZE"))
+
+	(style
+		(width = "INFO_ICON_SIZE")
+		(height = "INFO_ICON_SIZE")
+	)
+
 	(macro MOUSE_EVENTS_DISPATCHER)
 
 	(bindcall externalCall "'inputMapping.onRequest'" "[ 'showModalShipsBranchesFeatures', { _branchId: _branchId, _shipId: 0 }]" watch=false on='leftClick')
@@ -152,7 +160,7 @@
 	(controller $Instance renderer='GuidingTipHub'
 		(bind enabled "isFeaturesResearchTipVisible")
 		(args
-			_tipId =				"SC.Context_guiding_tip.TIP_TYPE.SHIP_FEATURES_RESEARCH_ICON"
+			_tipId =				"checkedTipId.value"
 			_tipPositioning =		"TIP_POSITION_TOP"
 			_pointerOffset =		20
 			_offsetY =				"XS"
@@ -266,13 +274,6 @@
 		(var paragonSeasonDropsSharedMade:number = "paragonSeasonEntity.paragonSeason.dropsSharedMade" (event "paragonSeasonEntity.paragonSeason.evUpdateDropsMade"))
 		(var bonusTagsForFirstDrop:number = "paragonSeasonEntity.paragonSeason.bonusTagsForFirstDrop" (event "paragonSeasonEntity.paragonSeason.evUpdate"))
 
-		(struct paragonsGuidingTip = PULL_GUIDING_TIP(_type = "SC.Context_guiding_tip.TIP_TYPE.PARAGONS_RULES"))
-
-		(var currentTipId:number = "paragonsGuidingTip.isActive	? SC.Context_guiding_tip.TIP_TYPE.PARAGONS_RULES
-																: SC.Context_guiding_tip.TIP_TYPE.NONE")
-
-		(var isGuidingTipVisible:bool = "paragonsGuidingTip.isActive && isNotSeenParagonInShipTree")
-		
 		(macro SERVER_TIME_SCOPE)
 		(macro COUNTDOWN_SCOPE _scopeName="'paragonSeasonTimeToFinish'" _time="paragonSeasonEndDate" _format="'HIGHEST'" _declination="'ACC'" _isLocalTime="true")
 
@@ -281,8 +282,18 @@
 		(var paragraphItems:array = "[	{ text: isMultiplierAvailable	? subst('IDS_PARAGON_BONUS_FOOTER_MULTIPLIER_INFO', [], { multiplier: bonusTagsForFirstDrop })
 																		: 'IDS_PARAGON_BONUS_FOOTER_NO_MULTIPLIER_INFO' },
 										{ text: 'IDS_PARAGON_BONUS_FOOTER_SPECIAL_STORAGE_INFO'}]")
+
+
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.PARAGONS_RULES ]"))
+
+		(var isGuidingTipVisible:bool = "checkedTipId.value && isNotSeenParagonInShipTree")
 	)
-	(style (width = 100%) (marginBottom = "XL"))
+
+	(style
+		(width = 100%)
+		(marginBottom = "XL")
+	)
 
 	(hblock
 		(style (marginLeft = "M") (width = 700px))
@@ -332,21 +343,15 @@
 					(element DefaultButton
 						_width = 164px
 						_label = 'IDS_PRMP_DETAILS_BUTTON'
-						_methods = "[
-										{	type: 'inputMapping.onRequest',
-											name: 'showParagonRules',
-											args: { rulesType: 'paragons' }},
-										{	type: isNotSeenParagonInShipTree ? 'inputMapping.onAction' : '',
-											name: 'ServerUIDataUSS.setUserTaskExecuted',
-											args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_PARAGONS_IN_SHIP_TREE] }}
-									]"
+						_methods = "[	{ type: 'inputMapping.onRequest',									name: 'showParagonRules',						args: { rulesType: 'paragons' } },
+										{ type: isNotSeenParagonInShipTree ? 'inputMapping.onAction' : '',	name: 'ServerUIDataUSS.setUserTaskExecuted',	args: { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_PARAGONS_IN_SHIP_TREE] } }]"
 					)
 				)
 
 				(controller $Instance renderer='GuidingTipHub'
 					(bind enabled "isGuidingTipVisible")
 					(args
-						_tipId =			"currentTipId"
+						_tipId =			"checkedTipId.value"
 						_tipPositioning =	"TIP_POSITION_RIGHT"
 						_offsetX =			"XS"
 						_pointerOffset =	"-L"
@@ -370,7 +375,6 @@
 (def element NationTabButton (_nationRoute:str, _sidePaddings:dict)
 	(scope
 		(struct routeMenuData = ROUTE_MENU_DATA(_route = "_nationRoute"))
-		(struct markerData = PULL_MARKER_NEW(_groupName = "'SC.Ui_common.CONTENT_MARKER_GROUPS.' + toUpper(_nationRoute)"))
 	)
 	(bind name "'button_tree_' + _nationRoute")
 
@@ -378,8 +382,6 @@
 		_imageUrl = "'swf:../nation_flags/ships_tree_svg/ships_tree_svg.swf:flag_' + _nationRoute"
 		_isEnabled = "routeMenuData.isEnabled"
 		_isSelected = "routeMenuData.isActive"
-		_markerType = "markerData.markerType"
-		_markerNewCounter = "markerData.markerCounter"
 		_methods = "[{ type: 'inputMapping.onAction', name: 'navigateTo', args: { route: _nationRoute } }]"
 		_sidePaddings = "_sidePaddings"
 		_data = "{ nation: _nationRoute }"

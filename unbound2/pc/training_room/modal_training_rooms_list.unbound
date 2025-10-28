@@ -1,0 +1,867 @@
+(def constant TRAINING_COLUMN_HEADER_BACKGROUND_ALPHA "{
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.07,
+	SC.Ui_styles.BUTTON_STATE.OVER		: 0.1,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: 0.05,
+	SC.Ui_styles.BUTTON_STATE.UP		: 0
+}")
+
+(def constant TRAINING_COLUMN_HEADER_TEXT_ALPHA "{
+	SC.Ui_styles.BUTTON_STATE.DOWN		: TS,
+	SC.Ui_styles.BUTTON_STATE.OVER		: TA,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: TA,
+	SC.Ui_styles.BUTTON_STATE.UP		: TC
+}")
+
+(def constant TRAINING_SORT_TYPES {
+	'MAP' : 1,
+	'PLAYERS' : 2
+})
+
+(def constant TRAINING_LIST_ITEM_HEIGHT 96px)
+(def constant TRAINING_LIST_CONTAINER_WIDTH 1188px )
+
+(def element ModalWindowTrainingRoomsList ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evSortByBlockClicked)
+		(event evSortByOrganizerBlockClicked)
+		(event evOrganizerFilterInputStrChanged)
+		(event evOrganizerFilterTurnOff)
+
+		(struct sortOrderTypePref = GET_PREF_NUMBER(_option="'ui.trainingList.sorting.trainingSortType'") )
+		(struct sortOrderDirectionPref = GET_PREF_BOOL(_option="'ui.trainingList.sorting.trainingSortDirection'"))
+
+		(var currentTrainingRoomsCollection:dhCollection = "getCollectionByPath(CC.trainingRoom, sortOrderTypePref.value == 1 ? 'availableRooms.mapIdSorting' : 'availableRooms.teamSizeSorting')")
+
+		(var battleTypeEntity:dhEntity = "getPrimaryEntity(CC.battleType, SC.Common.BATTLE_TYPES.TRAINING_BATTLE + '_' + toString(SC.Common.GAME_PARAMS.INVALID_PARAM_ID))")
+		(var battleTypeDenyReasons:array = "battleTypeEntity.battleType.battleTypeReasons" (event "battleTypeEntity.battleType.evDisableReasonChanged"))
+		(var isTrainingRoomsEnabled:bool = "getSingleEntity(CC.division) == null")
+
+		
+		(var currentFilterByOrganizerStr:str = '')
+		(bind currentFilterByOrganizerStr "''" init=false (event "evOrganizerFilterTurnOff"))
+		(bind currentFilterByOrganizerStr "$event.value" init=false (event "evOrganizerFilterInputStrChanged"))
+
+		
+		(var isFilterByOrganizeActive:bool = false)
+		(bind isFilterByOrganizeActive "false" init=false (event "evOrganizerFilterTurnOff"))
+		(bind isFilterByOrganizeActive "$event.isActive" init=false (event "evSortByOrganizerBlockClicked"))
+
+		
+		(var isFilterStrCorrect:bool = false)
+		(bind isFilterStrCorrect "isFilterByOrganizeActive && (currentFilterByOrganizerStr == '' || currentFilterByOrganizerStr.length >= 3)" init=false watch=false (event "evOrganizerFilterInputStrChanged") (event "evSortByOrganizerBlockClicked"))
+
+		(var hasTrainingRooms:bool = "isTrainingRoomsEnabled && (currentTrainingRoomsCollection.length != 0 || isFilterByOrganizeActive)")
+
+		(var trainingRoomsListStateEntity:dhEntity = "getEntity(CC.trainingRoomsListWindowState)")
+		(var isProcessing:bool = "trainingRoomsListStateEntity.trainingRoomsListWindowState.isProcessing" (event "trainingRoomsListStateEntity.trainingRoomsListWindowState.isProcessing"))
+
+		(var isNoItemsVisible:bool = "!hasTrainingRooms || (isTrainingRoomsEnabled && currentTrainingRoomsCollection.length == 0)")
+	)
+
+	(bindcall externalCall "'inputMapping.onRequest'" "['setOwnerNameFilter', {ownerName: currentFilterByOrganizerStr }]" init=false watch=false (bind enabled "isFilterStrCorrect") (bind trigger "currentFilterByOrganizerStr"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['startUpdateTrainingRooms', {}]" (event "startShow"))
+	(bindcall externalCall "'inputMapping.onAction'" "['stopUpdateTrainingRooms', {}]" (event "startHide"))
+
+	(style (align = "center"))
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(align = "center")
+			(width = 100%)
+		)
+
+		(element ModalWindowHeaderFullSize
+			_windowName =		"'IDS_CUSTOMROOMSLABEL'"
+			_paddingRight =		"M"
+			_paddingLeft =		"M"
+			_backButtonText =	'IDS_RETURN_FROM_MODAL_WINDOW_BUTTON'
+			_methods =			"[{ type: 'inputMapping.onAction', name: 'hideTrainingRooms', args: {} }]"
+		)
+
+		(block
+			(style
+				(align = "center")
+				(width = 100%)
+				(paddingLeft = "XS")
+				(paddingRight = "XS")
+				(marginTop = "SXS")
+				(marginBottom = "SXS")
+			)
+
+			(tf
+				(class $TextDefault18NM)
+				(style
+					(width = 100%)
+					(textAlign = "center")
+					(alpha = "TA")
+				)
+				(text = 'IDS_CUSTOMROOMSDESCRIPTION1LABEL')
+			)
+		)
+
+		(element HorizontalDividerTwoPx)
+	)
+
+	
+	(block
+		(style
+			(height = 100%)
+			(width = "TRAINING_LIST_CONTAINER_WIDTH")
+			(paddingBottom = "M")
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(height = 40px)
+				(width = 100%)
+				(marginTop = "{ 720:M, 1080:L }")
+				(marginBottom = "S")
+			)
+
+			(hblock
+				(class $Fullsize)
+				(bind visible "isTrainingRoomsEnabled")
+
+				
+				(block
+					(style
+						(height = 100%)
+						(width = 346px)
+					)
+
+					(element TrainingRoomListHeader
+						_label = 'IDS_TRAINING_MAP'
+						_sortTypeName = 'MAP'
+						_tooltipText = 'IDS_TRAINING_MAP_SORT_TOOLTIP'
+						_isActive = "sortOrderTypePref.value == TRAINING_SORT_TYPES['MAP']"
+						_currentSortType = "sortOrderTypePref.value"
+						_currentSortDirection = "sortOrderDirectionPref.value"
+						_horizontalAlign = "left"
+					)
+				)
+
+				
+				(block
+					(class $Fullsize)
+
+					(element OrganizerFilterHeader
+						_label = 'IDS_TRAINING_ORGANIZER'
+						_isActive = "isFilterByOrganizeActive"
+						_currentFilterByOrganizerStr = "currentFilterByOrganizerStr"
+						_isFilterStrCorrect = "isFilterStrCorrect"
+					)
+				)
+
+				
+				(block
+					(style
+						(height = 100%)
+						(width = 95px)
+					)
+
+					(element TrainingRoomListHeader
+						_label = 'IDS_PLAYERS'
+						_sortTypeName = 'PLAYERS'
+						_tooltipText = 'IDS_PLAYERS_SORT_TOOLTIP'
+						_isActive = "sortOrderTypePref.value == TRAINING_SORT_TYPES['PLAYERS']"
+						_currentSortType = "sortOrderTypePref.value"
+						_currentSortDirection = "sortOrderDirectionPref.value"
+						_horizontalAlign = "right"
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(class $Fullsize)
+
+			
+			(block
+				(bind visible "!isNoItemsVisible")
+				(class $Fullsize)
+
+				(scrollArea
+					(class $Fullsize)
+					(macro DEFAULT_VERTICAL_SCROLL_PARAMS)
+
+					(repeatController = 'trainingRoomsContainer')
+					(scrollPerItem = true)
+
+					(content
+						(style
+							(width = 100%)
+							(vgap = "XS")
+							(bind flow "sortOrderDirectionPref.value ? vertical : reverse_vertical")
+						)
+
+						(controller $DynamicRepeat renderer='TrainingRoomListItemRenderer' name='trainingRoomsContainer'
+							(bind count "currentTrainingRoomsCollection.length")
+							(args
+								_trainingRoomEntity = "currentTrainingRoomsCollection[$index]"
+							)
+							(itemHeight = "TRAINING_LIST_ITEM_HEIGHT")
+							(itemOffset = "TRAINING_LIST_ITEM_HEIGHT * 3")
+						)
+					)
+				)
+			)
+
+			
+			(block
+				(bind visible "isNoItemsVisible")
+				(class $Fullsize)
+
+				(controller $Instance renderer='NoItemsComeBackLater'
+					(bind enabled "isNoItemsVisible")
+					(args
+						_disableSubText = true
+						_type = "!hasTrainingRooms && currentFilterByOrganizerStr == '' ? 'TRAINING_ROOMS_CREATED' : 'TRAINING_ROOMS_SUITED_FOR_REQUEST'"
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "{ 720:MS, 1080:L }")
+				(marginBottom = "L")
+			)
+
+			(controller $Tooltip
+				(bind enabled "!isTrainingRoomsEnabled")
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+					_text = "battleTypeDenyReasons[0]"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element DefaultButton
+				_width = 164px
+				_name = 'ButtonCreateTrainingRoom'
+				_label = 'IDS_CREATEROOMBUTTON'
+				_dispatchedEv = 'evHideTrainingRooms'
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'createTrainingRoomWindow',
+									args: {} }]"
+				_defaultFocused = true
+				_focusIndex = 0
+			)
+		)
+	)
+)
+
+
+(def element TrainingRoomListItemRenderer (_trainingRoomEntity:dhEntity)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var state:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var roomMapId:number = "_trainingRoomEntity.trainingRoom.mapId" (event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var trainingRoomComponent:dhComponent = "_trainingRoomEntity.trainingRoom" (event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var mapInfoComponent:dhComponent = "getPrimaryEntity(CC.mapInfo, roomMapId).mapInfo")
+
+		(var preBattleEntity:dhEntity = "getPrimaryEntity(CC.preBattle, _trainingRoomEntity.preBattle.id)" (event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var isInBattle:bool = "preBattleEntity.preBattle.isInBattle" (event "preBattleEntity.preBattle.evStatusChanged"))
+
+		(var selectedFilters:array = "_trainingRoomEntity.shipListRestrictions.selectedFilters" (event "_trainingRoomEntity.trainingRoom.evUpdate"))
+
+		
+		(var roomDescription:str =			"_trainingRoomEntity.trainingRoom.description"			(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var roomDuration:number =			"_trainingRoomEntity.trainingRoom.duration"				(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var roomCurrPlayerCount:number =	"_trainingRoomEntity.trainingRoom.currPlayersCount"		(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var roomScenario:str =				"_trainingRoomEntity.trainingRoom.scenario	?	tr('IDS_SCENARIO_' + _trainingRoomEntity.trainingRoom.scenario)
+																						:	''"		(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var roomTeamSize:number =			"_trainingRoomEntity.trainingRoom.teamSize"				(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var ownerName:str =				"_trainingRoomEntity.trainingRoom.ownerName"			(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var isObserversAvailable:bool =	"_trainingRoomEntity.trainingRoom.observersAvailable"	(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var isEnemyShipsHidden:bool =		"_trainingRoomEntity.trainingRoom.hideShips"			(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var isSecuredByPassword:bool =		"_trainingRoomEntity.trainingRoom.isClosed"				(event "_trainingRoomEntity.trainingRoom.evUpdate"))
+
+		(var mapName:str = "mapInfoComponent.name" (event "trainingRoomComponent.evUpdate"))
+		(var mapGPName:str = "mapInfoComponent.gpName" (event "trainingRoomComponent.evUpdate"))
+
+		
+		(var divisionRestrictions:dhComponent = "_trainingRoomEntity.divisionRestrictions" (event "_trainingRoomEntity.trainingRoom.evUpdate"))
+		(var typesCount:gfx = "_trainingRoomEntity.divisionRestrictions.typesCount" (event "_trainingRoomEntity.trainingRoom.evUpdate"))
+
+		(var defaultRestrictionsEntity:dhEntity = "getPrimaryEntity(CC.battleType, SC.Common.BATTLE_TYPES.TRAINING_BATTLE + '_' + toString(SC.Common.GAME_PARAMS.INVALID_PARAM_ID))")
+		(var defaultTypesCount:dict = "defaultRestrictionsEntity.divisionRestrictions.typesCount" (event "defaultRestrictionsEntity.divisionRestrictions.evUpdate"))
+
+		(var isCarriersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.AIRCARRIER]	&& typesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1]	!= defaultTypesCount[SC.Common.SHIP_TYPE.AIRCARRIER][1]")
+		(var isBattleShipsRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.BATTLESHIP]	&& typesCount[SC.Common.SHIP_TYPE.BATTLESHIP][1]	!= defaultTypesCount[SC.Common.SHIP_TYPE.BATTLESHIP][1]")
+		(var isCruisersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.CRUISER]	&& typesCount[SC.Common.SHIP_TYPE.CRUISER][1]		!= defaultTypesCount[SC.Common.SHIP_TYPE.CRUISER][1]")
+		(var isDestroyersRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.DESTROYER]	&& typesCount[SC.Common.SHIP_TYPE.DESTROYER][1]		!= defaultTypesCount[SC.Common.SHIP_TYPE.DESTROYER][1]")
+		(var isSubmarinesRestricted:bool =	"typesCount[SC.Common.SHIP_TYPE.SUBMARINE]	&& typesCount[SC.Common.SHIP_TYPE.SUBMARINE][1]		!= defaultTypesCount[SC.Common.SHIP_TYPE.SUBMARINE][1]")
+		(var isAnyShipRestricted:bool =		"isCarriersRestricted || isBattleShipsRestricted || isCruisersRestricted || isDestroyersRestricted || isSubmarinesRestricted || selectedFilters.length > 0")
+
+		(var hasTrainingRoomRestrictions:bool = "selectedFilters.length > 0 || isAnyShipRestricted")
+
+		
+		(var realmConstantsEntity:dhEntity = "getSingleEntity(CC.realmConstants)")
+		(var currentRegion:str = "realmConstantsEntity.realmConstants.currentRegion")
+		(var isChinaRegion:bool = "currentRegion == CN_REGION")
+
+		(var chatRestrictionsEntity:dhEntity = "getSingleEntity(CC.chatRestrictions)")
+		(var isDescriptionTextFieldsBlocked:bool = "chatRestrictionsEntity.chatRestrictions.isBlockDescriptionTextFields" (event "chatRestrictionsEntity.chatRestrictions.evBlockDescriptionTextFieldsChanged"))
+
+		(var isDescriptionAllowed:bool = "!isChinaRegion && !isDescriptionTextFieldsBlocked")
+	)
+
+	(bindcall externalCall 'inputMapping.onAction' "[ isSecuredByPassword ? 'joinPasswordedRoom' : 'joinTrainingRoom', { preBattleId: _trainingRoomEntity.preBattle.id }]" watch=false on='leftClick')
+
+	(style
+		(height = 96px)
+		(width = 100%)
+		(flow = "horizontal")
+	)
+
+	(controller $Tooltip
+		(renderer = 'TrainingRoomTooltip')
+		(args
+			_trainingRoomComponent = "_trainingRoomEntity.trainingRoom"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "XS")
+			(alpha = 0.1)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.BLACK")
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(height = 100%)
+			(width = 346px)
+			(borderRadiusBottomLeft = "XS")
+			(borderRadiusTopLeft = "XS")
+		)
+
+		
+		(block
+			(class $Fullsize)
+			(style
+				(hitTest = false)
+				(backgroundSize = "cover")
+				(borderRadiusBottomLeft = "XS")
+				(borderRadiusTopLeft = "XS")
+				(bind backgroundImage "'url:../bg/training_room_maps_preview/' + mapGPName + '.jpg'")
+			)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(borderRadiusBottomLeft = "XS")
+				(borderRadiusTopLeft = "XS")
+				(alpha = 0.4)
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.BLACK")
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element MenuItemBackground
+			_state = "state"
+			_isRoundedBorder = true
+		)
+	)
+
+	
+	(hblock
+		(style
+			(height = 100%)
+			(width = 346px)
+			(hitTest = false)
+		)
+
+		
+		(block
+			(class $Fullsize)
+			(style (align = "middle"))
+
+			(block
+				(style
+					(width = 100%)
+					(paddingLeft = "M")
+				)
+
+				(hblock
+					(style
+						(align = "middle")
+						(width = 100%)
+					)
+
+					(block
+						(bind visible "isInBattle")
+						(style
+							(height = 24px)
+							(width = 24px)
+							(marginRight = "XS")
+							(backgroundImage = "'url:../service_kit/training_room/icon_in_training_battle.png'")
+						)
+					)
+
+					(tf
+						(class $TextDefaultBold20NM)
+						(style
+							(width = 100%)
+							(leading = -2)
+							(alpha = "TA")
+						)
+						(bind text "'IDS_' + mapName")
+					)
+				)
+
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(width = 100%)
+						(marginTop = "S")
+						(leading = -2)
+						(alpha = "TA")
+					)
+					(bind text "roomScenario")
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "isEnemyShipsHidden || isObserversAvailable || isSecuredByPassword")
+			(style
+				(align = "middle")
+				(height = 100%)
+				(marginRight = "M")
+			)
+
+			(hblock
+				(block
+					(bind visible "isEnemyShipsHidden")
+					(style
+						(height = 24px)
+						(width = 24px)
+						(marginLeft = "XS")
+						(backgroundImage = "'url:../service_kit/training_room/icon_ship_not_detected.png'")
+					)
+				)
+
+				(block
+					(bind visible "isObserversAvailable")
+					(style
+						(height = 24px)
+						(width = 24px)
+						(marginLeft = "XS")
+						(backgroundImage = "'url:../service_kit/training_room/icon_observer.png'")
+					)
+				)
+
+				(block
+					(bind visible "isSecuredByPassword")
+					(style
+						(height = 24px)
+						(width = 24px)
+						(marginLeft = "XS")
+						(backgroundImage = "'url:../service_kit/training_room/icon_locked_room.png'")
+					)
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(align = "middle")
+			(height = 100%)
+			(width = 354px)
+		)
+
+		(tf
+			(bind name "'ownerName_' + ownerName")
+			(class $TextDefaultBold18NM)
+			(style
+				(width = 100%)
+				(marginLeft = "M")
+				(alpha = "TA")
+				(noTranslate = true)
+			)
+			(bind text "ownerName")
+		)
+
+		(tf
+			(bind name "_trainingRoomEntity.trainingRoom.description ? 'roomDescription_' + _trainingRoomEntity.trainingRoom.description : ''")
+			(bind visible "isDescriptionAllowed")
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(marginLeft = "M")
+				(marginTop = 10px)
+				(alpha = "TC")
+				(leading = -2)
+				(noTranslate = true)
+			)
+			(bind text "_trainingRoomEntity.trainingRoom.description")
+		)
+	)
+
+	
+	(block
+		(class $Fullsize)
+		(style (align = "middle"))
+
+		(controller $Instance renderer='TrainingRoomAppliedFilter'
+			(bind enabled "hasTrainingRoomRestrictions")
+			(args
+				_trainingRoomEntityId = "_trainingRoomEntity.id"
+				_width = 100%
+				_showShipRestrictions = "isAnyShipRestricted"
+				_maxFiltersCount = 20
+				_align = "left"
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(align = "center|middle")
+			(height = 100%)
+			(width = 88px)
+			(paddingRight = "M")
+		)
+
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(width = 100%)
+				(textAlign = "right")
+				(alpha = "TA")
+				(leading = -2)
+			)
+			(bind text "(roomDuration / 60) + ' ' + tr('IDS_MINUTE')")
+		)
+	)
+
+	
+	(hblock
+		(style
+			(align = "center|middle")
+			(height = 100%)
+			(width = 80px)
+		)
+
+		(tf
+			(class $TextDefaultBold20NM)
+			(style
+				(marginRight = "XXS")
+				(alpha = "TA")
+			)
+			(bind text "roomCurrPlayerCount")
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TC"))
+			(bind text "'/' + roomTeamSize * 2")
+		)
+	)
+
+	(macro MOUSE_HANDLER)
+)
+
+
+(def element TrainingRoomListHeader (_label:str, _sortTypeName:str, _isActive:bool, _currentSortDirection:bool, _tooltipText:str, _currentSortType:number, _horizontalAlign:number = 0)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var state:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER :
+								_isActive	? SC.Ui_styles.BUTTON_STATE.SELECTED
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var alpha:number = "TRAINING_COLUMN_HEADER_BACKGROUND_ALPHA[state]")
+		(var textAlpha:number = "TRAINING_COLUMN_HEADER_TEXT_ALPHA[state]")
+
+		(var sortIconAlpha:number = "	state == SC.Ui_styles.BUTTON_STATE.OVER		?	0.9	:
+										state == SC.Ui_styles.BUTTON_STATE.DOWN		?	0.6	:
+										state == SC.Ui_styles.BUTTON_STATE.SELECTED	?	1
+																					:	0")
+
+		(var isLeftAlign:bool = "_horizontalAlign == left")
+		(var isRightAlign:bool = "_horizontalAlign == right")
+	)
+
+	(class $Fullsize)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "_tooltipText"
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "XS")
+			(alpha = "alpha")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "state"
+			_alpha = "alpha"
+		)
+	)
+
+	
+	(hblock
+		(class $Fullsize)
+		(style (bind align "_horizontalAlign|middle"))
+
+		
+		(block
+			(bind visible "isRightAlign")
+			(style
+				(alpha = "sortIconAlpha")
+				(height = 24px)
+				(width = 24px)
+				(marginTop = 2px)
+				(marginRight = 5px)
+				(backgroundSize = "cover")
+				(bind backgroundImage "_currentSortDirection ? 'url:../service_kit/buttons/icons/sort_up.png' : 'url:../service_kit/buttons/icons/sort_down.png'")
+			)
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger = "state"
+				_alpha = "sortIconAlpha"
+			)
+		)
+
+		
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(alpha = "textAlpha")
+				(bind marginLeft "isLeftAlign ? M : 0px")
+				(bind marginRight "isRightAlign ? SXS : 0px")
+			)
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger = "state"
+				_alpha = "textAlpha"
+			)
+
+			(bind text "_label")
+		)
+
+		
+		(block
+			(bind visible "isLeftAlign")
+			(style
+				(height = 24px)
+				(width = 24px)
+				(marginTop = 2px)
+				(marginLeft = 5px)
+				(alpha = "sortIconAlpha")
+				(backgroundSize = "cover")
+				(bind backgroundImage "_currentSortDirection ? 'url:../service_kit/buttons/icons/sort_up.png' : 'url:../service_kit/buttons/icons/sort_down.png'")
+			)
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger = "state"
+				_alpha = "sortIconAlpha"
+			)
+		)
+	)
+
+	(macro MOUSE_HANDLER
+		_dispatchedEv = "'evSortByBlockClicked'"
+		_methods = "[	{	type: 'direct.action',
+							name: 'option.set',
+							args: [	'ui.trainingList.sorting.trainingSortDirection', !_currentSortDirection || TRAINING_SORT_TYPES[_sortTypeName] != _currentSortType]},
+						{	type: 'direct.action',
+							name: 'option.set',
+							args: [	'ui.trainingList.sorting.trainingSortType',	TRAINING_SORT_TYPES[_sortTypeName] ] }]"
+		_soundSet = "'button_tab'"
+	)
+)
+
+
+(def element OrganizerFilterHeader (_label:str, _isActive:bool, _isFilterStrCorrect:bool, _currentFilterByOrganizerStr:str = '')
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evOrganizerFilterTurnOff)
+		(event evOrganizerFilterInputStrWrong)
+		(event evHideWarningTooltip)
+		(event evShowWarningTooltip)
+
+		(var state:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var alpha:number = " state == SC.Ui_styles.BUTTON_STATE.OVER ? TA : TC")
+
+		(var roomsListWindowStateEntity:dhEntity = "getSingleEntity(CC.trainingRoomsListWindowState)")
+		(var isProcessing:bool = "roomsListWindowStateEntity.trainingRoomsListWindowState.isProcessing" (event "roomsListWindowStateEntity.trainingRoomsListWindowState.evUpdate"))
+
+		(var realmConstantsEntity:dhEntity = "getSingleEntity(CC.realmConstants)")
+		(var nicknameMaxLength:number = "realmConstantsEntity.realmConstants.nicknameMaxLength")
+		(var nicknameRestrict:str = "realmConstantsEntity.realmConstants.nicknameRestrict")
+
+		(var isWrongName:bool = "_currentFilterByOrganizerStr != null && !_currentFilterByOrganizerStr.empty && _currentFilterByOrganizerStr.length < 3")
+
+		(var isWrongInput:bool = false)
+		(bind isWrongInput "true" init=false (event "evOrganizerFilterInputStrWrong"))
+		(bind isWrongInput "false" init=false (bind trigger "_currentFilterByOrganizerStr"))
+
+		(var validationState:str =	"	isProcessing			? VALIDATION_STATES.VALIDATION :
+										isWrongName				? VALIDATION_STATES.INVALID
+																: VALIDATION_STATES.NONE")
+	)
+
+	(dispatch evHideWarningTooltip dir="EventDirection.NONE" (bind enabled "!_isActive") (bind trigger "_isActive"))
+	(dispatch evHideWarningTooltip dir="EventDirection.NONE" (bind enabled "_isFilterStrCorrect && !isWrongInput") (bind trigger "_isFilterStrCorrect") (bind trigger "_currentFilterByOrganizerStr"))
+
+	(dispatch evShowWarningTooltip dir="EventDirection.NONE" (bind enabled "!_isFilterStrCorrect") (bind trigger "_isFilterStrCorrect"))
+	(dispatch evShowWarningTooltip dir="EventDirection.NONE" (bind enabled "isWrongInput") (bind trigger "isWrongInput"))
+
+	(class $Fullsize)
+
+	
+	(hblock
+		(bind visible "!_isActive")
+		(style
+			(height = 100%)
+			(marginLeft = "M")
+			(alpha = "alpha")
+			(bind align "left|middle")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "state"
+			_alpha = "alpha"
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = 'IDS_SEARCH_BY_ORGANIZER_NAME'
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TA"))
+			(text = 'IDS_TRAINING_ORGANIZER')
+		)
+
+		(block
+			(style
+				(height = 18px)
+				(width = 18px)
+				(marginLeft = 5px)
+				(marginRight = 5px)
+				(backgroundSize = "cover")
+				(backgroundImage = 'url:../service_kit/buttons/context/search.png')
+			)
+		)
+
+		(macro MOUSE_HANDLER
+			_enabled = "!_isActive"
+			_dispatchedEv = "'evSortByOrganizerBlockClicked'"
+			_dispatchParams = "{isActive: !_isActive}"
+			_soundSet = "'button_tab'"
+		)
+
+	)
+
+	
+	(hblock
+		(bind visible "_isActive")
+		(class $Fullsize)
+		(style
+			(align = "middle")
+			(marginLeft = 5px)
+		)
+
+		(block
+			(style
+				(height = 30px)
+				(width = 35px)
+			)
+
+			(element ValidationState
+				_validationState = "validationState"
+			)
+		)
+
+		(block
+			(controller $Tooltip
+				(renderer = 'WrongTextInputNotificationInfotip')
+				(args
+					_text = "isWrongInput ? 'IDS_LOGIN_SCREEN_WRONG_SYMBOL_INPUT' : 'IDS_LOGIN_SCREEN_NAME_RESTRICTIONS'"
+					_showCloseBtn = false
+				)
+
+				(macro CUSTOM_INFOTIP_BEHAVIOUR "evShowWarningTooltip")
+				(position = "border")
+				(macro TOOLTIP_HIDE_ON_EVENT "evHideWarningTooltip")
+			)
+
+			(element InputTextDefault
+				_name = 'organizerSearchField'
+				_closeButtonName = 'ResetFilterButton'
+				_onEnterEvent = 'evOrganizerFilterInputStrChanged'
+				_onCloseButtonEvent = 'evOrganizerFilterTurnOff'
+				_onInputChangedEvent = 'evOrganizerFilterInputStrChanged'
+				_onWrongSymbolInputedEvent = 'evOrganizerFilterInputStrWrong'
+				_closeButtonTooltipText = 'IDS_HINT_RESET_FILTER'
+				_onEnterTooltipText = 'IDS_HINT_FIND'
+				_tooltipText = 'IDS_HINT_FIND'
+				_placeholderText = 'IDS_ENTER_PLAYER_NAME'
+				_defaultText = "_currentFilterByOrganizerStr"
+				_restrict = "'[' + nicknameRestrict + ']'"
+				_width = '300px'
+				_maxChars = "nicknameMaxLength"
+				_defaultFocused = true
+				_focusIndex = 1
+				_isSmallButtonEnter = true
+			)
+
+		)
+	)
+)

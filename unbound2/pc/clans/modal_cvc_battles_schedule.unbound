@@ -1,0 +1,651 @@
+(def constant CURRENT_REALM_DAY_TYPE "{
+	LAST: 'last',
+	ONE: 'one',
+	MIDDLE: 'middle',
+	FIRST: 'first'
+}")
+
+(def constant CLAN_PRIM_TABLE_COLUMN_WIDTH "{
+	DAY: 150px,
+	TIME: 250px,
+	STATUS: 275px
+}")
+
+(def constant CLAN_BATTLE_RESTRICTIONS_TYPES "{
+	SINGLE: 'SINGLE',
+	SINGLE_SUPERSHIPS: 'SINGLE_SUPERSHIPS',
+	SINGLE_AND_SUPERSHIPS: 'SINGLE_AND_SUPERSHIPS',
+	FROM: 'FROM',
+	TO: 'TO',
+	FROM_TO: 'FROM_TO',
+	FROM_TO_AND_SUPERSHIPS: 'FROM_TO_AND_SUPERSHIPS'
+}")
+
+
+(def macro CLAN_PRIME_TIME_ANIMATION (_trigger:expression)
+	(visible = "_trigger")
+	(style
+		(alpha = "_trigger ? 1 : 0")
+		(visualOffsetY = "_trigger ? 1 : 0")
+	)
+	(controller $Animation
+		(bindcall play	duration = 0.15
+						delay = 0.15
+						from = {alpha:0, visible: false, visualOffsetY: 20px}
+						to = {alpha:1, visible: true, visualOffsetY: 0px}
+						action="kill"
+						(bind enabled "_trigger")
+		)
+		(bindcall play	duration = 0.15
+						to = {alpha:0, visible: false, visualOffsetY: -20px}
+						(bind enabled "!_trigger")
+		)
+	)
+)
+
+
+(def css $ClanPrimeTableVertBorder ()
+	(position = "absolute")
+	(width = 1px)
+	(height = 100%)
+	(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+	(alpha = 0.8)
+)
+
+(def css $ClanPrimeTableHorizBorder ()
+	(position = "absolute")
+	(width = 100%)
+	(height = 1px)
+	(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+	(alpha = 0.8)
+)
+
+(def css $ClanPrimeTableVertRightBorder ()
+	(extends $ClanPrimeTableVertBorder)
+	(right = 0)
+)
+
+(def css $ClanPrimeTableHorizBottomBorder ()
+	(extends $ClanPrimeTableHorizBorder)
+	(bottom = 0)
+)
+
+
+(def element ModalWindowClanBattlesSchedule (beforeBattle:bool = false)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(var clanCurrentSeasonEntity:dhEntity = "getSingleEntity(CC.clanBattleSeason, 'current')")
+		(var clanBattleSeason:dhComponent = "clanCurrentSeasonEntity.clanBattleSeason")
+		(var timeOfBattleEvent:dhComponent = "clanCurrentSeasonEntity.timeOfBattleEvent")
+		(var finishTime:number = "timeOfBattleEvent.finishTime ?: 0" (event "timeOfBattleEvent.evChanged"))
+		(var startTime:number = "timeOfBattleEvent.startTime ?: 0" (event "timeOfBattleEvent.evChanged"))
+		(var resetPrimeTimes:number = "clanBattleSeason.resetPrimeTimes ?: 0" (event "clanBattleSeason.evChanged"))
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var clanman:dhComponent = "selfPlayerEntity.clanman")
+		(var role:str = "clanman.role ?: ''" (event "clanman.evRoleChanged"))
+		(var hasClanPermissions:bool = "isIn(role, SC.Clan.CLAN_ROLE.CAN_INVITE)")
+
+		(struct serverTime = SERVER_TIME())
+		(struct seasonFinishTimeText = COUNTDOWN(_time = "finishTime" _serverTime = "serverTime.value" _format = "'HIGHEST,WITH_DAYS'"))
+	)
+
+	(style (align = "center"))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(marginBottom = "S")
+		)
+
+		(element ModalWindowHeaderFullSize
+			_windowName = 'IDS_CLAN_BATTLES_SCHEDULE'
+			_backButtonText = 'IDS_RETURN_TO_BATTLETYPE_CHOOSER'
+			_paddingRight = "M"
+			_paddingLeft = "M"
+			_methods = "[	{	type: 'inputMapping.onRequest',
+								name: 'returnToBattleTypeChooserClanBattlesSchedule',
+								args: {}}]"
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style (marginBottom = "{720: LS, 1080:XL}"))
+
+		(element StatusLine
+			_text = "subst('IDS_TILL_CLAN_BATTLE_SEASON_END', [], { _time: seasonFinishTimeText.value })"
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DATE"
+		)
+	)
+
+	(hblock
+		(style (width = 1200px))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (width = 100%))
+			(element ClanBatlePrimeTimeTable
+				_hasClanPermissions = "hasClanPermissions"
+				_isBeforeBattle = "beforeBattle"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style
+				(width = 280px)
+				(marginLeft = "L")
+				(marginTop = "L")
+			)
+			(element ClanPrimeScheduleNotes
+				_resetPrimeTimes = "resetPrimeTimes"
+				_startTime = "startTime"
+			)
+		)
+	)
+)
+
+(def element ClanPrimeScheduleNotes (_resetPrimeTimes:number = 0, _startTime:number = 0)
+	(scope
+		(var clanCurrentSeasonEntity:dhEntity = "getSingleEntity(CC.clanBattleSeason, 'current')")
+		(var clanBattleSeason:dhComponent = "clanCurrentSeasonEntity.clanBattleSeason")
+		(var shipLevelMin:number = "clanBattleSeason.shipLevelMin ?: 0" (event "clanBattleSeason.evChanged"))
+		(var shipLevelMax:number = "clanBattleSeason.shipLevelMax ?: 0" (event "clanBattleSeason.evChanged"))
+
+		(var localResetTime:str = "formatTime(_resetPrimeTimes, 'hh:mm', '', true)")
+		(var localStartTime:str = "formatTime(_startTime, 'h', '', true)")
+		(var utcStartTime:str = "formatTime(_startTime, 'h', '', false)")
+		(var timeDiff:number = "localStartTime - utcStartTime")
+
+		(var utcTime:str = "getTimeZone(utcStartTime).timeZoneName + ' ' + '+' + timeDiff")
+
+		(var superShipsOnly:bool = "shipLevelMin == SC.Ships.SHIP_LEVELS.SUPER_SHIP && shipLevelMax == SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var superShipsInMax:bool = "shipLevelMax == SC.Ships.SHIP_LEVELS.SUPER_SHIP")
+		(var shipLevelMaxUI:number = "superShipsInMax && !superShipsOnly ? shipLevelMax-1 : shipLevelMax")
+		(var hasMinShipLevel:bool = "shipLevelMin != 0")
+		(var hasMaxShipLevel:bool = "shipLevelMaxUI != 0")
+		(var isRangeShipLevel:bool = "hasMinShipLevel && hasMaxShipLevel")
+		(var isSingleShipRestriction:bool = "isRangeShipLevel && shipLevelMin == shipLevelMaxUI")
+		(var postfix:str = "
+			isSingleShipRestriction && superShipsOnly	? CLAN_BATTLE_RESTRICTIONS_TYPES.SINGLE_SUPERSHIPS :
+			isSingleShipRestriction && superShipsInMax	? CLAN_BATTLE_RESTRICTIONS_TYPES.SINGLE_AND_SUPERSHIPS :
+			isSingleShipRestriction						? CLAN_BATTLE_RESTRICTIONS_TYPES.SINGLE :
+			isRangeShipLevel && superShipsInMax			? CLAN_BATTLE_RESTRICTIONS_TYPES.FROM_TO_AND_SUPERSHIPS :
+			isRangeShipLevel							? CLAN_BATTLE_RESTRICTIONS_TYPES.FROM_TO :
+			hasMaxShipLevel								? CLAN_BATTLE_RESTRICTIONS_TYPES.TO :
+			hasMinShipLevel								? CLAN_BATTLE_RESTRICTIONS_TYPES.FROM
+														: ''
+		")
+		(var shipsRestrictionString:str = "subst('IDS_CLAN_BATTLES_ALLOWED_SHIPS_' + postfix, [], {	levelMin: shipLevelsToRoman([shipLevelMin]),
+																									levelMax: shipLevelsToRoman([shipLevelMaxUI])})")
+	)
+	(style (width = 100%))
+
+	
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+			(leading = -3)
+			(alpha = "TA")
+			(styleSheet = 'h2 { font-weight: bold}')
+		)
+		(bind htmlText "subst('IDS_CLAN_BATTLES_SERVER_RESET_TITLE', [], {_time: localResetTime})")
+	)
+
+	
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+			(leading = -3)
+			(alpha = "TA")
+			(styleSheet = 'h2 { font-weight: bold; }')
+		)
+		(bind htmlText "subst('IDS_TIMEZONE_IS_LOCAL', [], {_utcTime: utcTime})")
+	)
+
+	
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(width = 100%)
+			(marginBottom = "M")
+			(leading = -3)
+			(alpha = "TA")
+		)
+		(bind text "shipsRestrictionString")
+	)
+
+	
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+			(leading = -2)
+			(alpha = "TS")
+			(multiline = true)
+			(styleSheet = '.p_spacing { font-size: 12px; }')
+		)
+		(bind htmlText "tr('IDS_CLAN_BATTLES_SCHEDULE_NOTES')")
+	)
+)
+
+(def element ClanBattlePrimeTimesTableHeader ()
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+	)
+
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(width = "CLAN_PRIM_TABLE_COLUMN_WIDTH.DAY")
+			(marginLeft = "M")
+			(alpha = "TA")
+		)
+		(text = 'IDS_CLAN_BATTLES_SCHEDULE_DAY')
+	)
+
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(width = "CLAN_PRIM_TABLE_COLUMN_WIDTH.TIME")
+			(marginLeft = "L")
+			(alpha = "TA")
+		)
+		(text = 'IDS_CLAN_BATTLES_SCHEDULE_HEADER')
+	)
+
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(width = "CLAN_PRIM_TABLE_COLUMN_WIDTH.STATUS")
+			(alpha = "TA")
+		)
+		(text = 'IDS_PRIME_TIME_STATUS')
+	)
+)
+
+(def element ClanBatlePrimeTimeTable (_hasClanPermissions:bool = false, _isBeforeBattle:bool = false)
+	(scope
+		(event evSelectPrimeTimeChanged)
+
+		(var selectedPrimeTimeId:str = '')
+		(bind selectedPrimeTimeId "$event.selectedPrimeTimeId" (event "evSelectPrimeTimeChanged"))
+
+		(var selectedPrimeTimeEntity:dhEntity = "getPrimaryEntity(CC.clanBattlePrimeTime, selectedPrimeTimeId)")
+		(var selectedClanBattlePrimeTime:dhComponent = "selectedPrimeTimeEntity.clanBattlePrimeTime")
+		(var primeTimeComponent:dhComponent = "selectedPrimeTimeEntity.primeTime")
+		(var isChosen:bool = "selectedClanBattlePrimeTime.isChosen" (event "selectedClanBattlePrimeTime.evChanged"))
+		(var isFixed:bool = "selectedClanBattlePrimeTime.isFixed" (event "selectedClanBattlePrimeTime.evChanged"))
+		(var selectedPrimeTimeFinishTime:number = "primeTimeComponent.primeTimeFinishTime" (event "primeTimeComponent.evChanged"))
+		(var daylightshift:number = "primeTimeComponent.daylightshift" (event "primeTimeComponent.evChanged"))
+
+		(struct serverTime = SERVER_TIME())
+		(var isSelectedPrimeActive:bool = "(selectedPrimeTimeFinishTime - daylightshift) > serverTime.value")
+		(var isButtonEnabled:bool = "isSelectedPrimeActive && !isChosen")
+
+		(var clanPrimes:dhCollection = "getCollectionByPath(CC.day, 'clanPrimes')")
+	)
+	(style
+		(width = 100%)
+		(align = "right")
+	)
+
+	(element ClanBattlePrimeTimesTableHeader)
+
+	(block
+		(style
+			(width = 100%)
+			(marginTop = "M")
+			(marginBottom = "L")
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(maxHeight = 500px)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_singleStep = "60px"
+				_wheelScrollAcceleration = "0.8"
+				_isContrastScrollBar = "true"
+			)
+
+			(content
+				(style
+					(width = 100%)
+					(vgap = "XS")
+				)
+				(controller $Repeat renderer='ClanBattlePrimeTimeItem'
+					(bind count "clanPrimes.length")
+					(args
+						_entityId = "clanPrimes[$index].id"
+						_hasClanPermissions = "_hasClanPermissions"
+						_isBeforeBattle = "_isBeforeBattle"
+						_selectedPrimeTimeId = "selectedPrimeTimeId"
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "_hasClanPermissions")
+			(args
+				_width = 180px
+				_label = 'IDS_CHOOSE_PRIME_TIME_CONFIRMATION_BUTTON'
+				_focusIndex = 1
+				_defaultFocused = false
+				_enabled = "isButtonEnabled"
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'AccountClanComponent.sendPlannedPrimeTime',
+									args: { primeTimeId: selectedClanBattlePrimeTime.primeTimeId }}]"
+			)
+		)
+	)
+)
+
+(def element ClanBattlePrimeTimeItem (	_entityId:number = 0,
+										_isBeforeBattle:bool = false,
+										_hasClanPermissions:bool = false,
+										_selectedPrimeTimeId:str = '')
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var primeTimeEntity:dhEntity = "getEntity(_entityId)")
+		(var dateComponent:dhComponent = "primeTimeEntity.day")
+		(var isToday:bool = "dateComponent.isToday" (event "dateComponent.evUpdate"))
+		(var weekDayName:str = "dateComponent.weekDayName" (event "dateComponent.evUpdate"))
+		(var day:number = "dateComponent.day" (event "dateComponent.evUpdate"))
+		(var month:number = "dateComponent.month" (event "dateComponent.evUpdate"))
+		(var description:str = "day + ' ' + tr('IDS_MONTH_SHORTCUT_' + month)")
+
+
+		(var primeTimesPerDay:dhCollection = "getCollectionByPath(CC.clanBattlePrimeTime, 'byDateId.' + dateComponent.id)")
+		(var primeTimePerDayEntity:dhEntity = "primeTimesPerDay.getEntityAtIndex(0)")
+		(var hasPrimeTimes:bool = "primeTimesPerDay.length > 0")
+
+		(var clanBattlePrimeTime:dhComponent = "primeTimePerDayEntity.clanBattlePrimeTime")
+		(var clanBattlePrimeTimeId:str = "clanBattlePrimeTime.id")
+		(var currentRealmDayType:str = "clanBattlePrimeTime.currentRealmDayType" (event "clanBattlePrimeTime.evChanged"))
+		(var primeTimeDay:number = "clanBattlePrimeTime.day" (event "clanBattlePrimeTime.evChanged"))
+		(var isChosenPrimeTime:bool = "clanBattlePrimeTime.isChosen" (event "clanBattlePrimeTime.evChanged"))
+		(var isFixedPrimeTime:bool = "clanBattlePrimeTime.isFixed" (event "clanBattlePrimeTime.evChanged"))
+
+		(var primeTimeFixedCollection:dhCollection = "getCollectionByPath(CC.clanBattlePrimeTime, 'fixed')")
+		(var primeTimeFixedEntity:dhEntity = "primeTimeFixedCollection.getEntityAtIndex(0)")
+		(var isPrimeTimeFixedEnabled:bool = "primeTimeFixedEntity != null")
+
+		(var chosenPrimeTimes:dhCollection = "getCollectionByPath(CC.clanBattlePrimeTime, 'chosen')")
+		(var primeTimeEntityChosen:dhEntity = "chosenPrimeTimes.getEntityAtIndex(0)")
+
+		(struct primeTime = PULL_PRIME_TIME(_id = "primeTimePerDayEntity.id"))
+		(struct serverTime = SERVER_TIME())
+
+		(var isCurrentServerDay:bool = "currentRealmDayType != ''")
+		(var isUpcoming:bool = "serverTime.value < primeTime.startTime")
+		(var isActive:bool = "(serverTime.value > primeTime.startTime) && (serverTime.value < primeTime.finishTime)")
+		(var isBeforeBattleFlag:bool = "!isActive && _isBeforeBattle")
+		(var isCurrentPrimeTimeChosen:bool = "primeTimeEntityChosen != null")
+		(var isCurrentPrimeTimeFixed:bool = "isPrimeTimeFixedEnabled && isCurrentServerDay")
+		(var canBeChosen:bool = "	!isCurrentPrimeTimeChosen &&
+									!isCurrentPrimeTimeFixed &&
+									(isUpcoming || isCurrentServerDay) &&
+									!isBeforeBattleFlag")
+
+		(var isWarningVisible:bool = "	isCurrentServerDay &&
+										hasPrimeTimes")
+
+		(var rowTooltipText:str = "	isCurrentPrimeTimeChosen	? 'IDS_PRIME_TIME_FIXED_DESCR':
+									isCurrentPrimeTimeFixed		? 'IDS_CLAN_BATTLES_ACTIVE_PRIME_TIME_FIXED'
+																: 'IDS_CLAN_BATTLES_SCHEDULE_SELECT_PRIME_TOOLTIP'")
+
+		(var isIconCheckChosen:bool = "	isCurrentPrimeTimeChosen &&
+										(!isPrimeTimeFixedEnabled || !isCurrentServerDay) &&
+										(isUpcoming || isCurrentServerDay)")
+		(var isPrimeChosen:bool = "(isCurrentPrimeTimeFixed || isIconCheckChosen) && hasPrimeTimes")
+
+		(var isPrimeOver:bool = "!primeTime.isActive && !isUpcoming")
+
+		(var textAlpha:number = "	isToday && (isActive || !hasPrimeTimes)	? TA :
+									isUpcoming								? TC
+																			: TS")
+	)
+	(macro DEFAULT_MODAL_WINDOW_ANIMATION_EXPRESSION "$index")
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(dispatch 'evSelectPrimeTimeChanged' args="{selectedPrimeTimeId: clanBattlePrimeTimeId}" dir="EventDirection.UP" on='leftClick' (bind enabled "_hasClanPermissions && canBeChosen"))
+
+	(bind name "'primeRimeItem_' + $index")
+
+	(style
+		(flow = "horizontal")
+		(align = "middle")
+		(width = 100%)
+		(bind height "hasPrimeTimes ? 32px : 60px")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "XS")
+			(alpha = 0.4)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+		)
+	)
+
+	(block
+		(bind visible "isToday")
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "XS")
+			(alpha = 0.2)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+		)
+		(bind colorTransform "COLOR_TRANSFORM_BALANCER_THUMB")
+	)
+
+	(block
+		(bind name "'primeRimeItem_' + $index")
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='DockSubmenuItem'
+			(bind enabled "(primeTime.isActive || isUpcoming) && !isPrimeChosen")
+			(args
+				_selected = "clanBattlePrimeTimeId == _selectedPrimeTimeId"
+			)
+		)
+	)
+
+	
+	(tf
+		(class $TextDefault20NM)
+		(style
+			(width = 40px)
+			(marginLeft = "M")
+			(bind alpha "textAlpha")
+		)
+		(bind text "'IDS_' + weekDayName")
+	)
+
+	
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(width = 110px)
+			(marginLeft = "M")
+			(bind alpha "textAlpha")
+		)
+		(bind text "description")
+	)
+
+	
+	(block
+		(bind visible "!hasPrimeTimes")
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(width = "CLAN_PRIM_TABLE_COLUMN_WIDTH.TIME")
+				(marginLeft = "CLAN_PRIM_TABLE_COLUMN_WIDTH.STATUS")
+				(marginTop = "MS")
+				(marginBottom = "MS")
+				(bind alpha "textAlpha")
+			)
+			(bind text "toUpper(tr('IDS_CLAN_BATTLES_HAS_NO_PRIMETIME'))")
+		)
+	)
+
+	
+	(block
+		(style
+			(hitTest = false)
+			(width = 100%)
+			(marginLeft = "L")
+		)
+		(controller $Instance renderer='DailyPrimeTimeAndStatus'
+			(bind enabled "hasPrimeTimes")
+			(args
+				_entityId = "primeTimePerDayEntity.id"
+				_isCurrentServerDay = "isCurrentServerDay"
+				_isCurrentPrimeTimeChosen = "isCurrentPrimeTimeChosen"
+				_isCurrentPrimeTimeFixed = "isCurrentPrimeTimeFixed"
+				_isPrimeTimeFixed = "isPrimeTimeFixedEnabled"
+				_isUpcoming = "isUpcoming"
+			)
+		)
+	)
+
+	(hblock
+		(class $MiddleVAlignedAbsolutely)
+		(style (right = "SXS"))
+		
+		(block
+			(bind visible "isWarningVisible")
+			(style
+				(width = 22px)
+				(height = 22px)
+				(backgroundImage = 'url:../service_kit/icons/icon_status_attention.png')
+				(bind marginRight "isPrimeChosen ? XS : 0px")
+			)
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(args
+					_text = 'IDS_PRIME_TIME_HIGH_PING_WARNING'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		
+		(block
+			(bind visible "isPrimeChosen")
+			(style
+				(width = 19px)
+				(height = 19px)
+				(backgroundSize = "cover")
+				(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
+				(bind alpha "isCurrentPrimeTimeFixed && isCurrentServerDay ? 1 : 0.6")
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(renderer='SimpleStatusTooltip')
+		(args
+			_text = "rowTooltipText"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element DailyPrimeTimeAndStatus (	_entityId:number = 0,
+										_isCurrentServerDay:bool = false,
+										_isCurrentPrimeTimeChosen:bool = false,
+										_isCurrentPrimeTimeFixed:bool = false,
+										_isUpcoming:bool = false,
+										_isPrimeTimeFixed:bool = false)
+	(scope
+		(struct primeTime = PULL_PRIME_TIME(_id = "_entityId"))
+		(var localStartTime:str = "formatTime(primeTime.startTime - primeTime.daylightshift, 'hh:mm', '', true)")
+		(var localFinishTime:str = "formatTime(primeTime.finishTime - primeTime.daylightshift, 'hh:mm', '', true)")
+
+		(var timeTillStartShifted:number = "primeTime.startTime - primeTime.daylightshift")
+		(var timeTillEndShifted:number = "primeTime.finishTime - primeTime.daylightshift")
+		(var timeTillStart:number = "timeTillStartShifted - primeTime.serverTime")
+		(var timeTillEnd:number = "timeTillEndShifted - primeTime.serverTime")
+
+		(struct timeStart = COUNTDOWN(_time = "timeTillStartShifted" _serverTime = "primeTime.serverTime" _format = "'HIGHEST,WITH_DAYS'"))
+		(struct timeEnd = COUNTDOWN(_time = "timeTillEndShifted" _serverTime = "primeTime.serverTime" _format = "'HIGHEST,WITH_DAYS'"))
+
+		(var isStartTimerVisible:bool = "	_isUpcoming && _isCurrentServerDay ||
+											(_isUpcoming && timeTillStart < 900)")
+		(var isPrimeOver:bool = "!primeTime.isActive && !_isUpcoming")
+
+		(var isWarningStatus:bool = "timeTillEnd < 900")
+		(var textColor:number = "isWarningStatus	? SC.Ui_styles.SERVICE_COLORS.ORANGE
+													: SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var textAlpha:number = "	isPrimeOver		? TS :
+									_isUpcoming		? TC :
+									isWarningStatus	? 1
+													: TA")
+	)
+
+	(style (flow = "horizontal"))
+
+	
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(width = "CLAN_PRIM_TABLE_COLUMN_WIDTH.TIME")
+			(bind alpha "textAlpha")
+		)
+		(bind text "localStartTime + ' – ' + localFinishTime")
+	)
+
+	
+	(block
+		(macro CLAN_PRIME_TIME_ANIMATION "isStartTimerVisible")
+
+		(tf
+			(class $TextDefault18NM)
+			(style (bind alpha "textAlpha"))
+			(bind text "subst('IDS_PRIME_TIME_TILL_START', [], {_timeLeft: timeStart.value})")
+		)
+	)
+
+	
+	(block
+		(macro CLAN_PRIME_TIME_ANIMATION "primeTime.isActive")
+
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(bind textColor "textColor")
+				(bind alpha "textAlpha")
+			)
+			(bind text "subst('IDS_PRIME_TIME_TILL_END', [], {_timeLeft: timeEnd.value})")
+		)
+	)
+
+	
+	(block
+		(macro CLAN_PRIME_TIME_ANIMATION "isPrimeOver")
+
+		(tf
+			(class $TextDefault18NM)
+			(style (bind alpha "textAlpha"))
+			(text = 'IDS_PRIME_TIME_IS_OVER')
+		)
+	)
+)

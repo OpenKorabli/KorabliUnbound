@@ -1,18 +1,25 @@
 (def constant QUICK_COMMANDS_SMALL_SLOTS_COUNT 8)
 
-(def element ModalWindowQuickCommandsSmallContainer () layout=true
+
+(def element ModalWindowQuickCommandsSmallContainer (_isVisible:bool=true)
 	(scope
 		(macro IS_ALIVE)
 	)
-	(controller $Instance (renderer='ModalWindowQuickCommandsSmall')
+	(class $FullsizeAbsolute)
+
+	(bind visible "_isVisible")
+
+	(controller $Instance renderer='ModalWindowQuickCommandsSmall'
 		(bind enabled "isAlive")
 	)
 )
 
-(def element ModalWindowQuickCommandsSmall () layout=true
+(def element ModalWindowQuickCommandsSmall ()
 	(scope
 		(event evUpdateMouse)
 		(event evCommandChanged)
+		(event evEnableCommandUpdate)
+
 		(var quickCommandsPanelEntity:gfx = "$datahub.getSingleEntity(CC.quickCommandsPanel)")
 		(var panelComponent:gfx = "quickCommandsPanelEntity.quickCommandsPanel")
 		(var commandsData:array = "quickCommandsPanelEntity.quickCommandsPanel.commandsData" (event "quickCommandsPanelEntity.quickCommandsPanel.evChanged"))
@@ -34,27 +41,47 @@
 		(var curTooltipText:str = "currentSelectedCommandIndex > -1 && isActive ? commandsData[currentSelectedCommandIndex].textShort : ''")
 		(var curCommandId:number = "currentSelectedCommandIndex > -1 && isActive ? commandsData[currentSelectedCommandIndex].commandId : -1")
 
+		(var isCommandUpdateEnabled:bool = false)
+		(bind isCommandUpdateEnabled "false" init=false (bind enabled "!isActive") (bind trigger "isActive"))
+		(bind isCommandUpdateEnabled "true" init=false (event "evEnableCommandUpdate"))
+
 		(macro MOUSE_HANDLER_SCOPE)
 	)
 
+	(class $FullsizeAbsolute)
 	(style
-		(position = "absolute")
-		(bind width "stageWidth")
-		(bind height "stageHeight")
 		(backgroundColor = 0xCCCCCC)
 	)
 
 	(alpha = 0)
 	(visible = false)
+
 	(controller $Animation
-		(bindcall play duration=0.05 delay=0 from={alpha:0, visible:false} to={alpha:1, visible:true} action="killAll" (bind enabled "isActive"))
-		(bindcall play duration=0.01 delay=0 from={alpha:1, visible:true} to={alpha:0, visible:false} action="killAll" (bind enabled "!(isActive)"))
+		(controllerEvents evModalActivatedAnimEnded)
+		(bindcall play
+			onEndedEvent = 'evModalActivatedAnimEnded'
+			duration = 0.05
+			delay = 0
+			from = {alpha:0, visible:false}
+			to = {alpha:1, visible:true}
+			action = "kill"
+			(bind enabled "isActive")
+		)
+		(bindcall play
+			duration = 0.01
+			delay = 0
+			from = {alpha:1, visible:true}
+			to = {alpha:0, visible:false}
+			action = "kill"
+			(bind enabled "!isActive")
+		)
+		(dispatch evEnableCommandUpdate on='evModalActivatedAnimEnded')
 	)
 
 	(dispatch evUpdateMouse (bind enabled "isActive") (bind trigger "isActive")) 
-	(dispatch evCommandChanged args="{ commandIndex: -1 }" dir="EventDirection.UP"  (bind trigger "isActive"))
+	(dispatch evCommandChanged args="{ commandIndex: -1 }" dir="EventDirection.UP" (bind trigger "isActive"))
 
-	(bindcall externalCall 'direct.action' "['battle.quickCommand', [curCommandId]]" init=false (event "evCommandChanged"))
+	(bindcall externalCall 'direct.action' "['battle.quickCommand', [curCommandId]]" init=false (bind enabled "isCommandUpdateEnabled") (event "evCommandChanged"))
 
 	(block
 		(class $CenterAbsolute)
@@ -108,11 +135,6 @@
 				)
 			)
 		)
-
-		(mc quick_command_crosshair
-			(class $CenterAbsolute)
-			(alpha = 0.6)
-		)
 	)
 
 	(element QuickCommandsTextTooltip
@@ -123,7 +145,7 @@
 	)
 )
 
-(def element QCSSector () layout=true
+(def element QCSSector ()
 	(scope
 		(event evCommandChanged)
 		(var _stageHeight:number = 1)
@@ -143,14 +165,27 @@
 
 	(alpha = 0.25)
 	(controller $Animation
-		(bindcall play duration=0.05 delay=0 from={alpha:0.25} to={alpha:0.40} action="killAll" (bind enabled "rollOver && commandsData[$index].enabled"))
-		(bindcall play duration=0.05 delay=0 from={alpha:0.40} to={alpha:0.25} action="killAll" (bind enabled "!(rollOver) && commandsData[$index].enabled"))
+		(bindcall play
+			duration = 0.05
+			delay = 0
+			from = {alpha:0.25}
+			to = {alpha:0.40}
+			action = "kill"
+			(bind enabled "rollOver && commandsData[$index].enabled")
+		)
+		(bindcall play
+			duration = 0.05
+			delay = 0
+			from = {alpha:0.40}
+			to = {alpha:0.25}
+			action = "kill"
+			(bind enabled "!rollOver && commandsData[$index].enabled")
+		)
 	)
 
 	(block
-		(style
-			(position = "absolute")
-		)
+		(style (position = "absolute"))
+
 		(controller $Sector
 			(bind offset "$index * 45 - 22.5")
 			(bind color "0x000000")
@@ -161,7 +196,7 @@
 	)
 )
 
-(def element QCSItem () layout=true
+(def element QCSItem ()
 	(scope
 		(var _stageHeight:number = 1)
 		(var quickCommandsPanelEntity:gfx = "$datahub.getSingleEntity(CC.quickCommandsPanel)")
@@ -194,10 +229,10 @@
 	(block
 		(bind visible "commandsData[$index].icon != null")
 		(style
+			(width = 51px)
+			(height = 51px)
 			(marginLeft = -50%)
 			(marginTop = -50%)
-			(width = 51)
-			(height = 51)
 			(bind backgroundImage "iconPath")
 		)
 	)

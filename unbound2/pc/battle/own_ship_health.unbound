@@ -8,9 +8,11 @@
 (def constant HEALTH_ANI_MIN 0.3)
 (def constant HEALTH_ANI_MAX 1.3)
 
-(def constant NEW_BAR_IMAGE_WIDTH 270px)
-(def constant NEW_BAR_IMAGE_WIDTH_HALF 135px)
+(def constant NEW_BAR_IMAGE_WIDTH 316px)
+(def constant NEW_BAR_IMAGE_WIDTH_HALF 158px)
 (def constant NEW_BAR_IMAGE_HEIGHT 14px)
+
+(def constant FIRE_FLOOD_ICON_SIZE 18px)
 
 (def constant SHIP_HP_TRANSFORM_COLORS {
 	NONE: 			{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:0, greenOffset:0, blueOffset:0, alphaOffset:0 },
@@ -41,18 +43,14 @@
 
 (def macro HEALTH_PERCENT_AND_ALIVE (entity:expression)
 	(var healthComponent:gfx = "entity.health")
-	(var isAlive:bool = "healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
 	(var maxHealth:number = "healthComponent ? healthComponent.max : 1" (event "healthComponent.evMaxChanged"))
-	(var healthValue:number = "	!isAlive		? 0 :
-								healthComponent	? healthComponent.value
-												: 1" (event "healthComponent.evValueChanged"))
+	(var healthValue:number = "healthComponent ? healthComponent.value : 1" (event "healthComponent.evValueChanged"))
 	(var healthPercent:number = "healthValue / max(maxHealth, 1)")
+	(var isAlive:bool = "healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
 )
 
-(def element OwnShipHealth ()
+(def element OwnShipHealth (_isVisible:bool=true)
 	(scope
-		(macro STAGE_SIZE)
-
 		(var cameraComponent:gfx = "$datahub.getSingleComponent(CC.camera)")
 		(var observedPlayerId:number = "cameraComponent ? cameraComponent.observedPlayerId : INVALID_OBSERVED_AVATAR_ID" (event "cameraComponent.evObservedPlayerIdChanged"))
 
@@ -83,11 +81,9 @@
 		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
 	)
 
-	(style
-		(position = "absolute")
-		(bind width "stageWidth")
-		(bind height "stageHeight")
-	)
+	(class $FullsizeAbsolute)
+
+	(bind visible "_isVisible")
 
 	(controller $Instance renderer='NewShipHealthContainer'
 		(bind enabled "entityId && !isEventHealthContainerVisible")
@@ -208,45 +204,116 @@
 	)
 )
 
-(def element ShipStatesBar ()
+(def element ShipStatesBar (entityId:number)
 	(scope
-		(var damagedBurnModuleEntity:gfx = "$datahub.getPrimaryEntity(CC.damagedModule, SC.Battle.DAMAGE_MODULES.BURN)")
-		(var damagedBurnModule:gfx = "damagedBurnModuleEntity.damagedModule")
-		(var burnNodesCount:number = "damagedBurnModule.nodesCount" (event "damagedBurnModule.evNodesCountChanged"))
-		(var burnDistanceBetweenNodes:number = "damagedBurnModule.distanceBetweenNodes" (event "damagedBurnModule.evDistanceBetweenNodesChanged"))
-		(var burnDamageFlag:number = "damagedBurnModule.damageFlag" (event "damagedBurnModule.evDamageFlagChanged"))
+		(var firesFloodInfoComponent:dhComponent = "getSingleComponent(CC.firesFloodInfo)")
 
-		(var damagedFloodModuleEntity:gfx = "$datahub.getPrimaryEntity(CC.damagedModule, SC.Battle.DAMAGE_MODULES.FLOOD)")
-		(var damagedFloodModule:gfx = "damagedFloodModuleEntity.damagedModule")
-		(var floodNodesCount:number = "damagedFloodModule.nodesCount" (event "damagedFloodModule.evNodesCountChanged"))
-		(var floodDistanceBetweenNodes:number = "damagedFloodModule.distanceBetweenNodes" (event "damagedFloodModule.evDistanceBetweenNodesChanged"))
-		(var floodDamageFlag:number = "damagedFloodModule.damageFlag" (event "damagedFloodModule.evDamageFlagChanged"))
+		
+		(var fireMaskWidth:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.fireMaskWidth / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var fireMaskOffset:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.fireMaskOffset / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var fireCount:number = "firesFloodInfoComponent.fireCount ?: 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var isFireVisible:bool = "fireCount > 0")
+
+		
+		(var floodMaskWidth:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.floodMaskWidth / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var floodMaskOffset:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.floodMaskOffset / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var floodCount:number = "firesFloodInfoComponent.floodCount ?: 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var isFloodVisible:bool = "floodCount > 0")
+
+		
+		(var realFloodMaskWidth:number = "floodMaskWidth - fireMaskWidth")
+		(var iconsOffset:number = "max(fireMaskOffset + (fireMaskWidth + realFloodMaskWidth) / 2, (floodCount + fireCount) * FIRE_FLOOD_ICON_SIZE / 2)")
 	)
 
 	(class $FullsizeAbsolute)
+	(style (top = 1px))
 
-	(controller $Repeat renderer='SimpleShipStateItem'
-		(bind count "burnNodesCount")
-		(args
-			_distanceBetweenNodes 	= "burnDistanceBetweenNodes"
-			_damageFlag 			= "burnDamageFlag"
-			_itemNamePrefix 		= 'fireNodeIndicator_HP_Fire_Burn_'
-			_itemIcon 				= 'img://gui/battle_hud/own_ship_health/icon_fire_small.png'
-			_leftOffset 			= -13px
-			_topOffset 				= -21px
-		)
+	(element FireFloodStateIcons
+		_iconsOffset="iconsOffset"
+		_firesCount="fireCount"
+		_floodCount="floodCount"
+		_isVisible="isFloodVisible || isFireVisible"
 	)
 
-	(controller $Repeat renderer='SimpleShipStateItem'
-		(bind count "floodNodesCount")
-		(args
-			_distanceBetweenNodes 	= "floodDistanceBetweenNodes"
-			_damageFlag 			= "floodDamageFlag"
-			_itemNamePrefix 		= 'floodNodeIndicator_'
-			_itemIcon 				= 'img://gui/battle_hud/own_ship_health/icon_flooding_small.png'
-			_leftOffset 			= -13px
-			_topOffset 				= 0px
+	(element FireFloodBarFX
+		_maskWidth="floodMaskWidth"
+		_maskOffset="floodMaskOffset"
+		_isVisible="isFloodVisible"
+		_isFire=false
+	)
+
+	(element FireFloodBarFX
+		_maskWidth="fireMaskWidth"
+		_maskOffset="fireMaskOffset"
+		_isVisible="isFireVisible"
+		_isFire=true
+	)
+)
+
+(def element FireFloodBarFX (_maskWidth:number, _maskOffset:number, _isVisible:bool, _isFire:bool)
+	(bind visible "_isVisible")
+
+	(class $FullsizeAbsolute)
+
+	(style
+		(height = "NEW_BAR_IMAGE_HEIGHT")
+		(backgroundSize = "autosize")
+		(backgroundImage = "_isFire ? 'img://gui/battle_hud/own_ship_health/burn_bar.png' : 'img://gui/battle_hud/own_ship_health/flood_bar.png'")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "NO_COLOR")
+			(bind width "_maskWidth")
+			(bind left "_maskOffset")
 		)
+		(isMask = true)
+	)
+)
+
+(def element FireFloodStateIcons (_iconsOffset:number, _firesCount:number, _floodCount:number, _isVisible:bool)
+	(bind visible "_isVisible")
+
+	(style
+		(position = "absolute")
+		(align = "center|middle")
+		(flow = "horizontal")
+		(pivotX = 50%)
+		(top = -20px)
+		(height = "FIRE_FLOOD_ICON_SIZE")
+		(bind width "(_firesCount + _floodCount) * FIRE_FLOOD_ICON_SIZE")
+		(bind left "_iconsOffset")
+	)
+
+	(block
+		(style (flow = "horizontal"))
+		(block
+			(style (flow = "horizontal"))
+			(controller $Repeat renderer='FireFloodStateIcon'
+				(bind count "_firesCount")
+				(args
+					_isFire=true
+				)
+			)
+		)
+		(block
+			(style (flow = "horizontal"))
+			(controller $Repeat renderer='FireFloodStateIcon'
+				(bind count "_floodCount")
+				(args
+					_isFire=false
+				)
+			)
+		)
+	)
+)
+
+(def element FireFloodStateIcon (_isFire:bool)
+	(style
+		(height = "FIRE_FLOOD_ICON_SIZE")
+		(width = "FIRE_FLOOD_ICON_SIZE")
+		(backgroundImage = "_isFire ? 'swf:../battle_hud/own_ship_health_svg/own_ship_health_svg.swf:states_burn' : 'swf:../battle_hud/own_ship_health_svg/own_ship_health_svg.swf:states_flood'")
 	)
 )
 
@@ -321,6 +388,11 @@
 		(var healthComponent:gfx = "entity.health")
 		(var isAlive:bool = "healthComponent != null ? healthComponent.isAlive : false" (event "healthComponent.evIsAliveChanged"))
 		(var shipInfo:gfx = "_shipInfo")
+		(var masteryRank:number = "entity.avatar.masteryRank")
+
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var battleType:str = "battleInfoComponent.battleType")
+		(var isShipMasteryVisible:bool = "masteryRank && !isSelfObserved && isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE)")
 
 		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
 		(var isDreadnoughtCustomization:bool = "(customisedElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.DREADNOUGHT) > 0")
@@ -352,12 +424,25 @@
 
 	(hblock
 		(style
+			(align = "middle")
 			(width = 100%)
 			(paddingLeft = "XS")
 			(paddingRight = "XS")
 			(paddingTop = "XXS")
 			(paddingBottom = "XXS")
 			(marginLeft = "XXS")
+		)
+
+		(block
+			(bind visible "isShipMasteryVisible")
+			(style (marginRight = "XS"))
+
+			(controller $Instance renderer='ShipMasteryIcon'
+				(bind enabled "isShipMasteryVisible")
+				(args
+					_rank = "masteryRank"
+				)
+			)
 		)
 
 		(element ShipLabel
@@ -408,7 +493,7 @@
 			(bind visible "isAlive")
 		)
 
-		(element ShipStatesBar
+		(element ShipStatesBar entityId="entityId"
 			(bind visible "isAlive")
 		)
 	)

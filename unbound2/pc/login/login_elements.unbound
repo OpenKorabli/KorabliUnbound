@@ -1,0 +1,844 @@
+(def constant VALIDATION_STATES {
+	NONE: '',
+	VALID: 'valid',
+	INVALID: 'invalid',
+	VALIDATION: 'validation'
+})
+
+(def element AutoLoginContent (_waitingText:str)
+	(style
+		(flow = "horizontal")
+		(marginLeft = -7px)
+	)
+
+	(block
+		(style
+			(marginRight = "SXS")
+			(bottom = "XS")
+			(alpha = 1.25)
+		)
+		(bind colorTransform "{	redOffset: 255,
+								greenOffset: 255,
+								blueOffset: 255,
+								alphaOffset: 0 }")
+		(mc indicator_busy_small)
+	)
+
+	(tf
+		(class $TextDefaultBold18NM)
+		(style (alpha = "TA"))
+		(bind text "_waitingText")
+	)
+)
+
+(def element ReconnectionScreenContent (_curHostIndex:number, _loginMessage:str, _loginMessageHighlight:bool, _loginMessageHeader:str, _hasContentUnderLogo:bool)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(style
+		(width = 200px)
+		(marginTop = "L")
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style (width = 100%))
+
+		(element DefaultButton
+			_name = 'steamLoginRetryBtn'
+			_width = 100%
+			_label = 'IDS_LOGIN_BUTTON'
+			_size = "SIZE.LARGE"
+			_isIncreasedAccentBtn = true
+			_type = "SC.Ui_styles.BUTTON_TYPE.ACCENT"
+			_defaultFocused = true
+			_focusIndex = 0
+			_methods = "[{	type: 'inputMapping.onAction',
+							name: 'reconnect',
+							args: {	hostId:	_curHostIndex,
+									user:			'',
+									password:		'',
+									savePassword:	false }
+						}]"
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(align = "center")
+				(bind bottom "_hasContentUnderLogo ? 342px : 290px")
+			)
+
+			(controller $Instance renderer = 'ServerMessage'
+				(bind enabled "!_loginMessage.empty")
+				(args
+					_messageHighlight =	"_loginMessageHighlight"
+					_headerText =		"_loginMessageHeader"
+					_messageText =		"_loginMessage"
+				)
+			)
+		)
+	)
+)
+
+(def element ExternalNewNicknameContent (_isEnabled:bool)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evInputNicknameEnter)
+		(event evInputNicknameChanged)
+		(event evWrongSymbolInputed)
+		(event evHideWrongMessage)
+		(event evSteamSelectName)
+
+		(var realmConstants:dhComponent =	"getSingleComponent(CC.realmConstants)")
+		(var nicknameMaxLength:number =		"realmConstants.nicknameMaxLength")
+		(var nicknameRestrictRegexp:str =	"realmConstants.nicknameRestrictRegexp")
+
+		(var steamLoginData:dhComponent =		"getSingleComponent(CC.steamLoginData)")
+		(var selectedSteamHostName:str =		"steamLoginData.hostsDataProvider[steamLoginData.selectedHostIndex].ids"	(event "steamLoginData.evUpdate"))
+		(var nicknameSuggestions:array =		"steamLoginData.nicknameSuggestions"										(event "steamLoginData.evUpdate"))
+		(var lastAttemptedNickname:str =		"steamLoginData.lastAttemptedNickname"										(event "steamLoginData.evUpdate"))
+		(var isNicknameInUse:bool =				"steamLoginData.isNicknameInUse"											(event "steamLoginData.evUpdate"))
+		(var isNicknameInvalid:bool =			"steamLoginData.isNicknameInvalid"											(event "steamLoginData.evUpdate"))
+		(var isNicknameValidationRunning:bool =	"steamLoginData.isNicknameValidationRunning"								(event "steamLoginData.evUpdate"))
+		(var isWrongName:bool =					"isNicknameInUse || isNicknameInvalid")
+
+		(var isFirstEdit:bool = true)
+		(bind isFirstEdit "false" init=false (event "evInputNicknameChanged"))
+		(var selectedNameIndex:number = -1)
+		(bind selectedNameIndex "$event.selectedNameIndex" init=false watch=false (event "evSteamSelectName"))
+
+
+		(var steamNewNickname:str = "(nicknameSuggestions.length > 0) && (selectedNameIndex != -1)	? nicknameSuggestions[selectedNameIndex] :
+																					isFirstEdit		? lastAttemptedNickname
+																									: ''" watch=false)
+		(bind steamNewNickname "$event.value" init=false watch=false (event "evInputNicknameChanged"))
+		(bind steamNewNickname "(nicknameSuggestions.length > 0) && (selectedNameIndex != -1) ? nicknameSuggestions[selectedNameIndex] : ''" init=false watch=false (event "evSteamSelectName"))
+
+		(var isWrongSymbolInputed:bool = false)
+		(bind isWrongSymbolInputed "true" init=false (event "evWrongSymbolInputed"))
+		(bind isWrongSymbolInputed "false" init=false (event "evInputNicknameChanged") (event "evHideWrongMessage"))
+
+		(var isSteamNewNicknameLoginBtnEnabled:bool = "!(isWrongName || isNicknameValidationRunning || steamNewNickname == '')")
+
+		(var isWrongNickNotificationShown:bool = "!steamNewNickname.empty && (isWrongName && !isNicknameValidationRunning)")
+		(bind isWrongNickNotificationShown "false" init=false (event "evHideWrongMessage"))
+
+		(var validationState:str =	"	isNicknameValidationRunning					? VALIDATION_STATES.VALIDATION :
+										(isNicknameInvalid || isNicknameInUse)		? VALIDATION_STATES.INVALID
+																					: VALIDATION_STATES.VALID")
+	)
+
+	(bindcall externalCall "isSteamNewNicknameLoginBtnEnabled ? 'inputMapping.onAction' : ''" "['steamNicknameEdited', { nickname: steamNewNickname}]" watch=false (event "evInputNicknameEnter"))
+	(bindcall externalCall 'inputMapping.onAction' "['nickNameChange', { nickname: steamNewNickname}]" watch=false on='addedToStage' (event "evInputNicknameChanged") (event "evSteamSelectName"))
+
+	(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+	(style
+		(width = 400px)
+		(align = "center")
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(block
+				(style (width = 100%))
+
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(width = 100%)
+						(alpha = "TA")
+						(textAlign = "center")
+					)
+					(text = 'IDS_CHOOSE_MK_NAME')
+				)
+			)
+		)
+
+		(hblock
+			(style
+				(width = 100%)
+				(align = "center")
+				(height = 29px)
+			)
+
+			(block
+				(element InputTextDefault
+					_name = 'steamUserNameField'
+					_defaultText = "steamNewNickname"
+					_width = '200px'
+					_placeholderText = 'IDS_ENTER_LOGIN_ON_LOGIN'
+					_onEnterEvent = 'evInputNicknameEnter'
+					_onInputChangedEvent = 'evInputNicknameChanged'
+					_focusIndex = 0
+					_maxChars = "nicknameMaxLength"
+					_restrict = "nicknameRestrictRegexp"
+					_hideButtonEnter = true
+					_onWrongSymbolInputedEvent = 'evWrongSymbolInputed'
+					_isCapsStateVisible = true
+				)
+
+				(block
+					(bind visible "!steamNewNickname.empty")
+					(style
+						(position = "absolute")
+						(right = "-XXS")
+					)
+					(controller $Instance renderer='ValidationState'
+						(bind enabled "!steamNewNickname.empty")
+						(args
+							_validationState = "validationState"
+						)
+					)
+				)
+			)
+
+			(block
+				(style
+					(width = 410px)
+					(position = "absolute")
+					(bottom = "LS")
+				)
+				(controller $Instance renderer='WrongNickNameNotificationAndSuggestions'
+					(bind enabled "isWrongNickNotificationShown || isWrongSymbolInputed")
+					(args
+						_isWrongSymbolInputed = "isWrongSymbolInputed"
+						_selectedNameIndex = "selectedNameIndex"
+					)
+				)
+			)
+		)
+	)
+
+	(element DefaultButton
+		_enabled = "isSteamNewNicknameLoginBtnEnabled"
+		_name = "isSteamNewNicknameLoginBtnEnabled ? 'steamNewNicknameBtn' : ''"
+		_width = 200px
+		_label = 'IDS_LOGIN_BUTTON'
+		_size = "SIZE.LARGE"
+		_isIncreasedAccentBtn = true
+		_type = "SC.Ui_styles.BUTTON_TYPE.ACCENT"
+		_methods = "[{	type: 'inputMapping.onAction',
+						name: 'steamNicknameEdited',
+						args: { nickname: steamNewNickname } }]"
+	)
+)
+
+(def element ValidationState (_validationState:str)
+	(block
+		(style
+			(alpha = 0)
+			(position = "absolute")
+			(top = 13px)
+			(left = 8px)
+			(backgroundImage = 'url:../service_kit/icons/warning_icon.png')
+		)
+
+		(controller $Animation
+			(bindcall play	duration=0.15
+							to="_validationState == VALIDATION_STATES.INVALID ? { alpha: 1, top: 9px } : { alpha: 0, top: 13px }"
+							on = 'addedToStage'
+							watch = false
+							action = "kill"
+							(bind trigger "_validationState")
+			)
+		)
+	)
+
+	(block
+		(style
+			(alpha = 0)
+			(position = "absolute")
+			(top = 8px)
+			(backgroundImage = 'bitmap:checkbox_check')
+		)
+
+		(controller $Animation
+			(bindcall play	duration=0.15
+							to="_validationState == VALIDATION_STATES.VALID ? { alpha: 1, top: 5px } : { alpha: 0, top: 8px }"
+							on = 'addedToStage'
+							watch = false
+							action = "kill"
+							(bind trigger "_validationState")
+			)
+		)
+	)
+
+	(block
+		(style
+			(alpha = 0)
+			(position = "absolute")
+			(top = 15px)
+			(left = 15px)
+		)
+
+		(controller $Animation
+			(bindcall play	duration=0.15
+							to="{ alpha: _validationState == VALIDATION_STATES.VALIDATION ? 1 : 0 }"
+							on = 'addedToStage'
+							watch = false
+							action = "kill"
+							(bind trigger "_validationState")
+			)
+		)
+
+		(mc 'loading_bar_small_centered')
+	)
+)
+
+(def element ExternalLoginDenied (_curHostIndex:number)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var loginData:dhComponent = "getSingleComponent(CC.loginData)")
+		(var isEGSClient:bool = "loginData.isEGS" (event "loginData.evUpdate"))
+
+		(var steamLoginData:dhComponent = "getSingleComponent(CC.steamLoginData)")
+		(var lastAttemptedNickname:str = "steamLoginData.lastAttemptedNickname" (event "steamLoginData.evUpdate"))
+	)
+
+	(style
+		(width = 420px)
+		(marginTop = "L")
+		(align = "center")
+	)
+
+	(element DeclareBlurLayer)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(marginBottom = "M")
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style (hitTest = false))
+
+			(element BlurMap
+				_blurType = "BLUR_TYPE.BOX"
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(padding = 20px)
+			)
+
+			(tf
+				(class $TextDefault18NM)
+				(style
+					(alpha = "TA")
+					(width = 100%)
+					(leading = -1)
+					(textAlign = "center")
+					(styleSheet = "'h3 { color: #FFD966 }'")
+				)
+
+				(bind htmlText "isEGSClient	? ('<body>' + subst('IDS_PLATFORM_EGS_ACCOUNT_DENIED',		[], {accountName: '<h3>' + lastAttemptedNickname + '</h3>'}) + '</body>')
+											: ('<body>' + subst('IDS_PLATFORM_STEAM_ACCOUNT_DENIED',	[], {accountName: '<h3>' + lastAttemptedNickname + '</h3>'}) + '</body>')")
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(name = 'personalAccountBtn')
+
+		(style (marginBottom = "SXS"))
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style (hitTest = false))
+
+			(element BlurMap
+				_blurType = "BLUR_TYPE.BOX"
+			)
+		)
+
+		(block
+			(style (padding = 3px))
+
+			(element DefaultButton
+					_name = 'personalAccountBtn'
+					_width = 200px
+					_label = 'IDS_PERSONAL_ACCOUNT_BTN'
+					_size = "SIZE.MEDIUM"
+					_isIncreasedAccentBtn = true
+					_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_focusIndex = 0
+					_methods = "[{	type: 'inputMapping.onAction',
+									name: 'gotoUrlByIdent',
+									args: { ident: SC.Ui_windows.GUI_URL.PERSONAL_ACCOUNT } }]"
+			)
+
+			(controller $Tooltip
+				(renderer ='SimpleStatusTooltip')
+				(args
+					_text = 'IDS_PERSONAL_ACCOUNT_HINT'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+		(element DefaultButton
+			_name = 'steamLoginRetryBtn'
+			_width = 200px
+			_label = 'IDS_LOGIN_BUTTON'
+			_size = "SIZE.LARGE"
+			_isIncreasedAccentBtn = true
+			_focusIndex = 1
+			_type = "SC.Ui_styles.BUTTON_TYPE.ACCENT"
+			_methods = "[{	type: 'inputMapping.onAction',
+							name: 'reconnect',
+							args: {	hostId:			_curHostIndex,
+									user:			'',
+									password:		'',
+									savePassword:	false } }]"
+		)
+	)
+)
+
+(def element WrongNickNameNotificationAndSuggestions (_isWrongSymbolInputed:bool, _selectedNameIndex:number)
+	(scope
+		(var steamLoginData:dhComponent =	"getSingleComponent(CC.steamLoginData)")
+		(var isNicknameInvalid:bool =		"steamLoginData.isNicknameInvalid"		(event "steamLoginData.evUpdate"))
+		(var nicknameSuggestions:array =	"steamLoginData.nicknameSuggestions"	(event "steamLoginData.evUpdate"))
+		(var notificationText:str =			"_isWrongSymbolInputed			? 'IDS_LOGIN_SCREEN_WRONG_SYMBOL_INPUT' :
+											isNicknameInvalid				? 'IDS_LOGIN_SCREEN_NAME_RESTRICTIONS' :
+											nicknameSuggestions.length > 0	? 'IDS_CHOOSED_NAME_IS_TAKEN_IN_MK_SUGGESTIONS'
+																			: 'IDS_CHOOSED_NAME_IS_TAKEN_IN_MK'")
+	)
+	(style
+		(width = 100%)
+		(alpha = 0)
+		(visualOffsetY = 10px)
+	)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip="true")
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.15
+			to="{ alpha: 1, visualOffsetY: 0px }"
+			easing="Easing.quad_in"
+			on = 'addedToStage'
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(padding = "M")
+		)
+		(element WarningMessage
+			_text = "notificationText"
+		)
+
+		(block
+			(bind visible "true")
+			(style
+				(width = 100%)
+				(marginTop = "S")
+				(flow = "tile_horizontal")
+				(align = "center")
+			)
+			(controller $Repeat renderer='SteamNamesRenderer'
+				(bind count "nicknameSuggestions.length")
+				(args
+					_selectedNameIndex = "_selectedNameIndex"
+					_steamNewNickname = "nicknameSuggestions[$index]"
+				)
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(right = "S")
+			(top = "S")
+		)
+		(element CloseButton
+			_dispatchedEv = 'evHideWrongMessage'
+			_tooltipText = 'IDS_CLOSE'
+		)
+	)
+)
+
+(def element SteamNamesRenderer (_selectedNameIndex:number, _steamNewNickname:str)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(var isActive:bool = "_selectedNameIndex == $index")
+	)
+	(bind name "'SteamNamesRenderer_' + $index")
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(dispatch evSteamSelectName	dir="EventDirection.UP" args="{ selectedNameIndex: $index }" on='leftClick')
+
+	(style
+		(alpha = 0)
+		(visualOffsetY = 10px)
+		(height = 29px)
+		(paddingLeft = "XXS")
+		(paddingRight = "XXS")
+	)
+
+	(controller $Animation
+		(bindcall play 	duration=0.15
+						delay=0.15
+						from="{visualOffsetY: 10px, alpha: 0}"
+						to="{visualOffsetY: 0px, alpha: 1}"
+						easing="Easing.quad_in"
+						on='addedToStage'
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind alpha	"	isActive	? 0.5 :
+							rollOver	? 0.2
+										: 0")
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+			(scale9grid = 5)
+		)
+	)
+
+	(block
+		(style
+			(height = 100%)
+			(paddingLeft = "S")
+			(paddingRight = "S")
+			(paddingTop = "S")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				to = "isActive ? { alpha: 0.85 } : { alpha: 1 }"
+				(bind trigger "rollOver")
+			)
+		)
+
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(hitTest = false)
+				(alpha = "TA")
+
+			)
+			(bind text "_steamNewNickname")
+		)
+	)
+)
+
+(def element ServerMessage ( _headerText:str, _messageHighlight:bool, _messageText:str, _dispatchedEvOnClose:str)
+	(scope
+		
+		(var errorStringsToIgnoreSupportLinkFor:array = "[	'IDS_ACCOUNT_ACTIVATION_ERROR_ALL_INCORRECT_CONFIRMATION_CODE',
+															'IDS_ACCOUNT_ACTIVATION_ERROR_CODE_MIN_LENGTH',
+															'IDS_ACCOUNT_ACTIVATION_ERROR_CODE_MAX_LENGTH',
+															'IDS_ACCOUNT_ACTIVATION_ERROR_ALL_INCORRECT_CONFIRMATION_CODE_REQUEST_DEACTIVATED' ]")
+		(var hasLinkText:bool = "indexOf(_messageText, errorStringsToIgnoreSupportLinkFor) == -1")
+	)
+	(bindcall externalCall 'inputMapping.onAction'	"[ 'showErrorMessage', { header: '', message: '' } ]" watch=false on='leftClick')
+	(style
+		(alpha = 0)
+		(visualOffsetY = 10px)
+	)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip="true")
+
+	(controller $Animation
+		(bindcall play 	duration=0.15
+						delay=0.15
+						from="{visualOffsetY: 10px, alpha: 0}"
+						to="{visualOffsetY: 0px, alpha: 1}"
+						easing="Easing.quad_in"
+						on='addedToStage'
+		)
+	)
+
+	(block
+		(style
+			(paddingLeft = "MS")
+			(paddingRight = "MS")
+			(paddingTop = 19px)
+			(paddingBottom = 19px)
+			(align = "center")
+		)
+
+		(tf
+			(bind visible "_headerText")
+			(class $TextDefaultNM)
+			(name = 'messageLoggerHeader')
+			(style
+				(leading = -2)
+				(marginBottom = "SXS")
+				(bind textColor "_messageHighlight ? SC.Ui_styles.SERVICE_COLORS.RED : SC.Ui_styles.SERVICE_COLORS.ORANGE")
+			)
+			(bind text "_headerText")
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(name = 'messageLogger')
+			(style
+				(minWidth = 300px)
+				(maxWidth = 600px)
+				(marginBottom = "hasLinkText ? M : 0px")
+				(textAlign = "center")
+				(bind textColor "_messageHighlight ? SC.Ui_styles.SERVICE_COLORS.RED : SC.Ui_styles.SERVICE_COLORS.ORANGE")
+			)
+			(bind text "_messageText")
+		)
+
+		(block
+			(controller $Instance renderer='LinkText'
+				(bind enabled "hasLinkText")
+				(args
+					_label = 'IDS_LINK_SUPPORT'
+					_urlIdent = "SC.Ui_windows.GUI_URL.SUPPORT"
+					_tooltipText = 'IDS_LINK_SUPPORT_HINT'
+					_name = 'ButtonSupport'
+				)
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(padding = -1px)
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+				(scale9grid = 5)
+			)
+			(bind colorTransform "_messageHighlight	? COLOR_TRANSFORM_WHITE_TO_RED
+													: COLOR_TRANSFORM_WHITE_TO_ORANGE")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = "S")
+			(right = "S")
+		)
+		(element CloseButton
+			_tooltipText = 'IDS_CLOSE'
+			_dispatchedEv = "_dispatchedEvOnClose"
+		)
+	)
+)
+
+
+(def element ExternalChooseRealmContent ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var steamLoginData:dhComponent = "getSingleComponent(CC.steamLoginData)")
+		(var hostsDataProvider:array =		"steamLoginData.hostsDataProvider" (event "steamLoginData.evUpdate"))
+		(var selectedSteamHostIndex:number = "steamLoginData.selectedHostIndex" (event "steamLoginData.evUpdate"))
+	)
+	(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+	(style
+		(marginTop = "SXS")
+		(width = 250px)
+		(align = "center")
+	)
+
+	(element DeclareBlurLayer)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+
+		(element BlurMap
+			_blurType = "BLUR_TYPE.BOX"
+		)
+	)
+
+	(block
+		(style (padding = 20px))
+
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(textAlign = "center")
+				(marginBottom = "M")
+			)
+			(text = 'IDS_CHOOSE_REGION')
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(height = 80px)
+				(maxHeight = 250px)
+			)
+
+			(scrollArea
+				(class $Fullsize)
+				(style (backgroundColor = "NO_COLOR"))
+
+				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+					_singleStep = "50px"
+					_wheelScrollAcceleration = "0.8"
+					_maxScrollingAnimatedDistance = "280"
+					_isContrastScrollBar = "true"
+				)
+
+				(content
+					(style (width = 100%))
+
+					(controller $Repeat renderer='SteamHostRenderer'
+						(bind count "hostsDataProvider.length")
+						(args
+							_selectedSteamHostIndex = "selectedSteamHostIndex"
+						)
+					)
+				)
+			)
+		)
+	)
+)
+
+
+(def element SteamHostRenderer (_selectedSteamHostIndex:number)
+	(scope
+		(var steamLoginData:dhComponent = "getSingleComponent(CC.steamLoginData)")
+		(var steamHostRealm:str = "steamLoginData.hostsDataProvider[$index].realm" (event "steamLoginData.evUpdate"))
+		(var steamHostRealmToRegion:dict = "{CN: CN_REGION, RU: RU_REGION}")
+		(var steamHostRegion:str = "steamHostRealm in steamHostRealmToRegion ? steamHostRealmToRegion[steamHostRealm] : WW_REGION")
+
+		(var realmConstants:dhComponent = "getSingleComponent(CC.realmConstants)")
+		(var currentRegion:str = "realmConstants.currentRegion")
+		(var isSelected:bool = "_selectedSteamHostIndex == $index")
+	)
+
+
+	(style
+		(width = 100%)
+		(height = 50px)
+		(align = "middle")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element DockSubmenuItem
+			_soundSet = 'dropdown'
+			_dispatchedEv = "steamHostRegion == currentRegion ? 'evChangeLoginScreenState' : ''"
+			_dispatchParams = "{ loginScreenState: SC.Common.LOGIN_STATE.EXTERNAL_NEW_NICKNAME }"
+			_methods = "[{	type: 'inputMapping.onAction',
+							name: 'updateSteamSelectedHost',
+							args: { hostIndex: $index }
+						}]"
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(hitTest = false)
+		)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	)
+)
+
+(def element DevTraces ()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+)

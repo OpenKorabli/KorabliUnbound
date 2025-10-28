@@ -1,0 +1,317 @@
+(def constant CLIENT_BUILD_TYPE_HYBRID 'hybrid')
+
+(def constant RENDER_LOGIN_EL "{	SC.Common.LOGIN_STATE.EMPTY:					'',
+									SC.Common.LOGIN_STATE.RECONNECT:				'ReconnectionScreenContent',
+									SC.Common.LOGIN_STATE.PLATFORM_LOGIN_DENIED:	'ExternalLoginDenied',
+									SC.Common.LOGIN_STATE.EXTERNAL_NEW_NICKNAME:	'ExternalNewNicknameContent',
+									SC.Common.LOGIN_STATE.EXTERNAL_CHOOSE_COUNTRY:	'ExternalChooseCountryContent',
+									SC.Common.LOGIN_STATE.EXTERNAL_CHOOSE_HOST:		'' # unused state ExternalChooseRealmContent
+								}")
+
+(def element EmptyWindowWithHideBelow ()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(event hideLogin)
+		(event evDelayedSwitchBgState)
+		(var loginProgress:dhComponent = "getSingleComponent(CC.loginProgress)")
+		
+		
+		(var isFirstTimeLogin:bool = "loginProgress.firstTimeLogin")
+	)
+	(dispatch hideLogin (event "loginProgress.evStartFade"))
+	(bindcall externalCall 'inputMapping.onAction' "['finiLoadingScreen', {}]" (event "evDelayedSwitchBgState"))
+
+	(controller $Animation
+		(bindcall play
+			duration = "SC.Common.PERFECT_LOGIN.HIDE_TIME"
+			to = "{ alpha: 0 }"
+			(event "startHide")
+		)
+	)
+
+	
+	
+	
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+
+	(block
+		(bind visible "!isFirstTimeLogin")
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 1)
+			(backgroundColor = 0xFF000000)
+		)
+
+		
+		(dispatch evDelayedSwitchBgState delay="SC.Common.PERFECT_LOGIN.HIDE_TIME" (bind enabled "!isFirstTimeLogin") (event "hideLogin"))
+	)
+
+	
+
+	
+	
+	
+	
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+	
+	(block
+		(bind visible "isFirstTimeLogin")
+
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0)
+			(backgroundColor = 0xFF000000)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = "SC.Common.PERFECT_LOGIN.HIDE_TIME"
+				to = "{ alpha: 1 }"
+				(event "hideLogin")
+			)
+			
+			(dispatch evDelayedSwitchBgState on=evAnimEnded)
+		)
+	)
+
+)
+
+(def element Login()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(var loginProgress:dhComponent =	"getSingleComponent(CC.loginProgress)")
+		(var doneLoading:bool =				"loginProgress.doneLoading" (event "loginProgress.evDoneLoadingChanged"))
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = "SC.Common.PERFECT_LOGIN.HIDE_TIME"
+			to = "{ alpha: 0 }"
+			(event "loginProgress.evStartFade")
+		)
+	)
+
+	(controller $Instance renderer='LoginContent'
+		(bind enabled "doneLoading")
+	)
+)
+
+(def element LoginContent()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evChangeLoginScreenState)
+		(event evWaitingAnswerUpdate)
+
+		(var realmConstants:dhComponent =	"getSingleComponent(CC.realmConstants)")
+		(var currentRegion:str =			"realmConstants.currentRegion")
+
+		(var loginProgress:dhComponent =	"getSingleComponent(CC.loginProgress)")
+		(var isConnected:bool =				"loginProgress.isConnected"		(event "loginProgress.evIsConnectedChanged"))
+		(var isFirstTimeLogin:bool =			"loginProgress.isFirstTimeLogin"	(event "loginProgress.evFirstTimeLoginChanged"))
+
+		(var loginData:dhComponent =	"getSingleComponent(CC.loginData)")
+		(var staticScreen:str = "isFirstTimeLogin ? '' : 'img://' + loginData.staticScreen")
+
+		
+		(var savedHostIndex:number = "loginData.selectedHostIndex" (event "loginData.evUpdate"))
+		(var curHostIndex:number = "savedHostIndex ?: 0")
+		(var isWaitingAnswer:bool = "loginData.isWaitingAnswer")
+		(bind isWaitingAnswer "loginData.isWaitingAnswer" watch=false init=false (event "evWaitingAnswerUpdate"))
+
+		(var isExternalPlatformClient:bool = "loginData.isExternalPlatformClient" (event "loginData.evUpdate"))
+		
+
+		
+		(var steamLoginData:dhComponent =		"getSingleComponent(CC.steamLoginData)")
+		(var isSteamIdConnected:bool =			"steamLoginData.hasAccount"					(event "steamLoginData.evUpdate"))
+		(var isGettingBoundAccountInfo:bool =	"steamLoginData.isGettingBoundAccountInfo"	(event "steamLoginData.evUpdate"))
+		(var needToReconnect:bool =				"steamLoginData.needToReconnect"			(event "steamLoginData.evUpdate"))
+		(var isSteamHostChosen:bool =			"!steamLoginData.isDefaultRealm"			(event "steamLoginData.evUpdate"))
+		(var platformLoginDenied:bool =			"steamLoginData.loginDenied"				(event "steamLoginData.evUpdate"))
+		(var isRegionValid:bool =				"steamLoginData.isRegionValid"				(event "steamLoginData.evUpdate"))
+
+		(var isProcessing:bool =	"isSteamIdConnected || isGettingBoundAccountInfo")
+		(var isLoading:bool =		"isWaitingAnswer || isConnected")
+
+		
+		
+		
+		
+		
+		
+		(var loginScreenState:number = "	isLoading						? SC.Common.LOGIN_STATE.EMPTY :
+											needToReconnect					? SC.Common.LOGIN_STATE.RECONNECT :
+											platformLoginDenied				? SC.Common.LOGIN_STATE.PLATFORM_LOGIN_DENIED :
+											isProcessing					? SC.Common.LOGIN_STATE.EMPTY :
+											isSteamHostChosen				? isRegionValid	? SC.Common.LOGIN_STATE.EXTERNAL_NEW_NICKNAME
+																							: SC.Common.LOGIN_STATE.EXTERNAL_CHOOSE_COUNTRY
+		#																	: !isLGC	? SC.Common.LOGIN_STATE.EXTERNAL_CHOOSE_HOST
+																						: SC.Common.LOGIN_STATE.RECONNECT")
+
+		(var hasContentUnderLogo:bool = "(!isProcessing && isSteamHostChosen) || platformLoginDenied")
+
+		
+		(var loginMessageEntity:dhEntity = "getSingleEntity(CC.loginMessageData)")
+		(var loginMessageData:dhComponent = "loginMessageEntity.loginMessageData")
+		(var loginMessage:str =				"loginMessageData.message"			(event "loginMessageData.evUpdate"))
+		(var loginMessageHeader:str =		"loginMessageData.header"			(event "loginMessageData.evUpdate"))
+		(var loginMessageHighlight:bool =	"loginMessageData.messageHighlight"	(event "loginMessageData.evUpdate"))
+
+
+		(var waitingText:str = "	isConnected					? 'IDS_LOGGING_IN' :
+									isGettingBoundAccountInfo	? 'IDS_STATUS_GET_ACCOUNT_INFO'
+																: 'IDS_LOADING'")
+
+		(var activeloginScreenState:str = "toString(loginScreenState) in RENDER_LOGIN_EL ? RENDER_LOGIN_EL[loginScreenState] : 'EmptyItem'")
+
+		
+
+	)
+
+	(dispatch 'evWaitingAnswerUpdate' dir="EventDirection.NONE" args="{}" delay="isWaitingAnswer ? 0.7 : 0" (event "loginData.evUpdate"))
+	(bindcall externalCall 'inputMapping.onAction' "['login.shown', {}]" on='addedToStage')
+	
+	(bindcall externalCall 'inputMapping.onAction' "['showErrorMessage', { header: '', message: ''}]" (event "evChangeLoginScreenState"))
+
+	(class $Fullsize)
+
+	(element DeclareBlurLayer)
+
+	(block
+		(bind visible "!isFirstTimeLogin")
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+
+		(controller $Instance renderer='BackgroundAnimatedSwitcher'
+			(bind enabled "!isFirstTimeLogin")
+			(args
+				_bgSymbol = "staticScreen"
+			)
+		)
+	)
+
+	
+
+
+
+
+
+
+
+
+
+	
+	(block
+		(style
+			(position="absolute")
+			(width = 100%)
+			(align = "center")
+			(bind bottom "hasContentUnderLogo ? 276px : 159px")
+		)
+		
+		(mc 'game_logo_flat')
+	)
+
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(align = "center")
+			(bottom = "XL")
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.2
+				duration = 0.15
+				to = "{ alpha: 1 }"
+				on = 'addedToStage'
+			)
+		)
+
+		(controller $Instance
+			(bind renderer "activeloginScreenState")
+			(args
+				_curHostIndex =				"curHostIndex"
+				_loginMessage =				"loginMessage"
+				_loginMessageHighlight =	"loginMessageHighlight"
+				_loginMessageHeader =		"loginMessageHeader"
+				_hasContentUnderLogo =		"hasContentUnderLogo"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(align = "center")
+			(bottom = "MS")
+		)
+		(controller $Instance renderer = 'AutoLoginContent'
+			(bind enabled "!loginScreenState")
+			(args
+				_waitingText = "waitingText"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(position = "absolute")
+			(alpha = 0.5)
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(controller $Instance renderer = 'SettingsButton'
+			(bind enabled "loginScreenState")
+			(args
+				_name = 'loginButtonSettings'
+				_methods = "[{	type: 'inputMapping.onAction',
+								name: 'navigateTo',
+								args: { route: SC.Ui_windows.MODAL.GAME_SETTINGS }
+							}]"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(position = "absolute")
+			(top = 20px)
+			(right = 20px)
+			(bind alpha "loginScreenState ? 1 : 0.5")
+		)
+
+		(element CloseButton
+			_name = 'buttonClose'
+			_isGUIEventLocked = false
+			_tooltipText = 'IDS_CLOSE'
+			_isDisabled = "!loginScreenState"
+			_methods = "[]"
+		)
+	)
+)
