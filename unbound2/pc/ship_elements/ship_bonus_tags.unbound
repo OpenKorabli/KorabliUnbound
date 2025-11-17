@@ -1,14 +1,13 @@
 (def constant BONUS_TYPE_SNOWFLAKE 'snowflake')
 
-(def element CarouselShipBonusTags (_shipEntityId:number)
+(def element CarouselShipBonusTags (_shipEntityId:number, _isSmallCarouselView:bool = false)
 	(scope
-		(var shipEntity:gfx = "$datahub.getEntity(_shipEntityId)")
-		(var expMultiply:number = "shipEntity ? shipEntity.ownShip.expMultiply : 0"	(event "shipEntity.ownShip.evExpMultiplyChanged"))
-		(var bonusTagIds:array = "shipEntity ? shipEntity.ship.bonusTags : []"		(event "shipEntity.ship.evBonusTagsChanged"))
+		(var shipEntity:dhEntity = "getEntity(_shipEntityId)")
+		(var expMultiply:number = "shipEntity ? shipEntity.ownShip.expMultiply : 0" (event "shipEntity.ownShip.evExpMultiplyChanged"))
+		(var hasFirstWinBonus:bool = "shipEntity.ownShip.hasFirstWinBonus ?: false" (event "shipEntity.ownShip.evHasFirstWinBonusChanged"))
+		(var hasModifiedExpMultiplier:bool = "shipEntity.ownShip.hasModifiedExpMultiplier" (event "shipEntity.ownShip.evHasModifiedExpMultiplierChanged"))
+		(var bonusTagIds:array = "shipEntity ? shipEntity.ship.bonusTags : []" (event "shipEntity.ship.evBonusTagsChanged"))
 
-		(var dailyStarsEntity:dhEntity = "getPrimaryEntity(CC.splitRunTest, 'Daily_Stars_Research')")
-		(var isNewDailyStarDesign:bool = "dailyStarsEntity.splitRunTest.data.isNewDailyStarDesign" (event "dailyStarsEntity.splitRunTest.evDataChanged"))
-		(var bonusExpSuffix:str = "isNewDailyStarDesign ? '_ab_test' : ''")
 		
 		(var hasSnowflakeBonus:bool = "!bonusTagIds.length	?	false
 															:	getEntity(bonusTagIds[0]).bonusTag.type == BONUS_TYPE_SNOWFLAKE ||
@@ -26,22 +25,41 @@
 		(var isExpBonusTagVisible:bool = "expMultiply > 1 && (!bonusTagIds.length || hasSnowflakeBonus)")
 		(var areBothBonusTagsVisible:bool = "(isEntityBonusTagVisible || isExpBonusTagVisible) && hasSnowflakeBonus")
 
+		(var bonusExpSuffix:str = "hasModifiedExpMultiplier ? hasFirstWinBonus	? 'premium_double' 
+																				: 'premium_single'
+															: 'regular_single'")
+
 		(var imageUrl:str = "	hasSnowflakeBonus		? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_snowflake' :
 								isEntityBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_' + bonusTagType :
-								isExpBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_exp' + bonusExpSuffix
+								isExpBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_exp_' + bonusExpSuffix
 														: ''")
 		(var secondImageUrl:str = "areBothBonusTagsVisible	?	isEntityBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_' + bonusTagType :
-																isExpBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_exp' + bonusExpSuffix
+																isExpBonusTagVisible	? 'swf:../service_kit/bonus_tags_svg/bonus_tags_svg.swf:bonus_exp_' + bonusExpSuffix
 																						: ''
 															: ''")
 	)
 
 	(style
 		(flow = "horizontal")
-		(height = 31px)
 		(backgroundColor = "NO_COLOR")
 		(paddingLeft = "SXS")
 		(paddingRight = 6px)
+		(bind height "_isSmallCarouselView ? 33px : 31px")
+	)
+
+	(block
+		(bind visible "isExpBonusTagVisible || isEntityBonusTagVisible")
+		(style
+			(position = "absolute")
+			(width = 39px)
+			(height = 100%)
+			(right = -6px)
+			(borderRadiusBottomRight = "XS")
+			(backgroundSize = "fill")
+			(bind borderRadiusTopRight "_isSmallCarouselView ? XS : 0")
+			(bind backgroundImage "hasModifiedExpMultiplier || isEntityBonusTagVisible	? 'url:../service_kit/bonus_tags/bonus_panel_battlepass.png'
+																						: 'url:../service_kit/bonus_tags/bonus_panel_regular.png'")
+		)
 	)
 
 	(block
@@ -60,11 +78,10 @@
 		)
 
 		(controller $Tooltip
-			(renderer='LargeBonusTagsTooltip')
+			(renderer='SnowflakeBonusTagsTooltip')
 			(bind enabled "hasSnowflakeBonus")
 			(args
 				_shipEntityId = "_shipEntityId"
-				_isExpBonusTagVisible = false
 				_bonusTagId = "bonusTagIds[snowflakeBonusIndex]"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR_WITH_TOP)
@@ -86,7 +103,7 @@
 		(style
 			(height = 31px)
 			(align = "middle")
-			(marginLeft = "XXS")
+			(marginLeft = "SXS")
 			(backgroundColor = "NO_COLOR")
 		)
 		(block
@@ -184,7 +201,7 @@
 	)
 )
 
-(def element LargeBonusTagsTooltip (_shipEntityId:number=null, _isExpBonusTagVisible:bool=true, _isReceived:bool=false, _bonusTagId:number=null)
+(def element SnowflakeBonusTagsTooltip (_shipEntityId:number=null, _isReceived:bool=false, _bonusTagId:number=null)
 	(scope
 		(var shipEntity:dhEntity = "getEntity(_shipEntityId)")
 		(var expMultiply:number = "shipEntity.ownShip.expMultiply ?: 0" (event "shipEntity.ownShip.evExpMultiplyChanged"))
@@ -192,10 +209,11 @@
 
 		(var bonusTagIds:array = "	_bonusTagId	? [_bonusTagId]
 												: shipEntityBonusTags")
-
-		(var isDoubleExpBlockVisible:bool = "expMultiply > 1 && _isExpBonusTagVisible")
 	)
-	(style (width = 320px) (hitTest = false))
+	(style
+		(hitTest = false)
+		(width = "DEFAULT_TOOLTIP_WIDTH")
+	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -207,19 +225,6 @@
 					_itemsLength = "bonusTagIds.length"
 					_bonusTagEntityId = "bonusTagIds[$index]"
 					_isReceived = "_isReceived"
-				)
-			)
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isDoubleExpBlockVisible && bonusTagIds.length > 0"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='DoubleExperienceTooltipItem'
-				(bind enabled "isDoubleExpBlockVisible")
-				(args
-					_shipEntityId = "_shipEntityId"
 				)
 			)
 		)
@@ -337,7 +342,12 @@
 		(var expMultiply:number =		"shipOwnEntity.ownShip.expMultiply"					(event "shipOwnEntity.ownShip.evExpMultiplyChanged"))
 		(var crewExpMultiply:number =	"shipOwnEntity.ownShip.crewExpMultiply"				(event "shipOwnEntity.ownShip.evExpMultiplyChanged"))
 		(var freeExpMultiply:number =	"shipOwnEntity.ownShip.freeExpMultiply"				(event "shipOwnEntity.ownShip.evExpMultiplyChanged"))
-		(var hasModifiedExpMultiplier:bool = "shipOwnEntity.ownShip.hasModifiedExpMultiplier" (event "shipOwnEntity.ownShip.evHasModifiedExpMultiplierChanged"))
+
+		(var hasModifiedExpMultiplier:bool =	"shipOwnEntity.ownShip.hasModifiedExpMultiplier"	(event "shipOwnEntity.ownShip.evHasModifiedExpMultiplierChanged"))
+		(var hasFirstWinBonus:bool =			"shipOwnEntity.ownShip.hasFirstWinBonus ?: false"	(event "shipOwnEntity.ownShip.evHasFirstWinBonusChanged"))
+		(var expBonusSuffix:str =				"hasModifiedExpMultiplier && hasFirstWinBonus ? '' : 'single_'")
+		(var headerText:str =					"'IDS_BONUSTAG_EXP' + (hasFirstWinBonus ? '_FIRST_WIN' : '') + (hasModifiedExpMultiplier ? '_BATTLEPASS_ENHANCED' : '')")
+		(var subheaderText:str =				"'IDS_BATTLE_BONUS' + (hasModifiedExpMultiplier && !hasFirstWinBonus ? '_MULTIPLE' : '')")
 
 		(var remainingExpBonusWins:number = "shipOwnEntity.ownShip.remainingExpBonusWins"	(event "shipOwnEntity.ownShip.evUpdateConfig"))
 
@@ -360,18 +370,20 @@
 	(style (width = 100%))
 
 	(element TooltipSystemHeaderWithIconAndText
-		_imageUrl =			'url:../service_kit/bonus_tags/bonus_exp_big.png'
+		_imageUrl =			"'url:../service_kit/bonus_tags/bonus_exp_' + expBonusSuffix + 'big.png'"
 		_imageWidth =		80px
 		_imageHeight =		80px
-		_headerText =		'IDS_BONUSTAG_FIRST_WIN'
-		_subheaderText =	'IDS_BATTLE_BONUS'
+		_headerText =		"headerText"
+		_subheaderText =	"subheaderText"
 	)
 
 	(element TooltipSystemHorizontalDivider)
 	(element TooltipSystemDescriptionText
-		_descriptionText =		"remainingExpBonusWins > 1	? subst('IDS_TOOLTIP_BATTLE_BONUS_MULTIPLE_DESCRIPTION', [], {_battleAmount: remainingExpBonusWins}, remainingExpBonusWins) :
-								remainingExpBonusWins == 0	? 'IDS_TOOLTIP_BATTLE_BONUS_TAG_DESCRIPTION'
-															: 'IDS_TOOLTIP_BATTLE_BONUS_DAILY_DESCRIPTION'"
+		_descriptionText =	"remainingExpBonusWins > 1	? subst('IDS_TOOLTIP_BATTLE_BONUS_MULTIPLE_DESCRIPTION', [], {_battleAmount: remainingExpBonusWins}, remainingExpBonusWins) :
+							hasFirstWinBonus			? hasModifiedExpMultiplier	? 'IDS_TOOLTIP_BATTLE_BONUS_DAILY_BATTLEPASS_ENHANCED_DESCRIPTION'
+																					: 'IDS_TOOLTIP_BATTLE_BONUS_DAILY_DESCRIPTION'
+														: hasModifiedExpMultiplier	? 'IDS_TOOLTIP_BATTLE_BONUS_TAG_BATTLEPASS_ENHANCED_DESCRIPTION'
+																					: 'IDS_TOOLTIP_BATTLE_BONUS_TAG_DESCRIPTION'"
 	)
 
 	(element TooltipSystemHorizontalDivider)

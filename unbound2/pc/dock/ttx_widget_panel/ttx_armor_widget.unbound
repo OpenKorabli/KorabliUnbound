@@ -1,12 +1,22 @@
 (def element ArmorWidget (_isShown:bool)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
+		(struct browserPreviewRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_PREVIEW"))
+		(struct armorRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.ARMOR"))
 
-		(var sessionPrefs:dhComponent = "getSingleComponent(CC.sessionPreference)")
-		(var isArmorWidgetExpanded:bool = "sessionPrefs.armorWidgetExpanded" (event "sessionPrefs.evArmorWidgetExpandedChanged"))
+		(var isArmorEnabledRouteActive:bool = "browserPreviewRoute.isActive || armorRoute.isActive")
+		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
+
+		
+		
+		(var isArmorWidgetExpanded:bool = "armorRoute.isActive" (event "browserPreviewRoute.routeEntity.route.evIsActiveChanged"))
+		(bind isArmorWidgetExpanded "armorRoute.isActive || !isArmorWidgetExpanded" init=false watch=false (event "evClicked"))
+		(bind isArmorWidgetExpanded "!dockData.excursionVisible && isArmorWidgetExpanded" init=false watch=false (event "dockData.evExcursionVisibleChanged"))
+
+		(var isArmorVisible:bool = "isArmorWidgetExpanded && isArmorEnabledRouteActive && _isShown")
 	)
-	(bindcall externalCall 'inputMapping.onAction' "['onArmorWidgetClicked', {isExpanded: !isArmorWidgetExpanded }]" watch=false (event "evClicked"))
-
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.showArmor', {}]"		(bind enabled "isArmorVisible"))
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.hideArmor', {}]"		(bind enabled "!isArmorVisible"))
 	(class $TTXWidgetContainer)
 
 	(block
@@ -23,6 +33,7 @@
 		(macro MOUSE_EVENTS_DISPATCHER)
 		(macro SOUND_HANDLER
 			_soundSet = "'dropdown'"
+			_enabled = "browserPreviewRoute.isActive"
 		)
 
 		(hblock
@@ -30,46 +41,59 @@
 			(style
 				(width = 100%)
 				(height = "TTX_EXPAND_CONTAINER_HEADER_HEIGHT")
+				(paddingTop = 14px)
 				(paddingLeft = "M")
 				(paddingRight = "SXS")
-				(align = "middle")
-				(hitTest = false)
 			)
 
-			(block
-				(style
-					(width = 100%)
-				)
+			(hblock
+				(style (width = 100%))
+		
 				(tf
 					(class $TextDefaultBold18NM)
-					(style
-						(width = 100%)
-						(alpha = "TA")
-					)
+					(style (alpha = "TA"))
 					(text = 'IDS_ARMOUR_SCHEME')
+				)
+
+				(block
+					(style
+						(width = 22px)
+						(height = 22px)
+						(marginTop = "-XS")
+						(marginLeft = "S")
+						(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
+					)
+
+					(controller $Tooltip
+						(renderer = 'ArmorInfoTooltip')
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
 				)
 			)
 
-			(element SwitchWithoutLabel
-				_state = "isArmorWidgetExpanded"
-				_rollOver = "rollOver"
-				_mouseDown = "mouseDown"
+			(block	
+				(controller $Instance renderer='SwitchWithoutLabel'
+					(bind enabled "browserPreviewRoute.isActive")
+					(args
+						_state = "isArmorVisible"
+					)
+				)
 			)
 		)
 
 		(block
 			(style
 				(width = 100%)
-				(alpha = "isArmorWidgetExpanded ? 1 : 0")
+				(alpha = "isArmorVisible ? 1 : 0")
 			)
 	
 			(controller $Animation
 				(bindcall play
-					delay = "isArmorWidgetExpanded ? 0 : 0.1"
+					delay = "isArmorVisible ? 0 : 0.1"
 					duration = 0.15
-					to = "isArmorWidgetExpanded ? { alpha: 1 } : { alpha: 0 }"
+					to = "isArmorVisible ? { alpha: 1 } : { alpha: 0 }"
 					easing = "Easing.line"
-					(bind trigger "isArmorWidgetExpanded")
+					(bind trigger "isArmorVisible")
 				)
 			)
 
@@ -77,7 +101,7 @@
 		)
 	)
 
-	(element DEFAULT_EXPAND_CONTAINER "isArmorWidgetExpanded"
+	(element DEFAULT_EXPAND_CONTAINER "isArmorVisible"
 		(style (width = 100%))
 
 		(element ArmorWidgetContent)
@@ -107,12 +131,14 @@
 		(var pickerWidth:number = "armorRanges.length ? round(280 / armorRanges.length) : 0")
 
 		(var showBusyIndicator:bool = "!armorPick && !armorConfig")
+		(var isShipArmorRangeVisible:bool = "armorPick && thicknessMax != 0")
 	)
 
 	(style
-		(align = "center")
+		(align = "center|middle")
 		(width = 100%)
-		(paddingTop = "SXS")
+		(minHeight = 120px)
+		(paddingTop = "M")
 		(paddingBottom = "SXS")
 	)
 
@@ -126,11 +152,29 @@
 
 	(block
 		(visible = "!showBusyIndicator")
-
 		(style
 			(align = "center")
 			(width = 100%)
 			(alpha = "showBusyIndicator ? 0 : 1")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	0.01
+				from =		"{ alpha: 0, visible: false }"
+				to =		"{ alpha: 0, visible: false }"
+				watch =		false
+				(bind enabled "showBusyIndicator")
+			)
+		
+			(bindcall play
+				delay =		0.1
+				duration =	0.15
+				from =		"{ alpha: 0, visible: false }"
+				to =		"{ alpha: 1, visible: true }"
+				watch =		false
+				(bind enabled "!showBusyIndicator")
+			)
 		)
 
 		(htile_reverse
@@ -138,7 +182,7 @@
 				(align = "center")
 				(width = 100%)
 				(marginBottom = "SXS")
-				(hgap = "SXS")
+				(bind hgap "armorParts.length >= 6 ? S : SXS")
 			)
 
 			(controller $Repeat renderer='ArmorModulePicker'
@@ -168,40 +212,48 @@
 				)
 			)
 		)
-
 		(block
-			
-			(bind visible "armorPick && thicknessMax != 0")
+			(style (height = 12px))
 
-			(controller $Tooltip
-				(renderer = 'SimpleStatusTooltip')
-				(args
-					_text = 'IDS_SHIP_ARMOUR_WHOLE_RANGE'
+			(block
+				
+				(visible = "isShipArmorRangeVisible")
+				(style
+					(backgroundColor = "NO_COLOR")
+					(alpha = "isShipArmorRangeVisible ? 1 : 0")
 				)
-				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-			)
 
-			(tf
-				(class $TextDefaultNM)
-				(style (alpha = "TA"))
-				(bind text "armorRangeStr")
-			)
-		)
+				(controller $Animation
+					(bindcall play
+						duration =	0.01
+						from =		"{ alpha: 0, visible: false }"
+						to =		"{ alpha: 0, visible: false }"
+						action =	"kill"
+						(bind enabled "!isShipArmorRangeVisible")
+					)
+				
+					(bindcall play
+						duration =	0.15
+						from =		"{ alpha: 0, visible: false }"
+						to =		"{ alpha: 1, visible: true }"
+						action =	"kill"
+						(bind enabled "isShipArmorRangeVisible")
+					)
+				)
 
-		(controller $Animation
-			(bindcall play
-				duration =	0.01
-				from =		"{ alpha: 1, visible: true }"
-				to =		"{ alpha: 0, visible: false }"
-				watch =		false
-				(bind enabled "showBusyIndicator")
-			)
-			(bindcall play
-				duration =	0.15
-				from =		"{ alpha: 0, visible: false }"
-				to =		"{ alpha: 1, visible: true }"
-				watch =		false
-				(bind enabled "!showBusyIndicator")
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text = 'IDS_SHIP_ARMOUR_WHOLE_RANGE'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style (alpha = "TA"))
+					(bind text "armorRangeStr")
+				)
 			)
 		)
 	)
@@ -212,26 +264,17 @@
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
 
-		
-		(var moduleType:str =		"_data.type")
-		(var moduleIndex:number =	"_data.index")
-
-		(var isSelected:bool =		"(_mask & (1 << moduleIndex)) != 0")
-		(var iconPathUp:str =		"'url:../service_kit/armor_types/armor_' + moduleType + '_up.png'")
-		(var iconPathToggle:str =	"'url:../service_kit/armor_types/armor_' + moduleType + '.png'")
+		(var isSelected:bool =		"(_mask & (1 << _data.index)) != 0")
+		(var iconPathUp:str =		"'url:../service_kit/armor_types/armor_' + _data.type + '_up.png'")
+		(var iconPathToggle:str =	"'url:../service_kit/armor_types/armor_' + _data.type + '.png'")
 	)
 
 	(style
 		(width = 38px)
 		(height = 38px)
-		(backgroundColor = "NO_COLOR")
+		(backgroundImage = 'url:../service_kit/armor_types/armor_bgr.png')
 	)
-	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setShipPartVisible', { index: moduleIndex, visible: !isSelected }]" watch=false on='leftClick')
-
-	
-	
-	
-	
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setShipPartVisible', { index: _data.index, visible: !isSelected }]" watch=false on='leftClick')
 
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(macro SOUND_HANDLER
@@ -242,17 +285,9 @@
 		(renderer = 'SimpleStatusTooltip')
 		(args
 			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-			_text =				"tr((isSelected ? 'IDS_HIDE_ARMOUR_' : 'IDS_SHOW_ARMOUR_') + moduleType)"
+			_text =				"tr((isSelected ? 'IDS_HIDE_ARMOUR_' : 'IDS_SHOW_ARMOUR_') + _data.type)"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-	)
-
-	(block
-		(class $FullsizeAbsolute)
-		(style
-			(hitTest = false)
-			(backgroundImage = 'url:../service_kit/armor_types/armor_bgr.png')
-		)
 	)
 
 	(block
@@ -268,19 +303,10 @@
 			(class $FullsizeAbsolute)
 			(style
 				(hitTest = false)
-				(bind alpha "isSelected ? 0 : 1")
 				(bind backgroundImage "iconPathUp")
 			)
-			
-		)
-
-		(block
-			(class $FullsizeAbsolute)
-			(style
-				(hitTest = false)
-				(bind alpha "isSelected ? 1 : 0")
-				(bind backgroundImage "iconPathToggle")
-			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_CT "isSelected ? CT_ACCENT_BLUE : CT_NONE")
+			(colorTransform = "CT_ACCENT_BLUE")
 		)
 	)
 )
@@ -291,8 +317,6 @@
 
 		(var rangeIndex:number =	"_data.index")
 		(var rangeColor:number =	"_data.color")
-		(var rangeMin:number =		"_data.min")
-		(var rangeMax:number =		"_data.max")
 
 		(var overScaleX:number = "_pickerWidth	?	(_pickerWidth + 2) / (_pickerWidth / 100) / 100
 												:	1")
@@ -302,14 +326,6 @@
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setArmorRangeVisible', { rangeIdx: rangeIndex, visible: true }]"	watch=false (bind enabled "rollOver"))
 	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setArmorRangeVisible', { rangeIdx: rangeIndex, visible: false }]"	watch=false (bind enabled "!rollOver"))
-
-	(controller $Tooltip
-		(renderer = 'SimpleStatusTooltip')
-		(args
-			_text = "tr('IDS_SHIP_ARMOUR_IN_RANGE') + ' ' + rangeMin + ' – ' + rangeMax + tr('IDS_MILLIMETER_SPACE')"
-		)
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-	)
 
 	(block
 		(style
@@ -339,6 +355,47 @@
 					action = "kill"
 					(bind trigger "rollOver")
 				)
+			)
+		)
+	)
+)
+
+(def element ArmorInfoTooltip ()
+	(style (width = 380px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_ARMOR_INFO_TOOLTIP'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText _headerText = 'IDS_ARMOR_INFO_REBOUND_HEADER')
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText _descriptionText = 'IDS_ARMOR_INFO_REBOUND_DESCRIPTION')
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText _headerText = 'IDS_ARMOR_INFO_DETONATION_HEADER')
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText _descriptionText = 'IDS_ARMOR_INFO_DETONATION_DESCRIPTION')
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemSecondaryHeaderText _headerText = 'IDS_ARMOR_INFO_HE_PENETRATION_HEADER')
+			)
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText _descriptionText = 'IDS_ARMOR_INFO_HE_PENETRATION_DESCRIPTION')
 			)
 		)
 	)

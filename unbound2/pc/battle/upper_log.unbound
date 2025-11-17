@@ -9,6 +9,7 @@
 })
 (def constant INVALID_TIME -1)
 
+
 (def macro MESSAGE_SCOPE (_message:expression)
 	(var message:gfx = "_message" watch=false)
 	(var color:number = "message.logMessage.color")
@@ -16,7 +17,7 @@
 	(var substituteMap:gfx = "message.logMessage.substitutes ? message.logMessage.substitutes : {}")
 )
 
-(def element UpperLog(_isChallengesEnabled:bool, _isTrialsEnabled:bool)
+(def element UpperLog (_isChallengesEnabled:bool, _isTrialsEnabled:bool)
 	(scope
 		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
 		(var isCustomCountdownEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.CUSTOM_COUNTDOWN) > 0")
@@ -26,30 +27,33 @@
 		(var battleDataEntity:dhEntity = "getSingleEntity(CC.battleData)")
 		(var labelGameModeDescription:str = "battleDataEntity.battleInfo.gameModeDescription")
 
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var isCinematicActive:bool = "cameraComponent.isCinematicActive" (event "cameraComponent.evIsCinematicActiveChanged"))
+
 		(var battleStateComponent:dhComponent =	"battleDataEntity.battleState")
 		(var battleState:number ="battleStateComponent.battleState" (event "battleStateComponent.evBattleStateChanged"))
 		(var isBeginningOfBattle:bool ="battleState in SC.Common.CLIENT_BATTLE_STATE.BEGINNING_OF_BATTLE")
 		(var battleTimeAtMomentRender:number = "battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN ? (battleDataEntity.battleTimer.battleTime ?: 0) : INVALID_TIME" watch=false)
 
-		(var timerComponent:dhComponent = "getSingleEntity(CC.timer).timer")
+		(var timerComponent:dhComponent = "getSingleComponent(CC.timer)")
 		(var currentTimeAtMomentRender:number = "timerComponent.currentTime ?: 0" watch=false)
 		(var currentTime:number = "timerComponent.currentTime ?: 0" (event "timerComponent.evFrequent"))
 		(var endTime:number = "battleTimeAtMomentRender + currentTimeAtMomentRender")
 		(var countdownBattleTime:number = "battleTimeAtMomentRender != INVALID_TIME ? endTime - currentTime : INVALID_TIME")
 	)
 
+	(name = 'UpperLog')
+
 	(style
 		(width = "UPPER_LOG_WIDTH")
 		(hitTest = false)
 	)
 
-	(name = 'UpperLog')
-
 	(controller $Animation
 		(bindcall play
-			duration = "0.1"
-			from="{alpha:1}"
-			to="{alpha:0}"
+			duration = 0.1
+			from = "{alpha: 1}"
+			to = "{alpha: 0}"
 			(bind enabled "battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
 		)
 	)
@@ -60,6 +64,7 @@
 			(width = 100%)
 			(align = "center")
 		)
+
 		(controller $Repeat renderer='UpperLogMessage'
 			(bind enabled "countdownBattleTime < 0 && battleState != SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN")
 			(bind count "messagesCollection.items.length" watch=false (event "messagesCollection.evAdded"))
@@ -73,11 +78,12 @@
 			(width = 100%)
 			(align = "center")
 		)
+
 		(controller $Instance renderer='PrebattleText'
-			(bind enabled "countdownBattleTime >= 0 && isBeginningOfBattle && !_isChallengesEnabled && !_isTrialsEnabled && !isCustomCountdownEnabled")
+			(bind enabled "countdownBattleTime >= 0 && isBeginningOfBattle && !_isChallengesEnabled && !_isTrialsEnabled && !isCustomCountdownEnabled && !isCinematicActive")
 			(args
-				_labelGameModeDescription="labelGameModeDescription"
-				_battleTime="countdownBattleTime"
+				_labelGameModeDescription = "labelGameModeDescription"
+				_battleTime = "countdownBattleTime"
 			)
 		)
 	)
@@ -89,9 +95,9 @@
 			(align = "center")
 		)
 		(controller $Instance renderer='BattleChallengesRoundCountdown'
-			(bind enabled "_isChallengesEnabled")
+			(bind enabled "_isChallengesEnabled && !isCinematicActive")
 			(args
-				_battleState="battleState"
+				_battleState = "battleState"
 			)
 		)
 	)
@@ -103,9 +109,9 @@
 			(align = "center")
 		)
 		(controller $Instance renderer='TrialRoundCountdown'
-			(bind enabled "_isTrialsEnabled")
+			(bind enabled "_isTrialsEnabled && !isCinematicActive")
 			(args
-				_battleState="battleState"
+				_battleState = "battleState"
 			)
 		)
 	)
@@ -117,10 +123,10 @@
 			(align = "center")
 		)
 		(controller $Instance renderer='CustomStartBattleCountdown'
-			(bind enabled "isCustomCountdownEnabled")
+			(bind enabled "isCustomCountdownEnabled && !isCinematicActive")
 			(args
-				_battleState="battleState"
-				_countdownBattleTime="countdownBattleTime"
+				_battleState = "battleState"
+				_countdownBattleTime = "countdownBattleTime"
 			)
 		)
 	)
@@ -168,7 +174,7 @@
 		(macro MESSAGE_SCOPE "_message")
 	)
 
-	(style 
+	(style
 		(width = "UPPER_LOG_WIDTH")
 		(height = "UPPER_LOG_HEIGHT")
 		(align = "center|middle")
@@ -191,7 +197,7 @@
 		(macro MESSAGE_SCOPE "_message")
 	)
 
-	(style 
+	(style
 		(width = "UPPER_LOG_WIDTH")
 		(height = "UPPER_LOG_HEIGHT")
 		(bind backgroundImage "'url:../battle_hud/central_log/lower_log_bg_9scale.png'")
@@ -214,34 +220,45 @@
 
 (def element PrebattleText (_battleTime:number, _labelGameModeDescription:str)
 	(scope
-		(event evTest)
 		(event evShowFirstDigit)
 		(event evShowSecondDigit)
 		(event evHidePrebattleTextElement)
 		(event evPlaySound)
 
-		(var currentTimeCeil:number = "ceil(max((_battleTime-1), 0))" watch=true)
-		(var currentTimeCeilStr:str = "toString(currentTimeCeil)" watch=true)
+		(var currentTimeCeil:number = "ceil(max(_battleTime - 1, 0))")
+		(var currentTimeCeilStr:str = "toString(currentTimeCeil)")
 
-		(var firstDigit:str = "currentTimeCeil < 10 ? DIGIT_ZERO : currentTimeCeilStr[0]" watch=true init=false)
-		(var secondDigit:str = "currentTimeCeil < 10 ? currentTimeCeilStr[0] : currentTimeCeilStr[1]" watch=true init=false)
+		(var firstDigit:str = "currentTimeCeil < 10 ? DIGIT_ZERO : currentTimeCeilStr[0]")
+		(var secondDigit:str = "currentTimeCeil < 10 ? currentTimeCeilStr[0] : currentTimeCeilStr[1]")
 	)
-	
-	(style 
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['prebattleTimer', 'regular']" (event "evPlaySound"))
+
+	(dispatch evHidePrebattleTextElement delay="PREBATTLE_TIMER_DELAY + 0.75" (bind enabled "currentTimeCeilStr == DIGIT_ZERO") (bind trigger "currentTimeCeilStr"))
+
+	(dispatch evShowFirstDigit args="{_firstDigit: firstDigit}" on='addedToStage')
+	(dispatch evShowFirstDigit args="{_firstDigit: firstDigit}" delay="PREBATTLE_TIMER_DELAY" (bind trigger "firstDigit"))
+	(dispatch evShowSecondDigit args="{_secondDigit: secondDigit}" on='addedToStage')
+	(dispatch evShowSecondDigit args="{_secondDigit: secondDigit}" delay="PREBATTLE_TIMER_DELAY" (bind trigger "secondDigit"))
+
+	(dispatch evPlaySound delay="PREBATTLE_TIMER_DELAY" (bind enabled "currentTimeCeil < 11") (bind trigger "currentTimeCeilStr"))
+
+	(style
 		(width = 100%)
 		(align = "center")
 	)
 
 	(controller $Animation
 		(bindcall play
-			duration = "0.15"
-			from="{alpha:1}"
-			to="{alpha:0}"
+			duration = 0.15
+			from = "{alpha: 1}"
+			to = "{alpha: 0}"
 			(event "evHidePrebattleTextElement")
 		)
 	)
+
 	(block
-		(style 
+		(style
 			(width = 100%)
 			(height = "UPPER_LOG_HEIGHT")
 			(align = "center|middle")
@@ -256,22 +273,16 @@
 		)
 	)
 
-	(dispatch evHidePrebattleTextElement init=true dir="EventDirection.NONE" delay="PREBATTLE_TIMER_DELAY + 0.75" (bind enabled "currentTimeCeilStr == DIGIT_ZERO") (bind trigger "currentTimeCeilStr"))
-
-	(dispatch evShowFirstDigit init=true args="{_firstDigit: firstDigit}" on=addedToStage delay="PREBATTLE_TIMER_DELAY" (bind trigger "firstDigit"))
-	(dispatch evShowSecondDigit init=true args="{_secondDigit: secondDigit}" on=addedToStage delay="PREBATTLE_TIMER_DELAY" (bind trigger "secondDigit"))
-	(dispatch evPlaySound init=false delay="PREBATTLE_TIMER_DELAY" (bind enabled "currentTimeCeil < 11") (bind trigger "currentTimeCeilStr"))
-
-	(bindcall externalCall 'sound.playSetSoundDirect' "['prebattleTimer', 'regular']" init=false watch=false (event "evPlaySound"))
-
 	(hblock
-		(style (marginTop =  "XS"))
+		(style (marginTop = "XS"))
+
 		(block
 			(style
 				(width = 42px)
 				(height = 76px)
 				(marginRight = "XS")
 			)
+
 			(controller $FxInstance renderer='PrebattleTextTimerDigit' lifetime="12"
 				(bindcall create (event "evShowFirstDigit"))
 				(args
@@ -280,12 +291,13 @@
 				)
 			)
 		)
-		
+
 		(block
 			(style
 				(width = 42px)
 				(height = 76px)
 			)
+
 			(controller $FxInstance renderer='PrebattleTextTimerDigit' lifetime="3"
 				(bindcall create (event "evShowSecondDigit"))
 				(args
@@ -309,7 +321,7 @@
 
 	(dispatch evStartHide			delay = "PREBATTLE_TIMER_DELAY - 0.1" (bind enabled "_digit != _skin") (bind trigger "_digit") (bind trigger "_skin"))
 	(dispatch evSwitchVisibility	delay = 0.5 (event "evStartHide"))
-	
+
 	(controller $Spine
 		(bind skin "_skin")
 		(play sequence = "{ name:'animationIn', repeatCount:1, delay: 0 }")
@@ -339,7 +351,7 @@
 		(var challengeType:number = 	"challengeComponent.challengeType" (event "challengeComponent.evChallengeInfoChanged"))
 		(var timeToNextPhase:number = 	"challengeComponent.timeToNextPhase ?: 0" (event "challengeComponent.evPhaseInfoChanged"))
 		(var phase:number = 			"challengeComponent.phase" (event "challengeComponent.evPhaseInfoChanged"))
-		
+
 		(var isActivationPhase:bool = "phase == SC.Battle.ROUND_STAGE.ACTIVATION")
 		(var isDeactivationPhase:bool = "phase == SC.Battle.ROUND_STAGE.DEACTIVATION")
 		(var isCountdownBattleState:bool = "_battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN ")

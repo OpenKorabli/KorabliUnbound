@@ -1,0 +1,990 @@
+(def constant DYNAMIC_DIVISION_ITEM_HEIGHT 27px)
+(def constant DYNAMIC_DIVISION_CARD_WIDTH 220px)
+
+
+(def element DynamicDivisions (_isBattleStats:bool=false, _isBattleLoading:bool=false)
+	(scope
+		(macro DEFAULT_APPEAR_ANIMATION_SCOPE)
+
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var maxDivisions:number = "battleInfoComponent.maxDivisions")
+
+		(var dynamicDivisionsCollection:dhCollection = "getCollection(CC.division)")
+		(var divisionsAmount:number = "dynamicDivisionsCollection.length")
+		(var divisionSlotsNum:number = "divisionsAmount < maxDivisions 	? divisionsAmount + 1
+																		: divisionsAmount"
+		)
+	)
+
+	(style
+		(align = "center")
+		(width = 100%)
+	)
+
+	(macro DEFAULT_APPEAR_ANIMATION
+		_duration 	= 0.15
+		_delay 		= 0.1
+		_isEnabled 	= "!_isBattleStats"
+		_isCached 	= true
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='DeclareBlurLayer'
+			(bind enabled "_isBattleLoading")
+		)
+	)
+
+	(htile
+		(style
+			(align = "center")
+			(width = 690px)
+			(hgap = "S")
+			(vgap = "S")
+			(marginBottom = "S")
+		)
+
+		(controller $Repeat renderer='DivisionSlotOrCreateDivision'
+			(bind count "divisionSlotsNum")
+			(args
+				_isBattleStats 		= "_isBattleStats"
+				_isBattleLoading 	= "_isBattleLoading"
+			)
+		)
+	)
+
+	(block
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "divisionsAmount == maxDivisions")
+			(args
+				_text 		= 'IDS_MAX_DIVISIONS_CREATED'
+				_maxWidth 	= 900px
+			)
+		)
+	)
+)
+
+(def element DivisionSlotOrCreateDivision (_isBattleStats:bool=false, _isBattleLoading:bool=false)
+	(scope
+		(var dynamicDivisionsCollection:dhCollection = "getCollection(CC.division)")
+		(var index:number = "$index")
+	)
+
+	(controller $Instance renderer='DivisionSlot'
+		(bind enabled "index < dynamicDivisionsCollection.length")
+		(args
+			_idInCol 		= "index"
+			_isBattleStats 	= "_isBattleStats"
+		)
+	)
+
+	(controller $Instance renderer='CreateDynamicDivision'
+		(bind enabled "index == dynamicDivisionsCollection.length")
+		(args
+			_isBattleLoading = "_isBattleLoading"
+		)
+	)
+)
+
+(def element DivisionSlot (_idInCol:number, _isBattleStats:bool=false)
+	(scope
+		(var dynamicDivisionsCollectionSorted:dhCollection = "getCollectionByPath(CC.division, 'sorted')")
+		(var dynamicDivisionEntity:dhEntity = "dynamicDivisionsCollectionSorted.getEntityAtIndex(_idInCol)")
+		(var preBattleId:number = "dynamicDivisionEntity.division.preBattleId")
+
+		(var myAccountEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var isAlive:bool = "myAccountEntity.health.isAlive" (event "myAccountEntity.health.evIsAliveChanged"))
+	)
+
+	(style
+		(width = "DYNAMIC_DIVISION_CARD_WIDTH")
+
+		(macro DESATURATION_DEFAULT "isAlive")
+	)
+
+	(element DynamicDivisionItem
+		_preBattleId 	= "preBattleId"
+		_isBattleStats 	= "_isBattleStats"
+	)
+
+	(block
+		(bind visible "!isAlive")
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(bind enabled "!isAlive")
+			(args
+				_text 			= 'IDS_DIVISION_MANAGEMENT_LOCKED_FOR_DESTROYED'
+				_unifiedStatus 	= "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+)
+
+(def element DynamicDivisionItem (_preBattleId:number, _isBattleStats:bool=false)
+	(scope
+		(struct isBlurOptionEnabledPref = GET_PREF_BOOL(_option="'graphics.GUI.blur'"))
+
+		(var divisionEntity:dhEntity = "getPrimaryEntity(CC.division, _preBattleId)")
+		(var divisionComponent:dhComponent = "divisionEntity.division")
+		(var ownerId:number = "divisionComponent.ownerId" (event "divisionComponent.evOwnerIdChanged"))
+		(var inPortParticipantsCount:number = "divisionComponent.inPortParticipantsCount" (event "divisionComponent.evInPortParticipantsCountChanged"))
+		(var isDivisionLocked:bool = "divisionComponent.locked" (event "divisionComponent.evLockedChanged"))
+		(var name:str = "divisionComponent.name" (event "divisionComponent.evNameChanged"))
+
+		(var dynamicDivisionsByPrebattle:dhCollection = "getCollectionByPath(CC.dynamicDivisionMember, 'byPreBattleId.' + _preBattleId)")
+		(var membersCount:number = "dynamicDivisionsByPrebattle.length")
+
+		(var myAccountEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var selfId:number = "myAccountEntity.avatar.id")
+		(var isCurPlayerCommander:bool = "selfId == ownerId")
+
+		(var myDynamicDivisionMembership:dhEntity = "getPrimaryEntity(CC.dynamicDivisionMember, selfId)")
+		(var divisionId:number = "myDynamicDivisionMembership.dynamicDivisionMember.preBattleId" (event "myDynamicDivisionMembership.dynamicDivisionMember.evChanged"))
+
+		(var selfPlayerInvitedToDivision:dhEntity = "getPrimaryEntity(CC.invitationToDivision, _preBattleId)")
+		(var invitedPlayersCollection:dhCollection = "getCollection(CC.playerInvitedToPrebattleInfo)")
+		(var isPlayersDivision:bool = "_preBattleId == divisionId")
+		(var invitedPlayers:array = "isPlayersDivision ? invitedPlayersCollection.items : []")
+		(var isSelfInvitedToThisDivision:bool = "selfPlayerInvitedToDivision != null")
+		(var reservedPlacesCounter:number = "isPlayersDivision 	? inPortParticipantsCount - invitedPlayers.length < 0 	? 0
+																														: inPortParticipantsCount - invitedPlayers.length
+																: isSelfInvitedToThisDivision && inPortParticipantsCount > 0 	? inPortParticipantsCount - 1
+																																: inPortParticipantsCount"
+		)
+	)
+
+	(style
+		(width = 100%)
+		(alpha = 0)
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.15
+			from = "{alpha: 0}"
+			to = "{alpha: isDivisionLocked && !isPlayersDivision ? 0.6 : 1}"
+			watch = false
+			on = 'addedToStage'
+		)
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='BlurMap'
+			(bind enabled "isBlurOptionEnabledPref.value && !_isBattleStats")
+			(args
+				_blurType = "BLUR_TYPE.LOW"
+			)
+		)
+	)
+
+	(element InnerPanelFullsizeAbsolute)
+
+	(block
+		(style (width = 100%))
+		(element DynamicDivisionHeader
+			_isCommander 		= "isCurPlayerCommander"
+			_isPlayersDivision 	= "isPlayersDivision"
+			_newDivision 		= false
+			_name 				= "name"
+			_isDivisionLocked 	= "isDivisionLocked"
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='DynamicDivisionPlayerItem'
+			(bind count "membersCount")
+			(args
+				_dynamicDivisionMemberEntity 	= "dynamicDivisionsByPrebattle.getEntityAtIndex($index)"
+				_isPlayersDivision 				= "isPlayersDivision"
+				_isCurPlayerCommander 			= "isCurPlayerCommander"
+				_commanderId 					= "ownerId"
+			)
+		)
+	)
+
+	(block
+		(bind visible "isPlayersDivision")
+		(style (width = 100%))
+
+		(controller $Repeat renderer='DynamicDivisionInvitedPlayerItem'
+			(bind count "invitedPlayersCollection.length")
+			(args
+				_playerEntityId 		= "invitedPlayersCollection.getEntityAtIndex($index).avatar.id"
+				_isCurPlayerCommander 	= "isCurPlayerCommander"
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isPlayersDivision")
+		(style (width = 100%))
+
+		(block
+			(style (width = 100%))
+
+			(controller $Repeat renderer='JoinDynamicDivisionItem'
+				(bind enabled "!isSelfInvitedToThisDivision")
+				(bind count "MAX_DYNAMIC_DIVISION_PARTICIPANTS_COUNT - membersCount - inPortParticipantsCount")
+				(args
+					_divisionId 		= "_preBattleId"
+					_isDivisionLocked 	= "isDivisionLocked"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Repeat renderer='ApplyDivisionInvitation'
+				(bind enabled "isSelfInvitedToThisDivision")
+				(bind count "MAX_DYNAMIC_DIVISION_PARTICIPANTS_COUNT - membersCount - inPortParticipantsCount + 1")
+				(args
+					_invitationData = "selfPlayerInvitedToDivision.invitationToDivision"
+				)
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='DynamicDivisionReservedItem'
+			(bind count "reservedPlacesCounter")
+		)
+	)
+)
+
+(def element CreateDynamicDivision (_isBattleLoading:bool=false)
+	(scope
+		(macro DEFAULT_APPEAR_ANIMATION_SCOPE)
+
+		(struct isBlurOptionEnabledPref = GET_PREF_BOOL(_option="'graphics.GUI.blur'"))
+	)
+
+	(style
+		(width = "DYNAMIC_DIVISION_CARD_WIDTH")
+		(marginBottom = 10px)
+		(marginRight = 5px)
+		(marginLeft = 5px)
+	)
+
+	(macro DEFAULT_APPEAR_ANIMATION
+		_duration 	= 0.15
+		_offset 	= 0px
+		_isCached 	= true
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='BlurMap'
+			(bind enabled "isBlurOptionEnabledPref.value && _isBattleLoading")
+			(args
+				_blurType = "BLUR_TYPE.MEDIUM"
+			)
+		)
+	)
+
+	
+	(element InnerPanelFullsizeAbsolute)
+
+	
+	(element DynamicDivisionHeader
+		_isCommander 		= false
+		_isPlayerDivision 	= false
+		_newDivision 		= true
+	)
+
+	
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='JoinDynamicDivisionItem'
+			(bind count "MAX_DYNAMIC_DIVISION_PARTICIPANTS_COUNT")
+		)
+	)
+)
+
+(def element JoinDynamicDivisionItem (_divisionId:number, _isDivisionLocked:bool=false)
+	(bind name "(_divisionId ? 'JoinDiv_' : 'JoinNew_') + $index")
+	(scope
+		(var playerAvatarComponent:dhComponent = "getSingleComponent(CC.playerAvatar)")
+		(var enterToDynamicDivisionCooldown:number = "playerAvatarComponent.enterToDynamicDivisionCooldown" (event "playerAvatarComponent.evEnterToDynamicDivisionCooldownChanged"))
+
+		(struct serverTime = SERVER_TIME())
+		(var joinTimeOut:number = "enterToDynamicDivisionCooldown - serverTime.value")
+		(var isJoinTimeOut:bool = "joinTimeOut > 0")
+	)
+
+	(bindcall externalCall 	"isJoinTimeOut ? '' : 'inputMapping.onAction'"
+							"[	_divisionId 	? 'joinDivision'
+												: 'createDivision',
+								_divisionId ? {divisionId: _divisionId} : {}]"
+							watch = false
+							on = 'leftClick'
+	)
+
+	(style
+		(width = 100%)
+		(height = "DYNAMIC_DIVISION_ITEM_HEIGHT")
+		(bind alpha "isJoinTimeOut ? 0.7 : 1")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "NO_COLOR")
+			(bind hitTest "!_isDivisionLocked")
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(bind enabled "isJoinTimeOut")
+			(args
+				_text = "tr('IDS_WAIT_TIMEOUT_TO_JOIN_DIVISION') + ' ' + countdownFormat(isJoinTimeOut ? joinTimeOut : 0, 0, true)"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
+			(renderer = 'DescriptionStatusLineTooltip')
+			(bind enabled "!isJoinTimeOut")
+			(args
+				_unifiedStatus 		= "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				_statusText 		= "_divisionId ? 'IDS_JOIN_DYNAMIC_DIVISION_MOUSE_HINT' : 'IDS_CREATE_NEW_DIVISION_MOUSE_HINT'"
+				_descriptionText 	= "_divisionId ? 'IDS_JOIN_DYNAMIC_DIVISION_HINT' 		: 'IDS_CREATE_NEW_DIVISION_HINT'"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element DockSubmenuItem
+			_enabled 			= "!isJoinTimeOut"
+			_soundSet 			= 'button_secondary'
+			_isRoundedBorder 	= false
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(paddingLeft = 13px)
+			(paddingRight = 6px)
+		)
+
+		(block
+			(style
+				(width = 10px)
+				(height = 10px)
+				(backgroundImage = 'url:../service_kit/icons/icon_plus.png')
+				(backgroundSize = "fill")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(marginLeft = "S")
+				(alpha = "TC")
+			)
+			(text = 'IDS_JOIN_DIVISION')
+		)
+	)
+)
+
+(def element DynamicDivisionHeader (_newDivision:bool,
+									_isCommander:bool,
+									_isDivisionLocked:bool,
+									_isPlayersDivision:bool,
+									_name:str,
+									_preBattleId:number)
+	(scope
+		(event evMenuItemClicked)
+		(event evBattleStatsHidden)
+	)
+
+	(style
+		(width = 100%)
+		(height = 36px)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style
+			(align = "middle")
+			(paddingLeft = 6px)
+			(paddingRight = 6px)
+		)
+
+		(hblock
+			(style
+				(width = 100%)
+				(align = "middle|center")
+			)
+
+			
+			(block
+				(bind visible "!_newDivision")
+				(style (marginRight = "XXS"))
+
+				(controller $Tooltip
+					(renderer = 'DescriptionStatusLineTooltip')
+					(bind enabled "_isCommander")
+					(args
+						_unifiedStatus 		= "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						_statusText 		= "_isDivisionLocked ? 'IDS_UNLOCK_DIVISION' : 'IDS_LOCK_DIVISION'"
+						_descriptionText 	= "_isDivisionLocked ? 'IDS_DIVISION_IS_LOCKED_COMMANDER' : 'IDS_DIVISION_IS_NOT_LOCKED_COMMANDER'"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(bind enabled "!_isCommander")
+					(args
+						_text = "_isDivisionLocked ? 'IDS_DIVISION_IS_LOCKED' : 'IDS_DIVISION_IS_NOT_LOCKED'"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Instance renderer='DivisionLockIndicator'
+					(bind enabled "_isCommander || (!_isCommander && _isDivisionLocked)")
+					(args
+						_isDivisionLocked 	= "_isDivisionLocked"
+						_preBattleId 		= "_preBattleId"
+						_isCommander 		= "_isCommander"
+					)
+				)
+			)
+
+			
+			(block
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(bind enabled "_isPlayersDivision")
+					(args
+						_unifiedStatus 	= "SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT"
+						_text 			= 'IDS_HINT_RIGHT_CLICK_FOR_CONTEXT_MENU'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Tooltip
+					(renderer = 'DivisionHeaderRightClickBattleMenu')
+					(bind enabled "_isPlayersDivision")
+					(args
+						_isCommander = "_isCommander"
+					)
+					(macro DEFAULT_MENU_BEHAVIOUR "1")
+					(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+					(macro TOOLTIP_HIDE_ON_EVENT "evBattleStatsHidden")
+				)
+
+				(tf
+					(class $TextDefaultBold18NM)
+					(style
+						(bind alpha "_isPlayersDivision ? 1 : TA")
+						(bind textColor "_isPlayersDivision ? C_DIVISION
+															: SC.Ui_styles.SERVICE_COLORS.WHITE"
+						)
+					)
+					(bind text "_newDivision	? toUpper(tr('IDS_NEW_DIVISION'))
+												: toUpper(tr('IDS_DIVISION')) + ' ' + _name"
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(name = 'LeaveDiv')
+			(controller $Instance renderer='CloseButton'
+				(bind enabled "_isPlayersDivision")
+				(args
+					_tooltipText 	= 'IDS_LEAVE_DIVISION'
+					_methods 		= "	[{
+											type: 'inputMapping.onAction',
+											name: 'leaveDivision',
+											args: {}
+										}]"
+				)
+			)
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+)
+
+(def element DivisionHeaderRightClickBattleMenu (_isCommander:bool)
+	(class $ContextMenuDimensions)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip="true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset=true
+		
+		(block
+			(style
+				(width = 100%)
+				(vgap = "XXS")
+			)
+
+			(block
+				(bind visible "_isCommander")
+				(style (width = 100%))
+				(controller $Instance renderer='ContextMenuItem'
+					(args
+						_title 		= 'IDS_DISMISS_DIVISION'
+						_soundSet 	= 'dropdown'
+						_methods 	= "	[{
+											type: 'inputMapping.onAction',
+											name: 'dismissDivision',
+											args: {}
+										}]"
+						)
+				)
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='ContextMenuItem'
+					(args
+						_title 		= 'IDS_LEAVE_DIVISION'
+						_soundSet 	= 'dropdown'
+						_methods 	= "	[{
+											type: 'inputMapping.onAction',
+											name: 'leaveDivision',
+											args: {}
+										}]"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element DynamicDivisionPlayerItem (_dynamicDivisionMemberEntity:dhEntity,
+										_commanderId:number,
+										_isCurPlayerCommander:bool,
+										_isPlayersDivision:bool)
+	(scope
+		(event evMenuItemClicked)
+		(event evBattleStatsHidden)
+
+		(var playerId:number = "_dynamicDivisionMemberEntity.dynamicDivisionMember.playerId" (event "_dynamicDivisionMemberEntity.dynamicDivisionMember.evChanged"))
+		(var myAccountEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var selfId:number = "myAccountEntity.avatar.id")
+
+		(var selfDynamicDivisionMember:dhEntity = "getPrimaryEntity(CC.dynamicDivisionMember, selfId)")
+		(var selfPlayerDivisionId:number = "selfDynamicDivisionMember.dynamicDivisionMember.preBattleId" (event "selfDynamicDivisionMember.dynamicDivisionMember.evChanged"))
+
+		(var playerAvatarEntity:gfx = "$datahub.getPrimaryEntity(CC.avatar, playerId)")
+		(var shipId:number = "playerAvatarEntity.avatar.ship.ref.ship.id" (event "playerAvatarEntity.avatar.evShipRefChanged"))
+		(var name:str = "playerAvatarEntity.avatar.name")
+		(var isAbuser:bool = "playerAvatarEntity.avatar.isAbuser" (event "playerAvatarEntity.avatar.evIsAbuserStatusChanged"))
+		(var isAlive:bool = "playerAvatarEntity.health.isAlive" (event "playerAvatarEntity.health.evIsAliveChanged"))
+		(var pureName:str = "playerAvatarEntity.avatar.pureName")
+
+		(var playerVoiceChatEntity:dhEntity = "getPrimaryEntity(CC.playerVoiceState, pureName)")
+		(var isSpeaking:bool = "playerVoiceChatEntity.playerVoiceState.isSpeaking" (event "playerVoiceChatEntity.playerVoiceState.evIsSpeakingChanged"))
+		(var isMuted:bool = "playerVoiceChatEntity.playerVoiceState.isMuted" (event "playerVoiceChatEntity.playerVoiceState.evIsMutedChanged"))
+		(var isInVoiceChat:bool = "playerVoiceChatEntity != null")
+
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
+		(var subtype:str = "shipEntity.ship.subtype")
+		(var levelRome:str = "shipEntity.ship.levelRome")
+		(var nameIDS:str = "shipEntity.ship.nameIDS")
+
+		(var isCurrentPlayer:bool = "selfId == playerId")
+		(var isCommander:bool = "_commanderId == playerId")
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+		(height = "DYNAMIC_DIVISION_ITEM_HEIGHT")
+	)
+
+	(block
+		(bind visible "isCurrentPlayer")
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL"))
+
+		(controller $Tooltip
+			(renderer = 'BattlePlayerTooltip')
+			(bind enabled "isCurrentPlayer")
+			(args
+				_playerEntity = "playerAvatarEntity"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (bind hitTest "!isCurrentPlayer"))
+
+		(controller $Tooltip
+			(renderer = 'BattlePlayerTooltip')
+			(bind enabled "!isCurrentPlayer")
+			(args
+				_playerEntity 			= "playerAvatarEntity"
+				_isContextMenuAvailable = true
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
+			(renderer = 'ContextMenuPlayer')
+			(bind enabled "!isCurrentPlayer")
+			(args
+				_playerEntity = "playerAvatarEntity"
+				_selfPlayer = "selfPlayerEntity"
+			)
+			(macro DEFAULT_MENU_BEHAVIOUR "1")
+			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+			(macro TOOLTIP_HIDE_ON_EVENT "evBattleStatsHidden")
+		)
+
+		(element DockSubmenuItem
+			_soundSet 			= 'button_secondary'
+			_isRoundedBorder 	= false
+		)
+	)
+
+	(block
+		(bind visible "_isCurPlayerCommander && !isCurrentPlayer && rollOver")
+		(style
+			(position = "absolute")
+			(align = "middle")
+			(height = 100%)
+			(right = "XS")
+		)
+
+		(controller $Instance renderer='CloseButton'
+			(bind enabled "_isPlayersDivision")
+			(args
+				_tooltipText 	= 'IDS_EXCLUDE_PLAYER_OUT_OF_DIVISION'
+				_methods 		= "	[{
+										type: 'inputMapping.onAction',
+										name: 'kickPlayerFromDivision',
+										args: {playerId: playerId}
+									}]"
+			)
+		)
+	)
+
+	(hblock
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(paddingLeft = 13px)
+			(paddingRight = 6px)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(position = "absolute")
+				(top = -3px)
+				(left = -5px)
+				(marginLeft = -11px)
+			)
+
+			(element UIListVoiceTextChatIcons
+				_playerId 				= "playerId"
+				_selfPlayerDivisionId 	= "selfPlayerDivisionId"
+				_isSpeaking 			= "isSpeaking"
+				_isVoiceChatMuted 		= "isMuted"
+				_isInVoiceChat 			= "isInVoiceChat"
+				_isInSameDivision 		= "_isPlayersDivision"
+			)
+		)
+
+		(element FormationPlayerIcon
+			_isCommander 		= "isCommander"
+			_isReady 			= true
+			_isInBattle 		= false
+			_isOtherDivision 	= "!_isPlayersDivision"
+		)
+
+		(tf
+			(bind class "	isCurrentPlayer ? '$TextDefaultBoldNM' :
+							isAlive 		? '$TextDefaultNM'
+											: '$TextDefaultNMShadowWhite'"
+			)
+			(style
+				(width = 84px)
+				(marginLeft = "XXS")
+				(wordWrap = false)
+				(elideMode = true)
+				(noTranslate = true)
+
+				(bind alpha "(!isAlive && !isCurrentPlayer) || isAbuser || _isPlayersDivision ? 1 : TA")
+				(bind textColor "	!isAlive && !isCurrentPlayer 	? C_DEAD :
+									isAbuser 						? C_TKILLER :
+									_isPlayersDivision 				? C_DIVISION
+																	: SC.Ui_styles.SERVICE_COLORS.WHITE"
+				)
+			)
+			(bind text "name")
+		)
+
+		(block
+			(style (marginTop = "XXS"))
+			(element ShipIcon _shipType="subtype")
+		)
+
+		(tf
+			(bind class "	isCurrentPlayer ? '$TextDefaultBoldNM' :
+							isAlive 		? '$TextDefaultNM'
+											: '$TextDefaultNMShadowWhite'"
+			)
+			(style
+				(width = 70px)
+				(wordWrap = false)
+				(elideMode = true)
+				(letterSpacing = 0)
+				(bind alpha "isCurrentPlayer || !isAlive ? 1 : TA")
+				(bind textColor "	isCurrentPlayer ? C_DIVISION :
+									!isAlive 		? C_DEAD
+													: SC.Ui_styles.SERVICE_COLORS.WHITE"
+				)
+			)
+			(bind text "levelRome + ' ' + toUpper(tr(nameIDS))")
+		)
+	)
+)
+
+(def element DynamicDivisionInvitedPlayerItem (_playerEntityId:number, _isCurPlayerCommander:bool=false)
+	(scope
+		(event evMenuItemClicked)
+		(event evBattleStatsHidden)
+
+		(var playerEntity:gfx = "$datahub.getPrimaryEntity(CC.avatar, _playerEntityId)")
+		(var name:str = "playerEntity.accountName.name")
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+		(height = "DYNAMIC_DIVISION_ITEM_HEIGHT")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Tooltip
+			(renderer = 'BattlePlayerTooltip')
+			(args
+				_playerEntity = "playerEntity"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
+			(renderer = 'ContextMenuPlayer')
+			(args
+				_playerEntity 	= "playerEntity"
+				_selfPlayer 	= "selfPlayerEntity"
+			)
+			(macro DEFAULT_MENU_BEHAVIOUR "1")
+			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+			(macro TOOLTIP_HIDE_ON_EVENT "evBattleStatsHidden")
+		)
+
+		(element DockSubmenuItem
+			_soundSet 			= 'button_secondary'
+			_isRoundedBorder 	= false
+		)
+	)
+
+	
+	(block
+		(bind visible "_isCurPlayerCommander && rollOver")
+		(style
+			(position = "absolute")
+			(align = "middle")
+			(height = 100%)
+			(right = "XS")
+		)
+
+		(controller $Instance renderer='CloseButton'
+			(bind enabled "_isCurPlayerCommander")
+			(args
+				_tooltipText 	= 'IDS_RECALL_INVITATION'
+				_methods 		= "	[{
+										type: 'inputMapping.onAction',
+										name: 'revokeInvitationToDivision',
+										args: {id: _playerEntityId}
+									}]"
+			)
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(paddingLeft = 13px)
+		)
+
+		(element FormationPlayerIcon
+			_isEmptySlot = true
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 160px)
+				(marginLeft = "XS")
+				(alpha = "TA")
+				(wordWrap = false)
+				(elideMode = true)
+				(noTranslate = true)
+			)
+			(bind text "name")
+		)
+	)
+)
+
+(def element ApplyDivisionInvitation (_invitationData:dhComponent)
+	(scope
+		(struct serverTime = SERVER_TIME())
+		(var joinTimeOut:number = "_invitationData.expirationTime - serverTime.value")
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['acceptDivisionInvitation', {id: _invitationData.preBattleId}]" watch=false on='leftClick')
+
+	(style
+		(align = "middle")
+		(width = 100%)
+		(height = "DYNAMIC_DIVISION_ITEM_HEIGHT")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = "'-' + countdownFormat(joinTimeOut > 0 ? joinTimeOut : 0, 0, true)"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element DockSubmenuItem
+			_soundSet 			= 'button_secondary'
+			_isRoundedBorder 	= false
+		)
+	)
+
+	(hblock
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(marginTop = "XXS")
+			(paddingLeft = 13px)
+			(paddingRight = 6px)
+		)
+
+		(block
+			(style
+				(width = 10px)
+				(height = 10px)
+				(backgroundImage = 'url:../service_kit/icons/icon_plus.png')
+				(backgroundSize = "fill")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(marginLeft = "S")
+				(alpha = "TC")
+			)
+			(text = 'IDS_ACCEPT_INVITATION')
+		)
+	)
+)
+
+(def element DynamicDivisionReservedItem ()
+	(style
+		(flow = "horizontal")
+		(align = "middle")
+		(width = 100%)
+		(height = "DYNAMIC_DIVISION_ITEM_HEIGHT")
+		(paddingLeft = 11px)
+		(paddingRight = 6px)
+	)
+
+	(block
+		(style
+			(width = 16px)
+			(height = 16px)
+			(marginRight = "S")
+			(backgroundImage = 'url:../service_kit/unified_status_icons/icon_lock.png')
+			(backgroundSize = "fill")
+		)
+	)
+
+	(tf
+		(class $TextDefaultBoldNM)
+		(style (alpha = "TC"))
+		(text = 'IDS_PLACE_IS_LOCKED')
+	)
+)
+
+(def element DivisionLockIndicator (_isDivisionLocked:bool, _preBattleId:number, _isCommander:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(bindcall externalCall 	"'inputMapping.onAction'"
+							"[_isDivisionLocked ? 'unlockDivision' : 'lockDivision', {id: _preBattleId}]"
+							watch = false
+							on = 'leftClick'
+	)
+
+	(style
+		(width = 30px)
+		(height = 30px)
+		(backgroundSize = "fill")
+		(bind backgroundImage "_isDivisionLocked 	? 'url:../battle_divisions/button_lock_selected.png'
+													: 'url:../battle_divisions/button_lock_up.png'"
+		)
+	)
+
+	(bind colorTransform "	!_isCommander 	? CT_NONE :
+							mouseDown 		? COLOR_TRANSFORM_MOUSE_DOWN :
+							rollOver 		? COLOR_TRANSFORM_MOUSE_OVER
+											: CT_NONE"
+	)
+)

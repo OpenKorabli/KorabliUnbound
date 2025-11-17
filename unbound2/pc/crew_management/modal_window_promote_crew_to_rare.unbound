@@ -1,0 +1,1163 @@
+(def constant RARE_CREW_BOOK_PROMOTION_STEP_DATA [
+	{ title: 'IDS_RARE_CREW_BOOK_PROMOTION_TITLE_STEP_0',	hint: 'IDS_RARE_CREW_BOOK_PROMOTION_HINT_0' },
+	{ title: 'IDS_RARE_CREW_BOOK_PROMOTION_TITLE_STEP_1',	hint: 'IDS_RARE_CREW_BOOK_PROMOTION_HINT_1' },
+	{ title: 'IDS_RARE_CREW_BOOK_PROMOTION_TITLE_STEP_2',	hint: 'IDS_RARE_CREW_BOOK_PROMOTION_HINT_2' }
+])
+
+(def constant RARE_CREW_BOOK_PROMOTION "{
+	RANDOM_SKILL_SETS_MAX_AMOUNT:	2
+}")
+
+
+(def element ModalWindowPromoteCrewToRare (crewId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(event evSetRareBookPromotionClass)
+		(event evUpdateVisibleInfo)
+		(event evUnlockButtons)
+
+		(event evPromoteAnimationInit)
+		(event evOldPortraitMovementStarted)
+		(event evOldPortraitMovementEnded)
+		(event evNewPortraitLandingStarted)
+		(event evNewPortraitLandingEnded)
+		(event evShowUpdatedLayout)
+		(event evOldPortraitHide)
+		(event evNewPortraitAnimEnded)
+		(event evShowUpdatedLayoutFinished)
+
+
+		(var isInitModalInfoVisible:bool =	true)
+		(var isInitControlsEnabled:bool =	true)
+		(var isOldPortraitHidden:bool =		false)
+		(var hasNewPortraitLanded:bool =	false)
+		(var isNewLayoutShown:bool =		false)
+
+		(bind isInitModalInfoVisible		"false"		init=false		(event "evPromoteAnimationInit"))
+		(bind isInitControlsEnabled			"false"		init=false		(event "evPromoteAnimationInit"))
+		(bind isOldPortraitHidden			"true"		init=false		(event "evOldPortraitHide"))
+		(bind hasNewPortraitLanded			"true"		init=false		(event "evNewPortraitLandingEnded"))
+		(bind isNewLayoutShown				"true"		init=false		(event "evShowUpdatedLayout"))
+
+
+		(struct crew =			PULL_CREW(_crewId = "crewId"))
+
+		(var shipId:number =	"crew.component.shipID > 0 ? crew.component.shipID : crew.component.specializationID")
+		(macro PULL_SHIP_SCOPE "shipId" "'shipEntity'" "'shipInfo'")
+
+
+		(var rareCrewLearning:dhComponent =	"getSingleComponent(CC.rareCrewLearning)")
+		(var promotionStepDH:number =		"rareCrewLearning.currentLearningStep"			(event "rareCrewLearning.evCurrentLearningStepChanged"))
+		(var pickedShipType:str =			"rareCrewLearning.pickedShipType"				(event "rareCrewLearning.evChanged"))
+		(var skillsToDraft:array =			"rareCrewLearning.skillsToDraft"				(event "rareCrewLearning.evChanged"))
+
+		
+		(var promotionStep:number =			"promotionStepDH"	watch=false)
+
+		(var isStepShipClassPick:bool =		"promotionStep == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SHIP_CLASS_PICK")
+		(var isStepSkillsDraft:bool =		"promotionStep == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SKILLS_DRAFT")
+		(var isStepSkillSetPick:bool =		"promotionStep == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.RANDOM_SKILL_SET_PICK")
+
+		
+		(bind promotionStep					"isStepSkillSetPick ? promotionStep : promotionStepDH"	init=false watch=false	(bind trigger "promotionStepDH"))
+		(var visiblePromotionStep:number =	"promotionStep"		watch=false					(event "evUpdateVisibleInfo"))
+		
+
+		(var selectedForDraftSkillsCollection:dhCollection = "getCollection(CC.skill).getChildByPath('skillsSelectedForDrafting')")
+		(var areBothSkillsSelected:bool =	"selectedForDraftSkillsCollection.length == skillsToDraft.length")
+
+		(var selectedShipClassOnUI:str =	"isIn(shipInfo.subtype, SC.Common.SHIP_TYPE.RARE_BOOK_SPECIALIZATION) ? shipInfo.subtype : SC.Common.SHIP_TYPE.RARE_BOOK_SPECIALIZATION[0]"		watch=false)
+		(bind selectedShipClassOnUI			"$event.value"		init=false watch=false		(event "evSetRareBookPromotionClass"))
+
+		(var stepsStateIsChanging:bool = false)
+		(bind stepsStateIsChanging		"true"		init=false		(bind trigger "promotionStep"))
+		(bind stepsStateIsChanging		"false"		init=false		(event "evUnlockButtons"))
+	)
+
+	(dispatch evPromoteAnimationInit		dir="EventDirection.NONE"																				(event "rareCrewLearning.evRareCrewLearningFinished"))
+	(dispatch evOldPortraitMovementStarted	dir="EventDirection.DOWN"	delay="PROMOTE_CREW_ANIM_DURATIONS.RARE.OLD_PORTRAIT_MOVEMENT_START_DELAY"	(event "evPromoteAnimationInit"))
+	(dispatch evNewPortraitLandingStarted	dir="EventDirection.DOWN"	delay="PROMOTE_CREW_ANIM_DURATIONS.RARE.NEW_PORTRAIT_LANDING_DELAY"			(event "evOldPortraitMovementEnded"))
+	(dispatch evOldPortraitHide				dir="EventDirection.DOWN"	delay="PROMOTE_CREW_ANIM_DURATIONS.SHARED.OLD_PORTRAIT_HIDE_DELAY"			(event "evNewPortraitLandingStarted"))
+	(dispatch evNewPortraitLandingEnded		dir="EventDirection.NONE"	delay="PROMOTE_CREW_ANIM_DURATIONS.SHARED.NEW_PORTRAIT_LANDING"				(event "evNewPortraitLandingStarted"))
+	(dispatch evShowUpdatedLayout			dir="EventDirection.NONE"	delay="PROMOTE_CREW_ANIM_DURATIONS.SHARED.AFTER_ANIM_DOWNTIME"				(event "evNewPortraitAnimEnded"))
+	(dispatch evShowUpdatedLayoutFinished	dir="EventDirection.NONE"	delay="PROMOTE_CREW_ANIM_DURATIONS.RARE.NO_ESC_AFTER_NEW_LAYOUT_APPEAR"		(event "evShowUpdatedLayout"))
+
+	(bindcall externalCall 'inputMapping.onAction'		"['lockESCExit', {}]"					(event "evPromoteAnimationInit"))
+	(bindcall externalCall 'inputMapping.onAction'		"['unlockESCExit', {}]"					(event "evShowUpdatedLayoutFinished"))
+	(bindcall externalCall 'sound.playSetSoundDirect'	"['elite_crew_book', 'upgrade_crew']"	(event "evNewPortraitLandingStarted"))
+
+	(style (align = "center|middle"))
+
+	(block
+		(style
+			(align = "center")
+			(width = 600px)
+			(paddingTop = -22px)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(macro TRANSITION_ANIM_ALPHA
+				_trigger =		"isInitModalInfoVisible"
+				_duration =		"PROMOTE_CREW_ANIM_DURATIONS.SHARED.HIDE_INITIAL_INFO"
+			)
+
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_MODAL_WINDOW_RARE_CREW_MANUAL_HEADER'
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+			(style
+				(width = 100%)
+				(height = 309px)				
+				(bind marginBottom "MS")
+			)
+
+			(block
+				(macro TRANSITION_ANIM_ALPHA
+					_trigger =		"isInitModalInfoVisible"
+					_duration =		"PROMOTE_CREW_ANIM_DURATIONS.SHARED.HIDE_INITIAL_INFO"
+				)
+
+				(class $Fullsize)
+				(style (bind hitTest "isInitModalInfoVisible"))
+
+				(element RareCrewBookPromotionMainContent
+					_step =					"promotionStep"
+					_stepForDescription =	"visiblePromotionStep"
+					_crewId =				"crewId"
+					_selectedShipClass =	"pickedShipType ?: selectedShipClassOnUI"
+				)
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+
+				(element RareCrewBookPostPromotionContent
+					_crewId =					"crewId"
+					_hasNewPortraitLanded =		"hasNewPortraitLanded"
+					_isOldPortraitHidden =		"isOldPortraitHidden"
+					_isInitControlsEnabled =	"isInitControlsEnabled"
+					_isNewLayoutShown =			"isNewLayoutShown"
+				)
+			)
+		)
+
+
+		(block
+			(style
+				(position = "absolute")
+				(bottom = 0px)
+				(width = 100%)
+				(marginBottom = -100%)
+				(bind paddingTop "	visiblePromotionStep == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SHIP_CLASS_PICK		? -56px :
+									visiblePromotionStep == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SKILLS_DRAFT		? -LM
+																														: 0px")
+			)
+
+			(controller $Animation
+				(controllerEvents
+					evStateStep1Hidden
+					evStateStep2Shown
+					evStateStep2Hidden
+					evStateStep3Shown
+				)
+
+				(bindcall play
+					delay =			"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR_DELAY"
+					duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+					from =			"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+					to =			"DEFAULT_CONTENT_ANIM.STATES.INVISIBLE_OUT"
+					easing =		"Easing.quad_in"
+					action =		"killAll"
+					watch =			false
+					onEndedEvent =	'evStateStep1Hidden'
+					(bind enabled "isStepSkillsDraft")
+				)
+
+				(bindcall play
+					delay =			"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR_DELAY"
+					duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+					from =			"DEFAULT_CONTENT_ANIM.STATES.INVISIBLE_IN"
+					to =			"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+					easing =		"Easing.quad_in"
+					action =		"killAll"
+					watch =			false
+					on =			'evStateStep1Hidden'
+					onEndedEvent =	'evStateStep2Shown'
+				)
+
+				(bindcall play
+					delay =			"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR_DELAY"
+					duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+					from =			"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+					to =			"DEFAULT_CONTENT_ANIM.STATES.INVISIBLE_OUT"
+					easing =		"Easing.quad_in"
+					action =		"killAll"
+					watch =			false
+					onEndedEvent =	'evStateStep2Hidden'
+					(bind enabled "isStepSkillSetPick")
+				)
+
+				(bindcall play
+					delay =			"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR_DELAY"
+					duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+					from =			"DEFAULT_CONTENT_ANIM.STATES.INVISIBLE_IN"
+					to =			"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+					easing =		"Easing.quad_in"
+					action =		"killAll"
+					watch =			false
+					on =			'evStateStep2Hidden'
+					onEndedEvent =	'evStateStep3Shown'
+				)
+
+				(dispatch "evUpdateVisibleInfo"		on='evStateStep1Hidden')
+				(dispatch "evUpdateVisibleInfo"		on='evStateStep2Hidden')
+				(dispatch "evUnlockButtons"			on='evStateStep2Shown')
+				(dispatch "evUnlockButtons"			on='evStateStep3Shown')
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+				(macro TRANSITION_ANIM_ALPHA
+					_trigger =		"isInitModalInfoVisible"
+					_duration =		"PROMOTE_CREW_ANIM_DURATIONS.SHARED.HIDE_INITIAL_INFO"
+				)
+
+				(style (width = 100%))
+
+				(block
+					(style
+						(width = 100%)
+						(bind marginBottom "visiblePromotionStep != SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.RANDOM_SKILL_SET_PICK ? MS : L")
+					)
+
+					(element HorizontalDividerTwoPx)
+				)
+
+				(block
+					(bind visible "visiblePromotionStep != SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.RANDOM_SKILL_SET_PICK")
+
+					(style
+						(align = "center")
+						(width = 100%)
+						(marginBottom = 28px)
+					)
+
+					(element StatusLine
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+						_text =				"visiblePromotionStep == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.RANDOM_SKILL_SET_PICK ? '' : 'IDS_RARE_CREW_BOOK_PROMOTION_UNCHANGABLE_ATTENTION_STEP_' + visiblePromotionStep"
+					)
+				)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+				(macro TRANSITION_ANIM_ALPHA
+					_trigger =		"isInitModalInfoVisible"
+					_duration =		"PROMOTE_CREW_ANIM_DURATIONS.SHARED.HIDE_INITIAL_INFO"
+				)
+
+				(style
+					(align = "center")
+					(width = 100%)
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(bind enabled "isStepSkillsDraft && !areBothSkillsSelected")
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+						_text =				'IDS_RARE_CREW_BOOK_PROMOTION_PICK_2_EPIC_SKILLS_TOOLTIP_HINT'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(element ModalWindowSystemYesNoButtons
+					_isForceBtnOkVisible =		true
+					_btnOkFocusIndex =			"isInitControlsEnabled ? 0 : BUTTON_FOCUS_STATE.UNFOCUSABLE"
+					_btnNoFocusIndex =			"isInitControlsEnabled ? 1 : BUTTON_FOCUS_STATE.UNFOCUSABLE"
+					_isBtnOkEnabled =			"!isInitControlsEnabled || stepsStateIsChanging		? false:
+												 isStepSkillsDraft									? areBothSkillsSelected
+																									: true"
+					_btnOkLabel =				"visiblePromotionStep == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.RANDOM_SKILL_SET_PICK	? 'IDS_RARE_CREW_MANUAL_PROMOTE_BUTTON_FINAL'
+																																		: 'IDS_PROCEED_BUTTON'"
+					_btnOkWidth =				180
+					_btnOkMethods =				"isStepShipClassPick	? [{ type: 'inputMapping.onAction',		name: SC.Ui_methods.CREW_METHODS.SET_RARE_CREW_BOOK_SHIP_TYPE,		args: { value: selectedShipClassOnUI } }] :
+												 isStepSkillsDraft		? [{ type: 'inputMapping.onAction',		name: SC.Ui_methods.CREW_METHODS.SET_RARE_CREW_BOOK_DRAFT_SKILLS,	args: {} }]
+																		: [{ type: 'inputMapping.onAction',		name: SC.Ui_methods.CREW_METHODS.LEARN_RARE_CREW_BOOK,				args: { crewId: crewId } }]"
+					_isForceBtnNoInvisible =	"visiblePromotionStep != SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SHIP_CLASS_PICK"
+					_isBtnNoEnabled =			"isInitControlsEnabled && !stepsStateIsChanging"
+					_btnNoLabel =				'IDS_CLOSE_UPPER_CASE'
+					_btnNoWidth =				180
+				)
+			)
+		)
+	)
+)
+
+
+(def element RareCrewBookPromotionMainContent (_step:number, _stepForDescription:number, _crewId:number, _selectedShipClass:str)
+	(scope
+		(var rareCrewLearning:dhComponent =			"getSingleComponent(CC.rareCrewLearning)")
+		(var draftedSkills:array =					"rareCrewLearning.draftedSkills"	(event "rareCrewLearning.evChanged"))
+
+		(var isStepClassPick:bool =					"_step == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SHIP_CLASS_PICK")
+		(var isStepEpicSkillsDraft:bool =			"_step == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SKILLS_DRAFT")
+		(var isStepAdditionalSkillSetPick:bool =	"_step == SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.RANDOM_SKILL_SET_PICK")
+
+
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+
+		(var rarity:number =		"crew.component.rarity"			(event "crew.component.evRarityChanged"))
+		(var rankIDS:str =			"crew.component.rankIDS ?: ''"	(event "crew.component.evLevelUp"))
+		(var isCrewCommon:bool =	"rarity == SC.Common.UNIFIED_ITEM_RARITY.COMMON")
+		(var crewRankStatic:str =	"isCrewCommon ? rankIDS : 'IDS_UNCOMMON_CREW_STATUS'"	watch=false)
+	)
+
+	(class $Fullsize)
+	(style (flow = "horizontal"))
+
+	(block
+		(style (width = 236px))
+
+		
+		(block
+			(style
+				(width = "CREW_PORTRAIT.LARGE.width + 2 * XS")
+				(height = "CREW_PORTRAIT.LARGE.height + 2 * XS")
+				(marginBottom = "M")
+			)
+		)
+		
+
+		(element CrewNameWithIcon
+			_crewId =					"_crewId"
+			_isBig =					true
+			_isAutoSized =				true
+			_isRankShown =				true
+			_isSpecialIconTracked =		false
+			_crewRankStatic =			"crewRankStatic"
+		)
+
+		(block
+			(visible = "isStepEpicSkillsDraft")
+
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(top = "CREW_PORTRAIT.LARGE.height + 60 + M")
+				(alpha = "isStepEpicSkillsDraft ? 1 : 0")
+				(visualOffsetY = "isStepEpicSkillsDraft ? 0px : -10px")
+			)
+
+			(element ShipTypeWithText
+				_textAlpha =	"TA"
+				_iconSize =		30
+				_shipType =		"_selectedShipClass"
+				_textClass =	'$TextDefaultBold20NM'
+			)
+
+			(controller $Animation
+				(bindcall play
+					delay =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR_DELAY * 2"
+					duration =	"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+					to =		"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+					easing =	"Easing.quad_out"
+					action =	"killAll"
+					watch =		false
+					(bind enabled "isStepEpicSkillsDraft")
+				)
+				(bindcall play
+					delay =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR_DELAY * 2"
+					duration =	"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+					to =		"DEFAULT_CONTENT_ANIM.STATES.INVISIBLE_OUT"
+					easing =	"Easing.quad_out"
+					action =	"killAll"
+					watch =		false
+					(bind enabled "isStepAdditionalSkillSetPick")
+				)
+			)
+		)
+
+		(hblock
+			(visible = "isStepAdditionalSkillSetPick")
+
+			(style
+				(width = 100%)
+				(marginTop = "M")
+				(hgap = "SXS")
+				(alpha = "isStepAdditionalSkillSetPick ? 1 : 0")
+				(visualOffsetY = "isStepAdditionalSkillSetPick ? 0px : -10px")
+			)
+
+			(controller $Repeat renderer='EpicSkillWithShipClassWrapper'
+				(bind count "draftedSkills.length")
+				(args
+					_skillData =			"draftedSkills[$index]"
+					_isMarkerNewEnabled =	false
+				)
+			)
+
+			(controller $Animation
+				(bindcall play
+					delay =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR_DELAY * 2"
+					duration =	"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+					to =		"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+					easing =	"Easing.quad_out"
+					action =	"killAll"
+					watch =		false
+					(bind enabled "isStepAdditionalSkillSetPick")
+				)
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(block
+			(style
+				(width = 100%)
+				(marginBottom = "M")
+			)
+
+			(element RareCrewBookPromotionStepDescription
+				_step = "_stepForDescription"
+			)
+		)
+
+		(block
+			(visible = "isStepClassPick")
+
+			(style
+				(width = 100%)
+				(alpha = "isStepClassPick ? 1 : 0")
+				(visualOffsetY = "isStepClassPick ? 0px : 10px")
+			)
+
+			(macro DEFAULT_VISIBILITY_ANIMATION_BY_TRIGGER
+				_trigger =			"_step"
+				_compareValue =		"SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SHIP_CLASS_PICK"
+			)
+
+			(element RareCrewBookPromotionShipClassPickerLayout
+				_selectedShipClass = "_selectedShipClass"
+			)
+		)
+
+		(block
+			(visible = "isStepEpicSkillsDraft")
+
+			(style
+				(width = 100%)
+				(alpha = "isStepEpicSkillsDraft ? 1 : 0")
+				(visualOffsetY = "isStepEpicSkillsDraft ? 0px : 10px")
+			)
+
+			(macro DEFAULT_VISIBILITY_ANIMATION_BY_TRIGGER
+				_trigger =			"_step"
+				_compareValue =		"SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SKILLS_DRAFT"
+				_delayShow =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+			)
+
+			(element RareCrewBookPromotionEpicSkillDraftLayout)
+		)
+
+		(block
+			(visible = "isStepAdditionalSkillSetPick")
+
+			(style
+				(width = 100%)
+				(alpha = "isStepAdditionalSkillSetPick ? 1 : 0")
+				(visualOffsetY = "isStepAdditionalSkillSetPick ? 0px : 10px")
+			)
+
+			(macro DEFAULT_VISIBILITY_ANIMATION_BY_TRIGGER
+				_trigger =			"_step"
+				_compareValue =		"SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.RANDOM_SKILL_SET_PICK"
+				_delayShow =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+			)
+
+			(element RareCrewBookPromotionAdditionalEpicSkillSetPickerLayout)
+		)
+	)
+)
+
+
+(def element RareCrewBookPostPromotionContent (_crewId:number, _hasNewPortraitLanded:bool, _isOldPortraitHidden:bool, _isInitControlsEnabled:bool, _isNewLayoutShown:bool)
+	(scope
+		(event evOldPortraitMovementStarted)
+		(event evOldPortraitMovementEnded)
+
+		(var rareCrewLearning:dhComponent =		"getSingleComponent(CC.rareCrewLearning)")
+		(var draftedSkills:array =				"rareCrewLearning.draftedSkills"				(event "rareCrewLearning.evChanged"))
+		(var pickedRandomSkillSetIndex:number =	"rareCrewLearning.pickedRandomSkillSetIndex"	(event "rareCrewLearning.evChanged"))
+		(var randomSkillSetsToPick:array =		"rareCrewLearning.randomSkillSetsToPick"		(event "rareCrewLearning.evChanged"))
+		(var pickedSkillSet:array =				"randomSkillSetsToPick[pickedRandomSkillSetIndex]")
+
+		(struct crew =	PULL_CREW(_crewId = "_crewId"))
+		(var shipId:number = "crew.component.shipID > 0 ? crew.component.shipID : crew.component.specializationID")
+
+		(var baseUrl:str =				"crew.component.baseUrl ?: ''"				(event "crew.component.evRankChanged"))
+		(var overlayUrl:str =			"crew.component.overlayUrl ?: ''"			(event "crew.component.evRankChanged"))
+		(var initialRarity:number =		"crew.component.rarity"		watch=false)
+		(var isSpineAnimation:bool =	"crew.component.isAnimated")
+	)
+
+	(style
+		(position = "absolute")
+		(top = 0px)
+		(left = 0px)
+		(align = "center")
+	)
+
+	
+	(block
+		(bind visible "_hasNewPortraitLanded")
+
+		(style
+			(width = "CREW_PORTRAIT.LARGE.width + 2 * XS")
+			(height = "CREW_PORTRAIT.LARGE.height + 2 * XS")
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(controller $Tooltip
+			(renderer = 'CrewTooltip')
+			(bind enabled "_hasNewPortraitLanded")
+			(args
+				_crewId =						"_crewId"
+				_targetShipId =					"shipId"
+				_noMouseInstruction =			true
+				_noContextMenuInstruction =		true
+			)
+
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+	
+
+	(block
+		(style
+			(bind hitTest "_isInitControlsEnabled")
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(macro TRANSITION_ANIM_ALPHA
+			_trigger =		"!_isOldPortraitHidden"
+			_duration =		"PROMOTE_CREW_ANIM_DURATIONS.SHARED.HIDE_OLD_PORTRAIT"
+		)
+
+		(controller $Instance renderer = 'CrewPortraitWithBGR'
+			(bind enabled "!_hasNewPortraitLanded")
+			(args
+				_rarity =				"initialRarity"
+				_portraitWidth =		"CREW_PORTRAIT.LARGE.width"
+				_portraitHeight =		"CREW_PORTRAIT.LARGE.height"
+				_isSpineAnimation =		"isSpineAnimation"
+				_borderSize =			"XS"
+				_baseUrl =				"baseUrl"
+				_overlayUrl =			"overlayUrl"
+			)
+		)
+
+		(controller $Tooltip
+			(renderer = 'CrewTooltip')
+			(bind enabled "_isInitControlsEnabled")
+			(args
+				_crewId =						"_crewId"
+				_targetShipId =					"shipId"
+				_noMouseInstruction =			true
+				_noContextMenuInstruction =		true
+			)
+
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(position = "absolute")
+		)
+
+		(controller $Instance renderer='CrewPromotedAnimated'
+			(bind enabled "!_isInitControlsEnabled")
+			(args
+				_rarity =				"SC.Common.UNIFIED_ITEM_RARITY.RARE"
+				_baseUrl =				"baseUrl"
+				_overlayUrl =			"overlayUrl"
+				_isSpineAnimation =		"isSpineAnimation"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 0px)
+			(align = "center")
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(marginLeft = -50%)
+				(top = -207px)			
+			)
+
+			(block
+				(style
+					(hitTest = false)
+					(marginBottom = "SXS")
+					(alpha = 0)
+					(visualOffsetY = 10px)
+				)
+
+				(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+					_trigger =		"_isNewLayoutShown"
+					_delay =		"0"
+					_duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+				)
+
+				(element CrewNameWithIcon
+					_crewId =			"_crewId"
+					_isBig =			true
+					_isAutoSized =		true
+					_isCenterAligned =	true
+				)
+			)
+		)
+
+		(hblock
+			(style
+				(hitTest = false)
+				(align = "center")
+				(marginTop = "M")
+				(marginBottom = "MS")
+				(hgap = "M")
+				(alpha = 0)
+				(visualOffsetY = 10px)
+			)
+
+			(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+				_trigger =		"_isNewLayoutShown"
+				_delay =		"0.5"
+				_duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+			)
+
+			(hblock
+				(style (hgap = "M"))
+
+				(controller $Repeat renderer='EpicSkillWithShipClassWrapper'
+					(bind count "draftedSkills.length")
+					(args
+						_skillData =			"draftedSkills[$index]"
+						_isMarkerNewEnabled =	false
+					)
+				)
+			)
+
+			(hblock
+				(style (hgap = "M"))
+
+				(controller $Repeat renderer='EpicSkillWithShipClassWrapper'
+					(bind count "pickedSkillSet.length")
+					(args
+						_skillData =			"pickedSkillSet[$index]"
+						_isMarkerNewEnabled =	false
+					)
+				)
+			)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(alpha = 0)
+				(visualOffsetY = 10px)
+			)
+
+			(macro DEFAULT_MODAL_WINDOW_CONTENT_BLOCK_APPEAR_ANIMATION
+				_trigger =		"_isNewLayoutShown"
+				_delay =		"1"
+				_duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+			)
+
+			(element DefaultButton
+				_enabled =			"_isNewLayoutShown"
+				_focusIndex =		"_isNewLayoutShown ? 0 : BUTTON_FOCUS_STATE.UNFOCUSABLE"
+				_defaultFocused =	false
+				_type =				"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_label =			'IDS_CLOSE_UPPER_CASE'
+				_name =				'btn_cancel'
+			)
+		)
+	)
+
+	(controller $Animation
+		(controllerEvents
+			evMovementStopped
+		)
+
+		(bindcall play
+			duration =		"PROMOTE_CREW_ANIM_DURATIONS.RARE.OLD_PORTRAIT_MOVEMENT"
+			from =			"{ left: 0px }"
+			to =			"{ left: 216px }"
+			easing =		"Easing.quart_in"
+			action =		"killAll"
+			watch =			false
+			onEndedEvent =	'evMovementStopped'
+			(event "evOldPortraitMovementStarted")
+		)
+
+		(dispatch evOldPortraitMovementEnded		dir="EventDirection.UP"		on='evMovementStopped')
+	)
+)
+
+
+(def element RareCrewBookPromotionStepDescription (_step:number)
+	(scope
+		(var promotionStepPrefixText:str = "subst('IDS_RARE_CREW_BOOK_PROMOTION_STEP_PREFIX', [], { _step: _step + 1, _totalSteps: RARE_CREW_BOOK_PROMOTION_STEP_DATA.length })")
+	)
+
+	(style (width = 100%))
+
+	(hblock
+		(style (marginBottom = "SXS"))
+
+		(tf
+			(class $TextDefaultBold20NM)
+			(style
+				(alpha = "TC")
+				(marginRight = "S")
+			)
+
+			(bind text "promotionStepPrefixText")
+		)
+
+		(tf
+			(class $TextDefaultBold20NM)
+			(style (alpha = "TA"))
+
+			(bind text "RARE_CREW_BOOK_PROMOTION_STEP_DATA[_step].title")
+		)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(width = 100%)
+			(alpha = "TC")
+		)
+
+		(bind text "RARE_CREW_BOOK_PROMOTION_STEP_DATA[_step].hint")
+	)
+)
+
+(def element EpicSkillWithShipClassWrapper (_skillData:array = [], _isMarkerNewEnabled:bool = true)
+	(scope
+		(var skillType:number =		"_skillData[0] ?: 0")
+		(var shipType:str =			"_skillData[1] ?: ''")
+		(var skillEntity:dhEntity =	"getPrimaryEntity(CC.skill, skillType + '_1_' + shipType)")
+	)
+
+	(element EpicSkillWithShipClass
+		_entity =				"skillEntity"
+		_isMarkerNewEnabled =	"_isMarkerNewEnabled"
+	)
+)
+
+(def element EpicSkillWithShipClass (_entity:dhEntity, _isMarkerNewEnabled:bool)
+	(scope
+		(var isNewSkillInCollection:bool = "_entity.hasComponent(CC.newItem) && _isMarkerNewEnabled")
+		(var shipType:str = "_entity.skill.shipType")
+	)
+
+	(style
+		(align = "center")
+		(width = "CREW_SKILL_ICON_SIZE")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(element EpicSkillOfRareCrewBook
+		_entity =					"_entity"
+		_isNewSkillInCollection =	"isNewSkillInCollection"
+		_isTooltipShown =			false
+	)
+
+	(block
+		(style (marginTop = 1px))
+
+		(element ShipIcon
+			_shipType = "shipType"
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SkillTooltip')
+		(args
+			_skillKey =					"_entity.id"
+			_isNewSkillInCollection =	"isNewSkillInCollection"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element EpicSkillOfRareCrewBook (_entity:dhEntity, _isNewSkillInCollection:bool, _isTooltipShown:bool = true, _isSkillsDraft:bool = false, _isSelected:bool = false, _isAnySkillSelected:bool = false)
+	(scope
+		(var skill:dhComponent =	"_entity.skill")
+		(var name:str =				"skill.name")
+		(var image:str =			"'url:../crew_commander/skills/' + name + '.png'")
+	)
+
+	(style
+		(width = "CREW_SKILL_ICON_SIZE")
+		(height = "CREW_SKILL_ICON_SIZE")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "image")
+			(bind alpha "_isSkillsDraft && !_isSelected && _isAnySkillSelected ? 0.3 : 1")
+		)
+	)
+
+	(block
+		(style (position = "absolute"))
+
+		(element CrewSkillEpicIcon)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = -1px)
+			(right = 38px)
+		)
+
+		(controller $Instance renderer='MarkerNew'
+			(bind enabled "_isNewSkillInCollection")
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SkillTooltip')
+		(bind enabled "_isTooltipShown")
+		(args
+			_skillKey =					"_entity.id"
+			_mouseInstruction =			"_isSkillsDraft	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+															text:			!_isSelected	? 'IDS_RARE_CREW_BOOK_CREW_SKILL_SELECT_INSTRUCTION'
+																							: 'IDS_RARE_CREW_BOOK_CREW_SKILL_UNSELECT_INSTRUCTION' }
+														: null"
+			_isNewSkillInCollection =	"_isNewSkillInCollection"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+
+
+
+(def element RareCrewBookPromotionShipClassPickerLayout (_selectedShipClass:str)
+	(style
+		(width = 100%)
+		(vgap = "XS")
+	)
+
+	(controller $Repeat renderer='RareCrewBookPromotionShipClassPickerItem'
+		(count = "SC.Common.SHIP_TYPE.RARE_BOOK_SPECIALIZATION.length")
+		(args
+			_isSelected = "_selectedShipClass == SC.Common.SHIP_TYPE.RARE_BOOK_SPECIALIZATION[$index]"
+		)
+	)
+)
+
+(def element RareCrewBookPromotionShipClassPickerItem (_isSelected:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var shipType:str = "SC.Common.SHIP_TYPE.RARE_BOOK_SPECIALIZATION[$index]")
+
+		(var bgState:number = " _isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+
+	(style
+		(width = 100%)
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(borderRadius = "XS")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(controller $Tooltip
+			(renderer = 'ShipBranchTypeTooltip')
+			(args
+				_shipType = "shipType"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element MenuItemBackground
+			_state = "bgState"
+		)
+
+		(macro MOUSE_HANDLER
+			_enabled =			"!_isSelected"
+			_soundSet =			"'default_button'"
+			_dispatchedEv =		"'evSetRareBookPromotionClass'"
+			_dispatchParams =	"{ value: shipType }"
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(align = "middle")
+			(width = 100%)
+			(height = 42px)
+			(paddingLeft = "MS")
+			(paddingRight = "MS")
+			(bind alpha "_isSelected ? 1 : 0.8")
+		)
+
+		(element ShipTypeWithText
+			_textAlpha =	"TA"
+			_iconSize =		30
+			_shipType =		"shipType"
+			_textClass =	'$TextDefaultBold20NM'
+		)
+	)
+)
+
+
+
+
+(def element RareCrewBookPromotionEpicSkillDraftLayout ()
+	(scope
+		(var rareCrewLearning:dhComponent =	"getSingleComponent(CC.rareCrewLearning)")
+		(var skillsToDraft:array =			"rareCrewLearning.skillsToDraft"	(event "rareCrewLearning.evChanged"))
+	)
+
+	(style
+		(width = 100%)
+		(vgap = "XS")
+	)
+
+	(controller $Repeat renderer='RareCrewBookPromotionEpicSkillsDraftSet'
+		(bind count "skillsToDraft.length")
+	)
+)
+
+(def element RareCrewBookPromotionEpicSkillsDraftSet ()
+	(scope
+		(var setIndex:number = "$index")
+		(var selectedForDraftSkillInRowCollection:dhCollection = "getCollection(CC.skill).getChildByPath('skillsSelectedForDrafting.byRows.' + setIndex)")
+
+		(var rareCrewLearning:dhComponent =		"getSingleComponent(CC.rareCrewLearning)")
+		(var skillsToDraft:array =				"rareCrewLearning.skillsToDraft"	(event "rareCrewLearning.evChanged"))
+		(var skillsToDraftSet:array =			"skillsToDraft[setIndex]")
+	)
+
+	(style
+		(flow = "horizontal")
+		(align = "center")
+		(width = 100%)
+		(paddingTop = "SXS")
+		(paddingBottom =  "SXS")
+		(hgap = "MS")
+		(borderRadius = "XS")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	)
+
+	(controller $Repeat renderer='EpicSkillInDraftSetItem'
+		(bind count "skillsToDraftSet.length")
+		(args
+			_skillType =			"skillsToDraftSet[$index]"
+			_isAnySkillSelected =	"toBool(selectedForDraftSkillInRowCollection.length)"
+			_setIndex =				"setIndex"
+		)
+	)
+)
+
+(def element EpicSkillInDraftSetItem (_skillType:number, _isAnySkillSelected:bool, _setIndex:number)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var rareCrewLearning:dhComponent =		"getSingleComponent(CC.rareCrewLearning)")
+		(var pickedShipType:str =				"rareCrewLearning.pickedShipType"		(event "rareCrewLearning.evChanged"))
+
+		(var skillEntity:dhEntity =				"getPrimaryEntity(CC.skill, _skillType + '_1_' + pickedShipType)")
+		(var isSelected:bool =					"skillEntity.hasComponent(CC.crewSkillLearningSelection)")
+		(var isNewSkillInCollection:bool =		"skillEntity.hasComponent(CC.newItem)")
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "[ SC.Ui_methods.CREW_METHODS.SELECT_RARE_CREW_BOOK_SKILL_FOR_DRAFTING, { row: _setIndex, skillIndex: $index } ]" watch=false on='leftClick')
+
+	(style
+		(width = "CREW_SKILL_SLOT_SIZE")
+		(height = "CREW_SKILL_SLOT_SIZE")
+		(padding = "XS")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(bind visible "isSelected")
+
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(padding = "-XS")
+			(bind alpha "rollOver && !mouseDown	? 1 : 0.7")
+		)
+
+		(block
+			(class $Fullsize)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(scale9grid = 2)
+			)
+
+			(colorTransform = "COLOR_TRANSFORM_ACCENT_BLUE")
+		)
+	)
+
+	(element EpicSkillOfRareCrewBook
+		_entity =					"skillEntity"
+		_isNewSkillInCollection =	"isNewSkillInCollection"
+		_isSkillsDraft =			true
+		_isSelected =				"isSelected"
+		_isAnySkillSelected =		"_isAnySkillSelected"
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "!isSelected ? 'button_skill' : ''")
+)
+
+
+
+
+(def element RareCrewBookPromotionAdditionalEpicSkillSetPickerLayout ()
+	(scope
+		(var rareCrewLearning:dhComponent =			"getSingleComponent(CC.rareCrewLearning)")
+		(var isAlternativeSkillSetUnlocked:bool =	"rareCrewLearning.isAlternativeSkillSetUnlocked"	(event "rareCrewLearning.evIsAlternativeSkillSetUnlockedChanged"))
+		(var pickedRandomSkillSetIndex:number =		"rareCrewLearning.pickedRandomSkillSetIndex"		(event "rareCrewLearning.evChanged"))
+	)
+
+	(style
+		(width = 100%)
+		(vgap = "XS")
+	)
+
+	(controller $Repeat renderer='RareCrewBookPromotionAdditionalEpicSkillSet'
+		(count = "RARE_CREW_BOOK_PROMOTION.RANDOM_SKILL_SETS_MAX_AMOUNT")
+		(args
+			_isSelected =	"$index == pickedRandomSkillSetIndex"
+			_isUnlocked =	"$index == 0 || isAlternativeSkillSetUnlocked"
+		)
+	)
+)
+
+(def element RareCrewBookPromotionAdditionalEpicSkillSet (_isSelected:bool, _isUnlocked:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var rareCrewLearning:dhComponent =		"getSingleComponent(CC.rareCrewLearning)")
+		(var randomSkillSetsToPick:array =		"rareCrewLearning.randomSkillSetsToPick"	(event "rareCrewLearning.evChanged"))
+		(var skillSet:array =					"randomSkillSetsToPick[$index]")
+
+		(var bgState:number = "	!_isUnlocked	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								_isSelected		? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var isInteractable:bool = "!_isSelected && _isUnlocked")
+	)
+
+	(bindcall externalCall "isInteractable ? 'inputMapping.onAction' : ''" "[ SC.Ui_methods.CREW_METHODS.SET_RARE_CREW_BOOK_RANDOM_SKILL_SET, { skillSetIndex:  $index } ]"	watch=false on='leftClick')
+
+	(style
+		(align = "center")
+		(width = 100%)
+		(height = 111px)
+
+		(borderRadius = "XS")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(element MenuItemBackground
+			_state = "bgState"
+		)
+	)
+
+	(block
+		(bind visible "_isUnlocked")
+
+		(class $Fullsize)
+		(style
+			(flow = "horizontal")
+			(align = "center")
+			(hgap = "L")
+			(paddingTop = "M")
+			(paddingBottom = "S")
+		)
+
+		(controller $Repeat renderer='EpicSkillWithShipClassWrapper'
+			(bind enabled "_isUnlocked")
+			(bind count "skillSet.length")
+			(args
+				_skillData = "skillSet[$index]"
+			)
+		)
+	)
+
+	(block
+		(bind visible "!_isUnlocked")
+
+		(class $Fullsize)
+		(style (align = "center|middle"))
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../crew_commander/rare_crew_learning/skill_set_locked.png')
+				(backgroundSize = "align")
+				(alpha = 0.75)
+			)
+		)
+
+		(element DefaultButton
+			_type =			"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_label =		'IDS_UNLOCK_ADDITIONAL_SKILL_SET_BUTTON_LABEL'
+			_width =		180px
+			_size =			"SIZE.SMALL"
+			_methods =		"[{ type: 'inputMapping.onRequest', name: SC.Ui_methods.CREW_METHODS.OPEN_UNLOCK_ADDITIONAL_SKILL_SET_WINDOW, args: {} }]"
+		)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isInteractable ? 'default_button' : ''")
+)

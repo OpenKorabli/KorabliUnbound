@@ -1,0 +1,796 @@
+(def constant BATTLE_LOADING_TABS_ELEMENTS "[
+	'Tasks',
+	'TeamBattlePageContainer',
+	'BattleTipsContent',
+	'DynamicDivisions'
+]")
+
+(def constant GAME_MODES_YOUR_GOAL "[
+	SC.Battle.GAME_MODE.KEY_BATTLE,
+	SC.Battle.GAME_MODE.PORTAL_2021,
+	SC.Battle.GAME_MODE.WAFFENTRAGER
+]")
+
+(def constant GAME_MODES_JUST_GOAL "[
+	SC.Battle.GAME_MODE.BATTLE_CHALLENGES,
+	SC.Battle.GAME_MODE.BATTLE_TRIALS,
+	SC.Battle.GAME_MODE.AWESOME
+]")
+
+
+(def element BattleLoading ()
+	(macro MODAL_WINDOW_INIT)
+
+	(scope
+		(event evMakeArmsRaceRulesSeen)
+
+		(var spectatorStateEntity:dhEntity = "getSingleEntity(CC.spectatorState)")
+		(var isTrainingRoomSpectator:bool = "spectatorStateEntity.spectatorState.state == SC.Common.SPECTATOR_STATE.TRAINING_SPECTATOR")
+
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var battleType:str = "battleInfoComponent.battleType")
+		(var gameModeId:number = "battleInfoComponent.gameModeId")
+		(var maxDivisions:number = "battleInfoComponent.maxDivisions")
+		(var mapBGPath:str = "'url:' + battleInfoComponent.mapBGPathInWindow")
+
+		(var customElementsVisibilityComponent:dhComponent = "getSingleComponent(CC.customElementsVisibility)")
+		(var enabledElements:number = "customElementsVisibilityComponent.enabledElements" (event "customElementsVisibilityComponent.evChanged"))
+		(var disabledElements:number = "customElementsVisibilityComponent.disabledElements" (event "customElementsVisibilityComponent.evChanged"))
+
+		(var isClanBattle:bool = "battleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE")
+
+		
+		
+		(var isTipsTabDisabled:bool = true)
+
+		(var myAvatarEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var divisionId:number = "myAvatarEntity.preBattlePlayerSimple.preBattleId" (event "myAvatarEntity.preBattlePlayerSimple.evPreBattleIdChanged"))
+
+		(var isBattletypeWithDynamicDivisions:bool = "isIn(battleType, SC.Common.BATTLE_TYPES.DYNAMIC_DIVISION_AVAILABLE)")
+
+		
+		(struct userPrefs = USER_PREF_DATA())
+		(var battleLoadingTabIndex:number = "userPrefs.prefs.battleLoadingTabIndex")
+
+		(var isFirstBattle:bool = "battleInfoComponent.scenario == SC.Common.FIRST_BATTLE_INFO.FIRST_BATTLE")
+		(var isDynamicDivisionsEnabled:bool = "isBattletypeWithDynamicDivisions && !isFirstBattle && maxDivisions > 0")
+
+		(var isFirstArmsRaceBattle:bool = "gameModeId == SC.Battle.GAME_MODE.ARMS_RACE && !userPrefs.prefs.armsRaceInstructionsSeen")
+
+		(var isForcedSwitchFromTips:bool = "isTipsTabDisabled && battleLoadingTabIndex == SC.Common.BATTLE_LOADING_TAB.TIPS")
+		(var isForcedSwitchFromDivisions:bool = "battleLoadingTabIndex == SC.Common.BATTLE_LOADING_TAB.DYNAMIC_DIVISIONS && !isDynamicDivisionsEnabled")
+
+		
+		
+		(var isForcedSwitchToTasks:bool = "isFirstArmsRaceBattle || isForcedSwitchFromTips || battleLoadingTabIndex == null")
+
+		
+		
+		(var isForcedSwitchToTips:bool = "isForcedSwitchFromDivisions")
+
+		(var isVoiceChatEnabled:bool = "isClanBattle ||
+										divisionId != 0 && isIn(battleType, SC.Common.BATTLE_TYPES.CHAT_AVAILABLE)"
+		)
+
+		(var invitationToDivisionCollection:dhCollection = "getCollection(CC.invitationToDivision)")
+	)
+
+	(bindcall externalCall 	'inputMapping.onAction'
+							"[	isTrainingRoomSpectator ||
+								isForcedSwitchToTasks ||
+								isForcedSwitchToTips 	? 'setUserPref'
+														: '',
+							{
+								name: 'battleLoadingTabIndex',
+								value: 	isTrainingRoomSpectator ? SC.Common.BATTLE_LOADING_TAB.TEAMS :
+										isForcedSwitchToTasks 	? SC.Common.BATTLE_LOADING_TAB.TASKS
+																: SC.Common.BATTLE_LOADING_TAB.TIPS
+							}]"
+
+							watch = false
+							on = 'addedToStage'
+	)
+
+	(bindcall externalCall 'inputMapping.onAction' "['setUserPref', {name: 'armsRaceInstructionsSeen', value: true}]" (event "evMakeArmsRaceRulesSeen"))
+
+	(bindcall externalCall 'inputMapping.onAction' "['BattleHints.refresh', {}]" on='addedToStage')
+
+	
+	(dispatch evMakeArmsRaceRulesSeen delay=1 on='addedToStage' (bind enabled "isFirstArmsRaceBattle"))
+
+	(style
+		(backgroundSize = "cover")
+		(bind backgroundImage "mapBGPath")
+	)
+
+	(element DeclareBlurLayer)
+
+	(block
+		(class $Fullsize)
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+		
+		(block
+			(bind visible "!isTrainingRoomSpectator")
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(paddingTop = "{720:M, 1080:L}")
+			)
+
+			(element BattleLoadingMainTabButtons
+				_isTipsTabDisabled 			= "isTipsTabDisabled"
+				_isDynamicDivisionsEnabled 	= "isDynamicDivisionsEnabled"
+			)
+		)
+
+		
+		(block
+			(class $Fullsize)
+			(style
+				(align = "center")
+				(paddingTop = "{720:L, 1080:XL}")
+			)
+
+			
+			(block
+				(style
+					(align = "center")
+					(height = 100%)
+
+					(bind width "battleLoadingTabIndex == SC.Common.BATTLE_LOADING_TAB.TASKS ? 1280px : 100%")
+					(bind paddingTop "	battleLoadingTabIndex == SC.Common.BATTLE_LOADING_TAB.TASKS ? L :
+										battleLoadingTabIndex == SC.Common.BATTLE_LOADING_TAB.TIPS 	? {720:0px, 1080:L}
+																									: 0px"
+					)
+				)
+
+				(controller $Instance
+					(bind renderer "BATTLE_LOADING_TABS_ELEMENTS[battleLoadingTabIndex]")
+					(args
+						_isBattleLoading 			= true
+						_isDynamicDivisionsEnabled 	= "isDynamicDivisionsEnabled"
+					)
+					(reuseElement = true)
+				)
+			)
+
+			
+			(block
+				(bind visible "!isTrainingRoomSpectator")
+				(style
+					(position = "absolute")
+					(width = "{1280:210px, 1920:260px}")
+					(marginRight = -50%)
+					(bind right "(stageWidth - 1280px) / 4")
+				)
+
+				(controller $Instance renderer='DynamicDivisionsRightPanel'
+					(bind enabled "battleLoadingTabIndex == SC.Common.BATTLE_LOADING_TAB.DYNAMIC_DIVISIONS")
+					(args
+						_isDynamicDivisionsEnabled 	= "isDynamicDivisionsEnabled"
+						_isVoiceChatEnabled 		= "isVoiceChatEnabled"
+					)
+				)
+			)
+
+			
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+				(style (width = 100%))
+
+				(element FooterWrapperForBattle)
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(bottom = "SXS")
+				(left = "SXS")
+				(width = 19px)
+				(height = 17px)
+			)
+
+			(element VoiceChatOutgoingIcon)
+		)
+
+		
+		(hblock
+			(style
+				(position = "absolute")
+				(bind bottom "37px + (stageHeight - 720px) / 3")
+			)
+
+			(controller $Repeat renderer='InvitationToDivision'
+				(bind count "invitationToDivisionCollection.length")
+				(args
+					_invitationEntity 		= "invitationToDivisionCollection.getEntityAtIndex($index)"
+					_isBlurEnabled 			= true
+					_isContrastPanelEnabled = true
+					_isHotkeysEnabled 		= false
+				)
+			)
+		)
+	)
+)
+
+(def element Tasks ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(struct isBlurOptionEnabledPref = GET_PREF_BOOL(_option="'graphics.GUI.blur'"))
+
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var gameModeId:number = "battleInfoComponent.gameModeId")
+
+		(var tasksRenderer:str = "gameModeId == SC.Battle.GAME_MODE.PVE ? 'BattleLoadingPVETasks' : 'BattleLoadingStandartTasks'")
+	)
+
+	(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 1)
+
+	(style
+		(flow = "horizontal")
+		(align = "center")
+		(width = 100%)
+		(paddingLeft = 36px)
+		(paddingRight = 36px)
+	)
+
+	(element DeclareBlurLayer)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 6)
+		(style (marginRight = "XL"))
+
+		(element BattleMinimap _isLoading=true)
+	)
+
+	
+	(block
+		(style (width = 700px))
+
+		(block
+			(class $FullsizeAbsolute)
+
+			(controller $Instance renderer='BlurMap'
+				(bind enabled "isBlurOptionEnabledPref.value")
+				(args
+					_blurType = "BLUR_TYPE.LOW_SPHERE"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance
+				(bind renderer "tasksRenderer")
+			)
+		)
+	)
+)
+
+(def element BattleLoadingStandartTasks ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(struct stageSize = STAGE_SIZE())
+
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var gameModeId:number = "battleInfoComponent.gameModeId")
+		(var gameMode:str = "battleInfoComponent.gameMode")
+		(var gameModeDescription:str = "battleInfoComponent.gameModeDescription")
+		(var gameModeGoal:str = "	gameModeId in GAME_MODES_YOUR_GOAL 	? 'IDS_YOUR_GOAL' :
+									gameModeId in GAME_MODES_JUST_GOAL 	? 'IDS_JUST_GOAL'
+																		: 'IDS_TEAM_GOALS'"
+		)
+		(var customElementsVisibilityComponent:dhComponent = "getSingleComponent(CC.customElementsVisibility)")
+		(var enabledElements:number = "customElementsVisibilityComponent.enabledElements" (event "customElementsVisibilityComponent.evChanged"))
+		(var customisedElements:number = "customElementsVisibilityComponent.customisedElements" (event "customElementsVisibilityComponent.evChanged"))
+
+		(var isChallengeDisciplinesVisible:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.DISCIPLINES_ON_LOADING) > 0")
+		(var isTrialsDescriptionVisible:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.TRIALS_DESCR_ON_LOADING) > 0")
+		(var isDreadnoughtCustomisation:bool = "(customisedElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.DREADNOUGHT) > 0")
+
+		(var gameModeDescriptionItemsAmount:number = "	gameModeId == SC.Battle.GAME_MODE.ANTI_STANDARD 		? 2:
+														gameModeId == SC.Battle.GAME_MODE.ATTACK_DEFENSE 		? 5:
+														gameModeId == SC.Battle.GAME_MODE.TEAM_BATTLE_ROYALE 	? 3:
+														gameModeId == SC.Battle.GAME_MODE.ARMS_RACE 			? 2:
+														gameModeId == SC.Battle.GAME_MODE.PORTAL_2021 			? 1:
+														isDreadnoughtCustomisation 								? 1
+																												: 0"
+		)
+
+		(var extraDescriptionItemsAmount:number = "	gameModeId == SC.Battle.GAME_MODE.ARMS_RACE 			? 4 :
+													gameModeId == SC.Battle.GAME_MODE.PORTAL_2021 			? 4 :
+													gameModeId == SC.Battle.GAME_MODE.CONVOY_EVENT 			? 2 :
+													gameModeId == SC.Battle.GAME_MODE.CONVOY_AIRSHIP 		? 4 :
+													gameModeId == SC.Battle.GAME_MODE.TEAM_BATTLE_ROYALE 	? 2 :
+													isDreadnoughtCustomisation 								? 6
+																											: 0"
+		)
+		(var holdingPointsMessageCollection:dhCollection = "getCollection(CC.holdingPointsMessage)")
+		(var localWeatherEntity:dhEntity = "getSingleEntity(CC.localWeather)")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 3)
+		(style (width = 100%))
+
+		(tf
+			(class $TextDefaultBold28NM)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+				(alpha = "TA")
+			)
+			(bind text "gameModeGoal")
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 3.5)
+		(style (width = 100%))
+
+		(tf
+			(class $TextDefault20NM)
+			(style
+				(width = 100%)
+				(marginBottom = "LS")
+				(leading = -3)
+				(alpha = "TC")
+			)
+			(bind text "gameModeDescription")
+		)
+	)
+
+
+	
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='GameModeRulesDescription'
+			(bind enabled "gameModeDescriptionItemsAmount > 0")
+			(args
+				_bulletsCount = "gameModeDescriptionItemsAmount"
+				_gameModeName = "isDreadnoughtCustomisation ? 'DREADNOUGHT' : gameMode"
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "LS")
+		)
+
+		(controller $Instance renderer='GameModeRulesDescriptionWithIconsBlock'
+			(bind enabled "extraDescriptionItemsAmount > 0 && stageSize.height >= 900")
+			(args
+				_bulletsCount = "extraDescriptionItemsAmount"
+				_gameModeName = "isDreadnoughtCustomisation ? 'DREADNOUGHT' : gameMode"
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "holdingPointsMessageCollection.length > 0")
+
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 4)
+
+		(style
+			(width = 100%)
+			(marginBottom = "SXS")
+		)
+
+		(block
+			(tf
+				(class $TextDefaultBold28NM)
+				(style
+					(width = 100%)
+					(marginBottom = "MS")
+					(alpha = "TA")
+				)
+				(text = 'IDS_CHARGING_POINTS')
+			)
+
+			(element PointsCharge)
+		)
+	)
+
+	
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='LocalWeatherDescription'
+			(bind enabled "localWeatherEntity != null")
+		)
+	)
+
+	(block
+		(bind visible "gameModeId == SC.Battle.GAME_MODE.FORTS")
+
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 5)
+
+		(style
+			(width = 100%)
+			(marginTop = 14px)
+		)
+
+		(tf
+			(class $TextDefaultBold28NM)
+			(style
+				(width = 100%)
+				(marginBottom = "SXS")
+				(alpha = "TA")
+			)
+			(text = 'IDS_GAMEMODE_FORTS_GOAL_TITLE')
+		)
+
+		(tf
+			(class $TextDefault20NM)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+				(leading = -3)
+				(alpha = "TC")
+			)
+			(bindcall substitute
+				imageOffset = 5
+				substitutionMap = "{'[icon_1]': 'icon_ground_artillery_type_1_ally',
+									'[icon_2]': 'icon_ground_radar_ally',
+									'[icon_3]': 'icon_ground_artillery_type_1_enemy',
+									'[icon_4]': 'icon_ground_radar_enemy'}"
+				sourceText = 'IDS_GAMEMODE_FORTS_GOAL_DESCRIPTION'
+				postfix = ''
+				init = true
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='BattleChallengesDescriptionOnLoadingContainer'
+			(bind enabled "isChallengeDisciplinesVisible")
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='BattleTrialsDescriptionOnLoadingContainer'
+			(bind enabled "isTrialsDescriptionVisible")
+		)
+	)
+)
+
+(def element BattleTipsContent (_isBattleStats:bool)
+	(name = 'BattleTipsContent')
+
+	(scope
+		(macro DEFAULT_APPEAR_ANIMATION_SCOPE)
+	)
+
+	(style
+		(align = "center")
+		(width = 100%)
+	)
+
+	(macro DEFAULT_APPEAR_ANIMATION
+		_duration 	= 0.15
+		_delay 		= 0.1
+		_isEnabled 	= "!_isBattleStats"
+		_isCached 	= true
+	)
+
+	(element BattleGalleryViewer)
+)
+
+(def element GameModeRulesDescription (_bulletsCount:number=0, _gameModeName:str='')
+	(style
+		(width = 100%)
+		(marginBottom = "LS")
+		(vgap = "MS")
+	)
+
+	(tf
+		(class $TextDefaultBold28NM)
+		(style (alpha = "TA"))
+		(bind text "'IDS_' + toUpper(_gameModeName) + '_RULES_HEADER'")
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(vgap = "SXS")
+		)
+
+		(controller $Repeat renderer='UnorderedListItem'
+			(bind count "_bulletsCount")
+			(args
+				_text 				= "'IDS_' + toUpper(_gameModeName) + '_RULES_BULLET_'"
+				_isUseIndexForIDS 	= true
+				_listStyleType 		= "_bulletsCount > 1 ? 'IDS_BULLET' : null"
+				_textClass 			= '$TextDefault20NM'
+			)
+		)
+	)
+)
+
+(def element GameModeRulesDescriptionWithIconsBlock (	_gameModeName:str = '',
+														_hideHeader:bool = false,
+														_bulletsCount:number = 0)
+	(style (width = 100%))
+
+	(tf
+		(bind visible "!_hideHeader")
+		(class $TextDefaultBold28NM)
+		(style
+			(marginBottom = "MS")
+			(alpha = "TA")
+		)
+		(bind text "'IDS_' + toUpper(_gameModeName) + '_ICON_RULES_HEADER'")
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(vgap = "SXS")
+		)
+
+		(controller $Repeat renderer='GameModeRulesDescriptionWithIcons'
+			(bind count "_bulletsCount")
+			(args
+				_textClass 		= '$TextDefault20NM'
+				_hideHeader 	= true
+				_gameModeName 	= "_gameModeName"
+			)
+		)
+	)
+)
+
+(def element GameModeRulesDescriptionWithIcons (_gameModeName:str = '',
+												_hideHeader:bool = false,
+												_headerTextClass:str = '$TextDefaultBold18NM',
+												_textClass:str = '$TextDefault18NM')
+	(scope
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var gameModeId:number = "battleInfoComponent.gameModeId")
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var teamId:number = "selfPlayerEntity.avatar.teamId")
+
+		(var iconPostfix:str = "gameModeId == SC.Battle.GAME_MODE.CONVOY_EVENT ? '_' + teamId : ''")
+	)
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+	)
+
+	
+	(block
+		(style
+			(width = 30px)
+			(height = 30px)
+			(marginRight = "S")
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:../battle_tasks/rules/icon_rules_' + toLower(_gameModeName) + '_' + $index + iconPostfix + '.png'")
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginTop = "S")
+		)
+
+		(tf
+			(bind visible "!_hideHeader")
+			(bind class "_headerTextClass")
+			(style
+				(width = 100%)
+				(marginBottom = "S")
+				(alpha = "TA")
+			)
+			(bind text "'IDS_GAMEMODE_' + toUpper(_gameModeName) + '_RULES_DESCRIPTION_TITLE_' + $index")
+		)
+
+		(tf
+			(bind class "_textClass")
+			(style
+				(width = 100%)
+				(alpha = "TC")
+			)
+			(bind text "'IDS_GAMEMODE_' + toUpper(_gameModeName) + '_RULES_DESCRIPTION_TEXT_' + $index")
+		)
+	)
+)
+
+(def element TeamBattlePageContainer (	_isBattleStats:bool = false,
+										_isBattleLoading:bool = false,
+										_isDynamicDivisionsEnabled:bool = false)
+	(scope
+		(macro DEFAULT_APPEAR_ANIMATION_SCOPE)
+
+		(var selectedShipInfoComponent:dhComponent = "getSingleComponent(CC.selectedShipInfo)")
+		(var selectedAvatarId:number = "selectedShipInfoComponent.selectedAvatarId" (event "selectedShipInfoComponent.evChanged"))
+	)
+
+	(class $Fullsize)
+
+	(style (align = "center"))
+
+	(macro DEFAULT_APPEAR_ANIMATION
+		_duration 	= 0.15
+		_delay 		= 0.15
+		_offset 	= 5px
+		_isEnabled 	= "!_isBattleStats"
+		_isCached 	= true
+	)
+
+	(scrollArea
+		(style
+			(width = "2 * HALF_TABLE_WIDTH + 25px")
+			(maxHeight = 100%)
+		)
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_wheelScrollAcceleration 	= "0.8"
+			_hasHorizontalBorderOffset 	= "true"
+		)
+
+		(content
+			(style
+				(width = 100%)
+				(align = "center")
+			)
+
+			(element TeamBattlePage
+				_isDynamicDivisionsEnabled 	= "_isDynamicDivisionsEnabled"
+				_isBattleLoading 			= "_isBattleLoading"
+				_isBattleStats 				= "_isBattleStats"
+			)
+
+			(block
+				(bind visible "selectedAvatarId != 0")
+				(style (marginTop = "{720:M, 1080:L}"))
+
+				(element ShipInfoOnTeamBattlePage
+					_isBattleStats = "_isBattleStats"
+				)
+			)
+		)
+	)
+)
+
+(def element DynamicDivisionsRightPanel (_isVoiceChatEnabled:bool, _isDynamicDivisionsEnabled:bool)
+	(scope
+		(struct isBlurOptionEnabledPref = GET_PREF_BOOL(_option="'graphics.GUI.blur'"))
+	)
+
+	(style (width = 100%))
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='BlurMap'
+			(bind enabled "isBlurOptionEnabledPref.value")
+			(args
+				_blurType = "BLUR_TYPE.LOW_SPHERE"
+			)
+		)
+	)
+
+	(element RightPanelInfo
+		_headerText = 'IDS_DIVISIONS_IN_BATTLE_HEADER'
+		_infoText 	= 'IDS_DYNAMIC_DIVISIONS_INFO'
+	)
+
+	
+	(block
+		(style
+			(width = 100%)
+			(marginLeft = "XXS")
+		)
+
+		(controller $Instance renderer='VoiceChatRightPanelControl'
+			(bind enabled "_isVoiceChatEnabled")
+		)
+	)
+
+	
+	(block
+		(style
+			(width = 100%)
+			(marginLeft = "XXS")
+		)
+
+		(controller $Instance renderer='InvitationsToDivisionRightPanelControl'
+			(bind enabled "_isDynamicDivisionsEnabled")
+		)
+	)
+)
+
+(def element VoiceChatRightPanelControl (_isBattleStats:bool=false)
+	(scope
+		(macro DEFAULT_APPEAR_ANIMATION_SCOPE)
+
+		(struct voiceChatEnabledPref = GET_PREF_BOOL(_option="'sound.voice.chat.enabled'"))
+	)
+
+	(style
+		(width = 100%)
+		(marginTop = "M")
+	)
+
+	(macro DEFAULT_APPEAR_ANIMATION
+		_duration 	= 0.15
+		_delay 		= 0.1
+		_isEnabled 	= "!_isBattleStats"
+		_isCached 	= true
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = 'IDS_ENABLE_VOICE_CHAT_IN_BATTLE_HINT'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element CheckBox
+		_isChecked 	= "voiceChatEnabledPref.value"
+		_label 		= 'IDS_ENABLE_VOICE_CHAT'
+		_maxTfWidth = 180px
+		_methods 	= "	[{
+							type: 'direct.action',
+							name: 'option.set',
+							args: {preferenceId: 'sound.voice.chat.enabled', newValue: !voiceChatEnabledPref.value}
+						}]"
+	)
+)
+
+(def element InvitationsToDivisionRightPanelControl (_isBattleStats:bool=false)
+	(scope
+		(macro DEFAULT_APPEAR_ANIMATION_SCOPE)
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var isInvitationsEnabled:bool = "selfPlayerEntity.battleInvite.invitationsEnabled" (event "selfPlayerEntity.battleInvite.evInvitationsEnabledChanged"))
+	)
+
+	(style
+		(width = 100%)
+		(marginTop = "M")
+	)
+
+	(macro DEFAULT_APPEAR_ANIMATION
+		_duration 	= 0.15
+		_delay 		= 0.1
+		_isEnabled 	= "!_isBattleStats"
+		_isCached 	= true
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = 'IDS_ENABLE_INVITATIONS_TO_DIVISION_IN_BATTLE_HINT'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element CheckBox
+		_isChecked 	= "isInvitationsEnabled"
+		_label 		= 'IDS_ENABLE_INVITATIONS_TO_DIVISION'
+		_maxTfWidth = 180px
+		_methods 	= "	[{
+							type: 'inputMapping.onAction',
+							name: 'toggleInvitationsEnabled',
+							args: {}
+						}]"
+	)
+)

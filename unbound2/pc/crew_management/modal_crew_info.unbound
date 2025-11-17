@@ -15,10 +15,12 @@
 
 		(var rarity:number =					"crew.component.rarity" (event "crew.component.evRarityChanged"))
 		(var isCrewElite:bool =					"rarity == SC.Common.UNIFIED_ITEM_RARITY.ELITE")
-		(var canCrewBeUpgradedToElite:bool =	"isIn(rarity, SC.Common.UNIFIED_ITEM_RARITY.COMMANDERS_CAN_BECOME_ELITE)")
 		(var isMaxLevel:bool =					"crew.component.isMaxLevel"			(event "crew.component.evLevelUp"))
 		(var crewNation:str =					"crew.component.nation ?: ''"		(event "crew.component.evChanged"))
 		(var timeRent:number =					"crew.component.timeRent ?: 0"		(event "crew.component.evTimeRentChanged") (event "crew.component.evChanged"))
+
+		(var canCrewBeUpgradedToRare:bool =		"isIn(rarity, SC.Common.UNIFIED_ITEM_RARITY.COMMANDERS_CAN_BECOME_RARE)")
+		(var canCrewBeUpgradedToElite:bool =	"isIn(rarity, SC.Common.UNIFIED_ITEM_RARITY.COMMANDERS_CAN_BECOME_ELITE)")
 
 		(var shipId:number = "crew.component.shipID > 0 ? crew.component.shipID : crew.component.specializationID")
 		(macro PULL_SHIP_SCOPE "shipId" "'shipEntity'" "'shipInfo'")
@@ -42,11 +44,23 @@
 
 		(var crewDataEntity:dhEntity =	"getSingleEntity(CC.crewData)")
 		(var crewData:dhComponent =		"crewDataEntity.crewData")
-		(var booksAmount:number =		"crewData.eliteCrewBooksCount ?: 0"		(event "crewData.evEliteCrewBooksCountChanged"))
-		(var doesPlayerHaveBook:bool =	"booksAmount > 0")
-		(var canConvertIntoElite:bool =	"doesPlayerHaveBook && !isRental && canCrewBeUpgradedToElite")
 
+		(var rareCrewLearningEntity:dhEntity =	"getSingleEntity(CC.rareCrewLearning)")
+		(var rareCrewLearning:dhComponent =		"rareCrewLearningEntity.rareCrewLearning")
+
+		(var rareBooksAmount:number =	"rareCrewLearning.rareCrewBooksCount ?: 0"		(event "rareCrewLearning.evRareCrewBooksCountChanged"))
+		(var eliteBooksAmount:number =	"crewData.eliteCrewBooksCount ?: 0"				(event "crewData.evEliteCrewBooksCountChanged"))
+
+		(var doesPlayerHaveRareBook:bool =	"rareBooksAmount > 0")
+		(var doesPlayerHaveEliteBook:bool =	"eliteBooksAmount > 0")
+
+		(var canConvertIntoRare:bool =	"doesPlayerHaveRareBook && !isRental && canCrewBeUpgradedToRare")
+		(var canConvertIntoElite:bool =	"doesPlayerHaveEliteBook && !isRental && canCrewBeUpgradedToElite")
+
+		(var doesPlayerHaveNewRareBooks:bool =	"rareCrewLearningEntity.hasComponent(CC.newItem)")
 		(var doesPlayerHaveNewEliteBooks:bool =	"crewDataEntity.hasComponent(CC.newItem)")
+
+		(var isNewRareBookMarkerShown:bool =	"doesPlayerHaveNewRareBooks && canCrewBeUpgradedToRare")
 		(var isNewEliteBookMarkerShown:bool =	"doesPlayerHaveNewEliteBooks && canCrewBeUpgradedToElite")
 
 		(var hasCrewEntity:bool = "crew.entity != null")
@@ -60,7 +74,7 @@
 	)
 
 	
-	(bindcall externalCall "hasCrewEntity ? '' : 'inputMapping.onRequest'" "[CREW_ACTIONS.CLOSE_SKILLS_INFO_WINDOW, { }]"	watch=false (bind trigger "hasCrewEntity"))
+	(bindcall externalCall "hasCrewEntity ? '' : 'inputMapping.onRequest'" "[SC.Ui_methods.CREW_METHODS.CLOSE_SKILLS_INFO_WINDOW, { }]"	watch=false (bind trigger "hasCrewEntity"))
 
 	(dispatch evShowSkills dir="EventDirection.NONE" delay="0.2" reset=true (bind trigger "selectedShipClass"))
 	(bindcall externalCall "'inputMapping.onAction'" "['featureSeen', { featureIndex: 5 }]" watch=false (event "freeExp_evClicked"))
@@ -101,8 +115,8 @@
 				(element DockResourcesWidget
 					_name =		'eliteXPBalance'
 					_currency =	"SC.Common.CURRENCIES.ELITE_XP"
+					_label =	'IDS_CONVERT_FREE_EXPERIENCE_SHORT'
 					_height =	47px
-					_isStatic = true
 				)
 			)
 
@@ -115,7 +129,7 @@
 				(element DockResourcesWidget
 					_name = 'freeExpBalance'
 					_currency = "SC.Common.CURRENCIES.FREE_XP"
-					_label = 'IDS_CONVERT_FREE_EXPERIENCE_SHORT'
+					_label = 'IDS_CONVERT_ELITE_EXPERIENCE_SHORT'
 					_height = 47px
 					_isMarkerVisible = "isFreeExpNew"
 				)
@@ -145,12 +159,53 @@
 				)
 			)
 
+			(block
+				(style
+					(width = 100%)
+					(bind marginTop "canConvertIntoRare || canConvertIntoElite || isCrewElite	? isSmallPanel	? S : SXS
+																								: 0")
+				)
+
+				(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "canConvertIntoRare || canConvertIntoElite || isCrewElite"))
+			)
+
 			
 			(block
 				(style
 					(width = 100%)
-					(bind marginTop "isCrewElite	? isSmallPanel	? S
-																	: SXS
+					(bind marginTop "canConvertIntoRare		? isSmallPanel	? S : SXS
+															: 0")
+				)
+
+				(controller $Instance renderer='CrewConvertionBlock'
+					(bind enabled "canConvertIntoRare")
+					(args
+						_convertionType =	"SC.Common.CREW_BOOK_TYPE.RARE"
+						_crewId =			"_crewId"
+						_shipId =			"shipId"
+						_isNoNation =		"crewNation == SC.Common.NATION.COMMON"
+						_booksAmount =		"rareBooksAmount"
+						_isNewMarkerShown =	"isNewRareBookMarkerShown"
+					)
+				)
+			)
+			
+
+			(block
+				(style
+					(width = 100%)
+					(bind marginTop "canConvertIntoRare && canConvertIntoElite	? isSmallPanel	? S : SXS
+																				: 0")
+				)
+
+				(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "canConvertIntoRare && canConvertIntoElite"))
+			)
+
+			
+			(block
+				(style
+					(width = 100%)
+					(bind marginTop "isCrewElite	? isSmallPanel	? S : SXS
 													: 0")
 				)
 
@@ -170,18 +225,18 @@
 			(block
 				(style
 					(width = 100%)
-					(bind marginTop "canConvertIntoElite	? isSmallPanel	? S
-																			: SXS
+					(bind marginTop "canConvertIntoElite	? isSmallPanel	? S : SXS
 															: 0")
 				)
 
-				(controller $Instance renderer='CrewConvertionIntoEliteBlock'
+				(controller $Instance renderer='CrewConvertionBlock'
 					(bind enabled "canConvertIntoElite")
 					(args
+						_convertionType =	"SC.Common.CREW_BOOK_TYPE.ELITE"
 						_crewId =			"_crewId"
 						_shipId =			"shipId"
 						_isNoNation =		"crewNation == SC.Common.NATION.COMMON"
-						_booksAmount =		"booksAmount"
+						_booksAmount =		"eliteBooksAmount"
 						_isNewMarkerShown =	"isNewEliteBookMarkerShown"
 					)
 				)
@@ -467,30 +522,40 @@
 	)
 )
 
-(def element CrewConvertionIntoEliteBlock (_crewId:number, _shipId:number, _isNoNation:bool, _booksAmount:number, _isNewMarkerShown:bool = false)
+(def element CrewConvertionBlock (_convertionType:number, _crewId:number, _shipId:number, _isNoNation:bool, _booksAmount:number, _isNewMarkerShown:bool = false)
 	(scope
-		(var crewDataEntity:dhEntity =	"getSingleEntity(CC.crewData)")
-		(var shipOwnEntity:dhEntity =	"getPrimaryEntity(CC.ownShip, _shipId)")
-		(var shipOwnComponent:dhComponent = "shipOwnEntity.ownShip")
+		(var isConvertionToRare:bool = "_convertionType == SC.Common.CREW_BOOK_TYPE.RARE")
+
+		(var rareCrewLearningEntity:dhEntity =	"getSingleEntity(CC.rareCrewLearning)")
+		(var rareCrewLearning:dhComponent =		"rareCrewLearningEntity.rareCrewLearning")
+		(var promotionStep:number =				"rareCrewLearning.currentLearningStep"		(event "rareCrewLearning.evCurrentLearningStepChanged"))
+		(var isConvertionInProgress:bool =		"promotionStep != SC.Common.RARE_CREW_BOOK_PROMOTION_STEP.SHIP_CLASS_PICK")
+
+		(var crewDataEntity:dhEntity =			"getSingleEntity(CC.crewData)")
+		(var shipOwnEntity:dhEntity =			"getPrimaryEntity(CC.ownShip, _shipId)")
+		(var shipOwnComponent:dhComponent =		"shipOwnEntity.ownShip")
+
+		(var markerNewEntityId:number =			"isConvertionToRare ? rareCrewLearningEntity.id : crewDataEntity.id")
 
 		(var isShipReadyForBattle:bool =	"shipOwnComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "shipOwnComponent.evUpdateLock"))
 		(var isShipInBalancer:bool =		"shipOwnComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "shipOwnComponent.evUpdateLock"))
 		
 		(var isLocked:bool ="_isNoNation || isShipInBalancer || isShipReadyForBattle")
 
-		(var lockReasonTooltipStatus:dict = "	isShipInBalancer		? 	{ 	text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER',
-																				unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING } :
-												isShipReadyForBattle 	? 	{ 	text: 'IDS_CREW_EPIC_PROMOTE_DENY_REASON_IN_FORMATION',
-																				unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
-												_isNoNation 			? 	{	text: 'IDS_HINT_CREW_WITHOUT_NATION',
-																				unifiedStatus:  SC.Ui_styles.UNIFIED_STATUS.NEGATIVE }
-																		:	null")
+		(var lockReasonTooltipStatus:dict = "isShipInBalancer		? {	text:				'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER',
+																		unifiedStatus:		SC.Ui_styles.UNIFIED_STATUS.WARNING } :
+											 isShipReadyForBattle	? {	text:				isConvertionToRare		? 'IDS_CREW_RARE_PROMOTE_DENY_REASON_IN_FORMATION'
+																													: 'IDS_CREW_EPIC_PROMOTE_DENY_REASON_IN_FORMATION',
+																		unifiedStatus:		SC.Ui_styles.UNIFIED_STATUS.NEGATIVE } :
+											 _isNoNation 			? {	text:				'IDS_HINT_CREW_WITHOUT_NATION',
+																		unifiedStatus:		SC.Ui_styles.UNIFIED_STATUS.NEGATIVE }
+																	: null")
 	)
 
 	(style (width = 100%))
 
 	(hblock
-		(bindcall externalCall "_isNewMarkerShown ? 'inputMapping.onAction' : ''" "['makeSeen', { entityId: crewDataEntity.id }]" watch=false on='rollOver')
+		(bindcall externalCall "_isNewMarkerShown ? 'inputMapping.onAction' : ''" "['makeSeen', { entityId: markerNewEntityId }]" watch=false on='rollOver')
 
 		(style
 			(align = "middle")
@@ -506,8 +571,9 @@
 				(marginLeft = "-S")
 			)
 
-			(element EliteCrewBook
-				_amount = "_booksAmount"
+			(element CrewBook
+				_type =		"_convertionType"
+				_amount =	"_booksAmount"
 			)
 		)
 
@@ -519,7 +585,7 @@
 				(alpha = "TA")
 			)
 
-			(text = 'IDS_ELITE_CREW_MANUAL')
+			(text = "isConvertionToRare ? 'IDS_RARE_CREW_MANUAL' : 'IDS_ELITE_CREW_MANUAL'")
 		)
 
 		(block
@@ -535,7 +601,7 @@
 		)
 
 		(controller $Tooltip
-			(renderer = 'EliteCrewBookTooltip')
+			(bind renderer "isConvertionToRare ? 'RareCrewBookTooltip' : 'EliteCrewBookTooltip'")
 			(args
 				_amount = "_booksAmount"
 			)
@@ -555,14 +621,18 @@
 		)
 
 		(element DefaultButton
-			_type =				"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
-			_enabled =			"!isLocked"
-			_size =				"SIZE.SMALL"
-			_width =			180px
-			_focusIndex =		2
-			_label =			'IDS_ELITE_CREW_MANUAL_BUTTON_GIVE_LABEL'
-			_name =				'give_elite_manual'
-			_methods =			"[{ type: 'inputMapping.onRequest', name: CREW_ACTIONS.OPEN_PROMOTE_TO_ELITE_WINDOW, args: { crewId: _crewId } }]"
+			_type =			"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_enabled =		"!isLocked"
+			_size =			"SIZE.SMALL"
+			_width =		180px
+			_focusIndex =	2
+			_label =		"isConvertionToRare && isConvertionInProgress	? 'IDS_CREW_MANUAL_BUTTON_CONTINUE_LEARNING_LABEL'
+																			: 'IDS_CREW_MANUAL_BUTTON_GIVE_LABEL'"
+			_name =			"isConvertionToRare ? 'give_rare_manual' : 'give_elite_manual'"
+			_methods =		"[{	type:	'inputMapping.onRequest',
+								name:	isConvertionToRare	? SC.Ui_methods.CREW_METHODS.OPEN_PROMOTE_TO_RARE_WINDOW
+															: SC.Ui_methods.CREW_METHODS.OPEN_PROMOTE_TO_ELITE_WINDOW,
+								args:	{ crewId: _crewId } }]"
 		)
 	)
 )
@@ -622,7 +692,7 @@
 		(struct crewTalentUnlockPrice =	PULL_PRICE(_entityId = "TALENT_RESEARCH_ENTITY_PK_KEY"						_actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
 	)
 
-	(style (width = 320px))
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
@@ -736,13 +806,17 @@
 	)
 )
 
-(def element EliteCrewBook (_amount:number = 1)
-	(name = 'EliteCrewBook')
+(def element CrewBook (_type:number, _amount:number = 1)
+	(scope
+		(var isRare:bool = "_type == SC.Common.CREW_BOOK_TYPE.RARE")
+	)
+
+	(name = "isRare ? 'RareCrewBook' : 'EliteCrewBook'")
 
 	(style
 		(width = 80px)
 		(height = 80px)
-		(backgroundImage = 'url:../reward_icons/elite_crew_book.png')
+		(backgroundImage = "isRare ? 'url:../reward_icons/rare_crew_book.png' : 'url:../reward_icons/elite_crew_book.png'")
 	)
 
 	(block
@@ -758,16 +832,20 @@
 	)
 )
 
-(def element EliteCrewBookTooltip (_amount:number = 0, _rewardItem:dict = {})
-	(style (width = 320px))
-	
+(def element CrewBookTooltipContent (_type:number, _amount:number, _rewardItem:dict)
+	(scope
+		(var isConvertionToRare:bool = "_type == SC.Common.CREW_BOOK_TYPE.RARE")
+	)
+
+	(style (width = 100%))
+
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageUrl=			'url:../reward_icons/elite_crew_book.png'
+			_imageUrl=			"isConvertionToRare ? 'url:../reward_icons/rare_crew_book.png' : 'url:../reward_icons/elite_crew_book.png'"
 			_imageWidth =		80px
 			_imageHeight =		80px
-			_headerText =		'IDS_ELITE_CREW_MANUAL'
+			_headerText =		"isConvertionToRare ? 'IDS_RARE_CREW_MANUAL' : 'IDS_ELITE_CREW_MANUAL'"
 			_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.SIMPLE"
 		)
 
@@ -784,13 +862,13 @@
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemSecondaryHeaderText
-					_headerText = 'IDS_ELITE_CREW_MANUAL_PURPOSE_TOOLTIP_HEADER'
+					_headerText = 'IDS_CREW_MANUAL_PURPOSE_TOOLTIP_HEADER'
 				)
 			)
 
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemDescriptionText
-					_descriptionText = 'IDS_ELITE_CREW_MANUAL_PURPOSE_TOOLTIP_DESCRIPTION'
+					_descriptionText = "isConvertionToRare ? 'IDS_RARE_CREW_MANUAL_PURPOSE_TOOLTIP_DESCRIPTION' : 'IDS_ELITE_CREW_MANUAL_PURPOSE_TOOLTIP_DESCRIPTION'"
 				)
 			)
 		)
@@ -800,15 +878,35 @@
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemSecondaryHeaderText
-					_headerText = 'IDS_ELITE_CREW_MANUAL_CONDITIONS_TOOLTIP_HEADER'
+					_headerText = 'IDS_CREW_MANUAL_CONDITIONS_TOOLTIP_HEADER'
 				)
 			)
 
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemDescriptionText
-					_descriptionText = 'IDS_ELITE_CREW_MANUAL_CONDITIONS_TOOLTIP_DESCRIPTION'
+					_descriptionText = 'IDS_CREW_MANUAL_CONDITIONS_TOOLTIP_DESCRIPTION'
 				)
 			)
 		)
+	)
+)
+
+(def element EliteCrewBookTooltip (_amount:number = 0, _rewardItem:dict = {})
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	
+	(element CrewBookTooltipContent
+		_type = 		"SC.Common.CREW_BOOK_TYPE.ELITE"
+		_amount =		"_amount"
+		_rewardItem =	"_rewardItem"
+	)
+)
+
+(def element RareCrewBookTooltip (_amount:number = 0, _rewardItem:dict = {})
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	
+	(element CrewBookTooltipContent
+		_type = 		"SC.Common.CREW_BOOK_TYPE.RARE"
+		_amount =		"_amount"
+		_rewardItem =	"_rewardItem"
 	)
 )

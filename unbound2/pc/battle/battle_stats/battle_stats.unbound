@@ -1,0 +1,238 @@
+(def constant BATTLE_STATS_TABS "[
+	'TeamBattlePageContainer',
+	'DynamicDivisions',
+	'TaskBattleStats'
+]")
+
+
+(def element BattleStats (_isVisible:bool=false)
+	(scope
+		(macro DEFAULT_APPEAR_ANIMATION_SCOPE)
+		(event evBattleStatsHidden)
+
+		(struct stageSize = STAGE_SIZE())
+
+		(var myAccountEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var divisionId:number = "myAccountEntity.preBattlePlayerSimple.preBattleId" (event "myAccountEntity.preBattlePlayerSimple.evPreBattleIdChanged"))
+		(var teamId:number = "myAccountEntity.preBattlePlayerSimple.teamId")
+
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var battleType:str = "battleInfoComponent.battleType")
+		(var gameModeId:number = "battleInfoComponent.gameModeId")
+		(var maxDivisions:number = "battleInfoComponent.maxDivisions")
+
+		(var isBattletypeWithDynamicDivisions:bool = "isIn(battleType, SC.Common.BATTLE_TYPES.DYNAMIC_DIVISION_AVAILABLE)")
+		(var isFirstBattle:bool = "battleInfoComponent.scenario == SC.Common.FIRST_BATTLE_INFO.FIRST_BATTLE")
+		(var isDynamicDivisionsEnabled:bool = "isBattletypeWithDynamicDivisions && !isFirstBattle && maxDivisions > 0")
+		(var isVoiceChatEnabled:bool = "battleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE ||
+										divisionId != 0 && isIn(battleType, SC.Common.BATTLE_TYPES.CHAT_AVAILABLE)"
+		)
+		(var isTeamIdObserver:bool = "teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.OBSERVER_TEAM")
+
+		(struct userPrefs = USER_PREF_DATA())
+		(var tabStatsTabIndex:number = "userPrefs.prefs.tabStatsTabIndex ?: 0")
+		(var validTabIndex:number = "isTeamIdObserver || (tabStatsTabIndex == 1 && !isDynamicDivisionsEnabled) ? 0 : tabStatsTabIndex")
+		(var isRightPanelVisible:bool = "validTabIndex == 1")
+		(var isPlayerActionsEnable:bool = "validTabIndex == 0 && !isTeamIdObserver && !isFirstBattle")
+		(var isTeamBattlePage:bool = "validTabIndex == 0")
+
+		(var gameStatsCommandEntity:dhEntity = "getPrimaryEntity(CC.commandMappingCommandName, 'CMD_GAME_STATS')")
+		(var isBattleStatsCommandDown:bool = "gameStatsCommandEntity.commandMappingCommand.isDown" (event "gameStatsCommandEntity.commandMappingCommand.evIsDownChanged"))
+		(var isBattleStatsVisible:bool = "_isVisible && isBattleStatsCommandDown && gameModeId != SC.Battle.GAME_MODE.TUTORIAL")
+
+		(var invitationToDivisionCollection:dhCollection = "getCollection(CC.invitationToDivision)")
+	)
+
+	(bind visible "isBattleStatsVisible")
+
+	(dispatch evBattleStatsHidden dir="EventDirection.DOWN" (bind enabled "!isBattleStatsVisible") (bind trigger "isBattleStatsVisible"))
+
+	(style
+		(bind width "stageSize.width")
+		(bind height "stageSize.height")
+	)
+
+	(macro DEFAULT_APPEAR_ANIMATION
+		_duration 	= 0.1
+		_delay 		= 0.15
+		_offset 	= 0px
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0.8)
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/modal_battle.png')
+			(backgroundSize = "fill")
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(align = "center")
+			(paddingTop = "{720:M, 1080:L}")
+		)
+
+		
+		(block
+			(bind visible "!isTeamIdObserver && !isFirstBattle")
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element InBattleStatsMainTabButtons
+				_validTabIndex 				= "validTabIndex"
+				_isDynamicDivisionsEnabled 	= "isDynamicDivisionsEnabled"
+			)
+		)
+
+		
+		(block
+			(class $Fullsize)
+			(style
+				(align = "center")
+				(paddingTop = "{720:L, 1080:XL}")
+			)
+
+			
+			(block
+				(bind visible "validTabIndex == 0 && gameModeId != SC.Battle.GAME_MODE.ESCAPE_TO_PORTAL && !isTeamIdObserver && stageSize.width > 1400 && !isFirstBattle")
+				(style
+					(position = "absolute")
+					(top = 10px)
+					(width = "{1400:200px, 1920:240px}")
+					(height = 395px)
+
+					(bind left "-58px + ((stageSize.width - 1280px) / 2)") 
+				)
+
+				(element QuickCommandHelpPanel)
+			)
+
+			
+			(block
+				(class $Fullsize)
+				(style (align = "center"))
+
+				(controller $Instance
+					(bind renderer "BATTLE_STATS_TABS[validTabIndex]")
+					(args
+						_isBattleStats 				= true
+						_isBattleLoading 			= false
+						_isDynamicDivisionsEnabled 	= "isDynamicDivisionsEnabled"
+					)
+					(reuseElement = true)
+				)
+			)
+
+			
+			(block
+				(bind visible "!isTeamBattlePage && gameModeId != SC.Battle.GAME_MODE.ESCAPE_TO_PORTAL && !isFirstBattle && stageSize.width > 1400")
+				(style
+					(position = "absolute")
+					(top = 20px)
+					(width = 210px)
+
+					(bind right "-40px + ((stageSize.width - 1280px) / 4)") 
+				)
+
+				(macro DEFAULT_APPEAR_ANIMATION
+					_duration 	= 0.15
+					_delay 		= 0.1
+				)
+
+				
+				(block
+					(bind visible "isPlayerActionsEnable")
+					(style (width = 100%))
+
+					(element RightPanelInfo
+						_headerText 	= 'IDS_ACTIONS_WITH_PLAYERS_HEADER'
+						_infoText 		= 'IDS_ACTIONS_WITH_PLAYERS_HINT'
+						_isBattleStats 	= true
+					)
+				)
+
+				(block
+					(bind visible "isRightPanelVisible")
+					(style (width = 100%))
+
+					(element RightPanelInfo
+						_headerText 	= 'IDS_DIVISIONS_IN_BATTLE_HEADER'
+						_infoText 		= 'IDS_DYNAMIC_DIVISIONS_INFO'
+						_isBattleStats 	= true
+					)
+				)
+
+				
+				(block
+					(style
+						(width = 100%)
+						(marginLeft = "XXS")
+					)
+
+					(controller $Instance renderer='VoiceChatRightPanelControl'
+						(bind enabled "isVoiceChatEnabled")
+						(args
+							_isBattleStats = true
+						)
+					)
+				)
+
+				
+				(block
+					(style
+						(width = 100%)
+						(marginLeft = "XXS")
+					)
+
+					(controller $Instance renderer='InvitationsToDivisionRightPanelControl'
+						(bind enabled "isDynamicDivisionsEnabled")
+						(args
+							_isBattleStats = true
+						)
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "!isFirstBattle")
+			(style (width = 100%))
+
+			(element FooterWrapperForBattle)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(bottom = "SXS")
+			(left = "SXS")
+			(width = 19px)
+			(height = 17px)
+		)
+
+		(element VoiceChatOutgoingIcon)
+	)
+
+	
+	(hblock
+		(style
+			(position = "absolute")
+			(left = "XS")
+			(top = "XS")
+		)
+
+		(controller $Repeat renderer='InvitationToDivision'
+			(bind count "invitationToDivisionCollection.length")
+			(args
+				_invitationEntity = "invitationToDivisionCollection.getEntityAtIndex($index)"
+			)
+		)
+	)
+)

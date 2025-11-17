@@ -50,6 +50,31 @@
 	'")
 )
 
+(def constant MODAL_WINDOWS_WITHOUT_USELESS_ATTRIBUTES "[
+	SC.Ui_windows.MODAL.REWARD_CONTAINER,
+	SC.Ui_windows.MODAL.RESULT_SCREEN,
+	SC.Ui_windows.MODAL.RESULT_SCREEN_PORT,
+	SC.Ui_windows.MODAL.CREW_PROMOTE_TO_RARE,
+	'ModalWindowAlmanacs',
+	'ModalWindowArcEventMainScreen',
+	'ModalWindowArcEventConfirmSide',
+	'ModalWindowPostBattleSSE',
+	'ModalWindowClaimSseReward',
+	'ModalWindowSnowflakesTakeBonuses',
+	'ModalWindowSnowflakesConfirmChoice',
+	'ModalWindowRewardContainerWithoutAnimation',
+	'ModalWindowCrewInfo',
+	'ModalWindowUnlockCrewSkill'
+]")
+
+(def constant DOCK_ROUTES_WITHOUT_USELESS_ATTRIBUTES "[
+	SC.Ui_windows.ROUTE.LOOTBOXES,
+	SC.Ui_windows.ROUTE.STRATEGIC_ACTIONS,
+	SC.Ui_windows.ROUTE.SSE,
+	SC.Ui_windows.ROUTE.BATTLE_PASS,
+	SC.Ui_windows.ROUTE.CAMPAIGNS
+]")
+
 (def constant TOOLTIP_PARAMETER_WITHOUT_VALUE "'none'")
 
 (def constant WEAPON_PARAM_TYPE_TO_RENDERER	"
@@ -65,6 +90,8 @@
 	SIZE.SMALL	: '$TextDefaultBoldNM',
 	SIZE.MEDIUM	: '$TextDefaultBold20NM'
 }")
+
+(def constant UNLIMITED_CONSUMABLE_COUNT -1)
 
 
 (def macro SIMPLE_TOOLTIP_ANIMATION ()
@@ -898,38 +925,21 @@
 	)
 )
 
-(def element TooltipSystemParamsModifiersList (_attributesNegative:array=[], _attributesPositive:array=[], _attributesNeutral:array=[], _ownerId:number=0)
+
+
+(def element TooltipSystemParamsModifiersList (_attributesNegative:array = [], _attributesPositive:array = [], _attributesNeutral:array = [], _ownerId:number = 0)
 	(macro TOOLTIP_SYSTEM_PARAMS_CONTAINER)
 	(scope
 		(macro PULL_CURRENT_TOP_WINDOW_NAME)
 		
-		(struct portRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.WINDOWS.DOCK"))
-		(struct dockRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.WINDOWS.DOCK"))
+		(struct profileRoute =	PULL_FULL_ROUTE(_id = "SC.Ui_windows.MODAL.PROFILE"))
+		(struct dockRoute =		PULL_FULL_ROUTE(_id = "SC.Ui_windows.WINDOWS.DOCK"))
 
-		(var isInWindowWithoutUselessAttrs:bool =	"currentTopWindowName == 'ModalWindowAlmanacs' ||
-													currentTopWindowName == 'ModalWindowArcEventMainScreen' ||
-													currentTopWindowName == 'ModalWindowArcEventConfirmSide' ||
-													currentTopWindowName == 'ModalWindowPostBattleSSE' ||
-													currentTopWindowName == 'ModalWindowClaimSseReward' ||
-													currentTopWindowName == 'ModalWindowSnowflakesTakeBonuses' ||
-													currentTopWindowName == 'ModalWindowSnowflakesConfirmChoice' ||
-													currentTopWindowName == SC.Ui_windows.MODAL.REWARD_CONTAINER ||
-													currentTopWindowName == 'ModalWindowRewardContainerWithoutAnimation' ||
-													currentTopWindowName == 'ModalWindowCrewInfo' ||
-													currentTopWindowName == 'ModalWindowUnlockCrewSkill' ||
-													currentTopWindowName == SC.Ui_windows.MODAL.RESULT_SCREEN ||
-													currentTopWindowName == SC.Ui_windows.MODAL.RESULT_SCREEN_PORT")
+		(var isInWindowWithoutUselessAttrs:bool =		"isIn(currentTopWindowName, MODAL_WINDOWS_WITHOUT_USELESS_ATTRIBUTES)")
+		(var isInDockRouteWithoutUselessAttrs:bool =	"isIn(dockRoute.activeChild, DOCK_ROUTES_WITHOUT_USELESS_ATTRIBUTES)")
+		(var isInProfileRouteWithoutUselessAttrs:bool =	"profileRoute.activeChild == SC.Ui_windows.ROUTE.STATS")
 
-		(var isInPortRouteWithoutUselessAttrs:bool = "portRoute.activeChild == SC.Ui_windows.ROUTE.STATS")
-
-		(var isInDockRouteWithoutUselessAttrs:bool = "dockRoute.activeChild == SC.Ui_windows.ROUTE.LOOTBOXES ||
-													dockRoute.activeChild == SC.Ui_windows.ROUTE.STRATEGIC_ACTIONS ||
-													dockRoute.activeChild == SC.Ui_windows.ROUTE.SSE ||
-													dockRoute.activeChild == SC.Ui_windows.ROUTE.BATTLE_PASS ||
-													dockRoute.activeChild == SC.Ui_windows.ROUTE.CAMPAIGNS
-		")
-
-		(var notMarkUseless:bool = "isInWindowWithoutUselessAttrs || isInPortRouteWithoutUselessAttrs || isInDockRouteWithoutUselessAttrs")
+		(var notMarkUseless:bool = "isInWindowWithoutUselessAttrs || isInProfileRouteWithoutUselessAttrs || isInDockRouteWithoutUselessAttrs")
 	)
 
 	(block
@@ -1103,11 +1113,11 @@
 
 (def element ParamsModifierItemTooltipSystem (_attribute:dict, _notMarkUseless:bool, _ownerId:number=0)
 	(scope
-		(var parameterEntity:gfx = "'paramName' in _attribute && _ownerId ? $datahub.getPrimaryCompositeEntity(CC.parameter, _ownerId, _attribute.paramName) : null")
-		(var parameterView:gfx = "parameterEntity ? parameterEntity.parameterView : null")
+		(var parameterEntity:dhEntity = "'paramName' in _attribute && _ownerId ? getPrimaryCompositeEntity(CC.parameter, _ownerId, _attribute.paramName) : null")
+		(var parameterView:dhComponent = "parameterEntity.parameterView")
 
-		(var currentValue:str = "parameterView ? parameterView.currentValue : ''" (event "parameterEntity.parameterView.evCurrentValueChanged"))
-		(var isInfiniteCount:bool = "currentValue == 'inf'") 
+		(var currentValue:str = "parameterView ? parameterView.currentValue : ''" (event "parameterView.evCurrentValueChanged"))
+		(var isInfiniteCount:bool = "currentValue == UNLIMITED_CONSUMABLE_COUNT")
 		(var measuredValue:str= "	isInfiniteCount	? '' :
 									parameterView	? currentValue
 													: toString(_attribute.measuredValue)")
@@ -1138,7 +1148,8 @@
 		(class $TextDefaultNM)
 		(style
 			(width = 100%)
-			(leading = -3) (marginRight = 6px)
+			(leading = -3)
+			(marginRight = 6px)
 			(bind textColor "labelColor")
 			(bind alpha "isNegativeAttributeCategory && !measuredValue ? 1 : 0.8")
 		)
@@ -1148,7 +1159,10 @@
 
 	(tf
 		(class $TextDefaultNM)
-		(style (bind textColor "valueColor"))
+		(style
+			(bind textColor "valueColor")
+			(alpha = "TA")
+		)
 
 		(bindcall substitute imageOffset=5 substitutionMap="{	'[battleship]': 'battleship_small_own',
 																'[aircarrier]': 'carrier_small_own',
@@ -1171,8 +1185,11 @@
 	)
 )
 
-(def element TooltipSystemParamTextLine (_text:str, _value:str, _valueClass:str='$TextDefaultNM')
-	(style (flow = "horizontal") (width = 100%))
+(def element TooltipSystemParamTextLine (_text:str, _value:str, _valueClass:str='$TextDefaultNM', _isValueAlignRight:bool=false)
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+	)
 
 	(tf
 		(class $TextDefaultNM)
@@ -1183,15 +1200,22 @@
 		(bind text "_text")
 	)
 
-	(tf
-		(bind class "_valueClass")
+	(block
 		(style
 			(width = 100%)
-			(elideMode = true)
-			(wordWrap = false)
-			(alpha = "TA")
+			(bind align "_isValueAlignRight ? right : left")
 		)
-		(bind text "_value")
+
+		(tf
+			(bind class "_valueClass")
+			(style
+				(maxWidth = 100%)
+				(elideMode = true)
+				(wordWrap = false)
+				(alpha = "TA")
+			)
+			(bind text "_value")
+		)
 	)
 )
 

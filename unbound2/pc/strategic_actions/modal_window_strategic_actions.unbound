@@ -6,6 +6,14 @@
 (def constant PANEL_MARGINS_MEDIUM "{720: M, 1080: L}")
 (def constant PANEL_MARGINS_SMALL "{720: SXS, 1080: M}")
 (def constant PANEL_CONTENT_WIDTH "SC.Common.STRATEGIC_ACTIONS_UI.PANEL_WIDTH - 2 * L")
+(def constant REWARD_CARD_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED:	0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED:	0.2,
+	SC.Ui_styles.BUTTON_STATE.DOWN:		0.05,
+	SC.Ui_styles.BUTTON_STATE.OVER:		0.1,
+	SC.Ui_styles.BUTTON_STATE.UP:		0
+})
+
 
 (def struct THRESHOLDS_POINTS (_entityId:number)
 	(var entity:dhEntity = "getEntity(_entityId)")
@@ -44,8 +52,8 @@
 		(var observedTerritory:number = "strategicActionsEvent.observedTerritory ?: 0" (event "strategicActionsEvent.evObservedTerritoryChanged"))  
 		(var doneTerritories:number = "strategicActionsEvent.doneTerritories" (event "strategicActionsEvent.evDoneTerritoriesChanged"))
 		(var isOnboardingSeen:bool = "strategicActionsEvent.isOnboardingSeen" (event "strategicActionsEvent.evIsOnboardingSeenChanged"))
-
 		(var isObservingArchive:bool = "observedTerritory == SC.Common.STRATEGIC_ACTIONS_UI.ARCHIVE_VIEW_ID")
+		(var isNew:bool = "strategicActionsEntity.hasComponent(CC.newItem)")
 
 		(var territories:dhCollection = "getCollection(CC.strategicActionsTerritory)")
 		(var territoryMarkers:dhCollection = "getCollection(CC.strategicActionsTerritoryMarker)")
@@ -71,10 +79,39 @@
 		(var isMessageButtonVisible:bool = "isGlobalState || !isTerritoryLocked")
 
 		(var selectedState:str = "isGlobalState ? 'GlobalState' : 'TerritoryState'")
+
+		(var rulesButtonData:dict = "isAllTerritoriesCompleted ? {} : {
+				width: 170px,
+				label: 'IDS_MODAL_WINDOW_STRATEGIC_ACTIONS_RULES_BUTTON',
+				tooltipWarningText: 'IDS_NEWBIE_QUESTS_WARNING_BALANCER',
+				methods: [
+					{
+						type: 'inputMapping.onAction',
+						name: 'activateTipChain',
+						args: { tip_chain_id : SC.Context_guiding_tip.TIP_CHAIN_ID.STRATEGIC_ACTIONS_ONBOARDING_REPEAT }
+					},
+					{
+						type: 'inputMapping.onAction',
+						name: 'deactivateTipChain',
+						args: { tip_chain_id : SC.Context_guiding_tip.TIP_CHAIN_ID.STRATEGIC_ACTIONS_ONBOARDING }
+					}
+				]
+			}"
+		)
 	)
 	(dispatch evAddedToStage on='addedToStage')
-	(bindcall externalCall "!isOnboardingSeen ? 'inputMapping.onRequest' : ''" "['showStrategicActionsOnboarding', { }]" (event "evAddedToStage"))
-
+	(bindcall externalCall
+		"!isOnboardingSeen ? 'inputMapping.onRequest' : ''"
+		"['showBattleTypeRules', {	_rulesType: 'strategic_actions',
+									_buttonData: rulesButtonData}]"
+		(event "evAddedToStage")
+	)
+	(bindcall externalCall
+		"isNew ? 'inputMapping.onAction' : ''"
+		"['makeSeen', { entityId: strategicActionsEntity.id }]"
+		watch=false
+		(event "evAddedToStage")
+	)
 	(dispatch evCloseMessage args="{isMessageVisible:false}" dir="EventDirection.DOWN" (bind enabled "!isOnTop") (bind trigger "isOnTop"))
 
 	(name = "'window_ModalWindowStrategicActions'")
@@ -88,6 +125,7 @@
 			(bind trigger "isObservingArchive")
 		)
 	)
+
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
 		(block
@@ -112,6 +150,7 @@
 			)
 		)
 	)
+
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
 		(style
@@ -124,6 +163,7 @@
 			_name = 'btn_close'
 		)
 	)
+
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
 		(class $FullsizeAbsolute)
@@ -131,6 +171,7 @@
 			(bind enabled "!isStaticAnimBG && !isObservingArchive")
 		)
 	)
+
 	(block
 		(bind visible "isStaticAnimBG")
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
@@ -143,6 +184,7 @@
 			(backgroundImage = 'url:../events/strategic_actions/bg_panel_static.png')
 		)
 	)
+
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
 		(style
@@ -165,6 +207,7 @@
 			)
 		)
 	)
+
 	(block
 		(style
 			(hitTest = false)
@@ -230,8 +273,13 @@
 		(element DefaultButton
 			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
 			_label = 'IDS_STRATEGIC_ACTIONS_ONBOARDING'
-			_width = 160px
-			_methods="[{ type: 'inputMapping.onRequest', name: 'showStrategicActionsOnboarding', args: {} }]"
+			_methods = "[
+				{	type: 'inputMapping.onRequest',
+					name: 'showBattleTypeRules',
+					args: {	_rulesType: 'strategic_actions',
+							_buttonData: rulesButtonData }
+				}
+			]"
 		)
 	)
 )
@@ -267,7 +315,9 @@
 
 		(var thresholdReward:number = "rewards[selectedIndex][0]")
 		(var rewardEntity:dhEntity = "getEntity(thresholdReward)")
-		(var isShipReward:bool = "rewardEntity.rewardComponent.type == 'Ship'")
+		(var rewardComponent:dhComponent = "rewardEntity.rewardComponent")
+		(var isCoeffReward:bool = "REWARD_RESOURCE_ELEMENT[rewardComponent.subtype].rewardDefault == 'RewardResourcesCoeff'")
+		(var isShipReward:bool = "rewardComponent.type == 'Ship'")
 		(var shipId:number = "isShipReward ? toNumber(rewardEntity.rewardComponent.name) : null")
 		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
 
@@ -294,7 +344,7 @@
 	(block
 		(style
 			(width = 100%)
-			(marginBottom = "PANEL_MARGINS_SMALL")
+			(marginBottom = "PANEL_MARGINS_LARGE")
 			(paddingLeft = "L")
 			(paddingRight = "L")
 		)
@@ -344,10 +394,28 @@
 		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "thresholdReward" 3)
 		(class $Fullsize)
 		(style (align = "center"))
-		(element RewardBigCard
-			_rewardEntityId="thresholdReward"
-		)
+		(block
+			(element RewardBigCard
+				_rewardEntityId="thresholdReward"
+			)
+			(block
+				(bind visible "isCoeffReward")
+				(style
+					(position = "absolute")
+					(top = "M")
+					(right = 20px)
+					(width = 22px)
+					(height = 22px)
+					(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
+				)
 
+				(controller $Tooltip
+					(renderer='BonusInfoTooltip')
+					(bind enabled "isCoeffReward")
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+		)
 		(block
 			(style (bind marginTop "isStatusVisible ? {720:SXS, 1080:MS} : 0"))
 			(controller $Instance renderer='StatusLine'
@@ -381,21 +449,46 @@
 					_size = "SIZE.LARGE"
 					_defaultFocused = true
 					_focusIndex = 0
-					_methods = "[	{	type: 'inputMapping.onAction',
-										name: 'StrategicActionsProxyUSS.claimAllRewards',
-										args: {}},
-									{	type: 'inputMapping.onRequest',
-										name: 'openRewardsModalWithoutAnimation',
-										args: {	rewardsEntityId: strategicActionsEntity.id,
-												header: 'IDS_RECEIVED_LOOTBOXES_REWARDS'}},
-									{	type: 'inputMapping.onAction',
-										name: 'StrategicActionsProxyUSS.setStrategicActionsMessageSeen',
-										args: {territoryId: GLOBAL_VIEW_NAME}}]"
+					_methods = "[
+						{
+							type: 'inputMapping.onAction',
+							name: 'StrategicActionsProxyUSS.claimAllRewards',
+							args: {}
+						},
+						{
+							type: 'inputMapping.onRequest',
+							name: 'openRewardsModalWithoutAnimation',
+							args: {	rewardsEntityId: strategicActionsEntity.id,
+									header: 'IDS_RECEIVED_LOOTBOXES_REWARDS'}
+						},
+						{
+							type: 'inputMapping.onAction',
+							name: 'StrategicActionsProxyUSS.setStrategicActionsMessageSeen',
+							args: {territoryId: GLOBAL_VIEW_NAME}
+						}
+					]"
 				)
 			)
 		)
 	)
 )
+
+(def element BonusInfoTooltip ()
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_STRATEGIC_ACTIONS_INFO_BONUS_TOOLTIP_TITLE'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_STRATEGIC_ACTIONS_INFO_BONUS_TOOLTIP_TEXT'
+		)
+	)
+)
+
 
 (def element TerritoryState (_entityId:number)
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
@@ -444,11 +537,19 @@
 		(var textButton:str = "	isRewardsClaim	? 'IDS_STRATEGIC_ACTIONS_TERRITORY_REWARDS_CLAIM'
 												: 'IDS_STRATEGIC_ACTIONS_TERRITORY_AVAILABLE'")
 
-
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_PROGRESS,
-																												SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_TASKS,
-																												SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_REWARDS ]"))
+		(struct activeTip = PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId = SAFE_CHECK_ACTIVE_TIP_ID(
+			_tipId = "activeTip.tipId"
+			_validValues = "[
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_PROGRESS,
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_TASKS,
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_REWARDS,
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_PROGRESS_REPEAT,
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_TASKS_REPEAT,
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_REWARDS_REPEAT
+				]"
+			)
+		)
 	)
 
 	(class $Fullsize)
@@ -485,26 +586,22 @@
 
 			(tf
 				(bind name "'title_' + territoryId")
-
 				(class $TextDefaultBold24NM)
 				(style
 					(marginBottom = "{720:S, 1080:SXS}")
 					(alpha = "TA")
 				)
-
-				(bind text "toUpper(tr('IDS_TERRITORY_TITLE_' + toUpper(territoryId)))")
+				(bind text "toUpper(tr('IDS_TERRITORY_TITLE_' + territoryId))")
 			)
 
 			(hblock
 				(bind visible "isComplexityLevelVisible")
-
 				(tf
 					(class $TextDefault18NM)
 					(style
 						(marginRight = "XS")
 						(alpha = "TC")
 					)
-
 					(text = 'IDS_COMPLEXITY_COLON')
 				)
 
@@ -561,13 +658,14 @@
 			(controller $Instance renderer='StatusLine'
 				(bind enabled "isRewardsClaim || isCompleted")
 				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_unifiedStatus = "isRewardsClaim ? SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE : SC.Ui_styles.UNIFIED_STATUS.CHECK"
 					_text = "isRewardsClaim ? 'IDS_AVAILABLE_REWARD' : 'IDS_STRATEGIC_ACTIONS_TERRITORY_STATUS_DONE'"
 				)
 			)
 
 			(controller $Instance renderer='GuidingTipHub'
-				(bind enabled "checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_PROGRESS")
+				(bind enabled "	checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_PROGRESS ||
+								checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_PROGRESS_REPEAT")
 				(args
 					_tipId =			"checkedTipId.value"
 					_tipPositioning =	"TIP_POSITION_RIGHT"
@@ -665,7 +763,8 @@
 						)
 
 						(controller $Instance renderer='GuidingTipHub'
-							(bind enabled "checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_TASKS")
+							(bind enabled "	checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_TASKS ||
+											checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_TASKS_REPEAT ")
 							(args
 								_tipId =			"checkedTipId.value"
 								_tipPositioning =	"TIP_POSITION_RIGHT"
@@ -709,29 +808,41 @@
 					(block
 						(class $FullsizeAbsolute)
 						(style
-							(backgroundImage = 'url:../service_kit/panel_backgrounds/hint_panel_bold.png')
-							(scale9grid = 3)
-							(alpha = 0.2)
+							(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+							(borderRadius = "XS")
+							(alpha = "SSE_CARD_DARK_BLUE_BACKGROUND_ALPHA")
 						)
 					)
 
 					(block
 						(style
 							(width = 100%)
-							(paddingLeft = "M")
-							(paddingRight = "M")
-							(paddingTop = "SXS")
-							(paddingBottom = "SXS")
-							(backgroundColor = 0x66758b8b)
+							(height = 37px)
 						)
 
-						(tf
-							(class $TextDefaultBold20NM)
+						(block
+							(class $FullsizeAbsolute)
+							(style
+								(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+								(alpha = "SSE_CARD_HOVER_THUMB_ALPHA[SC.Ui_styles.BUTTON_STATE.SELECTED]")
+								(borderRadiusTopLeft = "XS")
+								(borderRadiusTopRight = "XS")
+							)
+						)
+
+						(block
 							(style
 								(width = 100%)
-								(alpha = "TA")
+								(paddingLeft = "M")
+								(paddingRight = "M")
+								(paddingTop = "SXS")
+								(paddingBottom = "SXS")
 							)
-							(text = 'IDS_STRATEGIC_ACTIONS_TERRITORY_ACTIVE_TASK_COLON')
+							(tf
+								(class $TextDefaultBold20NM)
+								(style (alpha = "TA"))
+								(text = 'IDS_STRATEGIC_ACTIONS_TERRITORY_ACTIVE_TASK')
+							)
 						)
 					)
 
@@ -768,7 +879,6 @@
 								(width = 100%)
 								(alpha = "TA")
 							)
-
 							(text = 'IDS_STRATEGIC_ACTIONS_POINTS_COLON')
 						)
 
@@ -790,8 +900,9 @@
 
 					(block
 						(style (width = 100%))
-
-						(controller $Instance renderer = 'HorizontalDividerTwoPx' (bind enabled "!isLocked"))
+						(controller $Instance renderer = 'HorizontalDividerTwoPx'
+							(bind enabled "!isLocked")
+						)
 					)
 
 					(block
@@ -810,7 +921,6 @@
 								(marginBottom = "S")
 								(alpha = "TA")
 							)
-
 							(text = 'IDS_SSE_TASK_RESTRICTIONS_COLON')
 						)
 
@@ -875,7 +985,8 @@
 					)
 
 					(controller $Instance renderer='GuidingTipHub'
-						(bind enabled "checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_REWARDS")
+						(bind enabled "	checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_REWARDS ||
+										checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_REWARDS_REPEAT")
 						(args
 							_tipId =			"checkedTipId.value"
 							_tipPositioning =	"TIP_POSITION_RIGHT"
@@ -926,24 +1037,37 @@
 				_enabled = "isAvailable || isRewardsClaim"
 				_label = "textButton"
 				_size = "SIZE.LARGE"
-				_methods = "[	{	type: 'inputMapping.onAction',
-									name: isAvailable ? 'StrategicActionsProxyUSS.selectTerritory' : 'StrategicActionsProxyUSS.claimTerritoryRewards',
-									args: {territoryID: territory.id}},
-								{	type: 'inputMapping.onRequest',
-									name: isAvailable ? '' : 'openRewardsModalWithoutAnimation',
-									args: {	rewardsEntityId: strategicActionsEntity.id,
-											header: 'IDS_RECEIVED_LOOTBOXES_REWARDS'}},
-								{	type: 'inputMapping.onAction',
-									name: isAvailable ? '' : 'StrategicActionsProxyUSS.setStrategicActionsMessageSeen',
-									args: {territoryId: territoryId}}]"
+				_methods = "[
+					{
+						type: 'inputMapping.onAction',
+						name: isAvailable ? 'StrategicActionsProxyUSS.selectTerritory' : 'StrategicActionsProxyUSS.claimTerritoryRewards',
+						args: {territoryID: territory.id}
+					},
+					{
+						type: 'inputMapping.onRequest',
+						name: isAvailable ? '' : 'openRewardsModalWithoutAnimation',
+						args: {	rewardsEntityId: strategicActionsEntity.id,
+								header: 'IDS_RECEIVED_LOOTBOXES_REWARDS'}
+					},
+					{
+						type: 'inputMapping.onAction',
+						name: isAvailable ? '' : 'StrategicActionsProxyUSS.setStrategicActionsMessageSeen',
+						args: {territoryId: territoryId}
+					}
+				]"
 			)
 		)
 	)
 )
 
-(def element StrategicActionsRewardCategory (	_isSelected:bool, _territoriesThreshold:number = 0, _rewardCategory:str='',
-												_isReceived:bool=false, _isRewardAvailable:bool=false)
+(def element StrategicActionsRewardCategory (	_isSelected:bool,
+												_territoriesThreshold:number = 0,
+												_rewardCategory:str='',
+												_isReceived:bool=false,
+												_isRewardAvailable:bool=false)
 	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
 		(macro STAGE_SIZE)
 		(struct strategicActionDimension = STRATEGIC_ACTIONS_DIMENSIONS(_stageWidth = "stageWidth" _stageHeight = "stageHeight"))
 
@@ -952,15 +1076,34 @@
 		(var iconSize:number = "strategicActionDimension.isLargeScreen ? 74 : 62")
 		(var iconMargin:number = "strategicActionDimension.isLargeScreen ? M : S")
 
-		(macro MOUSE_HANDLER_SCOPE)
+		(var state:number = "	_isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var cardAlpha:number = "REWARD_CARD_ALPHA[state]")
 	)
 	(style
 		(align = "center|middle")
-		(backgroundColor = "NO_COLOR")
+		(borderRadius = "XS")
+		(backgroundColor = 0x26000000)
 		(bind width "iconSize")
 		(bind height "iconSize")
 		(bind marginTop "iconMargin")
 		(bind marginLeft "iconMargin")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(borderRadius = "XS")
+			(alpha = "cardAlpha")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "state"
+			_alpha = "cardAlpha"
+		)
 	)
 
 	(element RewardCategory
@@ -969,21 +1112,11 @@
 		_isRewardActive = "isRewardActive"
 	)
 
-	(block
-		(class $FullsizeAbsolute)
-		(style
-			(scale9grid = 2)
-			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-			(bind alpha "	_isSelected	? 0.5 :
-							rollOver	? 0.2
-										: 0.1")
-		)
 
-		(macro MOUSE_HANDLER
-			_dispatchedEv = "'selectRewardCategory'"
-			_dispatchParams = "{ index: $index }"
-			_soundSet = "'button_battlepass_reward'"
-		)
+	(macro MOUSE_HANDLER
+		_dispatchedEv = "'selectRewardCategory'"
+		_dispatchParams = "{ index: $index }"
+		_soundSet = "'button_battlepass_reward'"
 	)
 
 	(controller $Tooltip
@@ -1009,11 +1142,13 @@
 	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(style (width = 340px))
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
 			_headerText = 'IDS_TOOLTIP_REWARDS_TITLE'
 		)
 		(element TooltipSystemHorizontalDivider)
+
 		(element TooltipSystemStatusLine
 			_unifiedStatus = "unifiedStatus"
 			_text = "text"
@@ -1023,6 +1158,7 @@
 
 (def element DividedCounterWithIcon (_curValue:number=0, _maxValue:number=0)
 	(style (flow = "horizontal"))
+
 	(element DefaultDividedCounter
 		_curValueTextClass = '$TextDefaultBold20NM'
 		_curValue = "_curValue"
@@ -1030,6 +1166,7 @@
 		_doNotAlphaOnZeroCurValue = true
 		_name = 'territory'
 	)
+
 	(block
 		(style
 			(width = 24px)
@@ -1044,11 +1181,13 @@
 (def element StrategicActionsPointsInfoTooltip ()
 	(style (width = 300px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
 			_headerText = 'IDS_STRATEGIC_ACTIONS_INFO_POINTS_TOOLTIP_TITLE'
 		)
 		(element TooltipSystemHorizontalDivider)
+
 		(element TooltipSystemDescriptionText
 			_descriptionText = 'IDS_STRATEGIC_ACTIONS_INFO_POINTS_TOOLTIP_TEXT'
 		)
@@ -1069,11 +1208,13 @@
 	)
 	(style (width = 340px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
 			_headerText = 'IDS_STRATEGIC_ACTIONS_TERRITORY_TASKS_LIST'
 		)
 		(element TooltipSystemHorizontalDivider)
+
 		(element TooltipSystemDescriptionText
 			_descriptionText = 'IDS_STRATEGIC_ACTIONS_TERRITORY_ACTIVE_TASK_TOOLTIP_TEXT'
 		)
@@ -1083,6 +1224,7 @@
 				(bind enabled "!isLocked")
 			)
 		)
+
 		(block
 			(bind visible "!isLocked")
 			(style (width = 100%))
@@ -1109,11 +1251,13 @@
 	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(style (width = 340px))
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
 			_headerText = 'IDS_STRATEGIC_ACTIONS_TERRITORY_TASKS_TOOLTIP_TITLE_SECONDARY'
 		)
 		(element TooltipSystemHorizontalDivider)
+
 		(controller $Repeat renderer='StrategicActionsTaskPointsRepeatItem'
 			(bind count "points.length")
 			(args
@@ -1139,6 +1283,7 @@
 		(flow = "horizontal")
 		(bind marginTop "$index ? SXS : 0")
 	)
+
 	(block
 		(bind visible "_thresholds.length")
 		(style (width = 100%))
@@ -1151,6 +1296,7 @@
 			(bind text "title")
 		)
 	)
+
 	(block
 		(element PriceTag
 			_priceInfo = "{currency: SC.Common.CURRENCIES.STRATEGIC_POINTS, finalPrice: _thresholdPoints[$index]}"
@@ -1205,13 +1351,18 @@
 	)
 )
 
-(def element StrategicActionsTaskTemplate (	_entityId:number, _isMultipleTasks:bool, _isOrTask:bool, _isMarker:bool=false,
-											_isThresholdTask:bool=false, _textClass:str='$TextDefault18NM', _taskIndex:str = '')
+(def element StrategicActionsTaskTemplate (	_entityId:number,
+											_isMultipleTasks:bool,
+											_isOrTask:bool,
+											_isMarker:bool=false,
+											_isThresholdTask:bool=false,
+											_textClass:str='$TextDefault18NM',
+											_taskIndex:str = '')
 	(scope
 		(var conditionsSetEntity:dhEntity = "getEntity(_entityId)")
 		(var taskDescriptionData:dict = "conditionsSetEntity.sseConditions.taskDescriptionData" (event "conditionsSetEntity.sseConditions.evConditionSetChanged"))
 		(var conditionCategory:str = "conditionsSetEntity.sseConditions.conditionCategory ?: ''" (event "conditionsSetEntity.sseConditions.evConditionSetChanged"))
-		(var thresholdTaskIds:str = "'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + toUpper(conditionCategory) + '_FULL'")
+		(var thresholdTaskIds:str = "'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + conditionCategory + '_FULL'")
 
 		(var taskDescription:str = "_isThresholdTask ? thresholdTaskIds : taskDescriptionData.ids")
 		(var isConjunctionVisible:bool = "_isMultipleTasks && $index == 0")
@@ -1221,6 +1372,7 @@
 		(width = 100%)
 		(bind paddingLeft "_isMarker ? SXS : 0")
 	)
+
 	(block
 		(bind visible "$index == 0 && _isMarker")
 		(style
@@ -1232,6 +1384,7 @@
 			(backgroundImage = 'url:../events/strategic_actions/task_marker.png')
 		)
 	)
+
 	(tf
 		(bind name "'task_'+ _taskIndex")
 		(bind class "_textClass")
@@ -1241,6 +1394,7 @@
 		)
 		(bind text "taskDescription")
 	)
+
 	(block
 		(bind visible "isConjunctionVisible")
 		(style
@@ -1293,7 +1447,11 @@
 	(dispatch evHideMessage dir="EventDirection.DOWN" args="{isMessageVisible: isMessageVisible}" (event "evStartHideInfotip"))
 
 	(dispatch evDelayBeforeShowingArchivePassed delay=0.625 (event "evArchiveObservationRequested")) 
-	(bindcall externalCall 'inputMapping.onRequest' "['showArchive', {_territoryName: territoryNameForArchive, _territoryStage: territoryStageForArchive}]" (event "evDelayBeforeShowingArchivePassed"))
+	(bindcall externalCall
+		'inputMapping.onRequest'
+		"['showArchive', {_territoryName: territoryNameForArchive, _territoryStage: territoryStageForArchive}]"
+		(event "evDelayBeforeShowingArchivePassed")
+	)
 
 	(style
 		(width = 1920px)
@@ -1338,6 +1496,7 @@
 			)
 		)
 	)
+
 	(block
 		(class $Fullsize)
 		(style (align = "center|bottom"))
@@ -1429,18 +1588,25 @@
 
 	(bindcall externalCall 'direct.action' "['strategicActions.playVoiceover', []]" (event "evPlayVoiceover"))
 	(bindcall externalCall 'direct.action' "['strategicActions.stopVoiceover', []]" (event "evStopVoiceover") (event "evHide"))
-	(bindcall externalCall 'inputMapping.onAction' "['StrategicActionsProxyUSS.setStrategicActionsMessageSeen', {territoryId: messageId}]" watch=false (event "evStartShow"))
+	(bindcall externalCall
+		'inputMapping.onAction'
+		"['StrategicActionsProxyUSS.setStrategicActionsMessageSeen', {territoryId: messageId}]"
+		watch=false
+		(event "evStartShow")
+	)
 
 	(style
 		(width = 920px)
 		(height = 236px)
 		(align = "center")
 	)
+
 	(hblock
 		(style
 			(width = 640px)
 			(align = "middle")
 		)
+
 		(block
 			(style
 				(width = 200px)
@@ -1449,6 +1615,7 @@
 				(bind backgroundImage "'url:../events/strategic_actions/messages/' + messageId + '_' + messageType + '.png'")
 			)
 		)
+
 		(element StrategicActionsMessageContent
 			_messageId = "messageId"
 			_messageType = "messageType"
@@ -1476,6 +1643,7 @@
 		)
 		(bind text "'IDS_TERRITORY_MESSAGE_TITLE_' + postfix")
 	)
+
 	(tf
 		(class $TextDefaultNM)
 		(style
@@ -1485,6 +1653,7 @@
 		)
 		(bind text "'IDS_TERRITORY_MESSAGE_SUBTITLE_' + postfix")
 	)
+
 	(tf
 		(class $TextDefaultNM)
 		(style
@@ -1494,6 +1663,7 @@
 		)
 		(bind text "'IDS_TERRITORY_MESSAGE_TEXT_' + postfix")
 	)
+
 	(hblock
 		(style
 			(width = 100%)
@@ -1508,16 +1678,17 @@
 				_isVoiceoverPlaying = "isVoiceoverPlaying"
 			)
 		)
-		(element TextButton
-			_label = 'IDS_TERRITORY_MESSAGE_LEARN_MORE'
-			_name = 'ArchiveButton'
-			_dispatchedEv = 'evArchiveObservationRequested'
-			_dispatchParams = "{	territoryName: _messageId,
-									territoryStage: _messageType}"
-			_methods = "[{	type: 'inputMapping.onAction',
-							name: 'observeArchive',
-							args: {} }]"
-		)
+
+
+
+
+
+
+
+
+
+
+
 	)
 )
 
@@ -1532,11 +1703,11 @@
 											: SC.Ui_styles.BUTTON_STATE.UP")
 		(var stateAlpha:number = "TEXT_BUTTON_ALPHA[state]")
 	)
-	(macro MOUSE_EVENTS_DISPATCHER)
 	(style
 		(flow = "horizontal")
 		(align = "middle")
 	)
+
 	(block
 		(style
 			(width = 32px)
@@ -1553,6 +1724,7 @@
 			_alpha="stateAlpha"
 		)
 	)
+
 	(block
 		(style
 			(width = 100px)
@@ -1611,7 +1783,8 @@
 
 		(var restrictionsEntityId:number = "territoryComponent ? territoryComponent.restrictionsEntity : 0" (event "territoryComponent.evChanged"))
 		(var restrictionsEntity:dhEntity = "getEntity(restrictionsEntityId)")
-		(var battleTypes:array = "restrictionsEntity.battleTypesView.viewList  ?: []" (event "territoryComponent.evChanged") (event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
+		(var battleTypes:array = "restrictionsEntity.battleTypesView.viewList  ?: []"	(event "territoryComponent.evChanged")
+																						(event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
 		(var shipRestrictions:array = "restrictionsEntity.shipListRestrictions.selectedFilters ?: []")
 		(var hasReducedBattleTypes:bool = "restrictionsEntity.battleTypesView.hasReducedBattleTypes" (event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
 
@@ -1642,7 +1815,7 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
-			_headerText = "tr('IDS_TERRITORY_TITLE_' + toUpper(_territoryName))"
+			_headerText = "'IDS_TERRITORY_TITLE_' + _territoryName"
 		)
 		(element TooltipSystemHorizontalDivider)
 
@@ -1659,7 +1832,9 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isStatusVisible"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isStatusVisible")
+			)
 		)
 
 		
@@ -1676,7 +1851,9 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isProgressVisible"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isProgressVisible")
+			)
 		)
 
 		
@@ -1702,7 +1879,9 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "canTasksBeShown"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "canTasksBeShown")
+			)
 		)
 
 		
@@ -1728,7 +1907,9 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "canTasksBeShown"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "canTasksBeShown")
+			)
 		)
 
 		
@@ -1745,7 +1926,9 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "areRestrictionsVisible"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "areRestrictionsVisible")
+			)
 		)
 
 		(element TooltipSystemRewardsDHList
@@ -1759,7 +1942,7 @@
 			(controller $Instance renderer='TooltipSystemStatusLine'
 				(args
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-					_text = "'IDS_STRATEGIC_ACTIONS_PROCEED_TO_TERRITORY'"
+					_text = 'IDS_STRATEGIC_ACTIONS_PROCEED_TO_TERRITORY'
 				)
 			)
 		)
@@ -1773,6 +1956,7 @@
 		(var isLastStage:bool = "territory.stage+1 == territory.thresholdsCount")
 		(var textStage:str = "isLastStage ? 'IDS_STRATEGIC_ACTIONS_POINTS_TILL_REWARD' : 'IDS_STRATEGIC_ACTIONS_POINTS_TILL_NEXT_STAGE'")
 	)
+
 	(hblock
 		(style (marginBottom = "M"))
 		(tf
@@ -1783,6 +1967,7 @@
 			)
 			(bind text "textStage")
 		)
+
 		(block
 			(element PriceTag
 				_priceInfo = "{currency: SC.Common.CURRENCIES.STRATEGIC_POINTS, finalPrice: pointsTillNextReward}"
@@ -1797,15 +1982,22 @@
 			)
 		)
 	)
+
 	(hblock
+		(style
+			(hgap = "XXS")
+			(backgroundColor = "NO_COLOR")
+		)
+
 		(controller $Repeat renderer='TerritoryProgressBar'
 			(count = "territory.thresholdsCount")
 			(args
 				_entityId = "_entityId"
 			)
 		)
+
 		(controller $Tooltip
-			(renderer='StrategicActionsPointsInfoTooltip')
+			(renderer = 'StrategicActionsPointsInfoTooltip')
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
@@ -1813,12 +2005,15 @@
 
 (def element TerritoryProgressBar (_entityId:number)
 	(scope
-		(struct territory = THRESHOLDS_POINTS (_entityId = "_entityId"))
+		(struct territory = THRESHOLDS_POINTS(_entityId = "_entityId"))
 		(var currentThresholdIndex:number = "floor(territory.progressCurrent/territory.thresholdPoints)")
 		(var isThresholdCompleted:bool = "currentThresholdIndex > $index")
+		(var thresholdsCount:number = "territory.thresholdsCount ?: 1")
+
 		(var thresholdsProgress:number = "isThresholdCompleted	? 1
 																: max(0, territory.progressCurrent/territory.thresholdPoints - $index)")
-		(var progressBarWidth:number = "PANEL_CONTENT_WIDTH / territory.thresholdsCount")
+		
+		(var progressBarWidth:number = "ceil((PANEL_CONTENT_WIDTH - ((thresholdsCount - 1) * XXS)) / thresholdsCount)")
 	)
 
 	(element DefaultProgressBar
@@ -1852,7 +2047,10 @@
 		(var isCompleted:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.COMPLETED")
 		(var isRewardsClaim:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.REWARDS_CLAIM")
 		(var isSelected:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.SELECTED")
-		(var isProgressVisible:bool = "!isArchiveEntryPoint && !isLocked && territory.stage != territory.thresholdsCount")
+		(var isProgressVisible:bool = "	!isArchiveEntryPoint &&
+										territory.stage != territory.thresholdsCount &&
+										territory.stage > 0 ||
+										isSelected")
 
 		(var screenPosition:dhComponent = "_entity.screenPosition")
 
@@ -1870,12 +2068,21 @@
 															: 'cursor'")
 
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_SELECTED_TERRITORY,
-																												SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_ARCHIVE ]"))
+		(struct activeTip = PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId = SAFE_CHECK_ACTIVE_TIP_ID(
+			_tipId = "activeTip.tipId"
+			_validValues = "[
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_SELECTED_TERRITORY,
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_SELECTED_TERRITORY_REPEAT,
+					SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_ARCHIVE
+				]"
+			)
+		)
 
-		(var isGuidingTipSelectedTerritoryVisible:bool =	"checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_SELECTED_TERRITORY && isSelected && (isGlobalState || isActiveTerritoryObserved)")
-		(var isGuidingTipArchiveVisible:bool =				"checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_ARCHIVE && isArchiveEntryPoint && isGlobalState")
+		(var isGuidingTipSelectedTerritoryVisible:bool =	"(	checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_SELECTED_TERRITORY ||
+																checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_SELECTED_TERRITORY_REPEAT) &&
+																isSelected && (isGlobalState || isActiveTerritoryObserved)")
+		(var isGuidingTipArchiveVisible:bool = "checkedTipId.value == SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_ARCHIVE && isArchiveEntryPoint && isGlobalState")
 	)
 
 	(dispatch evDelayBeforeShowingArchivePassed delay=0.625 on='leftClick') 

@@ -412,12 +412,17 @@
 		(var isGold:bool =			"_currency == SC.Common.CURRENCIES.GOLD")
 		(var isCredits:bool =		"_currency == SC.Common.CURRENCIES.CREDITS")
 		(var isFreeXP:bool =		"_currency == SC.Common.CURRENCIES.FREE_XP")
+		(var isEliteXP:bool =		"_currency == SC.Common.CURRENCIES.ELITE_XP")
 
-		(var clickAction:str = "isGold		?	'navigateTo' :
-								isCredits	?	'creditsGoldWindow' :
-								isFreeXP	?	'xpFreeExpWindow'
-											:	''")
-		(var actionParams:dict = "isGold ? { route: SC.Ui_windows.ROUTE.OVERLAY_BROWSER, data: { url: SC.Ui_windows.GUI_URL.BUY_GOLD_IN_GAME } } : {}")
+		(var isExpWidget:bool =		"isFreeXP || isEliteXP")
+
+		(var clickAction:str = "isGold			? 'navigateTo' :
+								isCredits		? 'creditsGoldWindow' :
+								isExpWidget		? 'xpFreeExpWindow'
+												: ''")
+		(var actionParams:dict = "isExpWidget	? { convertionType: isFreeXP ? SC.Common.EXCHANGE_EXP_INSET.SHIP_XP : SC.Common.EXCHANGE_EXP_INSET.ELITE_XP } :
+								  isGold		? { route: SC.Ui_windows.ROUTE.OVERLAY_BROWSER, data: { url: SC.Ui_windows.GUI_URL.BUY_GOLD_IN_GAME } }
+												: {}")
 
 		(var noAction:bool = "_isStatic || !(clickAction || _methods.length)")
 
@@ -827,7 +832,8 @@
 								_methods:array = [],
 								_dispatchedEv:str = 'evMenuItemClicked',
 								_dispatchParams:dict = {},
-								_textClass:str = '$TextDefaultNM')
+								_textClass:str = '$TextDefaultNM',
+								_soundSet:str = '')
 	(bind name "_name")
 	(style
 		(width = 100%)
@@ -844,6 +850,7 @@
 			_methods = "_methods"
 			_dispatchedEv = "_dispatchedEv"
 			_dispatchParams = "_dispatchParams"
+			_soundSet = "_soundSet"
 		)
 	)
 
@@ -1910,12 +1917,8 @@
 (def element MetaEventResultCard (_text:str = '', _bgImage:str = '', _value:number = 0, _valueData:array = [], _bottomText:str = '')
 	(style
 		(width = 368px)
-		(backgroundColor = 0x33000000)
-		(bind marginLeft "$index ? {1280:L, 1920:LM} : 0")
-	)
-	(block
-		(class $FullsizeAbsolute)
-		(element BlurMapWithLayerContrastPanel)
+		(backgroundColor = 0x0DFFFFFF)
+		(borderRadius = "S")
 	)
 
 	(block
@@ -1927,29 +1930,50 @@
 			(paddingBottom = "{720:M, 1080:MS}")
 			(align = "center")
 		)
+
 		(block
-			(style (width = 300px) (height = 116px) (bind backgroundImage "_bgImage"))
+			(style
+				(width = 300px)
+				(height = 116px)
+				(marginBottom = "M")
+				(bind backgroundImage "_bgImage")
+			)
 		)
+
 		(block
-			(style (width = 100%) (height = 40px) (marginTop = "M"))
+			(style
+				(width = 100%)
+				(height = 40px)
+			)
 			(tf
-				(class $TextDefault20NM)
-				(style (width = 100%) (textAlign = "center") (alpha = "TA"))
+				(class $TextDefaultBold20NM)
+				(style
+					(width = 100%)
+					(textAlign = "center")
+					(alpha = "TA")
+				)
 				(bind text "_text")
 			)
 		)
 	)
+
 	(element HorizontalDividerTwoPx)
 
 	(block
 		(bind visible "!_valueData.length")
-		(style (width = 100%) (height = "{720:80px, 1080:100px}") (align = "center|middle"))
+		(style
+			(width = 100%)
+			(height = "{720:80px, 1080:100px}")
+			(align = "center|middle")
+		)
+
 		(tf
 			(class $TextDefaultBold36NM)
 			(style (alpha = "TA"))
 			(bind text "formatSeparator(_value)")
 		)
 	)
+
 	(block
 		(bind visible "_valueData.length")
 		(style
@@ -1967,9 +1991,12 @@
 			)
 		)
 	)
+
 	(block
 		(style (width = 100%))
-		(controller $Instance renderer = 'HorizontalDividerTwoPx' (bind enabled "_bottomText"))
+		(controller $Instance renderer = 'HorizontalDividerTwoPx'
+			(bind enabled "_bottomText")
+		)
 	)
 
 	(block
@@ -1983,7 +2010,11 @@
 		)
 		(tf
 			(class $TextDefault18NM)
-			(style (width = 100%) (textAlign = "center") (alpha = "TC"))
+			(style
+				(width = 100%)
+				(textAlign = "center")
+				(alpha = "TC")
+			)
 			(bind text "_bottomText")
 		)
 	)
@@ -2285,7 +2316,7 @@
 			(width = 100%)
 			(multiline = true)
 			(leading = -1)
-			(styleSheet = "'.p_spacing {font-size: 3px}'")
+			(styleSheet = "'.p_spacing {font-size: 6px}'")
 			(bind alpha "_isShipRolesWindow ? TC : TA")
 		)
 
@@ -2375,23 +2406,24 @@
 	(var mouseDown:bool =	"'isDown' in $event ? $event.isDown : false" watch=false (event "evMouseDown") (event "evStageMouseUp"))
 )
 
-(def macro NEW_MOUSE_DISPATCHER (_mouseHandler:expression)
+(def macro STRUCT_MOUSE_DISPATCHER (_mouseHandler:expression)
+	(dispatch "_mouseHandler.evClicked"		args={ isOver: true }		on='leftClick')
 	(dispatch "_mouseHandler.evRollOver"		args={ isOver: true }	on='rollOver')
 	(dispatch "_mouseHandler.evRollOut"			args={ isOver: false }	on='rollOut')
-	(dispatch "_mouseHandler.evMouseDown"		args={ isDown: true }	on='mouseDown')
+	(dispatch "_mouseHandler.evMouseDown"		args={ isDown: true }	on='leftMouseDown')
 	(dispatch "_mouseHandler.evStageMouseUp"	args={ isDown: false }	on='stageMouseUp')
 )
 
-(def macro NEW_SOUND_HANDLER (_mouseHandler:expression, _soundSet:expression='')
+(def macro STRUCT_SOUND_HANDLER (_mouseHandler:expression, _soundSet:expression='')
 	(bindcall externalCall 'sound.playSetSoundDirect' "[_soundSet, SoundEvent.OVER]"	watch=false (event "_mouseHandler.evRollOver"))
 	(bindcall externalCall 'sound.playSetSoundDirect' "[_soundSet, SoundEvent.CLICK]"	watch=false (event "_mouseHandler.evClicked"))
 )
 
-(def macro NEW_DISPATCH_HANDLER (_mouseHandler:expression, _dispatchedEv:expression='', _dispatchParams:expression={})
+(def macro STRUCT_DISPATCH_HANDLER (_mouseHandler:expression, _dispatchedEv:expression='', _dispatchParams:expression={})
 	(dispatch "_dispatchedEv" args="_dispatchParams" dir="EventDirection.UP" (event "_mouseHandler.evClicked"))
 )
 
-(def macro NEW_CLICK_HANDLER (_mouseHandler:expression, _methods:expression=null)
+(def macro STRUCT_CLICK_HANDLER (_mouseHandler:expression, _methods:expression=null)
 	(controller $Repeat
 		(bind count "_methods.length")
 		(exprs
@@ -2404,6 +2436,32 @@
 	(bind visible "_enabled")
 	(class $FullsizeAbsolute)
 	(style (backgroundColor = "NO_COLOR"))
+)
+
+
+(def macro STRUCT_MOUSE_HANDLER (	_mouseHandler:expression, _enabled:expression=true, _dispatchedEv:expression='', _dispatchParams:expression={},
+									_methods:expression=[], _soundSet:expression='')
+	(block
+		(bind visible "_enabled")
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(macro STRUCT_MOUSE_DISPATCHER
+			_mouseHandler = "_mouseHandler"
+		)
+		(macro STRUCT_SOUND_HANDLER
+			_mouseHandler = "_mouseHandler"
+			_soundSet = "_soundSet"
+		)
+		(macro STRUCT_DISPATCH_HANDLER
+			_mouseHandler = "_mouseHandler"
+			_dispatchedEv = "_dispatchedEv"
+			_dispatchParams = "_dispatchParams"
+		)
+		(macro STRUCT_CLICK_HANDLER
+			_mouseHandler = "_mouseHandler"
+			_methods = "_methods"
+		)
+	)
 )
 
 (def constant ATTENTION_SELECTION_PANEL_STATE "{
@@ -2547,6 +2605,51 @@
 				init = true
 				(event "evAnimationStart")
 			)
+		)
+	)
+)
+
+(def element UnorderedListItem (_text:str = '',
+								_isUseIndexForIDS:bool = false,
+								_listStyleType:str = 'IDS_BULLET',
+								_textClass:str = '$TextDefaultNM',
+								_textAlpha:number = "TC",
+								_substitute:dict = {},
+								_isUpperCase:bool = false)
+	(scope
+		(var textItem:str = "_text + (_isUseIndexForIDS ? $index + 1 : '')")
+	)
+
+	(bind visible "_text")
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+	)
+
+	(tf
+		(bind visible "_listStyleType != null")
+		(bind class "_textClass")
+		(style (marginRight = 10px))
+		(bind alpha "_textAlpha")
+
+		(bind text "_listStyleType")
+	)
+
+	(tf
+		(bind class "_textClass")
+		(style
+			(width = 100%)
+			(leading = -3)
+		)
+		(bind alpha "_textAlpha")
+
+		(bindcall substitute
+			imageOffset = "_substitute.imageOffset ?: 0px"
+			substitutionMap = "_substitute.map"
+			sourceText = "_isUpperCase ? toUpper(tr(textItem)) : tr(textItem)"
+			postfix = "_substitute.postfix ?: ''"
+			init = true
 		)
 	)
 )

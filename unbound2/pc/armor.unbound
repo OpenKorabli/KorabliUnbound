@@ -1,21 +1,22 @@
-(def constant ARMOR_THICKNESS_EMPTY -1)
-
 (def element ArmorTooltipHub ()
 	(scope
 		(event evShowArmorTooltip)
 		(event evHideArmorTooltip)
+
+		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
+		(var isDockUIHidden:bool = "dockData.isDockUIHidden" (event "dockData.evIsDockUIHiddenChanged"))
 
 		(macro PULL_SHIP_ID)
 
 		(var armorPickEntity:dhEntity =	"getPrimaryEntity(CC.shipArmorPick, viewedShipId)")
 		(var armorPick:dhComponent =	"armorPickEntity.shipArmorPick")
 
-		(var armorThickness:number =	"armorPick.thickness ?: ARMOR_THICKNESS_EMPTY"	(event "armorPick.evUpdate"))
-		(var isNoArmorShown:bool =		"armorThickness == ARMOR_THICKNESS_EMPTY")
+		(var armorThickness:number =	"armorPick.thickness ?: SC.Common.ARMOR_PICK.EMPTY"	(event "armorPick.evUpdate"))
+		(var isNoArmorShown:bool =		"armorThickness == SC.Common.ARMOR_PICK.EMPTY || isDockUIHidden")
 	)
 
-	(dispatch evShowArmorTooltip	(event "armorPick.evUpdate") (bind enabled "!isNoArmorShown"))
-	(dispatch evHideArmorTooltip	(event "armorPick.evUpdate") (bind enabled "isNoArmorShown"))
+	(dispatch evShowArmorTooltip	(bind enabled "!isNoArmorShown") (bind trigger "isNoArmorShown"))
+	(dispatch evHideArmorTooltip	(bind enabled "isNoArmorShown") (bind trigger "isNoArmorShown"))
 
 	(controller $Tooltip
 		(renderer = 'ArmorTooltip')
@@ -26,6 +27,10 @@
 	)
 )
 
+
+(def constant MIN_ARMOR_CALIBER "SC.Common.BARREL_DIAMETER.MIN * 1000")
+(def constant MAX_ARMOR_CALIBER "SC.Common.BARREL_DIAMETER.MAX * 1000")
+
 (def element ArmorTooltip ()
 	(scope
 		(macro PULL_SHIP_ID)
@@ -33,35 +38,83 @@
 		(var armorPickEntity:dhEntity =	"getPrimaryEntity(CC.shipArmorPick, viewedShipId)")
 		(var armorPick:dhComponent =	"armorPickEntity.shipArmorPick")
 
-		(var armorName:str =			"armorPick.armorName"	(event "armorPick.evUpdate"))
-		(var armorType:str =			"armorPick.armorType"	(event "armorPick.evUpdate"))
-		(var armorThickness:number =	"armorPick.thickness"	(event "armorPick.evUpdate"))
+		(var armorName:str =			"armorPick.armorName"	(event "armorPick.evArmorSelected"))
+		(var armorType:str =			"armorPick.armorType"	(event "armorPick.evArmorSelected"))
+		(var armorThickness:number =	"armorPick.thickness"	(event "armorPick.evArmorSelected"))
 
-		(var header:str = "tr('IDS_' + toUpper(armorName))")
-		(var subheader:str = "tr('IDS_ARMOUR_TYPE_' + armorType)")
-		(var attributesNeutral:array = "[{	attributeIDS: 'IDS_SHIP_ARMOUR_THICKNESS_PARAM',
-											measuredValue: armorThickness,
-											measure: 'IDS_MILLIMETER',
-											category: 'neutral' }]")
-		(var iconPath:str = "'url:../service_kit/armor_types/preview/armor_' + armorType + '.png'")
+		
+		(var overmatchParam:number =					"ceil(armorThickness * SC.Battle.RICOCHET_THIN_ARMOR_MULTIPLIER.AP)")
+		(var armorPiercingCockingParam:number =			"round((armorThickness * 6) + 2)")
+		(var heFragmentationPenetrationParam:number =	"round((armorThickness - 0.5) * 6)")
+
+		
+		(var overmatchParamLabel:str = "	overmatchParam > MAX_ARMOR_CALIBER	? 'IDS_ARMOR_TOOLTIP_OVERMATCH_ALL_CALIBERS'
+																				: 'IDS_ARMOR_TOOLTIP_OVERMATCH'")
+
+		(var overmatchParamValue:str = "	overmatchParam < MIN_ARMOR_CALIBER	? tr('IDS_ARMOR_TOOLTIP_PARAM_MULTI_VALUE') :
+											overmatchParam > MAX_ARMOR_CALIBER	? ''
+																				: subst('IDS_ARMOR_TOOLTIP_PARAM_PRIMARY_VALUE', [], { _value: overmatchParam })")
+		
+		(var armorPiercingCockingParamLabel:str = "	armorPiercingCockingParam < MIN_ARMOR_CALIBER	? 'IDS_ARMOR_TOOLTIP_PARAM_ARMOR_PIERCING_COCKING_IMPOSSIBLE'
+																									: 'IDS_ARMOR_TOOLTIP_PARAM_ARMOR_PIERCING_COCKING'")
+
+		(var armorPiercingCockingParamValue:str = "	armorPiercingCockingParam > MAX_ARMOR_CALIBER	? tr('IDS_ARMOR_TOOLTIP_PARAM_MULTI_VALUE') :
+													armorPiercingCockingParam < MIN_ARMOR_CALIBER	? ''
+																									: subst('IDS_ARMOR_TOOLTIP_PARAM_LIMIT_VALUE', [], { _value: armorPiercingCockingParam })")
+		
+		(var heFragmentationPenetrationParamLabel:str = "	heFragmentationPenetrationParam > MAX_ARMOR_CALIBER		? 'IDS_ARMOR_TOOLTIP_PARAM_HIGH_EXPLOSIVE_FRAGMENTATION_PENETRATION_IMPOSSIBLE'
+																													: 'IDS_ARMOR_TOOLTIP_PARAM_HIGH_EXPLOSIVE_FRAGMENTATION_PENETRATION'")
+
+		(var heFragmentationPenetrationParamValue:str = "	heFragmentationPenetrationParam > MAX_ARMOR_CALIBER	? '' :
+															heFragmentationPenetrationParam < MIN_ARMOR_CALIBER	? tr('IDS_ARMOR_TOOLTIP_PARAM_MULTI_VALUE')
+																												: subst('IDS_ARMOR_TOOLTIP_PARAM_PRIMARY_VALUE', [], { _value: heFragmentationPenetrationParam })")
 	)
-
-	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(style (width = 350px))
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageUrl =			"iconPath"
-			_headerText =		"header"
 			_imageWidth = 		40px
 			_imageHeight = 		40px
-			_subheaderText =	"subheader"
+			_imageUrl =			"'url:../service_kit/armor_types/preview/armor_' + armorType + '.png'"
+			_headerText =		"'IDS_' + toUpper(armorName)"
+			_subheaderText =	"'IDS_ARMOUR_TYPE_' + armorType"
 		)
 
 		(element TooltipSystemHorizontalDivider)
 
+		(element TooltipSystemParamTextLine
+			_text = 'IDS_SHIP_ARMOUR_THICKNESS_PARAM'
+			_value = "armorThickness + tr('IDS_MILLIMETER_SPACE')"
+			_isValueAlignRight = true
+		)
+		(element TooltipSystemHorizontalDivider)
+
 		(element TooltipSystemParamsModifiersList
-			_attributesNeutral = "attributesNeutral"
+			_attributesNeutral = "[
+									{
+										attributeIDS:	overmatchParamLabel,
+										measuredValue:	overmatchParamValue,
+										measure: '',
+										category: 'neutral'
+									},
+									{
+										attributeIDS: armorPiercingCockingParamLabel,
+										measuredValue: armorPiercingCockingParamValue,
+										measure: '',
+										category: 'neutral'
+									},
+									{	attributeIDS: heFragmentationPenetrationParamLabel,
+										measuredValue: heFragmentationPenetrationParamValue,
+										measure: '',
+										category: 'neutral'
+									}
+								]"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_ARMOR_TOOLTIP_DISCLAMER'
 		)
 	)
 )
