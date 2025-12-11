@@ -125,17 +125,20 @@
 
 (def element CompassContainerInstance ()
 	(scope
-		(macro IS_ON_PLANE)
 		(macro IS_ALIVE)
+
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+
 		(var airDefensiveFireAura:gfx = "$datahub.getSingleComponent(CC.airDefensiveFireAura)")
 		(var hasAA:bool = "airDefensiveFireAura.near || airDefensiveFireAura.middle || airDefensiveFireAura.far")
 
-		(var isVisible:bool = "isOnPlane || isAlive")
+		(var isVisible:bool = "controlledSquadronId != DEFAULT_SQUADRON_ID || isAlive")
 	)
 	(style
 		(position = "absolute")
-		(bind width "COMPASS_SIZE")
-		(bind height "COMPASS_SIZE")
+		(width = "COMPASS_SIZE")
+		(height = "COMPASS_SIZE")
 	)
 
 	(element Compass)
@@ -160,11 +163,11 @@
 
 	(element GunsRotator
 		(style (position = "absolute"))
-		(bind visible "isVisible && !isOnPlane")
+		(bind visible "isVisible && controlledSquadronId == DEFAULT_SQUADRON_ID")
 	)
 
 	(element CrosshairRotatorLock
-		(bind visible "isVisible && !isOnPlane")
+		(bind visible "isVisible && controlledSquadronId == DEFAULT_SQUADRON_ID")
 	)
 )
 
@@ -238,17 +241,33 @@
 
 (def element Frustum ()
 	(scope
-		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
-		(var frustumAngle:number = "cameraEntity.camera.frustumAngle" (event "cameraEntity.camera.evFrustumAngleChanged"))
-		(var cameraMode:number = "cameraEntity.camera.mode" (event "cameraEntity.camera.evModeChanged"))
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var frustumAngle:number = "cameraComponent.frustumAngle" (event "cameraComponent.evFrustumAngleChanged"))
+		(var frustumAngleInGrad:number = "radToGrad(frustumAngle)")
+		(var cameraMode:number = "cameraComponent.mode" (event "cameraComponent.evModeChanged"))
 		(var showFrustum:bool = "cameraMode == SC.Battle.CAMERA_MODE.SNAKETAIL || cameraMode == SC.Battle.CAMERA_MODE.PLANETRACKER" )
 	)
 
-	(mc frustumClip
-		(bind visible "showFrustum")
-		(.frustum
-			(bind width "tan(frustumAngle/2) * COMPASS_SIZE")
+	(class $Fullsize)
+	(style
+		(alpha = 0.5)
+		(backgroundImage = 'swf:../battle_hud/new_doll_svg/new_doll_svg.swf:frustum')
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(style
+			(left = 50%)
+			(top = 50%)
+			(bind rotation "270 - (frustumAngleInGrad / 2)")
 		)
+
+		(controller $Sector
+			(bind arc "frustumAngleInGrad")
+			(radius = "COMPASS_SIZE / 2 - 1")
+		)
+		(isMask = true)
 	)
 )
 
@@ -264,25 +283,27 @@
 		(var isSubmarine:bool = "shipType == ShipTypes.SUBMARINE")
 
 		
-		(var aircarrier:gfx = "$datahub.getSingleComponent(CC.aircarrier)")
-		(var activeSquadron:number = "aircarrier ? aircarrier.activeSquadron : DEFAULT_SQUADRON_OWNER_ID" (event "aircarrier.evStateChanged"))
-		(var ownSquadronEntity:gfx = "$datahub.getPrimaryEntity(CC.ownSquadron, activeSquadron)")
-		(var subColName:str = "'bySquadron.' + (ownSquadronEntity ? ownSquadronEntity.squadron.id : -1)" (event "aircarrier.evStateChanged"))
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var activeSquadronIndex:number = "aircarrierComponent != null ? aircarrierComponent.activeSquadronIndex : DEFAULT_SQUADRON_OWNER_ID" (event "aircarrierComponent.evStateChanged"))
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+
+		(var ownSquadronEntity:gfx = "$datahub.getPrimaryEntity(CC.ownSquadron, activeSquadronIndex)")
+		(var subColName:str = "'bySquadron.' + (ownSquadronEntity ? ownSquadronEntity.squadron.id : -1)" (event "aircarrierComponent.evStateChanged"))
 
 		(var aircraftCol:gfx = "$datahub.getCollection(CC.aircraft)")
 		(var hpCollection:gfx = "aircraftCol.getChildByPath(subColName)" (event "aircraftCol.evAdded") (event "aircraftCol.evRemoved"))
 		(var hpCount:number = "hpCollection ? hpCollection.items.length : 0" (event "hpCollection.evAdded") (event "hpCollection.evRemoved"))
 		(var attackerSize:number = "ownSquadronEntity ? ownSquadronEntity.ownSquadron.attackerSize : 0")
-		(var isOnPlane:bool = "aircarrier && (activeSquadron != ActiveSquadron.NONE)")
 		(var numAttackers:number = "attackerSize ? ceil(hpCount/attackerSize) : 1")
 
 		
-		(var dollIcon:str = "	isOnPlane && hpCount>0	? subst('symbol:mc_compass_planes_doll_%d', [numAttackers]) :
-								isAircarrier			? 'symbol:compass_aircraftcarrier_doll' :
-								isSubmarine				? 'symbol:compass_submarine_doll'
-														: 'symbol:compass_default_doll'")
+		(var dollIcon:str = "	controlledSquadronId != DEFAULT_SQUADRON_ID && hpCount > 0 	? subst('symbol:mc_compass_planes_doll_%d', [numAttackers]) :
+								isAircarrier												? 'symbol:compass_aircraftcarrier_doll' :
+								isSubmarine													? 'symbol:compass_submarine_doll'
+																							: 'symbol:compass_default_doll'"
+		)
 
-		(var squadronCameraMode:str = "aircarrier ? aircarrier.squadronCameraMode : null" (event "aircarrier.evSquadronCameraModeChanged"))
+		(var squadronCameraMode:str = "aircarrierComponent.squadronCameraMode" (event "aircarrierComponent.evSquadronCameraModeChanged"))
 		(var lastLookSquadronCamera:bool = "squadronCameraMode == SquadronCameraModes.SQUADRON_DEAD || squadronCameraMode == SquadronCameraModes.LAST_SQUADRON_ATTACKED")
 	)
 
@@ -301,7 +322,7 @@
 			(args
 				collection = "weapons"
 			)
-			(bind enabled "!isOnPlane")
+			(bind enabled "controlledSquadronId == DEFAULT_SQUADRON_ID")
 		)
 	)
 )
@@ -659,10 +680,9 @@
 		(var compassEntity:gfx = "$datahub.getSingleEntity(CC.compass)")
 		(var shipDollRotation:number = "compassEntity.compass.shipDollRotation" (event "compassEntity.compass.evShipDollRotationChanged"))
 
-		(var aircarrier:gfx = "$datahub.getSingleComponent(CC.aircarrier)")
-		(var activeSquadron:number = "aircarrier.activeSquadron" (event "aircarrier.evStateChanged"))
-		(var squadronCameraMode:str = "aircarrier.squadronCameraMode" (event "aircarrier.evSquadronCameraModeChanged"))
-		(var isOnPlane:bool = "aircarrier && activeSquadron != DEFAULT_SQUADRON_OWNER_ID")
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var squadronCameraMode:str = "aircarrierComponent.squadronCameraMode" (event "aircarrierComponent.evSquadronCameraModeChanged"))
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
 		(var lastLookSquadronCamera:bool = "squadronCameraMode == SquadronCameraModes.SQUADRON_DEAD || squadronCameraMode == SquadronCameraModes.LAST_SQUADRON_ATTACKED")
 	)
 
@@ -673,7 +693,7 @@
 		(bind rotation "shipDollRotation - 90")
 	)
 
-	(bind visible "!(isOnPlane || lastLookSquadronCamera)")
+	(bind visible "!(controlledSquadronId != DEFAULT_SQUADRON_ID || lastLookSquadronCamera)")
 
 	
 	(controller $Repeat renderer='AirDefenseSectorRenderer'

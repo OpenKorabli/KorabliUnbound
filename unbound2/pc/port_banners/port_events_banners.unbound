@@ -90,7 +90,9 @@
 (def macro MOUSE_HANDLER_BANNER (_methods:expression=[])
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(macro SOUND_HANDLER "'button_banner'")
-	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT _methods = "_methods")
+	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT
+		_methods = "_methods"
+	)
 )
 
 (def macro MOTIVATOR_STAGE_SIZES ()
@@ -114,6 +116,7 @@
 (def element EventsDockMainInset ()
 	(scope
 		(event evSetScrollTargetIndex)
+		(event evCanScrollChanged)
 
 		(struct stageSize = STAGE_SIZE())
 		(macro CAROUSEL_HEIGHT_SCOPE)
@@ -139,6 +142,8 @@
 
 		(var scrollAreaTopPoint:number = 0)
 		(var scrollAreaHeight:number = 0)
+
+		(var canScroll:bool = "$event ? $event.up || $event.down : true" watch=false (event "evCanScrollChanged"))
 	)
 
 	(macro SOUND_DOCK_INSET_HANDLER "SC.Ui_windows.ROUTE.EVENTS")
@@ -164,10 +169,12 @@
 			_singleStep =				"EVENT_BANNER_HEIGHT.LARGE"
 			_wheelScrollAcceleration =	"0.8"
 			_isContrastScrollBar =		"true"
+			_canScrollChangedEvent =	"'evCanScrollChanged'"
 		)
 
 		(bind scrollAreaTopPoint	"round($globalLayoutBounds[1])"	(event "$evLayoutBoundsChanged"))
 		(bind scrollAreaHeight		"round($globalLayoutBounds[3])"	(event "$evLayoutBoundsChanged"))
+		(bind useMask "canScroll")
 
 		(content
 			(style
@@ -788,13 +795,12 @@
 		(var personalProgressBarValue:number = "hasReceivedAllRewards ? 1 : personalProgress/pointsTillNextRewardTotal")
 		(var pointsTillNextRewardRemaining:number = "pointsTillNextRewardTotal - personalProgress")
 
-		(var substText:str = "subst('IDS_ARC_EVENT_PORT_STATUS_POINTS_TILL_NEXT_REWARD', [], { _pointsNext: pointsTillNextRewardRemaining }, pointsTillNextRewardRemaining)")
+		(var substText:str = "pointsTillNextRewardRemaining ? subst('IDS_ARC_EVENT_PORT_STATUS_POINTS_TILL_NEXT_REWARD', [], { _pointsNext: pointsTillNextRewardRemaining }, pointsTillNextRewardRemaining) : ''")
 
 		(var isSmallBanner:bool = "_size == SC.Ui_common.TILE_SIZE.S")
 		(var isDisableState:bool = "isSmallBanner && hasReceivedAllRewards")
 		(var isProgressBarVisible:bool = "	(isSmallBanner && personalProgressBarValue > 0 || !isSmallBanner) &&
 											!isEventFinished && !isSideNeutral && !hasReceivedAllRewards && isPrimeTimeActive")
-
 
 		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.RVR_AVAILABLE,
@@ -895,15 +901,20 @@
 	)
 )
 
-(def element EventBannerRatingBattles (_size:number = "SC.Ui_common.TILE_SIZE.S")
+(def element RatingBattlesBanner (_size:number = "SC.Ui_common.TILE_SIZE.S")
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
+		(var ratingBattlesSeasonProgress:dhComponent = "getSingleComponent(CC.ratingBattlesSeasonProgress)")
+		(var initialQualificationBattlesResults:array = "ratingBattlesSeasonProgress.initialQualificationBattlesResults ?: []" (event "ratingBattlesSeasonProgress.evInitialQualificationBattlesResultsChanged"))
+		(var isQualification:bool = "ratingBattlesSeasonProgress != null && initialQualificationBattlesResults.length < SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
+
 		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.RATING"))
-		(var isNewMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW")
+		(var isCallToActionMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION")
 	)
 	(class $Fullsize)
 	(style (backgroundColor = "NO_COLOR"))
+
 
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[
@@ -912,6 +923,11 @@
 				name: 'navigateTo',
 				args: {	route: SC.Ui_windows.ROUTE.RATING,
 						data: { isPortBannerClicked: true }}
+			},
+			{
+				type: 'inputMapping.onAction',
+				name: isCallToActionMarkerVisible ? 'ServerUIDataUSS.setCallToActionMarkerSeen' : '',
+				args: {	markerId: SC.Ui_common.CALL_TO_ACTION_MARKERS.RATING_QUALIFICATION_AVAILABLE }
 			}
 		]"
 	)
@@ -922,12 +938,25 @@
 			_title = 'IDS_DOCK_BANNER_RATING'
 			_size = "_size"
 		)
+
+		(block
+			(controller $Instance renderer = 'DefaultDividedCounter'
+				(bind enabled "isQualification")
+				(args
+					_curValue = "initialQualificationBattlesResults.length"
+					_maxValue = "SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH"
+					_doNotAlphaOnZeroCurValue = true
+					_curValueTextClass = '$TextDefaultBold22NM'
+				)
+			)
+		)
 	)
 
 	(controller $Instance renderer='EventBannerMarkers'
-		(bind enabled "isNewMarkerVisible")
+		(bind enabled "markerData.isVisible")
 		(args
-			_isNewMarker = "isNewMarkerVisible"
+			_isActionMarker = "isCallToActionMarkerVisible"
+			_text = 'IDS_RATING_BATTLES_ACTION_MARKER_QUALIFICATION'
 			_size = "_size"
 		)
 	)
@@ -1026,15 +1055,27 @@
 	)
 )
 
-(def element EventBannerRankBattles (_size:number = "SC.Ui_common.TILE_SIZE.S")
+(def element RankBattlesBanner (_size:number = "SC.Ui_common.TILE_SIZE.S")
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
+		(struct rankInfo = PULL_BANNER_COMMON_RANK_INFO())
+		(struct serverTime = SERVER_TIME())
+
+		(var rankSeasonEntity:dhEntity = "getSingleEntity(CC.rankSeason)")
+		(var rankSeasonFinishTime:number = "rankSeasonEntity.timeOfBattleEvent.finishTime ?: 0" (event "rankSeasonEntity.timeOfBattleEvent.evChanged"))
+		(var isSeasonFinished:bool = "floor(rankSeasonFinishTime - serverTime.value) <= 0")
+
 		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.RANKS"))
 		(var isNewMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW")
+		(var isCallToActionMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION")
 	)
 	(class $Fullsize)
 	(style (backgroundColor = "NO_COLOR"))
+
+	(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM
+		_triggerExpression = "isSeasonFinished"
+	)
 
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[
@@ -1043,6 +1084,11 @@
 				name: 'navigateTo',
 				args: {	route: SC.Ui_windows.ROUTE.RANKS,
 						data: { isPortBannerClicked: true }}
+			},
+			{
+				type: 'inputMapping.onAction',
+				name: isCallToActionMarkerVisible ? 'ServerUIDataUSS.setCallToActionMarkerSeen' : '',
+				args: { markerId: SC.Ui_common.CALL_TO_ACTION_MARKERS.RANKED_QUALIFICATION_AVAILABLE }
 			}
 		]"
 	)
@@ -1053,12 +1099,26 @@
 			_title = 'IDS_DOCK_BANNER_RANK_BATTLES'
 			_size = "_size"
 		)
+
+		(block
+			(controller $Instance renderer = 'DefaultDividedCounter'
+				(bind enabled "rankInfo.isQualification")
+				(args
+					_curValue = "rankInfo.currentStars"
+					_maxValue = "rankInfo.totalStars"
+					_doNotAlphaOnZeroCurValue = true
+					_curValueTextClass = '$TextDefaultBold22NM'
+				)
+			)
+		)
 	)
 
 	(controller $Instance renderer='EventBannerMarkers'
-		(bind enabled "isNewMarkerVisible")
+		(bind enabled "markerData.isVisible")
 		(args
 			_isNewMarker = "isNewMarkerVisible"
+			_isActionMarker = "isCallToActionMarkerVisible"
+			_text = 'IDS_RANK_BATTLES_ACTION_MARKER_QUALIFICATION'
 			_size = "_size"
 		)
 	)
@@ -1402,20 +1462,25 @@
 
 		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
 
-		(var sseMotivatorCollection:dhCollection = "getCollection(CC.sseCore)")
+		(var motivatorTasks:dhCollection = "getCollectionByPath(CC.sseCore, 'motivator.sorted')")
+		(var sseCoreEntity:dhEntity = "motivatorTasks.getEntityAtIndex(0)")
+		(var sseCore:dhComponent = "sseCoreEntity.sseCore")
+		(var statusesCore:array = "sseCore.statuses ?: []" (event "sseCore.evStatusesChanged"))
+		(var isClaimed:bool = "sseCore.isClaimed" (event "sseCore.evChanged"))
+		(var isManualRewardClaim:bool = "	sseCoreEntity.sseChain.claimRewards ||
+											sseCoreEntity.sseEpic.claimRewards ||
+											sseCoreEntity.sseTask.claimRewards")
 
-		(var sseMotivatorSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.sorted')")
-		(var sseMotivatorComingSoonSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.comingSoon.sorted')")
-		(var sseMotivatorActiveSubCollection:dhCollection = "sseMotivatorCollection.getChildByPath('byMotivationPriority.active')")
+		(var isMotivatorStatusDone:bool = "	(isIn(SC.Sse.SSE_STATUSES.DONE, statusesCore) && !isManualRewardClaim) ||
+											isManualRewardClaim && isClaimed ||
+											isIn(SC.Sse.SSE_STATUSES.LOCKED_BY_TIME, statusesCore) ||
+											isIn(SC.Sse.SSE_STATUSES.LOCKED_BECAUSE_NOT_PRIME_TIME, statusesCore)")
 
-		(var isMotivatorStatusDone:bool = "sseMotivatorActiveSubCollection.length == 0")
-		(var tasksCounter:number = "isMotivatorStatusDone	? min(SC.Sse.SSE_MOTIVATION_BANNER.COMING_SOON_TASKS_ON_BANNER_MAX, sseMotivatorComingSoonSubCollection.length)
-															: min(SC.Sse.SSE_MOTIVATION_BANNER.ACTIVE_TASKS_ON_BANNER_MAX, sseMotivatorSubCollection.length)")
-		(var sseTasks:dhCollection = "isMotivatorStatusDone ? sseMotivatorComingSoonSubCollection : sseMotivatorSubCollection")
+		(var motivatorTasksCounter:number = "isMotivatorStatusDone ? 1 : min(SC.Sse.SSE_MOTIVATION_BANNER.ACTIVE_TASKS_ON_BANNER_MAX, motivatorTasks.length)")
 
-
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_INTRO ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_PIN_INTRO,
+																											SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_WEEKLY_TASK_COMPLETED ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
@@ -1430,12 +1495,11 @@
 	)
 
 	(controller $Repeat renderer='SseMotivatorSubBannerItem'
-		(bind count "tasksCounter")
+		(bind count "motivatorTasksCounter")
 		(args
-			_sseId =			"sseTasks[$index].id"
-			_isSingleCard =		"tasksCounter == 1 || isMotivatorStatusDone"
-			_guidingOffsets =	"_guidingOffsets"
-			_bannerHeight =		"EVENT_BANNER_HEIGHT.LARGE"
+			_sseId = "motivatorTasks[$index].id"
+			_guidingOffsets = "_guidingOffsets"
+			_isMotivatorDoneStateView = "motivatorTasksCounter == 1 || isMotivatorStatusDone"
 		)
 	)
 
@@ -1455,59 +1519,96 @@
 	)
 )
 
-(def element SseMotivatorSubBannerItem (_sseId:number = 0, _isSingleCard:bool = false, _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element SseMotivatorSubBannerItem (	_sseId:number = 0,
+											_bannerHeight:number = 0,
+											_isMotivatorDoneStateView:bool = false,
+											_guidingOffsets:dict = {})
 	(scope
 		(event evSubBannerItemClicked)
 
 		(macro HIGH_CONTRAST_DATA_SCOPE)
-		(macro MOUSE_HANDLER_SCOPE)
 		(macro MOTIVATOR_STAGE_SIZES)
 
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE "'button_'")
+		(macro MOUSE_HANDLER_SCOPE "'icon_pinned_'")
+
 		(var sseEntity:dhEntity = "getEntity(_sseId)")
-		(var sseTaskId:str = "sseEntity.sseCore.id" (event "sseEntity.sseCore.evChanged"))
-		(var sseCategoryId:str = "sseEntity.sseCore.tag ?: ''" (event "sseEntity.sseCore.evChanged"))
-		(var isTaskHighlighted:bool = "sseEntity.sseCore.isMotivationHighlighted" (event "sseEntity.sseCore.evChanged"))
-		(var statusesCore:array = "sseEntity.sseCore.statuses ?: []" (event "sseEntity.sseCore.evStatusesChanged"))
-		(var isTaskCompletedBlock:bool = "	isIn(SC.Sse.SSE_STATUSES.DONE, statusesCore) ||
+		(var sseCore:dhComponent = "sseEntity.sseCore")
+		(var sseTask:dhComponent = "sseEntity.sseTask")
+		(var isEpicTask:bool = "sseTask.epicId != null")
+		(var sseTaskId:str = "isEpicTask ? sseTask.epicId : sseCore.id" (event "sseCore.evChanged"))
+		(var sseCategoryId:str = "sseCore.tag ?: ''" (event "sseCore.evChanged"))
+		(var isTaskHighlighted:bool = "sseCore.isMotivationHighlighted" (event "sseCore.evChanged"))
+		(var statusesCore:array = "sseCore.statuses ?: []" (event "sseCore.evStatusesChanged"))
+		(var isClaimed:bool = "sseCore.isClaimed" (event "sseCore.evChanged"))
+		(var isActive:bool = "isIn(SC.Sse.SSE_STATUSES.ACTIVE, statusesCore)")
+
+		(var isManualRewardClaim:bool = "	sseEntity.sseChain.claimRewards ||
+											sseEntity.sseEpic.claimRewards ||
+											sseEntity.sseTask.claimRewards")
+		(var isClaimButtonVisible:bool = "!isActive && isManualRewardClaim && !isClaimed")
+
+		(var isTaskCompletedBlock:bool = "	(isIn(SC.Sse.SSE_STATUSES.DONE, statusesCore) && !isManualRewardClaim) ||
+											isManualRewardClaim && isClaimed ||
 											isIn(SC.Sse.SSE_STATUSES.LOCKED_BY_TIME, statusesCore) ||
 											isIn(SC.Sse.SSE_STATUSES.LOCKED_BECAUSE_NOT_PRIME_TIME, statusesCore)")
 		(var elementName:str = "isTaskCompletedBlock ? 'SseMotivatorTaskCompleted' : 'SseMotivatorTaskActive'")
+		(var isAnimationEnabled:bool = "isTaskHighlighted && !isTaskCompletedBlock")
+
+		(var isPinnedTask:bool = "toBool(sseCore.pinnedAt)" (event "sseCore.evChanged"))
+
+		(var bgState:number = " mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+											: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var isSseOpenEnded:bool =	"sseEntity.hasComponent(CC.sseOpenEnded)")
+		(var route:str = "isSseOpenEnded ? SC.Ui_windows.ROUTE.SSE_OPEN_ENDED : 'sse_' + sseCategoryId ")
+		(struct activeTip =	PULL_ACTIVE_GUIDING_TIP())
 	)
 
 	(dispatch evSubBannerItemClicked dir="EventDirection.DOWN" on='leftClick')
 	(bindcall externalCall
-		"'inputMapping.onAction'"
+		"activeTip.chainId == SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_INTRO ? 'inputMapping.onAction' : ''"
 		"[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_INTRO } ]"
-		watch=false (event "evSubBannerItemClicked")
+		watch=false
+		(event "evSubBannerItemClicked")
 	)
 	(bindcall externalCall
-		"isTaskCompletedBlock ? 'inputMapping.onAction' : ''"
+		"activeTip.chainId == SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_COMPLETED ? 'inputMapping.onAction' : ''"
 		"[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_COMPLETED } ]"
-		watch=false (event "evSubBannerItemClicked")
+		watch=false
+		(event "evSubBannerItemClicked")
 	)
 
 	(style
 		(height = 100%)
-		(backgroundColor = "NO_COLOR")
-		(bind width "_isSingleCard ? EVENT_BANNER_WIDTH.LARGE : EVENT_BANNER_WIDTH.MEDIUM")
+		(bind width "_isMotivatorDoneStateView ? EVENT_BANNER_WIDTH.LARGE : EVENT_BANNER_WIDTH.MEDIUM")
 	)
 
 	(macro MOUSE_HANDLER_BANNER
-		_methods = "[	{	type: 'inputMapping.onAction',
-							name: 'navigateTo',
-							args: { route: 'sse_' + sseCategoryId }},
-						{	type: 'inputMapping.onAction',
-							name: 'SSEProxyCommonUSS.selectItem',
-							args: { itemId: sseTaskId }}]"
+		_methods = "icon_pinned_rollOver || button_rollOver	? []
+															: [
+																{
+																	type: 'inputMapping.onAction',
+																	name: 'navigateTo',
+																	args: { route: route }
+																},
+																{
+																	type: 'inputMapping.onAction',
+																	name: 'SSEProxyCommonUSS.selectItem',
+																	args: { itemId: sseTaskId }
+																}
+															]"
 	)
 
-	(element EventBannerBackgroundNoImage
-		_rollOver = "rollOver"
-		_mouseDown = "mouseDown"
+	(element MotivatorTaskCardBackground
+		_isFromPort = true
+		_bgState = "bgState"
 	)
 
 	(block
-		(bind visible "isTaskHighlighted && !isTaskCompletedBlock")
+		(bind visible "isAnimationEnabled")
 		(class $FullsizeAbsolute)
 		(style
 			(hitTest = false)
@@ -1516,12 +1617,12 @@
 			(backgroundSize = "fill")
 		)
 		(controller $Spine
-			(bind enabled "isTaskHighlighted && !isTaskCompletedBlock")
+			(bind enabled "isAnimationEnabled")
 		)
 	)
 
 	(block
-		(bind visible "isTaskCompletedBlock && !_isSingleCard")
+		(bind visible "isTaskCompletedBlock && !_isMotivatorDoneStateView")
 		(style
 			(position = "absolute")
 			(right = 0)
@@ -1534,19 +1635,25 @@
 
 	(block
 		(class $Fullsize)
-		(style (padding = "M"))
+		(style
+			(paddingTop = "M")
+			(paddingLeft = "M")
+			(paddingRight = "M")
+			(paddingBottom = "SXS")
+		)
 
 		(controller $Instance
 			(bind renderer "elementName")
 			(args
-				_sseId =			"_sseId"
-				_isSingleCard =		"_isSingleCard"
-				_guidingOffsets =	"_guidingOffsets"
-				_bannerHeight =		"_bannerHeight"
+				_sseId = "_sseId"
+				_isMotivatorDoneStateView = "_isMotivatorDoneStateView"
+				_guidingOffsets = "_guidingOffsets"
+				_isClaimButtonVisible = "isClaimButtonVisible"
 			)
 		)
 	)
 
+	
 	(block
 		(class $FullsizeAbsolute)
 		(style (backgroundColor = "NO_COLOR"))
@@ -1556,6 +1663,7 @@
 			(bind enabled "!isTaskCompletedBlock")
 			(args
 				_sseId = "_sseId"
+				_isRewardChoice = "isManualRewardClaim"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -1565,160 +1673,219 @@
 			(bind enabled "isTaskCompletedBlock")
 			(args
 				_sseId = "_sseId"
-				_isSingleCard = "_isSingleCard"
+				_isMotivatorDoneStateView = "_isMotivatorDoneStateView"
+				_isRewardChoice = "isManualRewardClaim"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
+
+	(block
+		(macro MOUSE_EVENTS_DISPATCHER "'button_'")
+
+		(style
+			(position = "absolute")
+			(bottom = "S")
+			(left = "M")
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isClaimButtonVisible")
+			(args
+				_label = 'IDS_SSE_CLAIM_REWARD'
+				_width = 170px
+				_focusIndex = 1
+				_methods = "[
+								{	type: 'inputMapping.onRequest',
+									name: 'showSseClaimWindow',
+									args: { sseId: _sseId }
+								}
+							]"
+			)
+		)
+	)
+
+	
+	(block
+		(macro MOUSE_EVENTS_DISPATCHER "'icon_pinned_'")
+
+		(style
+			(position = "absolute")
+			(top = "XXS")
+			(right = "XXS")
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(controller $Tooltip
+			(renderer='SimpleStatusTooltip')
+			(args
+				_text = 'IDS_SSE_MOTIVATOR_UNPIN_HINT'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Instance renderer='SsePinnedTaskIcon'
+			(bind enabled "isPinnedTask")
+			(args
+				_isFromMotivator = true
+				_sseId = "sseCore.id"
+				_isPinShown = "icon_pinned_rollOver"
+			)
+		)
+
+		(macro CLICK_HANDLER
+			_prefix = "'icon_pinned_'"
+			_methods = "[
+				{
+					type: 'inputMapping.onAction',
+					name: 'SSEProxyCommonUSS.unpinSSEElement',
+					args: { sseID: sseCore.id }
+				}
+			]"
+		)
+	)
 )
 
-(def element SseMotivatorTaskActive (_sseId:number = 0, _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element SseMotivatorTaskActive (	_sseId:number = 0,
+										_guidingOffsets:dict = {},
+										_bannerHeight:number = 0,
+										_isClaimButtonVisible:bool = false)
 	(scope
 		(event evSubBannerItemClicked)
 		(event evDeactivateTip)
 
+		(macro MOUSE_HANDLER_SCOPE)
 		(macro MOTIVATOR_STAGE_SIZES)
 
 		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
 
-		(var sseEntity:dhEntity = "getEntity(_sseId)")
-		(var progressCurrent:number = "sseEntity.progress.value" (event "sseEntity.progress.evChanged"))
-		(var progressMax:number = "sseEntity.progress.max" (event "sseEntity.progress.evChanged"))
-		(var sseTaskId:str = "sseEntity.sseCore.id" (event "sseEntity.sseCore.evChanged"))
+		(struct sseMotivator = GET_MOTIVATOR_INFO(_sseId = "_sseId"))
 
-		(var isChain:bool = "sseEntity && sseEntity.hasComponent(CC.sseChain)")
-		(var currentTaskId:str = "isChain ? sseEntity.sseChain.currentTaskId : ''" (event "sseEntity.sseChain.evChanged"))
-		(var sseCoreEntity:dhEntity = "getPrimaryEntity(CC.sseCore, currentTaskId)")
-		(var sseTaskComponent:dhComponent = "isChain ? sseCoreEntity.sseTask : sseEntity.sseTask")
-		(var sseTaskEntityId:number = "isChain ? sseCoreEntity.id : _sseId")
-		(var sseChainName:str = "sseEntity.sseChain.name ?: ''" (event "sseEntity.sseChain.evChanged"))
-		(var sseChainDisplayName:str = "sseChainName == '' || sseChainName.length > MOTIVATOR_SYMBOLS_MAX	? tr('IDS_SSE_MOTIVATOR_TASK_COMMON_TITLE_COLON')
-																											: sseChainName + ':'")
-		(var sseTaskName:str = "sseTaskComponent.name.length > MOTIVATOR_SYMBOLS_MAX ? tr('IDS_SSE_MOTIVATOR_TASK_COMMON_TITLE') : sseTaskComponent.name")
-		(var nameToDisplay:str = "isChain ? sseChainDisplayName : sseTaskName")
+		(var taskDescriptionData:dict = "sseMotivator.conditions.taskDescriptionData" (event "sseMotivator.conditions.evConditionSetChanged"))
+		(var isSingleBattle:bool = "sseMotivator.conditions.isSingleBattle" (event "sseMotivator.conditions.evConditionSetChanged"))
 
-		(var taskConditions:array = "sseTaskComponent.conditions ?: []" (event "sseTaskComponent.evChanged"))
-		(var conditionId:number = "taskConditions[0]")
-		(var sseConditionEntity:dhEntity = "getEntity(conditionId)")
-		(var taskDescriptionData:dict = "sseConditionEntity.sseConditions.taskDescriptionData" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
-
-		(var sseTaskRewards:array = "sseTaskComponent.rewards ?: []" (event "sseTaskComponent.evChanged"))
+		(var sseTaskRewards:array = "sseMotivator.infoSourceComponent.rewards ?: []" (event "sseMotivator.infoSourceComponent.evChanged"))
 		(var rewardEntity:dhEntity = "getEntity(sseTaskRewards[0])")
 		(var reward:dict = "{	id: rewardEntity.rewardComponent.id,
-								amount: 0,
+								amount: rewardEntity.rewardComponent.amount,
 								name: rewardEntity.rewardComponent.name,
 								type: rewardEntity.rewardComponent.type,
 								subtype: rewardEntity.rewardComponent.subtype,
 								params: rewardEntity.rewardComponent.params,
 								isPRMP: rewardEntity.rewardComponent.isPRMP }")
-		(var isResourceCoeff:bool = "reward.type == SC.Common.REWARD_TYPE.RESOURCE_COEFF")
-		(var rewardAmount:number = "rewardEntity.rewardComponent.amount ?: 0")
-		(var resMulCoeff:str = "(rewardAmount > 0 ? '+' : '') + toString(rewardAmount) + '%'")
-		(var rewardCounter:str = "isResourceCoeff ? resMulCoeff : toString(rewardAmount)")
 
-		
-		(var sseTaskChainId:str = "sseCoreEntity.sseCore.id" (event "sseCoreEntity.sseCore.evChanged"))
-		(var sseIdUI:str = "isChain ? sseTaskChainId : sseTaskId")
+		(var isPinnedTask:bool = "toBool(sseMotivator.core.pinnedAt)" (event "sseMotivator.core.evChanged"))
 
+		(var progressSourceEntityId:number = "sseMotivator.isChain ? sseMotivator.coreEntity.id : _sseId")
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_TASK_CHANGED ]"))
+		(var isProgressVisible:bool = "	!_isClaimButtonVisible && (
+										!sseMotivator.entity.hasComponent(CC.sseOpenEnded) ||
+										sseMotivator.isChain ||
+										sseMotivator.isEpic)")
+
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_TASK_CHANGED ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
 		_tipId = "checkedTipId.value"
 	)
 
-	(dispatch evDeactivateTip (event "evSubBannerItemClicked") (bind enabled "sseTaskId == activeTip.targetId"))
-	(bindcall externalCall	"'inputMapping.onAction'" "[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_TASK_CHANGED } ]" watch=false (event "evDeactivateTip"))
+	(dispatch evDeactivateTip (event "evSubBannerItemClicked") (bind enabled "sseMotivator.sseTaskId == activeTip.targetId"))
 
-	(style
-		(width = 100%)
-		(backgroundColor = "NO_COLOR")
+	(bindcall externalCall
+		"'inputMapping.onAction'"
+		"[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_TASK_CHANGED } ]"
+		watch=false
+		(event "evDeactivateTip")
 	)
+
+	(class $Fullsize)
+	(style (backgroundColor = "NO_COLOR"))
 
 	(hblock
 		(style
 			(width = 100%)
-			(marginBottom = "M")
-		)  
+			(marginBottom = "S")
+			(bind paddingRight "sseMotivator.isChain	? 20px :
+								isPinnedTask			? XS
+														: 0px")
+		)
 
 		(tf
-			(class $TextDefaultBoldNM)
+			(class $TextDefaultBold14NM)
 			(style
-				(alpha = "TA")
+				(maxWidth = 100%)
 				(marginRight = "S")
-				(bind width "isChain ? 'auto' : 100%")
+				(alpha = "TA")
+				(wordWrap = false)
+				(elideMode = true)
 			)
-
-			(bind text "toUpper(nameToDisplay)")
+			(bind text "toUpper(sseMotivator.nameToDisplay)")
 		)
 
 		(block
-			(controller $Instance renderer='DefaultDividedCounter'
-				(bind enabled "isChain")
+			(controller $Instance renderer='EventBannerDividedCounter'
+				(bind enabled "sseMotivator.isChain")
 				(args
-					_curValueTextClass = '$TextDefaultBold14NM'
-					_curValue = "progressCurrent"
-					_maxValue = "progressMax"
-					_doNotAlphaOnZeroCurValue = true
+					_currentValue = "sseMotivator.progressCurrent"
+					_maxValue = "sseMotivator.progressMax"
 				)
 			)
 		)
 	)
 
 	(hblock
-		(style (width = 100%))
+		(class $Fullsize)
+		(style (bind paddingBottom "	isProgressVisible		? XS :
+										_isClaimButtonVisible	? L
+																: 0px"))
 
-		(tf
-			(class $TextDefaultNM)
-			(style
-				(width = 100%)
-				(maxHeight = 80px)
-				(elideMode = true)
-				(multiline = true)
-				(wordWrap = true)
-				(alpha = "TA")
-			)
-
-			(bind text "taskDescriptionData.ids")
+		(element SseTaskDescriptionMotivator
+			_sseId = "_sseId"
 		)
 
 		(block
 			(style
-				(marginTop = "-S")
+				(hitTest = false)
+				(width = 90px)
+				(height = 85px)
 				(marginRight = -6px)
+				(align = "center|middle")
 			)
 
-			(element RewardItem
-				_reward = "reward"
-				_withTooltip = false
-			)
-
-			(block
-				(style
-					(position = "absolute")
-					(bottom = 0)
-					(right = 0)
-					(width = 90px)
-					(height = 90px)
-					(align = "right|bottom")
+			(controller $Instance renderer='RewardItem'
+				(bind enabled "sseMotivator.rewards.length == 1 && !sseMotivator.isClaimRewardState")
+				(args
+					_isBattlePassSmallIconView = true
+					_withTooltip = false
+					_reward = "reward"
 				)
+			)
 
-				(element ImageTextCounter
-					_text = "rewardCounter"
+			(controller $Instance renderer='SseRewardCategory'
+				(bind enabled "sseMotivator.rewards.length > 1 || sseMotivator.isClaimRewardState")
+				(args
+					_isMotivatorView = true
+					_sseEntityId = "_sseId"
 				)
 			)
 		)
 	)
 
-	(element SseProgress
-		_sseId="sseTaskEntityId"
-		_conditionId="conditionId"
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='SseProgress'
+			(bind enabled "isProgressVisible")
+			(args
+				_sseEntityId = "progressSourceEntityId"
+				_conditionId = "sseMotivator.conditionId"
+			)
+		)
 	)
 
 	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "checkedTipId.value && sseTaskId == activeTip.targetId && routeEventsData.isActive")
+		(bind enabled "checkedTipId.value && sseMotivator.sseTaskId == activeTip.targetId && routeEventsData.isActive")
 		(args
 			_tipId =				"checkedTipId.value"
 			_tipPositioning =		"TIP_POSITION_RIGHT"
@@ -1733,12 +1900,15 @@
 	)
 )
 
-(def element SseMotivatorTaskCompleted (_sseId:number = 0, _isSingleCard:bool = false, _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element SseMotivatorTaskCompleted (	_sseId:number = 0,
+											_bannerHeight:number = 0,
+											_isMotivatorDoneStateView:bool = false,
+											_guidingOffsets:dict = {})
 	(scope
 		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
 
 		(var sseMotivatorCollection:dhCollection = "getCollection(CC.sseCore)")
-		(var sseMotivatorComingSoonCollection:dhCollection = "	getCollection(CC.sseCore).getChildByPath('byMotivationPriority.comingSoon.sorted')"
+		(var sseMotivatorComingSoonCollection:dhCollection = "getCollection(CC.sseCore).getChildByPath('motivator.withMotivationPriority.comingSoon.sorted')"
 																									(event "sseMotivatorCollection.evChildAdded")
 																									(event "sseMotivatorCollection.evChildRemoved")
 																									(event "sseMotivatorCollection.evChildUpdated"))
@@ -1751,16 +1921,15 @@
 		(var sseCoreEntity:dhEntity = "getPrimaryEntity(CC.sseCore, currentTaskId)")
 
 		(var isTaskLockedByTime:bool = "isIn(SC.Sse.SSE_STATUSES.LOCKED_BY_TIME, statuses)")
-		(var sseName:str = "_isSingleCard	? 'IDS_SSE_MOTIVATOR_TASKS_COMPLETED' :
-							weekly			? 'IDS_SSE_MOTIVATOR_BP_WEEKLY_TASKS_COMPLETED'
-											: 'IDS_SSE_MOTIVATOR_BP_DAILY_TASKS_COMPLETED'")
-		(var sseStatusId:number = "	_isSingleCard	? sseMotivatorComingSoonCollection[0].id :
-									isChain			? isTaskLockedByTime ? _sseId : sseCoreEntity.id
-													: _sseId")
+		(var sseName:str = "_isMotivatorDoneStateView	? 'IDS_SSE_MOTIVATOR_TASKS_COMPLETED' :
+							weekly						? 'IDS_SSE_MOTIVATOR_BP_WEEKLY_TASKS_COMPLETED'
+														: 'IDS_SSE_MOTIVATOR_BP_DAILY_TASKS_COMPLETED'")
+		(var sseStatusId:number = "	_isMotivatorDoneStateView	? sseMotivatorComingSoonCollection[0].id :
+									isChain						? isTaskLockedByTime ? _sseId : sseCoreEntity.id
+																: _sseId")
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_DAILY_TASK_COMPLETED,
-																												SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_WEEKLY_TASK_COMPLETED ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_DAILY_TASK_COMPLETED ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
@@ -1770,15 +1939,15 @@
 	(class $Fullsize)
 	(style
 		(align = "middle")
-		(bind marginLeft "_isSingleCard ? 0px : M")
-		(bind flow "_isSingleCard ? horizontal : vertical")
+		(bind marginLeft "_isMotivatorDoneStateView ? 0px : M")
+		(bind flow "_isMotivatorDoneStateView ? horizontal : vertical")
 	)
 
 	(tf
-		(bind class "_isSingleCard ? '$TextDefaultBold22NM' : '$TextDefaultBold18NM'")
+		(bind class "_isMotivatorDoneStateView ? '$TextDefaultBold22NM' : '$TextDefaultBold18NM'")
 		(style
-			(bind marginRight "_isSingleCard ? MS : 0px")
-			(bind marginBottom "_isSingleCard ? 3px : S")
+			(bind marginRight "_isMotivatorDoneStateView ? MS : 0px")
+			(bind marginBottom "_isMotivatorDoneStateView ? 3px : S")
 			(alpha = "TA")
 		)
 		(bind text "sseName")

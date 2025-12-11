@@ -98,8 +98,8 @@
 
 (def element BattleProgressBar (_barWidth:number, _barHeight:number, _maxProgress:number, _valueProgress:number, _color:number)
 	(scope
-		(var maxProgress:number = "_maxProgress" watch=false)
-		(var valueProgress:number = "_valueProgress" watch=true)
+		(var maxProgress:number = "_maxProgress")
+		(var valueProgress:number = "_valueProgress")
 
 		(var barWidth:number = "_barWidth" watch=false)
 		(var barHeight:number = "_barHeight ? _barHeight : 4" watch=false)
@@ -716,6 +716,87 @@
 	)
 )
 
+(def constant ROW_ITEM_BACKGROUND_ALPHA  "{
+	SC.Ui_styles.BUTTON_STATE.UP:					0,
+	SC.Ui_styles.BUTTON_STATE.OVER:					0.1,
+	SC.Ui_styles.BUTTON_STATE.DOWN:					0.05,
+	SC.Ui_styles.BUTTON_STATE.SELECTED:				0.22,
+	SC.Ui_styles.BUTTON_STATE.SELECTED_OVER:		0.3,
+	SC.Ui_styles.BUTTON_STATE.DISABLED:				0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED_DISABLED:	0.045
+}")
+
+(def element RowItemBackground (_state:number)
+	(class $FullsizeAbsolute)
+	(style
+		(borderRadius = "XS")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(borderRadius = "XS")
+			(alpha = "ROW_ITEM_BACKGROUND_ALPHA[_state]")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "_state"
+			_alpha = "ROW_ITEM_BACKGROUND_ALPHA[_state]"
+		)
+	)
+)
+
+(def constant SELECT_BACKGROUND_STATE_ALPHA "{
+	SC.Ui_styles.BUTTON_STATE.UP:				0,
+	SC.Ui_styles.BUTTON_STATE.OVER:				0.1,
+	SC.Ui_styles.BUTTON_STATE.DOWN:				0.05,
+	SC.Ui_styles.BUTTON_STATE.SELECTED:			0.2,
+	SC.Ui_styles.BUTTON_STATE.SELECTED_OVER:	0.4,
+	SC.Ui_styles.BUTTON_STATE.SELECTED_DOWN:	0.3
+}")
+
+(def element ControlBackground (_hasInnerBackground:bool = false, _mouseDown:bool = false, _mouseOver:bool = false,
+								_selected:bool = false, _isSelectedStateInteractive:bool = false)
+	(scope
+		(var backgroundState:number = "	_isSelectedStateInteractive	?	_selected && _mouseDown	?	SC.Ui_styles.BUTTON_STATE.SELECTED_DOWN :
+																		_mouseDown				?	SC.Ui_styles.BUTTON_STATE.DOWN :
+																		_selected && _mouseOver	?	SC.Ui_styles.BUTTON_STATE.SELECTED_OVER :
+																		_selected				?	SC.Ui_styles.BUTTON_STATE.SELECTED :
+																		_mouseOver				?	SC.Ui_styles.BUTTON_STATE.OVER
+																								:	SC.Ui_styles.BUTTON_STATE.UP
+																	:	_selected				?	SC.Ui_styles.BUTTON_STATE.SELECTED :
+																		_mouseDown				?	SC.Ui_styles.BUTTON_STATE.DOWN :
+																		_mouseOver				?	SC.Ui_styles.BUTTON_STATE.OVER
+																								:	SC.Ui_styles.BUTTON_STATE.UP")
+	)
+	(class $FullsizeAbsolute)
+
+	(block
+		(bind visible "_hasInnerBackground && backgroundState == SC.Ui_styles.BUTTON_STATE.UP")
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "XS")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "XS")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = "SELECT_BACKGROUND_STATE_ALPHA[backgroundState]")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "backgroundState"
+			_alpha	 = "SELECT_BACKGROUND_STATE_ALPHA[backgroundState]"
+		)
+	)
+)
+
 
 (def element DockTTXWidgetMenuItemBackground (_state:number, _isAttentionState:bool = false, _borderRadius:number = "XS")
 	(scope
@@ -1152,7 +1233,8 @@
 								_isCapsStateVisible:bool=true,
 								_defaultFocused:bool=false,
 								_name:str = '',
-								_closeButtonName:str = '')
+								_closeButtonName:str = '',
+								_enabled:bool = true)
 	(scope
 		(event evInputFocusReset)
 		(event evInputFocusSet)
@@ -1186,6 +1268,8 @@
 		(flow = "horizontal")
 		(bind width "_width")
 		(align = "middle")
+		(bind hitTest "_enabled")
+		(backgroundColor = "NO_COLOR")
 	)
 
 	(block
@@ -1283,7 +1367,7 @@
 					defaultFocus = "_defaultFocused"
 					clickFocus = true
 					tabFocus = true
-
+					(bind enabled "_enabled")
 					(bind isFocused "$event" init=false on='evFocused')
 					(bindcall setFocus "false" (event "evInputFocusReset"))
 					(bindcall setFocus "true" (event "evInputFocusSet"))
@@ -1344,6 +1428,7 @@
 				_label = 'IDS_APPLY'
 				_dispatchedEv = "'evEnter'"
 				_dispatchParams = "{ value: textInput }"
+				_enabled = "_enabled"
 			)
 		)
 
@@ -1526,10 +1611,15 @@
 									_maxChars:number=0,
 									_name:str='',
 									_width:str = '100%',
-									_focusIndex:number = 0,
-									_isEnabled:bool = true,
-									_defaultFocused:bool = false )
+									_focusIndex:number=0,
+									_isEnabled:bool=true,
+									_defaultFocused:bool=false,
+									_isButtonEnterEnabled:bool=false,
+									_isEnterEnabledExternally:bool=null)
+	
 	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
 		(event evInputFocusSet)
 		(event evKeyDown)
 		(event evEnter)
@@ -1543,14 +1633,14 @@
 		(var textInputHasChanges:bool = "textInput != savedText")
 
 		(var isFocused:bool = false)
+		(var isActive:bool = "isFocused || rollOver")
 		(var isPlaceholderVisible:bool = "!isFocused && textInput.length == 0")
 
 		(var keyCode:number = 0)
 		(bind keyCode "$event.keyCode" init=false (event "evKeyDown"))
-
-		(macro MOUSE_HANDLER_SCOPE)
+		(var isButtonEnabled:bool = "_isEnterEnabledExternally != null ? _isEnterEnabledExternally : textInputHasChanges")
 	)
-	(dispatch evEnter dir="EventDirection.NONE" init=false watch=false (bind enabled "textInputHasChanges && keyCode == KEY_ENTER") (event "evKeyDown"))
+	(dispatch evEnter dir="EventDirection.NONE" init=false watch=false (bind enabled "isButtonEnabled && keyCode == KEY_ENTER") (event "evKeyDown"))
 
 	(dispatch "_onInputChangedEvent"	args="{value: textInput}" dir="EventDirection.UP" init=false watch=false on='change')
 	(dispatch "_onEnterEvent"			args="{value: textInput}" dir="EventDirection.UP" init=false watch=false (event "evEnter"))
@@ -1583,6 +1673,25 @@
 			(style
 				(backgroundImage = 'url:../service_kit/text_input/bg_rounded.png')
 				(scale9grid = 9)
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+				(scale9grid = 5)
+				(alpha = 0)
+			)
+			(controller $Animation
+				(bindcall play
+					duration=0.15
+					from="{ alpha:0 }"
+					to="{ alpha:0.3 }"
+					easing="Easing.quad_in"
+					reverse="!isActive"
+					(bind trigger "isActive")
+				)
 			)
 		)
 
@@ -1665,7 +1774,7 @@
 					_icon = "_isSmallButtonEnter ? SC.Ui_styles.BUTTON_ICON.ENTER : ''"
 					_focusIndex = "_focusIndex + 1"
 					_label = 'IDS_APPLY'
-					_enabled = "textInputHasChanges"
+					_enabled = "isButtonEnabled"
 					_dispatchedEv = "'evEnter'"
 					_dispatchParams = "{ value: textInput }"
 				)
@@ -2214,7 +2323,7 @@
 			(height = 14px)
 			(marginLeft = "XS")
 			(marginTop = 2px)
-			(backgroundImage = 'url:../service_kit/buttons/icons/out.png')
+			(backgroundImage = 'swf:../service_kit/buttons/icons_svg/icons_svg.swf:out')
 		)
 	)
 

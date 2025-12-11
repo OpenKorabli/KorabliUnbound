@@ -1,0 +1,1268 @@
+(def element EconomicsSection (_isHistoryPBS:bool = false)
+	(scope
+		(event evAddedToStage)
+		(event evStatsLoaded)
+		(event evHideLoadingDataMessage)
+
+		(var isContentShown:bool = false)
+		(bind isContentShown "true" init=false (event "evAddedToStage"))
+	)
+
+	(dispatch evAddedToStage			dir="EventDirection.NONE"	delay=0.15		on='addedToStage')
+	(dispatch evHideLoadingDataMessage	dir="EventDirection.DOWN"					(event "evStatsLoaded"))
+
+	(class $FullsizeAbsolute)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='RealEconomicsSection'
+			(bind enabled "isContentShown")
+			(args
+				_isHistoryPBS = "_isHistoryPBS"
+			)
+		)
+	)
+
+	(block
+		(class $MiddleVHAbsolutely)
+
+		(element PBSLoadingDataCaption
+			_isContentShown = "isContentShown"
+		)
+	)
+)
+
+(def element RealEconomicsSection (_isHistoryPBS:bool)
+	(scope
+		(macro PBS_LOADING_ANIMATION_SCOPE)
+
+		(var battleResultsDH:dhEntity =		"getSingleEntity(CC.battleResultsStructured)")
+		(var economicsBase:array =			"battleResultsDH.battleResultsStructured.base_economics")
+		(var economicsPrem:array =			"battleResultsDH.battleResultsStructured.prem_economics")
+		(var isPremium:bool =				"battleResultsDH.battleResultsStructured.isPremium")
+
+		(var battleInfoEntity:dhEntity =	"getSingleEntity(CC.battleInfo)")
+		(var isReplayPlaying:bool =			"battleInfoEntity.battleInfo.isReplayPlaying")
+
+		(var isBuyPremButtonHidden:bool =	"isPremium || isReplayPlaying")
+	)
+
+	(macro PBS_LOADING_ANIMATION)
+	(style
+		(width = 100%)
+		(height = "{ 720: 630px, 1080: 738px }")
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "SXS")
+		)
+
+		(controller $Instance renderer = 'BuyPremiumFromBattleResultElement'
+			(bind enabled "!isBuyPremButtonHidden")
+			(args
+				_isHistoryPBS = "_isHistoryPBS"
+			)
+		)
+	)
+
+	(scrollArea
+		(class $Fullsize)
+		(style
+			(width = "{ 1280: 1078px, 1920: 1422px }")
+			(height = 100%)
+		)
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_singleStep = "100px"
+			_wheelScrollAcceleration = "1"
+		)
+
+		(content
+			(style
+				(flow = "horizontal")
+				(width = 100%)
+				(hgap = "XS")
+			)
+
+			(block
+				(style
+					(width = 50%)
+					(bind alpha "isPremium ? 0.5 : 1")
+				)
+
+				(element BattleStatsEconomicsColumn
+					_list =			"economicsBase"
+					_isPremium =	false
+				)
+			)
+
+			(block
+				(style
+					(width = 50%)
+					(bind alpha "isPremium ? 1 : 0.5")
+				)
+
+				(element BattleStatsEconomicsColumn
+					_list =			"economicsPrem"
+					_isPremium =	true
+				)
+			)
+		)
+	)
+
+	(element DeclareBlurLayer)
+)
+
+(def element BuyPremiumFromBattleResultElement (_isHistoryPBS:bool)
+	(scope
+		(event evMKPremBoughtYet)
+		(event evSetSwitchFinished)
+
+		(macro PULL_CURRENT_TOP_WINDOW_NAME)
+		(var isResultScreenTop:bool = "isIn(currentTopWindowName, [ SC.Ui_windows.MODAL.RESULT_SCREEN, SC.Ui_windows.MODAL.RESULT_SCREEN_PORT ])")
+
+		(var resourceComponent:dhComponent = "getSingleComponent(CC.accountResource)")
+
+		(var isSyncedWithWallet:bool =		"resourceComponent.isSyncedWithWallet"	(event "resourceComponent.evChangedIsSyncedWithWallet"))
+		(var isWalletAvailable:bool =		"resourceComponent.walletStatus"		(event "resourceComponent.evChangedWalletStatus"))
+		(var activePremiumType:number =		"resourceComponent.activePremiumType"	(event "resourceComponent.evActivePremiumTypeChanged"))
+		(var isShowWalletWarning:bool =		"!isSyncedWithWallet || !isWalletAvailable")
+
+		(var mkPremBoughtYet:bool = false)
+		(var isSwitchFinished:bool = false)
+		(bind mkPremBoughtYet "true"	init=false	(event "evMKPremBoughtYet"))
+		(bind isSwitchFinished "true"	init=false	(event "evSetSwitchFinished"))
+
+
+		(var isPremiumPurchaseAnimationShown:bool = "isResultScreenTop && mkPremBoughtYet && !isSwitchFinished")
+		(var isStatusLineShown:bool = "isSwitchFinished || ((activePremiumType == SC.Common.PREMIUM_TYPE.WOWS) && !mkPremBoughtYet)")
+	)
+
+	(dispatch evMKPremBoughtYet		dir="EventDirection.NONE"				(event "resourceComponent.evActivePremiumTypeChanged"))
+	(dispatch evSetSwitchFinished	dir="EventDirection.NONE"	delay=1.15	(bind trigger "isPremiumPurchaseAnimationShown") (bind enabled "isPremiumPurchaseAnimationShown"))
+
+	(style
+		(width = 100%)
+		(height = 24px)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(right = "-XXS")
+			(alpha = "isPremiumPurchaseAnimationShown ? 0 : 1")
+			(visualOffsetY = "isPremiumPurchaseAnimationShown ? 10px : 0px")
+		)
+
+		(block
+			(style
+				(bind hitTest "!(isStatusLineShown || isShowWalletWarning)")
+				(bind alpha "isStatusLineShown		? 0 :
+							 isShowWalletWarning	? 0.5
+													: 1")
+			)
+
+			(element ButtonBuyPremiumPBS
+				_isHistoryPBS = "_isHistoryPBS"
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+
+			(controller $Instance renderer='WalletServiceStatus'
+				(bind enabled "isShowWalletWarning && !isStatusLineShown")
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				watch =		false
+				duration =	0.15
+				delay =		1
+				from =		"{ alpha: 1, visualOffsetY: 0px }"
+				to =		"{ alpha: 0, visualOffsetY: 10px }"
+				easing =	"Easing.line"
+				action =	"kill"
+				(bind enabled "isPremiumPurchaseAnimationShown")
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(hitTest = false)
+			(top = 6px)
+			(right = 0px)
+			(bind alpha "isStatusLineShown ? 1 : 0")
+			(visualOffsetY = "isPremiumPurchaseAnimationShown ? -10px : 0px")
+		)
+
+		(element StatusLine
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.CHECK"
+			_text =				'IDS_BOUGHT_MK_PREMIUM_ACCOUNT'
+			_textClass =		'$TextDefault18NM'
+			_leading =			-3
+		)
+
+		(controller $Animation
+			(bindcall play
+				watch =		false
+				duration =	0.15
+				delay =		1
+				from =		"{ alpha: 0, visualOffsetY: isPremiumPurchaseAnimationShown ? -10px : 0px }"
+				to =		"{ alpha: 1, visualOffsetY: 0px }"
+				easing =	"Easing.line"
+				action =	"kill"
+				(bind enabled "isPremiumPurchaseAnimationShown")
+			)
+		)
+	)
+)
+
+(def element ButtonBuyPremiumPBS (_isHistoryPBS:bool)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var resourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var accountGold:number =				"resourceComponent.gold ?: 0"			(event "resourceComponent.evChangedGold"))
+
+		(var premiumItemEntity:dhEntity =		"getPrimaryEntity(CC.premiumItem, 'PREM_001_WOWS')")
+		(var leastGoldPrice:number =			"premiumItemEntity.premiumItem.gold"	(event "premiumItemEntity.premiumItem.evChangedGold"))
+
+		(var isModalWindowBuyPremShown:bool =	"accountGold >= leastGoldPrice")
+
+		(var requestBuyPremiumPBS:str =			"isModalWindowBuyPremShown	? _isHistoryPBS		? 'buttonShowPremiumPeriods'
+																								: 'buyPremiumBattleResult'
+																			: ''")
+
+		(var requestBuyPremiumPBSParams:dict =	"isModalWindowBuyPremShown	? { isFromPBS: true } : {}")
+
+		(var navigateActionParams:dict =		"{	route:	SC.Ui_windows.ROUTE.OVERLAY_BROWSER,
+													data:	{ url: SC.Ui_windows.GUI_URL.BUY_GOLD_AND_PREMIUM_IN_GAME } }")
+	)
+
+	(bindcall externalCall "'inputMapping.onRequest'"								"[requestBuyPremiumPBS, requestBuyPremiumPBSParams]"	init=false watch=false	on='leftClick')
+	(bindcall externalCall "requestBuyPremiumPBS ? '' : 'inputMapping.onAction'"	"['navigateTo', navigateActionParams]"					init=false watch=false	on='leftClick')
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_CT	"mouseHandler.mouseDown		? COLOR_TRANSFORM_MOUSE_DOWN :
+												 mouseHandler.rollOver		? COLOR_TRANSFORM_MOUSE_OVER
+																			: CT_NONE")
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler =		"mouseHandler"
+	)
+
+	(macro STRUCT_SOUND_HANDLER
+		_mouseHandler =		"mouseHandler"
+		_soundSet =			"'button_gold'"
+	)
+
+	(style (height = 24px))
+
+	(controller $Tooltip
+		(renderer = 'BuyPremResultScreenButtonTooltip')
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../service_kit/buttons/backgrounds/icon_premium.png')
+			(scale9grid = 4)
+		)
+	)
+
+	(tf
+		(class $TextDefaultBoldNM)
+		(style
+			(hitTest = false)
+			(marginLeft = "M")
+			(marginTop = 6px)
+			(marginRight = "M")
+			(textColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW")
+		)
+
+		(text = 'IDS_BUY_PREMIUM_ACCOUNT')
+	)
+)
+
+(def element BattleStatsEconomicsColumn (_list:array, _isPremium:bool)
+	(style
+		(width = 100%)
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	)
+
+	
+	(controller $Repeat renderer='BattleStatsEconomicsRow'
+		(bind count "_list.length")
+		(args
+			_entityId =		"_list[$index]"
+			_isPremium =	"_isPremium"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRow (_entityId:number, _isPremium:bool = false, _childrenLength:number = 0)
+	(scope
+		(var entity:dhEntity =		"getEntity(_entityId)")
+		(var rendererType:str =		"entity.battleResultsEntry.type ?: ''")
+		(var renderer:str =			"rendererType in BATTLE_STATS_ECONOMICS_ROW_RENDERER ? BATTLE_STATS_ECONOMICS_ROW_RENDERER[rendererType] : ''")
+	)
+
+	(style
+		(width = 100%)
+		(bind marginTop		"(rendererType == SC.Result_screen.TYPES.SUBLINE) && ($index == 0)						? 5px : 0px")
+		(bind marginBottom	"rendererType == SC.Result_screen.TYPES.EXP_WITH_PROGRESS								? SXS :
+							 (rendererType == SC.Result_screen.TYPES.SUBLINE) && ($index + 1 == _childrenLength)	? S
+																													: 0px")
+	)
+
+	(controller $Instance
+		(bind renderer "renderer")
+		(bind enabled "renderer")
+		(args
+			_entity =		"entity"
+			_isPremium =	"_isPremium"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsEmptyLine ()
+	(style
+		(width = 100%)
+		(height = 3px)
+	)
+)
+
+(def element BattleStatsEconomicsHeader (_entity:dhEntity, _isPremium:bool)
+	(scope
+		(var childrenRows:array = "_entity.battleResultsEntry.children")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style
+			(width = 100%)
+			(height = 30px)
+			(paddingTop = "-XS")
+			(scale9grid = 2)
+			(backgroundImage = "'url:../service_kit/panel_backgrounds/pbs/' + _entity.battleResultsEntry.bgColor + '.png'")
+		)
+
+		(element BattleStatsEconomicsRowItem
+			_entity =			"_entity"
+			_customTextClass =	'$TextDefaultBold22NM'
+			_isPremium =		"_isPremium"
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		
+		
+		(controller $Repeat renderer='BattleStatsEconomicsRow'
+			(bind count "childrenRows.length")
+			(args
+				_entityId =			"childrenRows[$index]"
+				_childrenLength =	"childrenRows.length"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsSubHeader (_entity:dhEntity)
+	(scope
+		(event evGroupClicked)
+
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(macro USER_PREF_DATA)
+
+		(var rowHint:str =				"_entity.battleResultsEntry.hint ?: ''")
+		(var bgColor:str =				"_entity.battleResultsEntry.bgColor ?: ''")
+		(var isExpandHidden:bool =		"_entity.battleResultsEntry.hideExpand")
+		(var rowType:str =				"_entity.battleResultsEntry.values[0].type ?: ''")
+		(var expandGroupName:str =		"_entity.battleResultsEntry.expandGroupName ?: ''")
+		(var childrenRows:array =		"_entity.battleResultsEntry.children")
+
+		(var isGroupExpandedPref:bool =	"toBool(userPrefs['PBSEconomicsExpand'][expandGroupName])")
+		(var hasWarningIcon:bool =		"rowType == 'warning_icon' && toBool(_entity.battleResultsEntry.values[0].value)")
+	)
+
+	(style (width = 100%))
+
+	(hblock
+		(bind visible "bgColor")
+
+		(macro STRUCT_MOUSE_DISPATCHER
+			_mouseHandler = "mouseHandler"
+		)
+
+		(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'PBSEconomicsExpand', subName: expandGroupName, value: !isGroupExpandedPref }]"	init=false watch=false	on='leftClick')
+
+		(style
+			(width = 100%)
+			(height = 30px)
+			(scale9grid = 2)
+			(bind backgroundImage "bgColor ? 'url:../service_kit/panel_backgrounds/pbs/' + bgColor + '.png' : ''")
+		)
+
+		(controller $Tooltip
+			(bind enabled "bgColor && rowHint")
+			(renderer = 'DescriptionStatusLineTooltip')
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				_statusText =		"isGroupExpandedPref ? 'IDS_HINT_COLLAPSE_GROUP' : 'IDS_HINT_EXPAND_GROUP'"
+				_descriptionText =	"rowHint"
+				_width =			"DEFAULT_TOOLTIP_WIDTH"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(block
+			(bind visible "bgColor")
+
+			(style
+				(width = 18px)
+				(marginTop = "S")
+				(marginLeft = "S")
+			)
+
+			(controller $Instance renderer='ButtonExpand'
+				(bind enabled "bgColor")
+				(args
+					_expanded =			"isGroupExpandedPref"
+					_isInOverState =	"mouseHandler.rollOver"
+					_isInDownState =	"mouseHandler.mouseDown"
+				)
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(style (hitTest = false))
+
+			(controller $Instance renderer='BattleStatsEconomicsRowItem'
+				(bind enabled "bgColor")
+				(args
+					_entity =			"_entity"
+					_customTextClass =	'$TextDefaultBold20NM'
+					_size =				"SIZE.MEDIUM"
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "hasWarningIcon")
+
+		(style
+			(position = "absolute")
+			(right = 260px)
+			(top = "XS")
+			(height = 21px)
+			(width = 21px)
+			(backgroundImage = 'swf:../service_kit/markers_svg/markers_svg.swf:marker_attention')
+		)
+
+		(controller $Tooltip
+			(bind enabled "hasWarningIcon")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = 'IDS_BATTLE_STATS_WARNING_ICON_HINT'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(element DEFAULT_EXPAND_CONTAINER "isGroupExpandedPref"
+		(controller $Repeat renderer='BattleStatsEconomicsRow'
+			(bind count "childrenRows.length")
+			(args
+				_entityId =			"childrenRows[$index]"
+				_childrenLength =	"childrenRows.length"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsTotal (_entity:dhEntity)
+	(style
+		(width = 100%)
+		(height = 50px)
+		(scale9grid = 2)
+		(bind backgroundImage "_entity.battleResultsEntry.bgColor ? 'url:../service_kit/panel_backgrounds/pbs/' + _entity.battleResultsEntry.bgColor + '.png' : ''")
+	)
+
+	(element BattleStatsEconomicsRowItem
+		_entity =			"_entity"
+		_customTextClass =	'$TextDefaultBold22NM'
+		_size =				"SIZE.LARGE"
+	)
+)
+
+(def element BattleStatsEconomicsTooltipLine (_entity:dhEntity)
+	(scope
+		(var childrenRows:array = "_entity.battleResultsEntry.children")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style
+			(width = 100%)
+			(height = 26px)
+			(marginTop = 6px)
+			(marginBottom = -6px)
+			(alpha = 0.95)
+		)
+
+		(element BattleStatsEconomicsRowItem
+			_entity =			"_entity"
+			_customTextClass =	'$TextDefaultBold18NM'
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='BattleStatsEconomicsRow'
+			(bind count "childrenRows.length")
+			(args
+				_entityId =			"childrenRows[$index]"
+				_childrenLength =	"childrenRows.length"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsLine (_entity:dhEntity)
+	(scope
+		(var childrenRows:array = "_entity.battleResultsEntry.children")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style
+			(width = 100%)
+			(height = 20px)
+		)
+
+		(element BattleStatsEconomicsRowItem
+			_entity =			"_entity"
+			_customTextClass =	'$TextDefaultNM'
+		)
+
+		(block
+			(class $InfoBlockHorizontalIndent)
+			(style
+				(position = "absolute")
+				(bottom = 1px)
+				(alpha = 0.5)
+			)
+
+			(element DottedLine)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='BattleStatsEconomicsRow'
+			(bind count "childrenRows.length")
+			(args
+				_entityId =			"childrenRows[$index]"
+				_childrenLength =	"childrenRows.length"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsSubLine (_entity:dhEntity)
+	(scope
+		(var rowHint:str = "_entity.battleResultsEntry.hint ?: ''")
+	)
+
+	(style
+		(width = 100%)
+		(height = 20px)
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(bind enabled "rowHint")
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "rowHint"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element BattleStatsEconomicsRowItem
+		_entity =			"_entity"
+		_customTextClass =	'$TextDefaultNM'
+	)
+
+	(block
+		(class $InfoBlockHorizontalIndent)
+		(style
+			(position = "absolute")
+			(bottom = 1px)
+			(alpha = 0.5)
+		)
+
+		(element DottedLine)
+	)
+)
+
+(def element BattleStatsEconomicsList (_entity:dhEntity)
+	(scope
+		(var childrenRows:array = "_entity.battleResultsEntry.children")
+	)
+
+	(style (width = 100%))
+
+	(controller $Repeat renderer='BattleStatsEconomicsRow'
+		(bind count "childrenRows.length")
+		(args
+			_entityId =			"childrenRows[$index]"
+			_childrenLength =	"childrenRows.length"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsExpWithProgress (_entity:dhEntity)
+	(scope
+		(var isCrewExpBlock:bool =				"_entity.battleResultsEntry.blockName == SC.Result_screen.BLOCKS.CREWEXP")
+		(var crewName:str =						"_entity.battleResultsEntry.values[0].value")
+		(var expGained:number =					"_entity.battleResultsEntry.values[2].value")
+		(var expRequired:number =				"_entity.battleResultsEntry.values[3].value")
+
+		(var areNewCrewLevelsAchieved:bool =	"_entity.battleResultsEntry.values[7].value && (_entity.battleResultsEntry.values[7].type == 'skill_points')")
+		(var isInAdaptation:bool =				"isCrewExpBlock && _entity.battleResultsEntry.values[6].value")
+		(var isMaxCrewRank:bool =				"isCrewExpBlock && _entity.battleResultsEntry.values[5].value && (!_entity.battleResultsEntry.values[3].value || _entity.battleResultsEntry.values[6].value)")
+
+		(var progressValue:number =				"expRequired ? expGained / expRequired : 0")
+		(var progressBarColor:number =			"isInAdaptation	? SC.Ui_styles.SERVICE_COLORS.ORANGE : SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE")
+	)
+
+	(class $InfoBlockIndent)
+	(style (flow = "horizontal"))
+
+	(block
+		(style (width = 100%))
+
+		
+		(block
+			(style (marginTop = 6px))
+
+			(hblock
+				(tf
+					(class $TextDefaultBold20NM)
+					(style (alpha = "TA"))
+
+					(bind text "crewName")
+				)
+
+				(block
+					(bind visible "areNewCrewLevelsAchieved")
+
+					(style
+						(marginTop = "-S")
+						(marginLeft = "XXS")
+					)
+
+					(controller $Tooltip
+						(bind enabled "areNewCrewLevelsAchieved")
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_text = 'IDS_HINT_FREE_SKILLPOINTS'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(block
+						(style (position = "absolute"))
+						
+						(controller $Instance renderer='MarkerNew'
+							(bind enabled "areNewCrewLevelsAchieved")
+							(args
+								_newContentCounter = "_entity.battleResultsEntry.values[7].value"
+							)
+						)
+					)
+				)
+			)
+
+			(block
+				(bind visible "isMaxCrewRank")
+
+				(tf
+					(class $TextDefault)
+					(style
+						(marginTop = "XXS")
+						(marginLeft = -3px)
+					)
+
+					(text = 'IDS_HIGHEST_RANK')
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "expRequired")
+
+		(style
+			(align = "right")
+			(marginTop = 3px)
+			(marginRight = "XS")
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(controller $Tooltip
+			(bind enabled "expRequired")
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = 'IDS_BATTLE_STATS_CREW_EXP_HINT'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(block
+			(style (hitTest = false))
+
+			(element DefaultProgressBar
+				_progress =		"progressValue"
+				_color =		"progressBarColor"
+				_width =		190px
+			)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(marginTop = "XS")
+			)
+
+			(element DefaultDividedCounter
+				_curValueTextClass =		'$TextDefault18NM'
+				_curValue =					"expGained"
+				_maxValue =					"expRequired"
+				_doNotHideOnZeroMaxValue =	true
+				_doNotAlphaOnZeroCurValue =	true
+				_unifiedStatus =			"isInAdaptation ? SC.Ui_styles.UNIFIED_STATUS.ATTENTION : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowItem (_entity:dhEntity, _customTextClass:str = '$TextDefaultNM', _size:number = "SIZE.SMALL", _isPremium:bool = false)
+	(scope
+		(var battleResultsEntry:dhComponent = "_entity.battleResultsEntry")
+
+		(var rowType:str =			"battleResultsEntry.type ?: ''")
+		(var rowTitle:str =			"battleResultsEntry.title ?: ''")
+		(var rowSubtitle:str =		"battleResultsEntry.subtitle ?: ''")
+		(var rowValues:array =		"battleResultsEntry.values ?: []")
+		(var rowHint:str =			"battleResultsEntry.hint ?: ''")
+		(var tooltipType:str =		"battleResultsEntry.tooltipType ?: ''")
+
+		(var isTypeHeader:bool =	"rowType == SC.Result_screen.TYPES.HEADER")
+		(var isTypeSubheader:bool =	"rowType == SC.Result_screen.TYPES.SUBHEADER")
+		(var isTypeTotal:bool =		"rowType == SC.Result_screen.TYPES.TOTAL")
+
+		(var tooltipRenderer:str =	"tooltipType in BATTLE_STATS_ECONOMICS_ROW_ITEM_TOOLTIP_RENDERER	? BATTLE_STATS_ECONOMICS_ROW_ITEM_TOOLTIP_RENDERER[tooltipType] : ''")
+
+		(var fontColor:number =		"battleResultsEntry.color in RESULT_SCREEN_ROW_FONT_COLOR			? RESULT_SCREEN_ROW_FONT_COLOR[battleResultsEntry.color]
+																										: SC.Ui_styles.SERVICE_COLORS.WHITE")
+	)
+
+	(class $InfoBlockHorizontalIndent)
+	(style
+		(flow = "horizontal")
+		(align = "middle")
+		(height = 100%)
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(bind enabled "tooltipRenderer")
+		(bind renderer "tooltipRenderer")
+		(args
+			_entity = "_entity"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(style (width = 100%))
+
+		
+		(block
+			(style
+				(bind marginTop "_size == SIZE.MEDIUM	? -3px :
+								 _size == SIZE.LARGE	? 1px
+														: 0px")
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(bind enabled "rowHint && (isTypeHeader || isTypeTotal)")
+				(args
+					_text = "rowHint"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(bind class "_customTextClass")
+				(style
+					(marginTop = "isTypeHeader ? 1px : 0px")
+					(marginLeft = "isTypeSubheader ? -6px : 0px")
+					(bind textColor "fontColor")
+					(bind alpha "fontColor == SC.Ui_styles.SERVICE_COLORS.WHITE ? TA : 1")
+				)
+
+				(bind text "rowTitle")
+			)
+		)
+		
+
+		
+		(block
+			(style
+				(position = "absolute")
+				(flow = "reverse_horizontal")
+				(right = "isTypeHeader ? 3px : 0px")
+				(top = "isTypeHeader			? 3px :
+						_size == SIZE.MEDIUM	? -1px :
+						_size == SIZE.LARGE		? -XXS
+												: 0px")
+			)
+
+			(block
+				(bind visible "isTypeHeader && rowSubtitle")
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(bind enabled "isTypeHeader && rowSubtitle")
+					(args
+						_text = "_isPremium ? 'IDS_WITH_PREM_HINT' : 'IDS_WITHOUT_PREM_DESC'"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(tf
+					(class $TextDefaultBold20NM)
+					(style
+						(alpha = "_isPremium ? 1 : TA")
+						(textColor = "_isPremium ? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
+					)
+
+					(bind text "rowSubtitle")
+				)
+			)
+
+
+			(controller $Repeat renderer='BattleStatsEconomicsRowValue'
+				(bind count "rowValues.length")
+				(args
+					_entity =			"_entity"
+					_self =				"rowValues[$index]"
+					_customTextClass =	"_customTextClass"
+					_size =				"_size"
+				)
+			)
+		)
+		
+	)
+)
+
+(def element BattleStatsEconomicsRowValue (_entity:dhEntity, _self:dict, _customTextClass:str = '$TextDefaultNM', _size:number = "SIZE.SMALL")
+	(scope
+		(var rendererType:str =		"_self.type ?: ''")
+		(var renderer:str =			"isIn(rendererType, BATTLE_STATS_ECONOMICS_ROW_VALUE_NO_RENDERER_LIST)	? '' :
+									 rendererType in BATTLE_STATS_ECONOMICS_ROW_VALUE_RENDERER	? BATTLE_STATS_ECONOMICS_ROW_VALUE_RENDERER[rendererType]
+																								: 'BattleStatsDetailedEconomicsRowDefaultValue'")
+	)
+
+	(controller $Instance
+		(bind renderer "renderer")
+		(bind enabled "renderer")
+		(args
+			_entity =			"_entity"
+			_valueNumber =		"!isIn(rendererType, BATTLE_STATS_ECONOMICS_ROW_DICT_OF_VALUES_LIST) ? _self.value : null"
+			_valueDict =		"isIn(rendererType, BATTLE_STATS_ECONOMICS_ROW_DICT_OF_VALUES_LIST) ? _self.value : null"
+			_customTextClass =	"_customTextClass"
+			_size =				"_size"
+		)
+	)
+)
+
+(def element BattleStatsDetailedEconomicsRowDefaultValue (_valueNumber:number = 0, _customTextClass:str = '$TextDefaultNM')
+	(tf
+		(bind class "_customTextClass")
+		(style (alpha = "TA"))
+
+		(bind text "_valueNumber")
+	)
+)
+
+(def element BattleStatsEconomicsRowCredits (_entity:dhEntity, _valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(scope
+		(var rowType:str = "_entity.battleResultsEntry.type ?: ''")
+	)
+
+	(style
+		(position = "absolute")
+		(right = "_size == SIZE.MEDIUM || _size == SIZE.LARGE ? 0px : 11px")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "rowType == SC.Result_screen.TYPES.TOTAL && _valueNumber != null")
+		(args
+			_text = 'IDS_BATTLE_STATS_TOTAL_CREDITS_COUNT_HINT'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != null")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.CREDITS }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowCreditsApplied (_valueDict:dict = null, _size:number = "SIZE.SMALL")
+	(bind visible "_valueDict.value != 0")
+
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(flow = "horizontal")
+		(right = "_size == SIZE.MEDIUM || _size == SIZE.LARGE ? 0px : 11px")
+	)
+
+	(block
+		(bind visible "_valueDict && !_valueDict.applied")
+
+		(style
+			(width = 15px)
+			(height = 13px)
+			(marginRight = 3px)
+			(backgroundImage = 'url:../service_kit/icons/icon_warning_red.png')
+		)
+	)
+
+	(block
+		(controller $Instance renderer='PriceTag'
+			(bind enabled "_valueDict != null")
+			(args
+				_priceInfo =	"{ finalPrice: _valueDict.value, currency: SC.Common.CURRENCIES.CREDITS }"
+				_size =			"_size"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowCreditsAppliedShowZero (_valueDict:dict = null, _size:number = "SIZE.SMALL")
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(flow = "horizontal")
+		(right = "_size == SIZE.MEDIUM || _size == SIZE.LARGE ? 0px : 11px")
+	)
+
+	(block
+		(bind visible "_valueDict && !_valueDict.applied")
+
+		(style
+			(width = 15px)
+			(height = 13px)
+			(marginRight = 3px)
+			(backgroundImage = 'url:../service_kit/icons/icon_warning_red.png')
+		)
+	)
+
+	(block
+		(controller $Instance renderer='PriceTag'
+			(bind enabled "_valueDict != null")
+			(args
+				_priceInfo =	"{ finalPrice: _valueDict.value, currency: SC.Common.CURRENCIES.CREDITS }"
+				_size =			"_size"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowGold (_entity:dhEntity, _valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(scope
+		(var rowType:str = "_entity.battleResultsEntry.type ?: ''")
+	)
+
+	(bind visible "_valueNumber != 0")
+
+	(style
+		(position = "absolute")
+		(right = 130px)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "rowType == SC.Result_screen.TYPES.TOTAL && _valueNumber != null")
+		(args
+			_text = 'IDS_BATTLE_STATS_TOTAL_GOLD_COUNT_HINT'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != null")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.GOLD }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowGoldApplied (_valueDict:dict = null, _size:number = "SIZE.SMALL")
+	(bind visible "_valueDict.value != 0")
+
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(flow = "horizontal")
+		(right = 130px)
+	)
+
+	(block
+		(bind visible "_valueDict && !_valueDict.applied")
+
+		(style
+			(width = 15px)
+			(height = 13px)
+			(marginRight = 3px)
+			(backgroundImage = 'url:../service_kit/icons/icon_warning_red.png')
+		)
+	)
+
+	(block
+		(controller $Instance renderer='PriceTag'
+			(bind enabled "_valueDict != null")
+			(args
+				_priceInfo =	"{ finalPrice: _valueDict.value, currency: SC.Common.CURRENCIES.GOLD }"
+				_size =			"_size"
+			)
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowGoldRight (_valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(right = 0px)
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != 0")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.GOLD }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowCreditsHideZero (_valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(bind visible "_valueNumber != 0")
+
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(right = "_size == SIZE.MEDIUM || _size == SIZE.LARGE ? 0px : 11px")
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != 0")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.CREDITS }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowExp (_entity:dhEntity, _valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(scope
+		(var rowType:str = "_entity.battleResultsEntry.type ?: ''")
+	)
+
+	(name = 'PureExp')
+
+	(style
+		(position = "absolute")
+		(right = "_size == SIZE.MEDIUM || _size == SIZE.LARGE ? 0px : 11px")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "rowType == SC.Result_screen.TYPES.TOTAL")
+		(args
+			_text = 'IDS_BATTLE_STATS_TOTAL_EXP_COUNT_HINT'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element PriceTag
+		_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.XP }"
+		_size =			"_size"
+	)
+)
+
+(def element BattleStatsEconomicsRowFreeXP (_entity:dhEntity, _valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(bind visible "_valueNumber != 0")
+
+	(style
+		(position = "absolute")
+		(right = 130px)
+	)
+
+	(controller $Tooltip
+		(renderer = 'PostBattleFreeExpTooltip')
+		(bind enabled "_valueNumber != 0")
+		(args
+			_entity = "_entity"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != 0")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.FREE_XP }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowFreeXPRight (_valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(right = "_size == SIZE.MEDIUM || _size == SIZE.LARGE ? 0px : 11px")
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != 0")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.FREE_XP }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowCrewXP (_entity:dhEntity, _valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(scope
+		(var rowType:str = "_entity.battleResultsEntry.type ?: ''")
+	)
+
+	(bind visible "_valueNumber != 0")
+
+	(style
+		(position = "absolute")
+		(right = "_size == SIZE.MEDIUM || _size == SIZE.LARGE ? 0px : 11px")
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(bind enabled "rowType == SC.Result_screen.TYPES.TOTAL && _valueNumber != 0")
+		(args
+			_text = 'IDS_BATTLE_STATS_TOTAL_CREW_EXP_COUNT_HINT'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != 0")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.CREW_XP }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowEliteXP (_entity:dhEntity, _valueNumber:number = 0, _size:number = "SIZE.SMALL")
+	(scope
+		(var rowType:str = "_entity.battleResultsEntry.type ?: ''")
+	)
+
+	(bind visible "_valueNumber != 0")
+
+	(style
+		(position = "absolute")
+		(right = 130px)
+	)
+
+	(controller $Tooltip
+		(renderer = 'PostBattleEliteExpTooltip')
+		(bind enabled "rowType == SC.Result_screen.TYPES.TOTAL && _valueNumber != 0")
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Instance renderer='PriceTag'
+		(bind enabled "_valueNumber != 0")
+		(args
+			_priceInfo =	"{ finalPrice: _valueNumber, currency: SC.Common.CURRENCIES.ELITE_XP }"
+			_size =			"_size"
+		)
+	)
+)
+
+(def element BattleStatsEconomicsRowPercents (_valueNumber:number = 0, _customTextClass:str = '$TextDefaultNM')
+	(bind visible "_valueNumber != 0")
+
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(right = 210px)
+	)
+
+	(tf
+		(bind class "_customTextClass")
+		(style (alpha = "TA"))
+
+		(bind text "_valueNumber > 0	? '+' + _valueNumber + '%'
+										: _valueNumber + '%'")
+	)
+)
+
+(def element BattleStatsEconomicsRowTooltipPercents (_valueNumber:number = 0, _customTextClass:str = '$TextDefaultNM')
+	(bind visible "_valueNumber != 0")
+
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(right = 74px)
+	)
+
+	(tf
+		(bind class "_customTextClass")
+		(style (alpha = "TA"))
+
+		(bind text "_valueNumber > 0	? '+' + _valueNumber + '%'
+										: _valueNumber + '%'")
+	)
+)

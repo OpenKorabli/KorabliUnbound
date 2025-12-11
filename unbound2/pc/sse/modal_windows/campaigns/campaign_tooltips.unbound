@@ -1,6 +1,6 @@
 (def element CampaignTooltip (_curCampaignId:number)
 	(scope
-		(var campaign:dhEntity = "getPrimaryEntity(CC.campaignParams, _curCampaignId)")
+		(var campaign:dhEntity = "getEntity(_curCampaignId)")
 		(var campaignPlayer:dhComponent = "campaign.campaignPlayer")
 		(var campaignParams:dhComponent = "campaign.campaignParams")
 
@@ -14,14 +14,14 @@
 		(macro SERVER_TIME_SCOPE)
 		(var startTime:number =	"campaignParams.startTime" (event "campaignParams.evChanged"))
 		(var endTime:number =	"campaignParams.endTime" (event "campaignParams.evChanged"))
-		(var formatEndTime:str = "formatTime(endTime - startTime, 'HIGHEST,WITH_DAYS', 'ABB')")
+		(var formatEndTime:str = "formatTime(endTime - serverTime, 'HIGHEST,WITH_DAYS', 'ABB')")
 		(var isTempCampaignAvailable:bool =	"serverTime >= startTime && serverTime < endTime")
 
 		(var countCompletedTasks:number = "campaignPlayer.countCompletedTasks" (event "campaignPlayer.evChanged"))
 		(var countTasks:number = "campaignParams.countTasks")
 
 		
-		(var mainTask:number = "campaignParams.mainTask")
+		(var mainTask:str = "campaignParams.mainTask")
 		(var missionMainTaskEntity:dhEntity = "getPrimaryEntity(CC.campaignTaskParams, mainTask)")
 		(var campaignTaskPlayer:dhComponent = "missionMainTaskEntity.campaignTaskPlayer")
 		(var mainTaskState:number = "campaignTaskPlayer.state" (event "campaignTaskPlayer.evUpdate"))
@@ -33,7 +33,7 @@
 
 		(var state:number = "campaignPlayer.state" (event "campaignPlayer.evUpdate"))
 
-		(var activeMissionId:number = "campaignPlayer.activeMissionId" (event "campaignPlayer.evUpdate"))
+		(var activeMissionId:str = "campaignPlayer.activeMissionId" (event "campaignPlayer.evUpdate"))
 		(var activeMissionIndex:number = "indexOf(activeMissionId, allMissions) > -1 ? indexOf(activeMissionId, allMissions) : 0")
 		(var hasFinalTaskCampaign:bool = "activeMissionIndex == allMissionsCount - 1")
 
@@ -66,7 +66,7 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
-			_headerText = "'IDS_' + campaignName + '_TITLE'"
+			_headerText = "campaignName"
 		)
 
 		(block
@@ -130,12 +130,12 @@
 		
 		(element TooltipSystemStatusLine
 			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-			_text =				'IDS_CAMPAIGN_HINT_DESCR'
+			_text =				'IDS_CAMPAIGN_HINT_DESC'
 		)
 	)
 )
 
-(def element CampaignTaskTooltip (_taskId:number, _isCampaignBasket:bool = false, _hasMouseInstruction:bool = true)
+(def element CampaignTaskTooltip (_taskId:str, _isCampaignBasket:bool = false, _hasMouseInstruction:bool = true)
 	(scope
 		(var campaignTaskEntity:dhEntity =		"getPrimaryEntity(CC.campaignTaskParams, _taskId)")
 		(var campaignTaskParams:dhComponent =	"campaignTaskEntity.campaignTaskParams")
@@ -160,10 +160,6 @@
 		(var lootStars:number =		"campaignTaskParams.lootStars")
 		(var rewards:array =		"campaignTaskParams.rewards")
 		(var missionNumber:str =	"campaignMissionParams.uiNumber")
-
-		(var goalEntityId:number = "campaignTaskParams.goal" (event "campaignTaskPlayer.evUpdate"))
-		(var goalEntity:dhEntity = "getEntity(goalEntityId)")
-		(var taskDescription:str = "goalEntity.campaignTaskGoal.l10nText")
 
 		(var availableSlotsLen:number = "SC.Common.CAMPAIGNS.ACTIVE_TASKS_SLOTS_COUNT")
 
@@ -195,7 +191,7 @@
 
 		(var isImpossibleChooseTask:bool = "(!isTaskSelected || isTaskSelected && !isMainTask && isLooted) && isMainTaskUnlocked")
 
-		(var subheaderText:str = "tr('IDS_' + campaignParams.name + '_TITLE_QUOTES') + '. ' + subst('IDS_CAMPAIGN_MISSION_NUMBER', [], { _missionNumber: missionNumber })")
+		(var subheaderText:str = "tr(campaignParams.name + '_QUOTES') + '. ' + subst('IDS_CAMPAIGN_MISSION_NUMBER', [], { _missionNumber: missionNumber })")
 
 		(var attentionStatusText:str = "isImpossibleChooseTask			? 'IDS_IMPOSSIBLE_TO_CHOOSE_TASK' :
 										isUnsuitableShipAndBattle		? 'IDS_TASK_UNSUITABLE_BATTLE_AND_SHIP' :
@@ -216,6 +212,9 @@
 											isTaskSelected && !hasTaskProgress					? { text: 'IDS_TASK_CANCEL',				unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT } :
 											isTaskSelected										? { text: 'IDS_TASK_CANCEL_WITH_PROGRESS',	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }
 																								: null")
+		(var sseConditionEntity:dhEntity = "getEntity(campaignTaskParams.restrictionsEntityId)")
+		(var taskDescriptionData:dict = "sseConditionEntity.sseConditions.taskDescriptionData" (event "sseConditionEntity.sseConditions.evConditionSetChanged"))
+		(var achievements:array =		"taskDescriptionData.achievements ?: []")
 	)
 	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
@@ -267,22 +266,31 @@
 
 		
 		(element TooltipSystemHorizontalDivider)
-		(block
-			(style (width = 100%))
 
-			(controller $Instance renderer='TooltipSystemDescriptionText'
-				(bind enabled "!isProgressBarVisible")
-				(args
-					_descriptionText = "taskDescription"
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemDescriptionText
+					_descriptionText = "taskDescriptionData.ids"
 				)
 			)
 
-			(controller $Instance renderer='TooltipSystemProgressBarBlock'
-				(bind enabled "isProgressBarVisible")
-				(args
-					_title = "taskDescription"
-					_currentValue = "taskProgress" 
-					_maxValue = "maxProgress"
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled = "achievements.length > 0"
+				(controller $Instance renderer='SSETooltipAchievements'
+					(bind enabled "achievements")
+					(args
+						_achievements = "achievements"
+					)
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled = "isProgressBarVisible"
+				(controller $Instance renderer='TooltipSystemProgressBarBlock'
+					(bind enabled "isProgressBarVisible")
+					(args
+						_currentValue = "taskProgress"
+						_maxValue = "maxProgress"
+					)
 				)
 			)
 		)
@@ -469,9 +477,9 @@
 	)
 )
 
-(def element MissionTooltip (_curCampaignId:number, _curCampaignMissionId:number, _hasMouseInstruction:bool)
+(def element MissionTooltip (_curCampaignId:number, _curCampaignMissionId:str, _hasMouseInstruction:bool)
 	(scope
-		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, _curCampaignId)")
+		(var campaignEntity:dhEntity = "getEntity(_curCampaignId)")
 		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
 		(var campaignName:str = "campaignParams.name")
 
@@ -493,7 +501,7 @@
 
 		(var hasFinalTaskCampaign:bool = "toNumber(uiNumber) == countMissions")
 
-		(var mainMissionTaskId:number = "campaignMissionEntity.campaignMissionParams.mainTask")
+		(var mainMissionTaskId:str = "campaignMissionEntity.campaignMissionParams.mainTask")
 		(var missionMainTaskEntity:dhEntity =	"getPrimaryEntity(CC.campaignTaskParams, mainMissionTaskId)")
 		(var mainTaskState:number =	"missionMainTaskEntity.campaignTaskPlayer.state" (event "missionMainTaskEntity.campaignTaskPlayer.evUpdate"))
 		(var isMainTaskDone:bool = "mainTaskState == SC.Ui_common.CAMPAIGN_STATE.DONE || mainTaskState == SC.Ui_common.CAMPAIGN_STATE.COMPLETED")
@@ -522,7 +530,7 @@
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
 			_headerText =		"tr('IDS_MISSION') + ' ' + uiNumber"
-			_subheaderText =	"'IDS_' + campaignName + '_TITLE'"
+			_subheaderText =	"campaignName"
 		)
 		(block
 			(style (width = 100%))

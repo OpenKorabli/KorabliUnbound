@@ -78,6 +78,8 @@
 		(var isNotStarted:bool = "sseCoreComponent.start > serverTime")
 		(var isExpirationTimerVisible:bool = "!(daysLeft || sseTaskStatusFlags.isDone || sseTaskStatusFlags.isFailed || isNotStarted)")
 
+		(var isPinnedTask:bool = "toBool(sseCoreComponent.pinnedAt)" (event "sseCoreComponent.evChanged"))
+
 		(macro STAGE_SIZE)
 		(var isSmallDimension:bool = "stageWidth <= 1680")
 		(var isVertLineVisible:bool = "isEpic && epicsAmount > 0") 
@@ -93,9 +95,13 @@
 		
 		(var name:str = "'short_sse_'+ sseNamePrefix + sseNameId + sseNameStatus")
 
-		(var backgroundState:number = "	isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
+		(var backgroundState:number = "	isSelected 	? SC.Ui_styles.BUTTON_STATE.SELECTED :
 										mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
 										rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+													: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var pinState:number = "	isOrTask		? SC.Ui_styles.BUTTON_STATE.DISABLED :
+									isPinnedTask 	? SC.Ui_styles.BUTTON_STATE.SELECTED
 													: SC.Ui_styles.BUTTON_STATE.UP")
 	)
 	(bind name "name")
@@ -104,10 +110,6 @@
 
 	(bindcall externalCall "(isSelected || _isNotMainSseWindow) ?  '' : 'inputMapping.onAction'" "['SSEProxyCommonUSS.selectItem', { itemId: sseCoreComponent.id }]" watch=false on='leftClick')
 	(dispatch "'evBroadcastSelectedItemUpwards'" args="{}" dir="EventDirection.UP" on='leftClick' (bind enabled "!(isSelected || _isNotMainSseWindow)"))
-
-	
-	
-	
 
 	(style
 		(flow = "horizontal")
@@ -122,9 +124,11 @@
 
 	(block
 		(class $FullsizeAbsolute)
-		(element SSeCardInteractiveBackground
+		(element SseCardInteractiveBackground
 			_state = "backgroundState"
+			_pinState = "pinState"
 			_isAttention = "isExpirationTimerVisible"
+			_isPinnableTask = "isPinnedTask"
 		)
 	)
 
@@ -167,7 +171,7 @@
 				_sseEntityId = "sseEntityId"
 			)
 		)
-	
+
 		(block 
 			(bind visible "isVertLineVisible && (indexNumber < epicsAmount)")
 			(style
@@ -330,9 +334,19 @@
 
 (def element SseCardThirdLevel (_sseCollection:dhCollection, _sseEntityId:number, _parentLength:number = 0)
 	(scope
+		(event evTimeOfTheFirstShowIsOver)
+		(event evTimeOfTheFirstShowChanged)
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+
+		(struct sseShipAcesRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_SHIP_ACES"))
+		(struct sseNewbieQuestsRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS"))
+		(struct sseCampaignsRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_CAMPAIGNS"))
+
 		(var sseWindowState:dhComponent =	"getSingleEntity(CC.sseWindowState).sseWindowState")
 		(var activeTaskIndex:number =		"sseWindowState.activeTaskIndex" (event "sseWindowState.evChanged"))
-	
+
 		(var sseEntity:dhEntity = "_sseCollection[$index]")
 		(var sseEntityId:number = "sseEntity.id")
 		(var sseEpicComponent:dhComponent =				"sseEntity.sseEpic")
@@ -387,13 +401,77 @@
 		(var name:str=  "'sse_task_' +  sseCoreComponent.id + (	sseTaskStatusFlags.isFailed		? '_failed' :
 																sseTaskStatusFlags.isDone		? '_done'
 																								: '')")
-	
-		(macro HIGH_CONTRAST_DATA_SCOPE)
+
 		(var isVertLineVisible:bool = "isChainTask && (_parentLength > 0)") 
+
+		(struct pinnedTasks = GET_PINNED_TASKS())
+
+		(var isPinnedTaskCore:bool = "toBool(sseCoreComponent.pinnedAt)" (event "sseCoreComponent.evChanged"))
+		(var isParentChainPinned:bool = "toBool(parentChainEntity.sseCore.pinnedAt)" (event "parentChainEntity.sseCore.evChanged"))
+		(var isPinnedTask:bool = "isChainTask ? isParentChainPinned : isPinnedTaskCore")
+		(var isPinEnabled:bool = "	!isOrTask &&
+									!isPinnedTask &&
+									!sseTaskStatusFlags.isInactive")
+
+		(var isInactiveBackground:bool = "sseTaskStatusFlags.isInactive || isOrTask")
+		(struct sseCard = SSE_INTERACTIVE_BACKGROUND(
+				_isInactiveBackground="isInactiveBackground"
+				_isPinnedTask="isPinnedTask"
+				_mouseDown="mouseDown"
+				_rollOver="rollOver"
+			)
+		)
+
+		(var isTimeOfTheFirstShow:bool = true)
+		(bind isTimeOfTheFirstShow "false" init=false (event "evTimeOfTheFirstShowIsOver"))
+		(bind isTimeOfTheFirstShow "true" init=false (event "evTimeOfTheFirstShowChanged"))
+		(var isRollOver:bool = "$event.isOver ?: false" watch=false (event "evRollOver") (event "evRollOut"))
+		(var isPinShown:bool = "isTimeOfTheFirstShow ? false : isRollOver")
+
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_PIN_TASK,
+		 																									SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_UNPIN_TASK]"))
+		(var isNewGuidingTipVisible:bool = "	checkedTipId.value &&
+												activeTip.targetId == $index &&
+												!sseTaskStatusFlags.isInactive &&
+												!isOrTask &&
+												!sseShipAcesRoute.isActive &&
+												!sseNewbieQuestsRoute.isActive &&
+												!sseCampaignsRoute.isActive")
 	)
+	(dispatch evTimeOfTheFirstShowIsOver (bind enabled "isPinnedTask") (event "evRollOver"))
+	(dispatch evTimeOfTheFirstShowChanged (bind enabled "!isPinnedTask") (bind trigger "isPinnedTask"))
+
 	
 	
 	
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isInactiveBackground ? '' : 'button_modernization_Item'")
+	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT
+		_methods = "[
+			{
+				type: isPinEnabled && !pinnedTasks.isMaxReached ? 'inputMapping.onAction' : '',
+				name: 'SSEProxyCommonUSS.pinSSEElement',
+				args: { sseID: isChainTask ? sseTaskComponent.chainId : sseCoreComponent.id }
+			},
+			{
+				type: isPinnedTask && !isInactiveBackground && isNewGuidingTipVisible ? 'inputMapping.onAction' : '',
+				name: 'deactivateTipChain',
+				 args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_PIN_TASK_INTRO }
+			},
+			{
+				type: isPinnedTask && !isInactiveBackground ? 'inputMapping.onAction' : '',
+				name: 'SSEProxyCommonUSS.unpinSSEElement',
+				args: { sseID: isChainTask ? sseTaskComponent.chainId : sseCoreComponent.id }
+			},
+			{
+				type: isPinEnabled && pinnedTasks.isMaxReached ? 'inputMapping.onRequest' : '',
+				name: 'showMotivatorWindow',
+				args: { sseID: isChainTask ? sseTaskComponent.chainId : sseCoreComponent.id }
+			}
+		]"
+	)
 
 	(bind name "name")
 	(style
@@ -406,12 +484,13 @@
 		(element BlurMapRoundedWithContrastPanel)
 	)
 
+	
 	(block
 		(class $FullsizeAbsolute)
-		(style
-			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
-			(borderRadius = "XS")
-			(alpha = "SSE_CARD_DARK_BLUE_BACKGROUND_ALPHA")
+		(element SseCardInteractiveBackground
+			_isAttention = false
+			_state = "sseCard.backgroundState"
+			_pinState = "sseCard.pinState"
 		)
 	)
 
@@ -451,13 +530,17 @@
 
 		(block 
 			(style
+				(width = 32px)
+				(height = 32px)
 				(marginTop = "XS")
 				(alpha = 0.8)
 			)
 
-			(element SseTypeIcon
-				_sseId = "sseEntityId"
-				_isBig = true
+			(element SseTypeIconWithPin
+				_sseEntityId = "_sseEntityId"
+				_isPinned = "!sseTaskStatusFlags.isInactive && isPinnedTask"
+				_isPinShown = "!sseTaskStatusFlags.isInactive && isPinShown"
+				_hasMouseInstruction = "!isInactiveBackground"
 			)
 		)
 
@@ -473,7 +556,7 @@
 			(block
 				(class $Fullsize)
 				(style (backgroundColor = "BG_COLOR_SSE_LINK_LINE"))
-		
+
 				(block
 					(bind visible "!sseTaskStatusFlags.isInactive")
 					(style
@@ -663,14 +746,39 @@
 			)
 		)
 	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isNewGuidingTipVisible")
+		(args
+			_tipId =			"checkedTipId.value"
+			_tipPositioning =	"TIP_POSITION_LEFT"
+			_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+			_offsetX =			"MS"
+			_pointerOffset =	30px
+			_isHideOnBounds =	true
+			_screenOffsetTop = "SSE_CARD_THIRD_LEVEL_SCROLL_ANIMATED_DISTANCE"
+		)
+	)
 )
 
 (def element SseCardDetailed (_sseEntityId:number)
 	(scope
+		(event evTimeOfTheFirstShowIsOver)
+		(event evTimeOfTheFirstShowChanged)
+
+		(event evAchievementInfoHovered)
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE "'button_'")
+
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 		(macro SERVER_TIME_SCOPE)
 		(macro STAGE_SIZE)
 		(var isSmallScreen:bool = "stageWidth <= 1600")
+
+		(struct sseShipAcesRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_SHIP_ACES"))
+		(struct sseNewbieQuestsRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS"))
+		(struct sseCampaignsRoute = 	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SSE_CAMPAIGNS"))
 
 		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
 		(var sseCoreComponent:dhComponent =				"sseEntity.sseCore")
@@ -713,6 +821,7 @@
 		(struct sseTaskStatusFlags = SSE_TASKS_STATUS_FLAGS (	_sseOpenEnded =			"sseOpenEndedComponent"
 																_sseCorePersistent =	"sseCorePersistentComponent"
 																_sseCore =				"sseCoreComponent"
+																_sseGlobal =			"sseGlobalComponent"
 																_isManualRewardClaim =	"isManualRewardClaim"))
 
 		(var linkUrl:str =			"sseLinkComponent.url"			(event "sseLinkComponent.evChanged"))
@@ -757,7 +866,78 @@
 											: 'task_' ) + (sseTaskStatusFlags.isPostBattle ? sseCorePersistentComponent.id : sseCoreComponent.id)")
 
 		(var bgGradientTransform:dict = "isExpirationTimerVisible ? CT_ORANGE : COLOR_TRANSFORM_ACCENT_BLUE")
+
+		(var isAchievementHovered:bool = false)
+		(bind isAchievementHovered "$event.isHovered" (event "evAchievementInfoHovered"))
+		(var isAnyInteractiveObjectHovered:bool = "button_rollOver || isAchievementHovered")
+
+		(struct pinnedTasks = GET_PINNED_TASKS())
+		(var isPinnedTask:bool = "toBool(sseCoreComponent.pinnedAt)" (event "sseCoreComponent.evChanged"))
+		(var isPinEnabled:bool = "	!isOrTask &&
+									!isPinnedTask &&
+									!isAnyInteractiveObjectHovered &&
+									!sseTaskStatusFlags.isInactive &&
+									!sseTaskStatusFlags.isPostBattle")
+
+		(var isInactiveBackground:bool = "	sseTaskStatusFlags.isInactive ||
+											sseTaskStatusFlags.isPostBattle ||
+											isOrTask")
+		(struct sseCard = SSE_INTERACTIVE_BACKGROUND(
+				_isInactiveBackground="isInactiveBackground"
+				_isPinnedTask="isPinnedTask"
+				_mouseDown="mouseDown && isPinEnabled"
+				_rollOver="rollOver && isPinEnabled"
+			)
+		)
+
+		(var isTimeOfTheFirstShow:bool = true)
+		(bind isTimeOfTheFirstShow "false" init=false (event "evTimeOfTheFirstShowIsOver"))
+		(bind isTimeOfTheFirstShow "true" init=false (event "evTimeOfTheFirstShowChanged"))
+		(var isRollOver:bool = "$event.isOver ?: false" watch=false (event "evRollOver") (event "evRollOut"))
+		(var isPinShown:bool = "isTimeOfTheFirstShow ? false : isRollOver")
+
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_PIN_TASK,
+																											SC.Context_guiding_tip.TIP_TYPE.SSE_MOTIVATOR_UNPIN_TASK]"))
+		(var isNewGuidingTipVisible:bool = "	checkedTipId.value &&
+												activeTip.targetId == sseCoreComponent.id &&
+												!sseTaskStatusFlags.isInactive &&
+												!isOrTask &&
+												!sseShipAcesRoute.isActive &&
+												!sseNewbieQuestsRoute.isActive &&
+												!sseCampaignsRoute.isActive")
 	)
+
+	(dispatch evTimeOfTheFirstShowIsOver (bind enabled "isPinnedTask") (event "evRollOver"))
+	(dispatch evTimeOfTheFirstShowChanged (bind enabled "!isPinnedTask") (bind trigger "isPinnedTask"))
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro SOUND_HANDLER "isInactiveBackground ? '' : 'button_modernization_Item'")
+	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT
+		_methods = "[
+			{
+				type: isPinEnabled && !pinnedTasks.isMaxReached ? 'inputMapping.onAction' : '',
+				name: 'SSEProxyCommonUSS.pinSSEElement',
+				args: { sseID: sseCoreComponent.id }
+			},
+			{
+				type: isPinnedTask && !isAnyInteractiveObjectHovered && isNewGuidingTipVisible ? 'inputMapping.onAction' : '',
+				name: 'deactivateTipChain',
+				args: { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.SSE_MOTIVATOR_PIN_TASK_INTRO }
+			},
+			{
+				type: isPinnedTask && !isAnyInteractiveObjectHovered ? 'inputMapping.onAction' : '',
+				name: 'SSEProxyCommonUSS.unpinSSEElement',
+				args: { sseID: sseCoreComponent.id }
+			},
+			{
+				type: isPinEnabled && pinnedTasks.isMaxReached ? 'inputMapping.onRequest' : '',
+				name: 'showMotivatorWindow',
+				args: { sseID: sseCoreComponent.id }
+			}
+		]"
+	)
+
 	(style (width = 100%))
 
 	(block
@@ -768,17 +948,17 @@
 	
 	(block
 		(class $FullsizeAbsolute)
-		(style
-			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
-			(borderRadius = "XS")
-			(alpha = "SSE_CARD_DARK_BLUE_BACKGROUND_ALPHA")
+		(element SseCardInteractiveBackground
+			_isAttention = false
+			_state = "sseCard.backgroundState"
+			_pinState = "sseCard.pinState"
 		)
 	)
+
 	
 	(block
 		(bind name "name")
 		(style (width = 100%))
-
 		(block
 			(style (width = 100%))
 
@@ -801,14 +981,15 @@
 					(paddingBottom = "M")
 				)
 
-				(bind alpha "sseTaskStatusFlags.isInactive ? 0.4 : 1")		
-			
-				(block
-					(element SseTypeIcon
-						_sseEntityId = "_sseEntityId"
-						_isBig = true
-					)
+				(bind alpha "sseTaskStatusFlags.isInactive ? 0.4 : 1")
+
+				(element SseTypeIconWithPin
+					_sseEntityId = "_sseEntityId"
+					_isPinned = "isPinnedTask"
+					_isPinShown = "isPinShown && !isAnyInteractiveObjectHovered"
+					_hasMouseInstruction = "!isInactiveBackground"
 				)
+
 				(block
 					(style
 						(width = 100%)
@@ -837,6 +1018,7 @@
 				)
 
 				(block
+					(macro MOUSE_EVENTS_DISPATCHER "'button_'")
 					(style (bind flow "!isSmallScreen ? horizontal : vertical"))
 					(block
 						(style
@@ -860,6 +1042,7 @@
 								_label = "linkMainText"
 								_width = 192px
 								_enabled = true
+								_isExternal = true
 								_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
 								_methods = "[{	type: 'inputMapping.onRequest',
 												name: linkRequest,
@@ -869,6 +1052,7 @@
 					)
 
 					(block
+						(bind visible "isButtonClaimRewardVisible")
 						(style (bind marginRight "!isSmallScreen && isCollectionLink ? SXS : 0px"))
 						(controller $Instance renderer='DefaultButton'
 							(bind enabled "isButtonClaimRewardVisible")
@@ -1112,6 +1296,18 @@
 			(width = 4px)
 			(borderRadiusBottomLeft = "XS")
 			(borderRadiusTopLeft = "XS")
+		)
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isNewGuidingTipVisible")
+		(args
+			_tipId =			"checkedTipId.value"
+			_tipPositioning =	"TIP_POSITION_LEFT"
+			_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+			_offsetX =			"MS"
+			_pointerOffset =	30px
+
 		)
 	)
 )

@@ -44,11 +44,6 @@
 
 (def constant START_LEAGUE_INDEX 3)
 
-(def struct GET_RANK_LEAGUE_ID (_entityId:number)
-	(var entity:dhEntity = "getEntity(_entityId)")
-	(var component:dhComponent = "entity.rankLeague")
-	(var id:number = "component.id ?: 0")
-)
 
 (def element PlayerProfileRanksPage ()
 	(scope
@@ -56,64 +51,13 @@
 		(var isLargeDimension:bool = "stageWidth >= 1400 && stageHeight >= 930")
 
 		(struct rankRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.RANKS"))
+		(struct rankSeasonInfo = PULL_RANK_SEASON_INFO())
 
 		(struct rankBattlesFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.RANK_BATTLES"))
 		(var isNewRankBattlesFeature:bool = "rankBattlesFeature.state == 'new'")
 
 		(var leagues:dhCollection = "getCollectionByPath(CC.rankLeague, 'sorted')")
 		(var leaguesCount:number = "leagues.length")
-
-		(var rankSeasonEntity:dhEntity = "getSingleEntity(CC.rankSeason)")
-		(var seasonId:str = "rankSeasonEntity.rankSeason.title ?: ''" (event "rankSeasonEntity.rankSeason.evChanged"))
-		(var currentSprintId:number = "rankSeasonEntity.rankSeason.currentSprintId ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
-		(var previousSprintId:number = "rankSeasonEntity.rankSeason.previousSprintId ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
-		(var sprintId:number = "(currentSprintId+1) ?: (previousSprintId+1)")
-		(var isActiveSprint:bool = "currentSprintId != SC.Ranked.RANK_CONSTANTS.NO_SPRINT")
-
-		(macro SERVER_TIME_SCOPE)
-		(var rankSeasonFinishTime:number = "rankSeasonEntity.timeOfBattleEvent.finishTime ?: 0" (event "rankSeasonEntity.timeOfBattleEvent.evChanged"))
-		(var rankSeasonStartTime:number = "rankSeasonEntity.timeOfBattleEvent.startTime ?: 0" (event "rankSeasonEntity.timeOfBattleEvent.evChanged"))
-		(var primeTimeStartTime:number = "rankSeasonEntity.primeTime.primeTimeStartTime	?: 0" (event "rankSeasonEntity.primeTime.evChanged"))
-		(var primeTimeFinishTime:number = "rankSeasonEntity.primeTime.primeTimeFinishTime ?: 0" (event "rankSeasonEntity.primeTime.evChanged"))
-		(var rankSeasonStage:number = "rankSeasonEntity.rankSeason.stage ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
-		(var dayLightShift:number = "rankSeasonEntity.primeTime.daylightshift ?: 0" (event "rankSeasonEntity.primeTime.evChanged"))
-		(var isPrimeInactive:bool = "primeTimeStartTime - dayLightShift - floor(serverTime) > 0")
-		(var isPrimeTimeActive:bool = "primeTimeFinishTime - dayLightShift - floor(serverTime) > 0")
-
-		(var currentRankSprintEntity:dhEntity = "getPrimaryEntity(CC.rankSprint, currentSprintId)")
-		(var rankSprintFinishTime:number = "currentRankSprintEntity.rankSprint.finishTime ?: 0" (event "rankSeasonEntity.rankSeason.evChanged"))
-
-		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
-
-		(var isSeasonWaiting:bool = "rankSeasonStage == SC.Common.SEASON_BATTLES_STAGES.WAITING && floor(rankSeasonStartTime - serverTime) > 0")
-		(var seasonTimeToShow:number = "isSeasonWaiting ? rankSeasonStartTime : rankSeasonFinishTime")
-		(var seasonTimer:number = "seasonTimeToShow - serverTime")
-		(var sprintTimer:number = "rankSprintFinishTime - serverTime")
-		(var isSeasonFinished:bool = "floor(rankSeasonFinishTime - serverTime) <= 0")
-		(var isSprintFinished:bool = "floor(sprintTimer) <= 0")
-
-		(macro COUNTDOWN_SCOPE "'formattedSeasonTimeStamp'" "seasonTimeToShow" "'HIGHEST,WITH_DAYS'")
-		(macro COUNTDOWN_SCOPE "'formattedSprintTimeStamp'" "rankSprintFinishTime" "'HIGHEST,WITH_DAYS'")
-		(macro COUNTDOWN_SCOPE "'formattedPrimeTimeStamp'" "primeTimeFinishTime" "'HIGHEST,WITH_DAYS'")
-
-		(var seasonStatusText:str = "	isSeasonWaiting		? subst('IDS_SUBST_RANKED_SEASON_STARTS_IN', [], {_timeTillStart: formattedSeasonTimeStamp}) :
-										isSeasonFinished	? 'IDS_RANKED_SEASON_FINISHED'
-															: subst('IDS_RANKED_SEASON_TIME', [], {_timeLeft: formattedSeasonTimeStamp})")
-		(var sprintStatusText:str = "	isSprintFinished	? 'IDS_RANKED_SPRINT_FINISHED'
-															: subst('IDS_RANKED_SPRINT_TIME', [], {_timeLeft: formattedSprintTimeStamp})")
-		(var primeTimeStatusText:str = "isPrimeInactive		? 'IDS_RANKED_PRIME_FINISH' :
-										isPrimeTimeActive	? subst('IDS_RANKED_PRIME_TIME', [], {_timeLeft: formattedPrimeTimeStamp})
-															: 'IDS_RANKED_PRIME_FINISH'")
-
-		(var unifiedStatusSeason:str = "isSeasonFinished			? SC.Ui_styles.UNIFIED_STATUS.CALENDAR :
-										seasonTimer < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
-																	: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
-		(var unifiedStatusSprint:str = "isSprintFinished			? SC.Ui_styles.UNIFIED_STATUS.CALENDAR :
-										sprintTimer < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
-																	: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
-		(var unifiedStatusPrime:str = "	isPrimeInactive														? SC.Ui_styles.UNIFIED_STATUS.DATE :
-										isPrimeTimeActive && primeTimeFinishTime - serverTime < HOUR_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION
-																											: SC.Ui_styles.UNIFIED_STATUS.DATE")
 
 		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
 		(var rankStateComponent:dhComponent = "rankStateEntity ? rankStateEntity.rankState : null")
@@ -144,7 +88,7 @@
 	(block
 		(class $FullsizeAbsolute)
 		(controller $Instance renderer='NoItemsComeBackLater'
-			(bind enabled "!toBool(rankSeasonEntity)")
+			(bind enabled "!toBool(rankSeasonInfo.seasonEntity)")
 			(args
 				_type = "COME_BACK_LATER_TYPE.RANKED_SEASON"
 			)
@@ -153,7 +97,7 @@
 
 	
 	(block
-		(bind visible "toBool(rankSeasonEntity)")
+		(bind visible "toBool(rankSeasonInfo.seasonEntity)")
 
 		
 		(hblock
@@ -181,30 +125,30 @@
 			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "rankRoute.isActive" 1.5)
 			(style
 				(marginBottom = "{ 720:SXS, 1080:LS }")
-				(bind gap "!isSeasonWaiting ? M : 0")
+				(bind gap "!rankSeasonInfo.isSeasonWaiting ? M : 0")
 			)
 
 			(element StatusLine
-				_unifiedStatus = "unifiedStatusSeason"
-				_text = "seasonStatusText"
+				_unifiedStatus = "rankSeasonInfo.unifiedStatusSeason"
+				_text = "rankSeasonInfo.seasonStatusText"
 			)
 
 			(block
 				(controller $Instance renderer='StatusLine'
-					(bind enabled "!isSeasonWaiting")
+					(bind enabled "!rankSeasonInfo.isSeasonWaiting")
 					(args
-						_unifiedStatus = "unifiedStatusSprint"
-						_text = "sprintStatusText"
+						_unifiedStatus = "rankSeasonInfo.unifiedStatusSprint"
+						_text = "rankSeasonInfo.sprintStatusText"
 					)
 				)
 			)
 
 			(block
 				(controller $Instance renderer='StatusLine'
-					(bind enabled "!isSeasonWaiting")
+					(bind enabled "!rankSeasonInfo.isSeasonWaiting")
 					(args
-						_unifiedStatus = "unifiedStatusPrime"
-						_text = "primeTimeStatusText"
+						_unifiedStatus = "rankSeasonInfo.unifiedStatusPrime"
+						_text = "rankSeasonInfo.primeTimeStatusText"
 					)
 				)
 			)

@@ -200,6 +200,7 @@
 		(var isDividerForPrebattleOpportunityVisible:bool = "isPrebattleOpportunity && !isBot && isChatServerAvailable")
 
 		(var isInviteToChannel:bool = "_playerContext.type == 'inviteToChannel'")
+		(var isSendMessage:bool = "!isBot && isChatServerAvailable")
 	)
 	(bind alpha "accountDbId != null ? 1 : 0.5")
 	(bind mouseChildren "accountDbId != null")
@@ -310,7 +311,7 @@
 			(style (width = 100%))
 
 			(controller $Instance renderer='ContextMenuItem'
-				(bind enabled "isInviteToChannel")
+				(bind enabled "isSendMessage")
 				(args
 					_title = 'IDS_SEND_MESSAGE'
 					_methods = "[ {
@@ -423,7 +424,7 @@
 				(bind enabled "!isBot && isChatServerAvailable")
 				(args
 					_dbId = "entityAccount.accountSimple.dbId"
-					_channelId = "_playerContext.channelIdl"
+					_channelId = "_playerContext.channelId"
 				)
 			)
 		)
@@ -495,20 +496,22 @@
 	)
 )
 
-(def element MenuItemReportPortChatMisbehaviour (_channelId:number=null, _dbId:number=null)
+(def element MenuItemReportPortChatMisbehaviour (_channelId:str=null, _dbId:number=null)
 	(scope
-		(var channelEntity:gfx = "$datahub.getPrimaryEntity(CC.channel, _channelId)")
-		(var canReportPortChatMisbehaviour:bool = "channelEntity.channel.typeIdent != SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE && channelEntity.channel.typeIdent != SC.Channel.CHANNEL_TYPE_IDENT_VALUE.TRAINING_ROOM" (event "channelEntity.channel.evTypeChanged"))
+		(var channelComponent:dhComponent = "getPrimaryComponent(CC.channel, _channelId)")
+		(var canReportPortChatMisbehaviour:bool = "	channelComponent.typeIdent != SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE &&
+													channelComponent.typeIdent != SC.Channel.CHANNEL_TYPE_IDENT_VALUE.TRAINING_ROOM"
+													(event "channelComponent.evTypeChanged"))
 
-		(var playerEntity:gfx = "$datahub.getPrimaryEntity(CC.accountSimple, _dbId)")
-		(var banRequestAlreadySent:bool = "playerEntity.accountSimple.reported" (event "playerEntity.accountSimple.evReportedChanged"))
+		(var accountSimpleComponent:dhComponent = "getPrimaryComponent(CC.accountSimple, _dbId)")
+		(var isBanRequestAlreadySent:bool = "accountSimpleComponent.reported" (event "accountSimpleComponent.evReportedChanged"))
 	)
 
 	(bind visible "_channelId != null && canReportPortChatMisbehaviour")
 	(style (width = 100%))
 
 	(element ContextMenuItem
-		_enabled = "!banRequestAlreadySent"
+		_enabled = "!isBanRequestAlreadySent"
 		_title = 'IDS_REQUEST_BAN_PLAYER_DOCK'
 		_methods = "[ {
 						type:	'inputMapping.onAction',
@@ -607,10 +610,15 @@
 	)
 )
 
-(def element PlayerContactItem (_entityAccount:gfx, _playerContext:dict, _isShort:bool=false, _nickNameWidth:str='', _notTrancated:bool=false)
+(def element PlayerContactItem (_entityAccount:dhEntity,
+								_playerContext:dict,
+								_isShort:bool=false,
+								_notTrancated:bool=false,
+								_width:number=100%,
+								_fontClassCustom:str ='')
 	(scope
-		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
-		(var isInTrainingRoom:bool = "selfPlayerEntity.hasComponent(CC.trainingRoomPlayer)" (event "selfPlayerEntity.evAdded") (event "selfPlayerEntity.evRemoved"))
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var isInTrainingRoom:bool = "selfPlayerEntity.hasComponent(CC.trainingRoomPlayer)")
 
 		(var nickName:str = "_entityAccount.accountName.nickName ?: ''" (event "_entityAccount.accountName.evChanged"))
 		(var pureName:str = "_entityAccount.accountName.name ?: ''" (event "_entityAccount.accountName.evChanged"))
@@ -621,17 +629,14 @@
 
 		(var rating:number = "_entityAccount.accountRating.leagueProgress ?: 1" (event "_entityAccount.accountRating.evChanged"))
 		(var ratingLeague:str = "_entityAccount.accountRating.leagueName ?: RATING_LEAGUE_NAME_NONE" (event "_entityAccount.accountRating.evChanged"))
-		(var clanId:number = "_entityAccount.clanman.clanId ?: 0" (event "_entityAccount.clanman.evClanIdChanged"))
 		(var isSelf:bool = "_entityAccount.accountSimple.isSelfPlayer")
 
-		(var preBattlePlayerSimple:gfx = "_entityAccount.preBattlePlayerSimple" (event "_entityAccount.evAdded") (event "_entityAccount.evRemoved"))
+		(var preBattlePlayerSimple:dhComponent = "_entityAccount.preBattlePlayerSimple")
 		(var isInBattle:bool = "preBattlePlayerSimple.isInBattle" (event "preBattlePlayerSimple.evIsInBattleChanged"))
 		(var isCommander:bool = "preBattlePlayerSimple.isCommander" (event "preBattlePlayerSimple.evIsCommanderChanged"))
 		(var isReady:bool = "preBattlePlayerSimple.isReady" (event "preBattlePlayerSimple.evIsReadyChanged"))
 
-		(var clanEntity:gfx = "$datahub.getPrimaryEntity(CC.clan, clanId)")
-
-		(var playerInvitedToPrebattleInfo:gfx = "_entityAccount.playerInvitedToPrebattleInfo" (event "_entityAccount.evAdded") (event "_entityAccount.evRemoved"))
+		(var playerInvitedToPrebattleInfo:dhComponent = "_entityAccount.playerInvitedToPrebattleInfo")
 		(var isInvitedToDivision:bool = "playerInvitedToPrebattleInfo != null")
 		(var isInFormation:bool = "preBattlePlayerSimple != null")
 
@@ -645,12 +650,16 @@
 		(var isFormationPlayerIconVisible:bool = "(isInDivision || (isInvitedToDivision && !isSelf)) && !isInTrainingRoom")
 		(var isRatingIconVisible:bool = "ratingLeague != RATING_LEAGUE_NAME_NONE && !(_isShort || isInDivision)")
 		(var isRankIconVisible:bool = "rank > 0 && !(_isShort || isInDivision)")
+
+		(var nickNameClass:str = "	_fontClassCustom != '' 	? _fontClassCustom :
+									isSelf 					? '$TextDefaultBoldNM'
+															: '$TextDefaultNM'")
 	)
 	(style
 		(bind alpha "isAccountOnline ? 1 : 0.65")
 		(flow = "horizontal")
 		(hitTest = false)
-		(width = 100%)
+		(width = "_width")
 		(height = 30px)
 	)
 
@@ -735,15 +744,15 @@
 
 	(block
 		(style
-			(width = 100%)
-			(marginTop = 8px)
+			(width = "_width")
+			(marginTop = "S")
 		)
 
 		(tf
 			(bind name "'playerContactName_' + nickName")
-			(bind class "isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+			(bind class "nickNameClass")
 			(style
-				(width = 100%)
+				(width = "_width")
 				(elideMode = true)
 				(wordWrap = false)
 				(noTranslate = true)
@@ -812,7 +821,8 @@
 		(var isChatServerAvailable:bool = "chatEntity.chat.isConnected" (event "chatEntity.chat.evConnected") (event "chatEntity.chat.evDisConnected"))
 
 		
-		(var isLeftMouseInstructionVisible:bool = "	(_playerContext.type == 'inviteToDivision' || isChatServerAvailable) &&
+		(var isInstructionPlayerContext:bool = "(_playerContext.type == 'inviteToDivision') || (_playerContext.type != '' && isChatServerAvailable)")
+		(var isLeftMouseInstructionVisible:bool = "	isInstructionPlayerContext &&
 													_actionDenyReason == ACTION_DENY_REASON_NONE &&
 													!isBot &&
 													!isSuspended &&

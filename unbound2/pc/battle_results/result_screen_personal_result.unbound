@@ -1,0 +1,2126 @@
+(def element PersonalResultSection (_isFirstTimeShown:bool)
+	(scope
+		(event evAddedToStage)
+		(event evStatsLoaded)
+		(event evHideLoadingDataMessage)
+
+		(var isContentShown:bool =	false)
+		(bind isContentShown		"true"		init=false		(event "evAddedToStage"))
+
+		(var isFirstTimeShown:bool = "_isFirstTimeShown"	watch=false)
+	)
+
+	(dispatch evAddedToStage			dir="EventDirection.NONE"	delay=0.15		on='addedToStage')
+	(dispatch evHideLoadingDataMessage	dir="EventDirection.DOWN"					(event "evStatsLoaded"))
+
+	(class $FullsizeAbsolute)
+
+	(block
+		(style
+			(width = 100%)
+			(visualOffsetY = 40px)
+		)
+
+		(controller $Instance renderer='RealPersonalResultSection'
+			(bind enabled "isContentShown")
+			(args
+				_isAnimatedContentAppear = "isFirstTimeShown"
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isFirstTimeShown")
+
+		(class $MiddleVHAbsolutely)
+
+		(element PBSLoadingDataCaption
+			_isContentShown = "isContentShown"
+		)
+	)
+)
+
+(def element RealPersonalResultSection (_isAnimatedContentAppear:bool)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(macro PBS_LOADING_ANIMATION_SCOPE)
+
+		(event evUpdateTotalExp)
+		(event evPlayResistanceIconSound)
+		(event evSetResistanceRewardsInstantly)
+
+		(struct featureFreeExp = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.FREE_EXP_USE"))
+
+		(struct stageSize = STAGE_SIZE())
+
+		(var battleInfo:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var isReplayPlaying:bool = "battleInfo.isReplayPlaying")
+
+		(var battleResultsStructuredEntity:dhEntity =		"getSingleEntity(CC.battleResultsStructured)")
+		(var battleResultsStructuredComponent:dhComponent =	"battleResultsStructuredEntity.battleResultsStructured")
+		(var battleResultsDataComponent:dhComponent =		"battleResultsStructuredEntity.dataComponent")
+		(var data:dict =				"battleResultsDataComponent.data ?: {}"		(event "battleResultsDataComponent.evDataChanged"))
+		(var gameData:dict =			"data.game_data")
+		(var personal:dict =			"data.personal")
+		(var creditsExperience:dict =	"data.credits_experience")
+		(var result:number =			"gameData.battle_result")
+		(var abuseStatus:number =		"personal.player['abuseStatus']")
+		(var gameMode:number =			"gameData.game_mode")
+
+		(var isResultWonPosition:bool = "result == SC.Battle.BATTLE_RESULT.WON_POSITION")
+		(var roundResultColorText:number = "isResultWonPosition && personal.wonPosition == 1 ||
+											isIn(result, SC.Battle.BATTLE_RESULT.SUCCESS_RESULTS)	? RESULT_TITLE_COLOR.POSITIVE :
+											isIn(result, SC.Battle.BATTLE_RESULT.FAIL_RESULTS)		? RESULT_TITLE_COLOR.NEGATIVE
+																									: RESULT_TITLE_COLOR.DEFAULT")
+		(var successRoundsCount:number = "personal.trialsInfo.successRoundsCount")
+		(var totalRoundsCount:number = "personal.trialsInfo.totalRoundsCount")
+		(var isBattleChallenge:bool = "gameMode == SC.Battle.GAME_MODE.BATTLE_CHALLENGES")
+		(var isWaffentrager:bool = "gameMode == SC.Battle.GAME_MODE.WAFFENTRAGER")
+		(var isTrialsBattle:bool = "toBool(successRoundsCount) || toBool(totalRoundsCount)")
+		(var isFirstBattle:bool = "gameData.scenario == SC.Common.FIRST_BATTLE_INFO.FIRST_BATTLE")
+		(var battleTypeTitle:str = "	gameData.battleType == SC.Common.BATTLE_TYPES.EVENT_BATTLE	? 'IDS_' + gameData.scenario :
+										isTrialsBattle												? 'IDS_' + gameData.scenario + '_NAME' :
+										isFirstBattle												? 'IDS_FIRST_BATTLE_NAME'
+																									: 'IDS_' + gameData.battleType")
+
+		(var resultText:str = "	isTrialsBattle		? subst('IDS_TRIAL_ROUND_RESULTS', [], {'_bestRound': successRoundsCount, '_totalRounds': totalRoundsCount}) :
+								isResultWonPosition	? subst('IDS_SYS_MSG_BATTLE_RESULTS_' + result, [], {_wonPosition: personal.wonPosition})
+													: RESULT_TITLE_IDS[result]")
+		(var scenarioOrMapName:str = "gameMode == SC.Battle.GAME_MODE.PVE	? 'IDS_' + gameData.scenario + '_NAME'
+																			: gameData.map_name")
+
+		(var isEconomicallyPunished:bool = "personal.isEconomicallyPunished")
+		(var isCustomBattle:bool = "gameData.battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE ||
+									gameData.battleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
+		(var isEarnedBlockVisible:bool = "(!isFirstBattle || personal.achievements.length > 0) && !isCustomBattle")
+		(var isAchievementBlockVisible:bool = "isEarnedBlockVisible && toBool(personal.achievements)")
+		(var isEarnedRewardBlockVisible:bool = "isEarnedBlockVisible && !isEconomicallyPunished")
+
+		(var sseTasks:dhCollection = "getCollectionByPath(CC.sseCorePersistent, 'byArenaId.' + gameData.arena_id)")
+
+		(var playerShipMasteryEntity:dhEntity =	"getPrimaryEntity(CC.shipMastery, personal.player.shipId)")
+		(var killerShipMasteryEntity:dhEntity =	"getPrimaryEntity(CC.shipMastery, personal.killer.shipId)")
+
+		(var causedDamageEntity:dhEntity = "getEntity(battleResultsStructuredComponent.causedDamage[0])")
+		(var causedDamage:number = "causedDamageEntity.battleResultsEntry.values[0].value ?: 0")
+		(var isPositiveBattleEfficiency:bool = "personal.ribbons.length > 0 || causedDamageEntity.battleResultsEntry.values[0].value > 0")
+
+		
+		(var bonusTagsTasksList:array = "personal.bonus_tags ?: []")
+		(var campaignTasksDoneList:array = "personal.campaignTasksResults.done ?: []")
+		(var strategicActionsTasksList:array = "personal.strategicActions ?: []")
+		(var arcEventTasksDoneList:array = "personal.arc_details.done ?: []")
+		(var shipAcesTasksList:array = "personal.shipAces ?: []")
+		(var sseTasksDoneList:array= "personal.tasksCollectionName.done ?: []")
+
+		
+		(var campaignTasksInProgressList:array = "personal.campaignTasksResults.inProgress ?: []")
+		(var arcEventTasksInProgressList:array = "personal.arc_details.inProgress ?: []")
+		(var sseTasksInProgressList:array = "personal.tasksCollectionName.inProgress ?: []")
+
+		(var sseTasksAmount:number =				"sseTasksDoneList.length + sseTasksInProgressList.length")
+		(var campaignTasksAmount:number =			"campaignTasksDoneList.length + campaignTasksInProgressList.length")
+		(var bonusTagsTasksAmount:number =			"bonusTagsTasksList.length")
+		(var rvrTasksAmount:number =				"arcEventTasksDoneList.length + arcEventTasksInProgressList.length")
+		(var shipAcesTasksAmount:number =			"shipAcesTasksList.length")
+		(var strategicActionsTasksAmount:number =	"strategicActionsTasksList.length")
+
+		
+		(var achievementDelay:number = 0.7)
+		(var ribbonsDelay:number = "achievementDelay + (personal.achievements.length * 0.15) + 0.2")
+		(var bonusTagDelay:number = "ribbonsDelay + personal.ribbons.length * 0.2")
+		(var campaignTasksDoneDelay:number = "bonusTagDelay + bonusTagsTasksList.length * 0.2")
+		(var strategicActionsTasksDoneDelay:number = "campaignTasksDoneDelay + campaignTasksDoneList.length * 0.2")
+		(var arcEventTasksDoneDelay:number = "strategicActionsTasksDoneDelay + strategicActionsTasksList.length * 0.2")
+		(var shipAcesTasksDelay:number = "arcEventTasksDoneDelay + arcEventTasksDoneList.length * 0.2")
+		(var sseTasksDoneDelay:number = "shipAcesTasksDelay + shipAcesTasksList.length * 0.2")
+		(var campaignTasksInProgressDelay:number = "sseTasksDoneDelay + sseTasksDoneList.length * 0.2")
+		(var arcEventTasksInProgressDelay:number = "campaignTasksInProgressDelay + campaignTasksInProgressList.length * 0.2")
+		(var sseTasksInProgressDelay:number = "arcEventTasksInProgressDelay + arcEventTasksInProgressList.length * 0.2")
+
+		(var isAnimatedContentAppear:bool = "_isAnimatedContentAppear" watch=false)
+
+		(var hideAddedExp:bool =			false)
+		(var playResistanceIconSound:bool =	false)
+		(bind hideAddedExp					"true"	init=false	(event "evUpdateTotalExp"))
+		(bind playResistanceIconSound		"true"	init=false	(event "evPlayResistanceIconSound"))
+
+		(var expResistanceValue:number =		"toNumber(creditsExperience.result.gui_exp_resistance)"			watch=false)
+		(var freeExpResistanceValue:number =	"toNumber(creditsExperience.result.gui_free_exp_resistance)"	watch=false)
+
+		(var expValue:number =		"isAnimatedContentAppear ? toNumber(creditsExperience.result.gui_exp_without_resistance)		: toNumber(creditsExperience.result.gui_main_exp)"			watch=false)
+		(var freeExpValue:number =	"isAnimatedContentAppear ? toNumber(creditsExperience.result.gui_free_exp_without_resistance)	: toNumber(creditsExperience.result.gui_main_free_exp)"		watch=false)
+		(bind expValue				"toNumber(creditsExperience.result.gui_main_exp)"		init=false watch=false		(event "evUpdateTotalExp"))
+		(bind freeExpValue			"toNumber(creditsExperience.result.gui_main_free_exp)"	init=false watch=false		(event "evUpdateTotalExp"))
+
+		(var hasResistanceRecognitionReward:bool = "personal.hasResistanceReward > 0")
+
+		(var areTasksShown:bool = "(sseTasksAmount || campaignTasksAmount || bonusTagsTasksAmount || rvrTasksAmount || shipAcesTasksAmount || strategicActionsTasksAmount) && !isReplayPlaying")
+	)
+
+	(dispatch "hasResistanceRecognitionReward && isAnimatedContentAppear ? 'evUpdateTotalExp' : ''"				dir="EventDirection.NONE"	delay="PBS_ELEMENT_BASE_ANIM_DELAY + 1.95"		on='addedToStage')
+	(dispatch "hasResistanceRecognitionReward && isAnimatedContentAppear ? 'evPlayResistanceIconSound' : ''"	dir="EventDirection.DOWN"	delay="PBS_ELEMENT_BASE_ANIM_DELAY + 0.8"		on='addedToStage')
+
+	(dispatch "isAnimatedContentAppear ? 'evSetAnimatedAppearOff' : ''"											dir="EventDirection.UP"		delay=0.1										on='addedToStage')
+
+
+	(class $Fullsize)
+	(style (align = "center"))
+
+	(macro PBS_LOADING_ANIMATION)
+
+	(block
+		(style
+			(align = "middle")
+			(bind width "min(0.8 * stageSize.width, 1280px)")
+			(bind height "0.7 * stageSize.height")
+		)
+
+		
+		(block
+			(style (width = 100%))
+
+			(hblock
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"0"
+				)
+
+				(style (height = 80px))
+
+				(tf
+					(name = 'BattleResultText')
+
+					(class $TextDefaultBold76NM)
+					(style
+						(marginBottom = "M")
+						(textColor = "roundResultColorText")
+					)
+
+					(bind text "resultText")
+				)
+
+				(block
+					(bind visible "hasResistanceRecognitionReward")
+
+					(style
+						(marginTop = -10px)
+						(marginLeft = 10px)
+						(alpha =			"isAnimatedContentAppear ? 0 : 1")
+						(visualScaleX =		"isAnimatedContentAppear ? 2 : 1")
+						(visualScaleY =		"isAnimatedContentAppear ? 2 : 1")
+						(visualOffsetX =	"isAnimatedContentAppear ? -40 : 0")
+						(visualOffsetY =	"isAnimatedContentAppear ? -40 : 0")
+					)
+
+					(controller $Animation
+						(bindcall play	delay =		"PBS_ELEMENT_BASE_ANIM_DELAY + 0.8"
+										duration =	0.3
+										from =		"{ alpha: 0, visualScaleX: 2, visualScaleY: 2, visualOffsetX: -40, visualOffsetY: -40 }"
+										to =		"{ alpha: 1, visualScaleX: 1, visualScaleY: 1, visualOffsetX: 0, visualOffsetY: 0 }"
+										easing =	"Easing.quad_out"
+										action =	"kill"
+										on =		'addedToStage'
+										(bind enabled "isAnimatedContentAppear")
+						)
+					)
+
+					(element ResistanceRecognitionRewardAnimatedIcon
+						_playSound = "playResistanceIconSound"
+					)
+				)
+			)
+
+			(block
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"0.1"
+				)
+
+				(name = 'BattleResultSubText')
+
+				(tf
+					(class $TextDefaultBold26NM)
+					(style
+						(marginBottom = "M")
+						(alpha = "TA")
+					)
+					(bind text "gameData.resultComment")
+				)
+			)
+
+			(hblock
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"0.2"
+				)
+
+				(block
+					(controller $Instance renderer='PBSPlayerWithShip'
+						(bind enabled "!isBattleChallenge")
+						(args
+							_shipId = "personal.player.shipId"
+							_name = "personal.player.name"
+							_masteryRank = "personal.player.masteryRank"
+							_isTeamKiller = "abuseStatus && abuseStatus != SC.Common.ABUSE_STATUS.NORMAL"
+							_fontSize = "SIZE.LARGE"
+							_isSelf = true
+						)
+					)
+				)
+
+				(block
+					(style
+						(bind marginTop "!isBattleChallenge && personal.killed ? XXS : 0")
+						(bind marginLeft "!isBattleChallenge && personal.killed ? S : 0")
+					)
+
+					(controller $Instance renderer='PersonalResultKiller'
+						(bind enabled "!isBattleChallenge && !isWaffentrager && personal.killed")
+						(args
+							_killer = "personal.killer"
+							_deathReasonId = "personal.death_reason_id"
+							_relation = "personal.killer.relation"
+							_killerIsBuilding = "personal.killerIsBuilding"
+							_killerBuildingName = "personal.killerBuilding.ids_name"
+							_killerBuildingType = "personal.killerBuilding.type"
+							_masteryRank = "personal.killer.masteryRank"
+						)
+					)
+				)
+			)
+
+			
+			(block
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"0.25"
+				)
+
+				(style
+					(align = "right")
+					(position = "absolute")
+					(right = 0)
+					(top = "MS")
+				)
+
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(marginBottom = "S")
+						(alpha = "TA")
+					)
+					(bind text "isBattleChallenge	? tr(battleTypeTitle)
+													: subst('IDS_PERSONAL_RESULT_SCENARIO_OR_MAP_NAME_DASH_BATTLETYPE', [],
+															{scenarioOrMapName: tr(scenarioOrMapName), battleTypeTitle: tr(battleTypeTitle)})")
+				)
+
+				(tf
+					(class $TextDefault18NM)
+					(style (alpha = "TA"))
+					(bind text "subst('IDS_BATTLE_START_TIME', [], {battleDate: gameData.battle_date})")
+				)
+			)
+			
+		)
+		
+
+		
+		(block
+			(bind visible "isEarnedBlockVisible")
+
+			(style (marginTop = "L"))
+
+			(block
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"0.3"
+				)
+
+				(tf
+					(class $TextDefaultBold26NM)
+					(style
+						(marginBottom = "M")
+						(alpha = "TA")
+					)
+
+					(text = 'IDS_BATTLE_STATS_TAKEN_TILL_BATTLE')
+				)
+			)
+
+			(block
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"0.6"
+				)
+
+				(tf
+					(bind visible "isEconomicallyPunished")
+
+					(class $TextDefault18NM)
+					(style
+						(marginBottom = "M")
+						(textColor = "abuseStatus == SC.Common.ABUSE_STATUS.NORMAL ? SC.Ui_styles.SERVICE_COLORS.ORANGE : SC.Ui_styles.SERVICE_COLORS.PINK")
+					)
+
+					(text = 'IDS_TEAMSHOOTER_PENALTY')
+				)
+			)
+
+			(hblock
+				(hblock
+					(bind visible "!isEconomicallyPunished")
+
+					(style (bind hgap "isEarnedRewardBlockVisible ? M : 0"))
+
+					
+					(block
+						(macro PBS_ELEMENTS_ANIMATION
+							_isEnabled =	"isAnimatedContentAppear"
+							_delay =		"0.4"
+						)
+
+						(controller $Instance renderer='PBSEarnedReward'
+							(bind enabled "isEarnedRewardBlockVisible")
+							(args
+								_name = 'BattleResultCreditsGain'
+								_value = "creditsExperience.result.gui_main_credits"
+								_currency = "SC.Common.CURRENCIES.CREDITS"
+								_animationIndex = 1
+							)
+						)
+					)
+					
+
+					
+					(block
+						(macro PBS_ELEMENTS_ANIMATION
+							_isEnabled =	"isAnimatedContentAppear"
+							_delay =		"0.5"
+						)
+
+						(element NumberChangeAnimated
+							_name =					'BattleResultExperienceGain'
+							_triggerValue =			"expValue"
+							_currency =				"SC.Common.CURRENCIES.XP"
+							_isAnimationEnabled =	"isAnimatedContentAppear"
+						)
+
+						(block
+							(bind visible "!hideAddedExp && hasResistanceRecognitionReward")
+
+							(style
+								(position = "absolute")
+								(top = -30px)
+								(right = 0px)
+								(alpha = 0)
+							)
+
+							(controller $Animation
+								(controllerEvents	evBonusExpShown)
+								(bindcall play	delay =			"PBS_ELEMENT_BASE_ANIM_DELAY + 1.1"
+												duration =		0.15
+												from =			"{ alpha: 0 }"
+												to =			"{ alpha: 1 }"
+												easing =		"Easing.quad_out"
+												on =			'addedToStage'
+												onEndedEvent =	'evBonusExpShown'
+												(bind enabled "isAnimatedContentAppear")
+								)
+								(bindcall play	delay =			0.4
+												duration =		0.3
+												from =			"{ alpha: 1, visualOffsetY: 0px }"
+												to =			"{ alpha: 0, visualOffsetY: 30px }"
+												easing =		"Easing.quad_out"
+												on =			'evBonusExpShown'
+								)
+							)
+
+							(tf
+								(class $TextDefaultBold30NMWithoutShadow)
+								(style
+									(alpha = "TA")
+									(letterSpacing = -2)
+								)
+
+								(bind text "'+' + formatFloatingPoint(expResistanceValue, 0)")
+							)
+						)
+					)
+					
+
+					
+					(block
+						(macro PBS_ELEMENTS_ANIMATION
+							_isEnabled =	"isAnimatedContentAppear"
+							_delay =		"0.6"
+						)
+
+						(controller $Instance renderer='NumberChangeAnimated'
+							(bind enabled "isEarnedRewardBlockVisible && featureFreeExp.state != 'locked'")
+							(args
+								_name =					'BattleResultFreeExperienceGain'
+								_triggerValue =			"freeExpValue"
+								_currency =				"SC.Common.CURRENCIES.FREE_XP"
+								_isAnimationEnabled =	"isAnimatedContentAppear"
+							)
+						)
+
+						(block
+							(bind visible "!hideAddedExp && hasResistanceRecognitionReward && freeExpResistanceValue > 0")
+
+							(style
+								(position = "absolute")
+								(top = -30px)
+								(right = 0px)
+								(alpha = 0)
+							)
+
+							(controller $Animation
+								(controllerEvents	evBonusExpShown)
+								(bindcall play	delay =			"PBS_ELEMENT_BASE_ANIM_DELAY + 1.1"
+												duration =		0.15
+												from =			"{ alpha: 0 }"
+												to =			"{ alpha: 1 }"
+												easing =		"Easing.quad_out"
+												on =			'addedToStage'
+												onEndedEvent =	'evBonusExpShown'
+												(bind enabled "isAnimatedContentAppear")
+								)
+								(bindcall play	delay =			0.4
+												duration =		0.3
+												from =			"{ alpha: 1, visualOffsetY: 0px }"
+												to =			"{ alpha: 0, visualOffsetY: 30px }"
+												easing =		"Easing.quad_out"
+												on =			'evBonusExpShown'
+								)
+							)
+
+							(tf
+								(class $TextDefaultBold30NMWithoutShadow)
+								(style
+									(letterSpacing = -2)
+									(textColor = "SC.Ui_styles.SERVICE_COLORS.LIGHT_GREEN")
+								)
+
+								(bind text "'+' + formatFloatingPoint(freeExpResistanceValue, 0)")
+							)
+						)
+					)
+					
+				)
+
+				
+				(hblock
+					(bind visible "isEarnedBlockVisible")
+
+					(name = 'BattleResultAchievements')
+
+					(style
+						(hgap = "M")
+						(bind marginTop		"isEconomicallyPunished ? M : -S")
+						(bind marginBottom	"isEconomicallyPunished ? MS : -MS")
+						(bind marginLeft	"isEconomicallyPunished ? 0 : M")
+					)
+
+					(controller $Repeat renderer='PBSAchievementIcon'
+						(bind count "personal.achievements.length")
+						(args
+							_appearAnimationEnabled =	"isAnimatedContentAppear"
+							_achievement =				"personal.achievements[$index]"
+							_animationDelay =			"achievementDelay"
+						)
+					)
+				)
+				
+			)
+		)
+
+		
+		(block
+			(bind visible "!isBattleChallenge")
+
+			(style
+				(width = 100%)
+				(marginTop = "L")
+			)
+
+			(block
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"ribbonsDelay - 0.1"
+				)
+				(tf
+					(class $TextDefaultBold26NM)
+					(style
+						(marginBottom = "M")
+						(alpha = "TA")
+					)
+					(text = 'IDS_BATTLE_EFFICIENCY')
+				)
+			)
+
+			(block
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"ribbonsDelay"
+				)
+				(tf
+					(bind visible "!isPositiveBattleEfficiency")
+					(class $TextDefault18NM)
+					(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+					(text  = 'IDS_YOU_DIDNT_SHOW_RESULTS')
+				)
+			)
+
+			(htile
+				(bind visible "isPositiveBattleEfficiency")
+				(style
+					(width = 100%)
+					(hgap = "XS")
+					(vgap = "S")
+				)
+
+				(block
+					(macro PBS_ELEMENTS_ANIMATION
+						_isEnabled =	"isAnimatedContentAppear"
+						_delay =		"ribbonsDelay + 0.15"
+					)
+
+					(style
+						(marginRight = "S")
+						(marginTop = 10px)
+						(align = "center")
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_text = 'IDS_RIBBON_TOTAL_DAMAGE'
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(tf
+						(class $TextDefaultBold50NMWithoutShadow)
+						(style
+							(marginBottom = 10px)
+							(textAlign = "center")
+							(alpha = "TA")
+						)
+						(bind text "formatSeparator(causedDamage)")
+					)
+
+					(tf
+						(class $TextDefaultNM)
+						(style (alpha = "TA"))
+						(bind text "'IDS_TOTAL_DAMAGE'")
+					)
+				)
+
+				(controller $Repeat renderer='PBSRibbonItem'
+					(bind count "personal.ribbons.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_ribbon =					"personal.ribbons[$index]"
+						_animationDelay =			"ribbonsDelay + 0.3"
+					)
+				)
+			)
+		)
+		
+
+		
+		(block
+			(bind visible "areTasksShown")
+
+			(style (marginTop = "L"))
+
+			(block
+				(macro PBS_ELEMENTS_ANIMATION
+					_isEnabled =	"isAnimatedContentAppear"
+					_delay =		"bonusTagDelay - 0.05"
+				)
+
+				(tf
+					(class $TextDefaultBold26NM)
+					(style
+						(marginBottom = "M")
+						(textColor = "RESULT_TITLE_COLOR.DEFAULT")
+					)
+					(text = 'IDS_TASKS')
+				)
+			)
+
+			(hblock
+				(style
+					(hgap = "S")
+					(align = "middle")
+				)
+
+				
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "bonusTagsTasksList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_entityId =					"bonusTagsTasksList[$index]"
+						_animationDelay =			"bonusTagDelay"
+					)
+				)
+
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "campaignTasksDoneList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_campaignData =				"campaignTasksDoneList[$index]"
+						_animationDelay =			"campaignTasksDoneDelay"
+					)
+				)
+
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "strategicActionsTasksList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_entityId =					"strategicActionsTasksList[$index]"
+						_animationDelay =			"strategicActionsTasksDoneDelay"
+					)
+				)
+
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "arcEventTasksDoneList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_entityId =					"arcEventTasksDoneList[$index]"
+						_animationDelay =			"arcEventTasksDoneDelay"
+					)
+				)
+
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "shipAcesTasksList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_entityId =					"shipAcesTasksList[$index]"
+						_animationDelay =			"shipAcesTasksDelay"
+					)
+				)
+
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "sseTasksDoneList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_entityId =					"sseTasksDoneList[$index]"
+						_animationDelay =			"sseTasksDoneDelay"
+					)
+				)
+				
+
+				
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "campaignTasksInProgressList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_campaignData =				"campaignTasksInProgressList[$index]"
+						_entityId =					0
+						_animationDelay =			"campaignTasksInProgressDelay"
+					)
+				)
+
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "arcEventTasksInProgressList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_entityId =					"arcEventTasksInProgressList[$index]"
+						_animationDelay =			"arcEventTasksInProgressDelay"
+					)
+				)
+
+				(controller $Repeat renderer='PostBattleResultItemRenderer'
+					(bind count "sseTasksInProgressList.length")
+					(args
+						_appearAnimationEnabled =	"isAnimatedContentAppear"
+						_entityId =					"sseTasksInProgressList[$index]"
+						_animationDelay =			"sseTasksInProgressDelay"
+					)
+				)
+				
+
+				(block
+					(macro PBS_ELEMENTS_ANIMATION
+						_isEnabled =	"isAnimatedContentAppear"
+						_delay =		"sseTasksInProgressDelay + 0.2"
+					)
+
+					(style (marginLeft = "SXS"))
+
+					(controller $Tooltip
+						(renderer ='SimpleStatusTooltip')
+						(args
+							_text = 'IDS_HINT_SSE_SHOW_POSTBATTLE_TASK_DETAILS'
+							_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(controller $Instance renderer='DefaultButton'
+						(bind enabled "toBool(sseTasks.length)")
+						(args
+							_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+							_width = 192px
+							_label = "subst('IDS_SUBST_PL_SSE_POSTBATTLE_TASKS_TOTAL', [], {taskCount: sseTasks.length}, sseTasks.length)"
+							_name = 'all_tasks'
+							_methods = "[	{	type: 'inputMapping.onRequest',
+												name: 'showPostBattleSSE',
+												args: { tasksCollectionName: 'byArenaId.' + gameData.arena_id }}]"
+						)
+					)
+				)
+			)
+		)
+		
+	)
+)
+
+(def element PBSPlayerWithShip (	_shipId:number = 0,
+									_fontSize:number="SIZE.SMALL",
+									_masteryRank:number = 0,
+									_isSelf:bool = false,
+									_isEnemy:bool = false,
+									_isBot:bool = false,
+									_isTeamKiller:bool = false,
+									_isInMyDivision:bool = false,
+									_name:str = '')
+	(scope
+		(var isInMyDivision:bool = "_isInMyDivision && !_isSelf")
+
+		(var textColor:number = "	_isEnemy		? C_ENEMY :
+									_isTeamKiller	? C_TKILLER :
+									isInMyDivision	? C_DIVISION
+													: 0xE6FFFFFF")
+
+		(var shipColor:number = "	_isEnemy		? C_ENEMY :
+									isInMyDivision	? C_DIVISION
+													: 0xE6FFFFFF")
+
+		(var iconColorTransform:dict = "_isEnemy		? CT_ENEMY :
+										isInMyDivision	? COLOR_TRANSFORM_WHITE_TO_YELLOW
+														: {}")
+
+		(var fontClass:str = "	_fontSize == SIZE.SMALL		?	_isSelf	?	'$TextDefaultBold14NM'
+																		:	'$TextDefault14NM' :
+								_fontSize == SIZE.MEDIUM	?	_isSelf	?	'$TextDefaultBoldNM'
+																		:	'$TextDefaultNM' :
+								_fontSize == SIZE.LARGE		?	_isSelf	?	'$TextDefaultBold20NM'
+																		:	'$TextDefault20NM'
+															:	_isSelf	?	'$TextDefaultBold20NM'
+																		:	'$TextDefault20NM'")
+	)
+
+	(style (flow = "horizontal"))
+
+	(tf
+		(bind class "fontClass")
+		(style
+			(bind textColor "textColor")
+			(bind marginRight "!toBool(_masteryRank) && _fontSize == SIZE.SMALL ? XS : S")
+			(bind noTranslate "!_isBot")
+		)
+
+		(bind text "_name")
+	)
+
+	(block
+		(bind visible "toBool(_masteryRank)")
+
+		(style
+			(marginTop = "-XXS")
+			(marginLeft = "XS")
+			(marginRight = "XS")
+		)
+
+		(controller $Instance renderer='ShipMasteryIcon'
+			(bind enabled "toBool(_masteryRank)")
+			(args
+				_rank = "_masteryRank"
+			)
+		)
+	)
+
+	(block
+		(style (marginTop = -6px))
+
+		(element ShipTitleWithIconAndLevelPBS
+			_shipID = "_shipId"
+			_isSelf = "_isSelf"
+			_isEnemy = "_isEnemy"
+			_fontSize = "_fontSize"
+			_iconColorTransform = "iconColorTransform"
+			_textColor = "shipColor"
+		)
+	)
+)
+
+(def element PersonalResultKiller (	_killerIsBuilding:bool = false,
+									_killer:dict = {},
+									_deathReasonId:number = 0,
+									_relation:number = 0,
+									_masteryRank:number = 0,
+									_killerBuildingType:str = '',
+									_killerBuildingName:str = '')
+	(hblock
+		(bind visible "!_killerIsBuilding")
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(marginRight = "S")
+				(textColor = "RESULT_TITLE_COLOR.DEFAULT")
+			)
+
+			(bind text "tr('IDS_BATTLE_STATS_DAMAGED_BY_' + _deathReasonId)")
+		)
+
+		(block
+			(controller $Instance renderer='PBSPlayerWithShip'
+				(bind enabled "toBool(_killer.shipId)")
+				(args
+					_shipId = "_killer.shipId"
+					_masteryRank = "_killer.masteryRank"
+					_isSelf = "_killer.relation == 0"
+					_isEnemy = "_killer.relation == 2"
+					_isBot = "_killer.dbId < 0"
+					_isTeamKiller = "_killer.isAbuser"
+					_isInMyDivision = "_killer.isInSameDivision"
+					_name = "_killer.name"
+					_fontSize = "SIZE.LARGE"
+				)
+			)
+		)
+	)
+
+	(hblock
+		(bind visible "_killerIsBuilding")
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(marginLeft = 3px)
+				(marginRight = 3px)
+				(textColor = "RESULT_TITLE_COLOR.DEFAULT")
+			)
+			(text = 'IDS_BATTLE_STATS_DAMAGED_BY_FORT')
+		)
+
+		(block
+			(bind visible "_killerBuildingType == 'AirBase'")
+
+			(style
+				(width = 17px)
+				(height = 17px)
+				(marginTop = "-XXS")
+				(backgroundSize = "cover")
+				(backgroundImage = 'url:../battle_hud/markers/building_icons/normal/icon_ground_airbase_enemy.png')
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(marginLeft = 3px)
+				(marginRight = 3px)
+				(textColor = "SC.Ui_styles.SERVICE_COLORS.RED")
+			)
+
+			(bind text "toUpper(_killerBuildingName)")
+		)
+	)
+)
+
+(def element PBSEarnedReward (_name:str = '', _value:number = 0, _currency:str = '', _animationIndex:number = 0)
+	(style (flow = "horizontal"))
+
+	(tf
+		(bind name "_name")
+		(class $TextDefaultBold50NMWithoutShadow)
+		(style
+			(letterSpacing = -2)
+			(alpha = "TA")
+		)
+		(bind text "formatSeparator(_value)")
+	)
+
+	(block
+		(style
+			(marginLeft = "XS")
+			(marginBottom = -10px)
+		)
+
+		(element Currency
+			_currency =		"_currency"
+			_size =			"SIZE.EXTRA_LARGE"
+		)
+	)
+)
+
+(def element PBSAchievementIcon (_appearAnimationEnabled:bool = true, _achievement:dict = {}, _animationDelay:number = 0)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var id:str =						"toString(_achievement.id) ?: ''")
+		(var amount:number =				"_achievement.amount ?: 0")
+		(var achievementEntity:dhEntity =	"getPrimaryEntity(CC.achievement, id)")
+	)
+
+	(macro PBS_ELEMENTS_ANIMATION
+		_isEnabled =	"_appearAnimationEnabled"
+		_delay =		"$index * 0.1 + _animationDelay"
+	)
+
+	(element AchievementIcon
+		_id =			"achievementEntity.id"
+		_amount =		"amount"
+		_size =			56px
+		_isPostBattle =	true
+	)
+)
+
+(def element PBSRibbonItem (_appearAnimationEnabled:bool = true, _ribbon:dict = {}, _animationDelay:number = 0)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var ribbonEntity:dhEntity = "getPrimaryEntity(CC.ribbon, _ribbon.ribbonId)")
+	)
+
+	(macro PBS_ELEMENTS_ANIMATION
+		_isEnabled =	"_appearAnimationEnabled"
+		_delay =		"$index * 0.1 + _animationDelay"
+	)
+
+	(style
+		(align = "center")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer = 'RibbonTooltip')
+		(args
+			_ribbonEntityId =	"ribbonEntity.id"
+			_ribbonInfo =		"_ribbon"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(style (marginBottom = "XS"))
+
+		(element RibbonIcon
+			_iconName = "_ribbon.iconName"
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(bottom = "XS")
+				(right = "XS")
+			)
+
+			(tf
+				(class $TextDefaultBold22NM)
+				(style (alpha = "TA"))
+
+				(bind text "'x' + _ribbon.amount")
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TA"))
+
+		(bind text "'IDS_RIBBON_' + _ribbon.ids")
+	)
+)
+
+(def element PostBattleResultItemRenderer (_appearAnimationEnabled:bool = true, _entityId:number = 0, _campaignData:dict = {}, _animationDelay:number = 0)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var entity:dhEntity = "getEntity(_entityId)")
+		(var renderer:str = "	entity.hasComponent(CC.bonusTag)						? 'PostBattleBonusTagTask' :
+								entity.hasComponent(CC.strategicActionsTaskPersistent)	? 'PostBattleStrategicActionTask' :
+								_campaignData											? 'PostBattleCampaignTasksItem' :
+								entity.hasComponent(CC.shipAcesPersistent)				? 'PostBattleShipAcesTask' :
+								entity.hasComponent(CC.arcEventTaskPersistent)			? 'PostBattleRvrTask'
+																						: 'PostBattleSseTask'")
+	)
+
+	(macro PBS_ELEMENTS_ANIMATION
+		_isEnabled =	"_appearAnimationEnabled"
+		_delay =		"_animationDelay"
+	)
+
+	(controller $Instance
+		(bind renderer "renderer")
+		(args
+			_entityId = "entity.id"
+			_campaignData = "_campaignData"
+		)
+	)
+)
+
+(def element PostBattleBonusTagTask (_entityId:number = 0)
+	(scope
+		(var bonusTagEntity:dhEntity = "getEntity(_entityId)")
+		(var bonusTagType:str = "bonusTagEntity.bonusTag.type")
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(align = "middle")
+	)
+
+	(controller $Tooltip
+		(renderer = 'BonusTagsTooltip')
+		(args
+			_bonusTagId = "bonusTagEntity.id"
+			_isReceived = true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(block
+			(style
+				(alpha = 0.3)
+				(width = 54px)
+				(height = 54px)
+				(backgroundSize = "fill")
+				(bind backgroundImage "'url:../service_kit/bonus_tags/bonus_' + bonusTagType + '_big.png'")
+			)
+		)
+		(block
+			(style
+				(hitTest = false)
+				(position = "absolute")
+				(left = 3px)
+				(top = 3px)
+				(width = 48px)
+				(height = 48px)
+				(backgroundImage = 'url:../reward_categories/icon_check.png')
+			)
+		)
+	)
+
+	(block
+		(style (marginLeft = "S"))
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(maxWidth = 136px)
+				(leading = -2)
+				(alpha = "TA")
+			)
+			(bind text "'IDS_BONUSTAG_' + bonusTagType + '_HEADER'")
+		)
+	)
+)
+
+(def element PostBattleCampaignTasksItem (_campaignData:dict = {})
+	(scope
+		(var isTaskDone:bool =		"_campaignData.isDone")
+
+		(var campaignTaskEntity:dhEntity =		"getPrimaryEntity(CC.campaignTaskParams, _campaignData.id)")
+		(var campaignTaskParams:dhComponent =	"campaignTaskEntity.campaignTaskParams")
+
+		(var campaignMissionEntity:dhEntity =		"getPrimaryEntity(CC.campaignMissionParams, campaignTaskParams.missionID)")
+		(var campaignMissionParams:dhComponent =	"campaignMissionEntity.campaignMissionParams")
+
+		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, campaignMissionParams.campaignID)")
+		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
+
+		(var isMainTask:bool =		"campaignTaskParams.isMainTask")
+		(var missionNumber:str =	"campaignMissionParams.uiNumber")
+		(var taskNumber:number =	"campaignTaskParams.taskNumber")
+
+		(var campaignAllMissionsLen:number = "campaignParams.allMissions.length ?: 0")
+		(var isFinalTaskCampaign:bool =		"(toNumber(missionNumber) == campaignAllMissionsLen) && isMainTask")
+
+		(var taskProgress:number =	"campaignTaskEntity.progress.value ?: 0"	(event "campaignTaskEntity.progress.evChanged"))
+		(var maxProgress:number =	"campaignTaskEntity.progress.max ?: 1")
+
+		(var taskName:str = "	isFinalTaskCampaign		? 'IDS_FINAL_TASK_CAMPAIGN' :
+								isMainTask				? 'IDS_FINAL_TASK_MISSION'
+														: subst('IDS_CAMPAIGN_TASK_NUMBER', [], { _taskNumber: taskNumber })")
+
+		(var missionInfo:str = "subst('IDS_CAMPAIGN_MISSION_NUMBER', [], { _missionNumber: missionNumber })")
+	)
+
+	(style
+		(align = "middle")
+		(bind width "isTaskDone ? 160px : 210px")
+		(height = 70px)
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer = 'CampaignTaskTooltip')
+		(args
+			_taskId = "_campaignData.id"
+			_hasMouseInstruction = false
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(hblock
+		(style
+			(width = 100%)
+			(height = 60px)
+			(hgap = "S")
+		)
+
+		
+		(block
+			(block
+				(style
+					(width = 60px)
+					(height = 60px)
+					(backgroundSize = "cover")
+					(bind alpha "isTaskDone ? 0.5 : 1")
+					(bind backgroundImage "'url:../campaigns/campaign_logo/' + campaignParams.background + '_logo.png'")
+				)
+			)
+
+			(block
+				(bind visible "isTaskDone")
+				(class $FullsizeAbsolute)
+				(style (align = "center|middle"))
+
+				(block
+					(style
+						(width = 48px)
+						(height = 48px)
+						(backgroundImage = 'url:../reward_categories/icon_check.png')
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(class $Fullsize)
+			(style (align = "middle"))
+
+			(tf
+				(class $TextDefaultBold18NM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+				(bind text "taskName")
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(marginTop = "S")
+					(alpha = "TC")
+				)
+				(bind text "missionInfo")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(bind marginTop "!isTaskDone ? SXS : 0px")
+				)
+				(controller $Instance renderer='DefaultProgressBar'
+					(bind enabled "!isTaskDone")
+					(args
+						_width =	100%
+						_progress =	"taskProgress / maxProgress"
+						_color =	"SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element PostBattleStrategicActionTask (_entityId:number = 0)
+	(scope
+		(var strategicActionsTaskEntity:dhEntity = "getEntity(_entityId)")
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(align = "middle")
+	)
+
+	(controller $Tooltip
+		(renderer = 'PostBattleStrategicActionsTooltip')
+		(args
+			_entityId = "strategicActionsTaskEntity.id"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element RewardCategory
+		_rewardCategory = 'strategic_actions'
+		_isReceived = true
+		_isRewardActive = false
+	)
+
+	(block
+		(style (marginLeft = "S"))
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(maxWidth = 136px)
+				(leading = -2)
+				(alpha = "TA")
+			)
+			(text = 'IDS_STRATEGIC_ACTIONS_COMMON_EVENT_TITLE')
+		)
+	)
+)
+
+(def element PostBattleStrategicActionsTooltip (_entityId:number = 0)
+	(scope
+		(var strategicActionsTaskEntity:dhEntity = "getEntity(_entityId)")
+		(var strategicActionsTaskPersistent:dhComponent = "strategicActionsTaskEntity.strategicActionsTaskPersistent")
+		(var rewards:array = "strategicActionsTaskPersistent.rewards")
+		(var isPVEModifierApplied:bool = "strategicActionsTaskPersistent.pveModifierApplied")
+		(var conditionsSets:array = "strategicActionsTaskPersistent.conditionsSets")
+		(var doneConditionSetIndex:number = "strategicActionsTaskPersistent.doneConditionSetIndex")
+		(var taskType:number = "strategicActionsTaskPersistent.taskType")
+
+		(var isThresholdTask:bool = "taskType == SC.Common.STRATEGIC_ACTIONS_TASK_TYPE.THRESHOLD")
+		(var isOrTask:bool = "taskType == SC.Common.STRATEGIC_ACTIONS_TASK_TYPE.OR")
+		(var isAndTask:bool = "taskType == SC.Common.STRATEGIC_ACTIONS_TASK_TYPE.AND")
+		(var conditionsEntities:array = "isOrTask ? [conditionsSets[doneConditionSetIndex]] : conditionsSets")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_STRATEGIC_ACTIONS_COMMON_EVENT_TITLE'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+			_text = 'IDS_TASK_COMPLETED'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'TooltipSystemStatusLine'
+				(bind enabled "isPVEModifierApplied")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PVE_MODIFIER"
+					_text = 'IDS_PVE_MODIFIER_TOOLTIP_DESC_TASK'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isPVEModifierApplied")
+			)
+		)
+
+		(element TooltipSystemStrategicActionsTaskDescriptionItem
+			_entityId = "conditionsEntities[0]"
+			_isThresholdTask = "isThresholdTask"
+			_isAndTask = "isAndTask"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+			_text = 'IDS_TOOLTIP_REWARD_TAKEN'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDHRewards
+			_rewards = "rewards"
+		)
+	)
+)
+
+(def element TooltipSystemStrategicActionsTaskDescriptionItem (_entityId:number = 0, _isAndTask:bool = false, _isThresholdTask:bool = false)
+	(scope
+		(var conditionsEntity:dhEntity = "getEntity(_entityId)")
+		(var taskDescriptionData:dict = "conditionsEntity.sseConditions.taskDescriptionData")
+		(var conditionCategory:str = "conditionsEntity.sseConditions.conditionCategory")
+		(var thresholdTaskIds:str = "'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + conditionCategory + '_FULL'")
+		(var taskDescription:str = "_isThresholdTask ? thresholdTaskIds : taskDescriptionData.ids")
+		(var isConjunctionVisible:bool = "_isAndTask && $index == 0")
+	)
+	(style (width = 100%))
+	(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+		(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+			(element TooltipSystemDescriptionText
+				_descriptionText = "taskDescription"
+			)
+		)
+
+		(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isConjunctionVisible"
+			(controller $Instance renderer = 'TooltipSystemDescriptionText'
+				(bind enabled "isConjunctionVisible")
+				(args
+					_descriptionText = 'IDS_AND'
+				)
+			)
+		)
+	)
+)
+
+(def element PostBattleShipAcesTask (_entityId:number = 0)
+	(scope
+		(var ssePostBattleEntity:dhEntity = "getEntity(_entityId)")
+		(var sseId:number = "ssePostBattleEntity.id")
+		(var taskConditions:array = "ssePostBattleEntity.sseTask.conditions")
+		(var conditionEntity:dhEntity = "getEntity(taskConditions[0])")
+		(var taskDescriptionData:dict = "conditionEntity.sseConditions.taskDescriptionData")
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(align = "middle")
+	)
+
+	(controller $Tooltip
+		(renderer = 'PostBattleShipAcesTaskTooltip')
+		(args
+			_entityId = "sseId"
+			_taskDescription = "taskDescriptionData.ids"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element RewardCategory
+		_rewardCategory = "ssePostBattleEntity.sseTask.rewardCategory"
+		_isReceived = true
+		_isRewardActive = false
+	)
+
+	(block
+		(style (marginLeft = "S"))
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(maxWidth = 136px)
+				(leading = -2)
+				(alpha = "TA")
+			)
+			(bind text "ssePostBattleEntity.sseTask.name")
+		)
+	)
+)
+
+(def element PostBattleShipAcesTaskTooltip (_entityId:number = 0, _taskDescription:str = '')
+	(scope
+		(var sseEntity:dhEntity = "getEntity(_entityId)")
+		(var stepsNumber:number = "sseEntity.shipAcesPersistent.stepsNumber")
+		(var shipId:number = "sseEntity.shipAcesPersistent.shipId")
+		(var shipAcesType:number = "sseEntity.shipAcesPersistent.shipAcesType")
+
+		(var sseTaskComponent:dhComponent = "sseEntity.sseTask")
+		(var taskConditions:array = "sseTaskComponent.conditions")
+		(var conditionEntity:dhEntity = "getEntity(taskConditions[0])")
+		(var isPVEModifierApplied:bool = "conditionEntity.sseConditions.pveModifierApplied")
+
+		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "shipId"))
+		(var upgradableShipInfo:gfx = "shipInfo.shipEntity.upgradableShipInfo" (event "shipInfo.shipEntity.upgradableShipInfo.evUpdate"))
+		(var dockShipNation:str = "shipInfo.shipComponent.nation")
+		(var dockShipType:str = "shipInfo.shipComponent.subtype")
+		(var tooltipHeader:str = "	shipAcesType == SC.Common.SHIP_ACES_TYPE.SHIP_TYPE	? 'IDS_' + dockShipType :
+									shipAcesType == SC.Common.SHIP_ACES_TYPE.NATION		? 'IDS_' + dockShipNation
+																						: 'IDS_' + dockShipNation + '_' + dockShipType")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "tooltipHeader"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+			_text = 'IDS_SSE_STATUS_COMPLETED'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'TooltipSystemStatusLine'
+				(bind enabled "isPVEModifierApplied")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PVE_MODIFIER"
+					_text = 'IDS_PVE_MODIFIER_TOOLTIP_DESC_TASK'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isPVEModifierApplied")
+			)
+		)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = "_taskDescription"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+			_text = 'IDS_TOOLTIP_REWARD_TAKEN'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDHRewards
+			_rewards = "sseTaskComponent.rewards"
+		)
+	)
+)
+
+(def element PostBattleRvrTask (_entityId:number = 0)
+	(scope
+		(var arcEventTaskEntity:dhEntity = "getEntity(_entityId)")
+		(var progressWithRewardsPersistent:dhComponent = "arcEventTaskEntity.progressWithRewardsPersistent")
+		(var pointsArray:array = "progressWithRewardsPersistent.pointsArray")
+		(var progressIndex:number = "progressWithRewardsPersistent.activeIndex - 1")
+		(var isDone:bool = "progressIndex == pointsArray.length - 1")
+
+		(var taskConditions:array = "arcEventTaskEntity.arcEventTaskPersistent.conditions")
+		(var conditionEntity:dhEntity = "getEntity(taskConditions[0])")
+		(var taskCategory:str = "conditionEntity.sseConditions.conditionCategory")
+		(var taskDescriptionData:dict = "conditionEntity.sseConditions.taskDescriptionData")
+		(var currentProgress:number = "taskDescriptionData.currentProgress")
+		(var maxProgress:number = "taskDescriptionData.maxProgress")
+		(var battleProgress:number = "taskDescriptionData.battleProgress")
+
+		(var progressBeforeBattle:number = "(currentProgress - battleProgress) / maxProgress")
+		(var progressAfterBattle:number = "battleProgress / maxProgress")
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(align = "middle")
+	)
+
+	(controller $Tooltip
+		(renderer = 'PostBattleRvrTaskTooltip')
+		(args
+			_entityId = "arcEventTaskEntity.id"
+			_taskDescription = "taskDescriptionData.ids"
+			_currentValue = "currentProgress"
+			_maxValue = "maxProgress"
+			_valueIncrement = "battleProgress"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(element RewardCategory
+		_rewardCategory = 'arc_event_task_reward_points'
+		_isReceived = "isDone"
+		_isRewardActive = false
+	)
+
+	(block
+		(style (marginLeft = "S"))
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(maxWidth = 136px)
+				(leading = -2)
+				(alpha = "TA")
+			)
+			(bind text "'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + taskCategory + '_FULL'")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "S")
+			)
+
+			(controller $Instance renderer = 'DoubleProgressBar'
+				(bind enabled "!isDone")
+				(args
+					_progress1 =	"progressBeforeBattle"
+					_progress2 =	"progressAfterBattle"
+				)
+			)
+		)
+	)
+)
+
+(def element PostBattleRvrTaskTooltip (	_entityId:number = 0,
+										_currentValue:number = 0,
+										_maxValue:number = 0,
+										_valueIncrement:number = 0,
+										_taskDescription:str = '')
+	(scope
+		(var arcEventTaskEntity:dhEntity = "getEntity(_entityId)")
+		(var finishTime:number = "arcEventTaskEntity.arcEventTaskPersistent.finishTime")
+		(var personalPoints:number = "arcEventTaskEntity.arcEventTaskPersistent.personalPoints")
+		(var pointsArray:array = "arcEventTaskEntity.progressWithRewardsPersistent.pointsArray")
+		(var progressIndex:number = "arcEventTaskEntity.progressWithRewardsPersistent.activeIndex - 1")
+		(var isDone:bool = "progressIndex == pointsArray.length - 1")
+		(var hasPointsForThisBattle:bool = "personalPoints > 0")
+
+		(struct serverTime = SERVER_TIME())
+		(var timeLeft:number = "finishTime - serverTime.value")
+		(var isExpired:bool = "serverTime.value > finishTime")
+		(var isFailed:bool = "isExpired && !isDone")
+		(struct formattedLastDayLeft = COUNTDOWN(_time = "finishTime" _serverTime = "serverTime.value" _format = 'hh:mm:ss'))
+		(var daysLeft:number = "floor(timeLeft/DAY_IN_SEC)")
+
+		(var taskStatus:dict = "hasPointsForThisBattle	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
+															text: subst('IDS_SUBST_PL_ARC_EVENT_POSTBATTLE_TOOLTIP_POINTS_RECEIVED', [], { _points: personalPoints }, personalPoints) }
+														: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+															text: 'IDS_SSE_STATUS_FAILED' }")
+
+		(var timeLeftStatusText:str =	"toBool(daysLeft)	? subst('IDS_SUBST_PL_SSE_TIME_LEFT_DAYS', [], { timeLeft: formatSeparator(daysLeft) }, daysLeft)
+															: subst('IDS_SUBST_SSE_TIME_LEFT_LAST_DAY', [], { timeLeft: formattedLastDayLeft.value })")
+		(var timeUnifiedStatus:str =	"toBool(daysLeft)	? SC.Ui_styles.UNIFIED_STATUS.DATE
+															: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "_taskDescription"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "hasPointsForThisBattle || isExpired")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'TooltipSystemStatusLine'
+				(bind enabled "hasPointsForThisBattle || isExpired")
+				(args
+					_unifiedStatus = "taskStatus.unifiedStatus"
+					_text = "taskStatus.text"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "!isDone && !isExpired")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!isDone && !isExpired")
+				(args
+					_unifiedStatus =	"timeUnifiedStatus"
+					_text =				"timeLeftStatusText"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "!isDone")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDoubleProgressBarBlock'
+				(bind enabled "!isDone")
+				(args
+					_title = 'IDS_SSE_PROGRESS_COLON'
+					_currentValue = "_currentValue"
+					_maxValue = "_maxValue"
+					_valueIncrement = "_valueIncrement"
+				)
+			)
+		)
+	)
+)
+
+(def element PostBattleSseTask (_entityId:number = 0)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var ssePostBattleEntity:dhEntity = "getEntity(_entityId)")
+		(var sseId:number = "ssePostBattleEntity.id")
+		(var sseTask:dhComponent = "ssePostBattleEntity.sseTask")
+		(var sseEpic:dhComponent = " ssePostBattleEntity.sseEpic")
+		(var sseChain:dhComponent = "ssePostBattleEntity.sseChain")
+		(var sseRefresh:dhComponent = "ssePostBattleEntity.sseRefresh")
+		(var sseCorePersistent:dhComponent = "ssePostBattleEntity.sseCorePersistent")
+
+		(var doneConditionSetIndex:number =	"sseCorePersistent.doneConditionSetIndex")
+		(var isClaimed:bool =				"sseCorePersistent.isClaimed"	(event "sseCorePersistent.evIsClaimedChanged"))
+		(var isDone:bool =					"sseCorePersistent.isDone")
+		(var isFailed:bool =				"sseCorePersistent.isFailed")
+		(var taskConditions:array =			"sseTask.conditions")
+		
+		(var isManualRewardClaim:bool =	"sseChain.claimRewards || sseEpic.claimRewards || sseTask.claimRewards")
+		(var isClaimable:bool =			"isManualRewardClaim && isDone && !isClaimed")
+
+		(var isEpic:bool = "ssePostBattleEntity.hasComponent(CC.sseEpic)")
+		(var isChain:bool = "ssePostBattleEntity.hasComponent(CC.sseChain)")
+		(var isSseOpenEnded:bool = "ssePostBattleEntity.hasComponent(CC.sseOpenEnded)")
+		(var isDailyTask:bool = "ssePostBattleEntity.sseRefresh.isDaily")
+		(var isOrTask:bool = "taskConditions.length > 1")
+		(var isTask:bool = "!(isEpic || isChain)")
+
+		(var sseConditionEntityId:number = "	!isTask ? null :
+												!isDone ? taskConditions[0]
+														: taskConditions[doneConditionSetIndex]")
+
+		(var sseConditions:dhComponent = "getEntity(sseConditionEntityId).sseConditions")
+		(var battleProgress:number = "sseConditions.taskDescriptionData.battleProgress ?: 0")
+	)
+
+	(bindcall externalCall "isClaimable ? 'inputMapping.onRequest' : ''" "['showSseClaimWindow', { sseId: sseId }]"	init=false watch=false	on='leftClick')
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(align = "middle")
+	)
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_CT	"isClaimed					? CT_NONE :
+												 mouseHandler.mouseDown		? COLOR_TRANSFORM_MOUSE_DOWN :
+												 mouseHandler.rollOver		? COLOR_TRANSFORM_MOUSE_OVER
+																			: CT_NONE")
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler =		"mouseHandler"
+	)
+
+	(macro STRUCT_SOUND_HANDLER
+		_mouseHandler =		"mouseHandler"
+		_soundSet =			"isClaimed ? '' : 'button_default'"
+	)
+
+	(controller $Tooltip
+		(renderer = 'PostBattleSseTaskTooltip')
+		(args
+			_entityId = "_entityId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(style (hitTest = false))
+		(element SseRewardCategory
+			_sseEntityId = "sseId"
+		)
+	)
+
+	(block
+		(style
+			(width = 136px)
+			(marginLeft = "S")
+		)
+
+		(element SseTaskDescription
+			_sseEntityId = "sseId"
+			_conditionId = "isOrTask ? null : taskConditions[0]"
+			_isHeader = true
+			_isPostBattle = true
+		)
+
+		(block
+			(bind visible "!isDone && !isSseOpenEnded")
+			(style
+				(width = 120px)
+				(marginTop = "XS")
+			)
+			(controller $Instance renderer='SseProgress'
+				(bind enabled "!isDone && !isSseOpenEnded")
+				(args
+					_sseEntityId = "_entityId"
+					_conditionId = "taskConditions[0]"
+					_isPostBattleSseItem = true
+				)
+			)
+		)
+
+		(tf
+			(bind visible "!isDone && isSseOpenEnded")
+			(class $TextDefaultBoldNM)
+			(style
+				(width = 120px)
+				(marginTop = "S")
+			)
+			(bind text "'+' + formatSeparator(battleProgress)")
+		)
+	)
+)
+
+(def element PostBattleSseTaskTooltip (_entityId:number = 0)
+	(scope
+		(var ssePostBattleEntity:dhEntity = "getEntity(_entityId)")
+		(var sseId:number = "ssePostBattleEntity.id")
+		(var sseTask:dhComponent = "ssePostBattleEntity.sseTask")
+		(var sseEpic:dhComponent = " ssePostBattleEntity.sseEpic")
+		(var sseChain:dhComponent = "ssePostBattleEntity.sseChain")
+		(var sseRefresh:dhComponent = "ssePostBattleEntity.sseRefresh")
+		(var sseCorePersistent:dhComponent = "ssePostBattleEntity.sseCorePersistent")
+		(var sseOpenEnded:dhComponent = "ssePostBattleEntity.sseOpenEnded")
+		(var sseGlobal:dhComponent = "ssePostBattleEntity.sseGlobal")
+
+		(var doneConditionSetIndex:number = "sseCorePersistent.doneConditionSetIndex")
+		(var isClaimed:bool = "sseCorePersistent.isClaimed")
+		(var isDone:bool = "sseCorePersistent.isDone")
+		(var isFailed:bool = "sseCorePersistent.isFailed")
+		(var taskConditions:array = "sseTask.conditions")
+		(var progressFreezeAt:number = "sseOpenEnded.freezeAt" (event "sseOpenEnded.evChanged"))
+		(var isProgressFrozen:bool = "sseOpenEnded.isFrozen")
+		(var isRewarded:bool = "sseOpenEnded.isRewarded")
+
+		(struct serverTime = SERVER_TIME())
+		(var resultsPublicationAt:number = "sseOpenEnded.resultsAt")
+		(var isResultPublished:bool = "resultsPublicationAt < serverTime.value")
+		(var isResultsCounting:bool = "isProgressFrozen && !isResultPublished")
+
+		(var isEpic:bool = "ssePostBattleEntity.hasComponent(CC.sseEpic)")
+		(var isChain:bool = "ssePostBattleEntity.hasComponent(CC.sseChain)")
+		(var isSseOpenEnded:bool = "ssePostBattleEntity.hasComponent(CC.sseOpenEnded)")
+		(var isDailyTask:bool = "ssePostBattleEntity.sseRefresh.isDaily")
+		(var isOrTask:bool = "taskConditions.length > 1")
+		(var isTask:bool = "!(isEpic || isChain)")
+
+		(var sseStopTimestamp:number = "isSseOpenEnded ? progressFreezeAt : sseCorePersistent.stop")
+		(var timeLeft:number = "sseStopTimestamp - serverTime.value")
+		(var isExpired:bool = "timeLeft < 0")
+		(var isCompleted:bool = "isDone || isFailed ||isExpired")
+
+		(var sseConditionEntityId:number = "	!isTask ? null :
+												!isDone ? taskConditions[0]
+														: taskConditions[doneConditionSetIndex]")
+
+		(var sseConditions:dhComponent = "getEntity(sseConditionEntityId).sseConditions")
+		(var isPVEModifierApplied:bool = "sseConditions.pveModifierApplied")
+		(var conditionCategory:str = "sseConditions.conditionCategory")
+		(var isAggregator:bool = "conditionCategory == SC.Sse.SSE_CONDITION_CATEGORY.COMPLETE_TASK")
+
+		(var statusRenderer:str = "	isSseOpenEnded	?	isResultsCounting	? 'SseStatusResultsCounting' :
+														isRewarded			? 'SseStatusRewardsReceived'
+																			: 'SseStatusFailed' :
+									isDone			? 'SseStatusDone'
+													: 'SseStatusFailed'")
+
+		(var rewards:array = "	isEpic	? sseEpic.rewards :
+								isChain	? sseChain.rewards
+										: sseTask.rewards")
+		(var hasRewards:bool = "rewards.length > 0")
+
+		(var isManualRewardClaim:bool =	"	sseChain.claimRewards ||
+											sseEpic.claimRewards ||
+											sseTask.claimRewards")
+		(var isClaimable:bool = "isManualRewardClaim && !isClaimed")
+
+		(var sseRewardTitle:str = "	isClaimable							? 'IDS_SSE_STATUS_CLAIM_AVAILABLE_COLON' :
+									isDone 								? 'IDS_TOOLTIP_REWARD_TAKEN' :
+									(isEpic || isChain || isAggregator)	? 'IDS_SSE_FINAL_REWARD_COLON'
+																		: 'IDS_SSE_TASK_REWARD_COLON'")
+		(var sseRewardTitleUnifiedStatus:str = "	isClaimable	? SC.Ui_styles.UNIFIED_STATUS.DEFAULT :
+													isDone		? SC.Ui_styles.UNIFIED_STATUS.CHECK :
+													isFailed	? SC.Ui_styles.UNIFIED_STATUS.NEGATIVE
+																: SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element SseTaskDescription
+			_sseEntityId = "sseId"
+			_conditionId = "isOrTask ? null : taskConditions[0]"
+			_isHeader = true
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		
+		(block
+			(style (width = 100%))
+
+			(controller $Instance
+				(bind enabled "isCompleted")
+				(bind renderer "statusRenderer")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='SseStatusActive'
+				(bind enabled "!isCompleted")
+				(args
+					_sseEntity = "ssePostBattleEntity"
+					_isCardSimple = true
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'TooltipSystemStatusLine'
+				(bind enabled "isPVEModifierApplied")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PVE_MODIFIER"
+					_text = 'IDS_PVE_MODIFIER_TOOLTIP_DESC_TASK'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isPVEModifierApplied")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Repeat renderer='TooltipSystemSseProgressBarBlockRepeater'
+				(bind count "isTask ? taskConditions.length : 1")
+				(args
+					_entityId =				"isTask ? taskConditions[$index] : _entityId"
+					_sseId =				"_entityId"
+					_firstTaskEntityId =	"isOrTask ? taskConditions[0] : 0"
+				)
+			)
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'TooltipSystemStatusLine'
+				(bind enabled "hasRewards")
+				(args
+					_unifiedStatus = "sseRewardTitleUnifiedStatus"
+					_text = "sseRewardTitle"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "hasRewards")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDHRewards'
+				(bind enabled "hasRewards")
+				(args
+					_rewards = "rewards"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isClaimable")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer = 'TooltipSystemStatusLine'
+				(bind enabled "isClaimable")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text = 'IDS_SSE_CLAIM_REWARD'
+				)
+			)
+		)
+	)
+)
+
+(def element TooltipSystemSseProgressBarBlockRepeater (_entityId:number = 0, _sseId:number = 0, _firstTaskEntityId:number = 0)
+	(scope
+		(var ssePostBattleEntity:dhEntity =		"getEntity(_sseId)")
+		(var isDone:bool =						"ssePostBattleEntity.sseCorePersistent.isDone")
+		(var isEpic:bool =						"ssePostBattleEntity.hasComponent(CC.sseEpic)")
+		(var isChain:bool =						"ssePostBattleEntity.hasComponent(CC.sseChain)")
+		(var isSseOpenEnded:bool =				"ssePostBattleEntity.hasComponent(CC.sseOpenEnded)")
+
+		(var sseEpic:dhComponent =				"ssePostBattleEntity.sseEpic")
+		(var sseChain:dhComponent =				"ssePostBattleEntity.sseChain")
+		(var sseTask:dhComponent =				"ssePostBattleEntity.sseTask")
+		(var sseOpenEnded:dhComponent =			"ssePostBattleEntity.sseOpenEnded")
+		(var progressComponent:dhComponent =	"ssePostBattleEntity.progress")
+
+		(var taskConditions:array =				"sseTask.conditions")
+		(var epicTasksToComplete:number =		"sseEpic.tasksToComplete"		(event "sseEpic.evChanged"))
+		(var epicBattleProgress:number =		"sseEpic.battleProgress"		(event "sseEpic.evChanged"))
+		(var chainBattleProgress:number =		"sseChain.battleProgress"		(event "sseChain.evChanged"))
+		(var progressCurrent:number =			"progressComponent.value"		(event "progressComponent.evChanged"))
+		(var progressMax:number =				"progressComponent.max ?: 1"	(event "progressComponent.evChanged"))
+
+		(var maxTasks:number =					"isEpic ? epicTasksToComplete : progressMax")
+
+		(var sseConditionEntity:dhEntity =		"getEntity(_entityId)")
+		(var sseConditions:dhComponent =		"sseConditionEntity.sseConditions")
+		(var taskDescriptionData:dict =			"sseConditions.taskDescriptionData")
+		(var taskCategory:str =					"sseConditions.conditionCategory")
+		(var achievements:array =				"sseConditions.achievements ?: []")
+
+		(var sseProgressMax:number =			"isEpic		? epicTasksToComplete :
+												 isChain	? progressMax
+															: taskDescriptionData.maxProgress")
+
+		(var isOrTask:bool =					"taskConditions.length > 1")
+		(var isBinaryTask:bool =				"sseProgressMax == 1")
+
+		(var sseProgressBattle:number =			"isEpic		? epicBattleProgress :
+												 isChain	? chainBattleProgress
+															: taskDescriptionData.battleProgress")
+		(var sseProgressCurrent:number =		"(isEpic || isChain || isBinaryTask)	? progressCurrent
+																						: taskDescriptionData.currentProgress")
+		(var isTaskDone:bool =					"sseProgressCurrent >= sseProgressMax")			
+
+		(var sseProgressValueIncrement:number =	"sseProgressBattle > sseProgressMax ? sseProgressMax : sseProgressBattle")
+		(var isProgressShown:bool =				"!isBinaryTask && !isTaskDone")					
+		(var sseTaskDescription:str =			"isSseOpenEnded		? 'IDS_SSE_CONDITION_CATEGORY_DESCRIPTION_' + taskCategory + '_FULL' :
+												 isEpic || isChain	? subst('IDS_PL_SSE_COMPLETE_TASKS', [], { count: maxTasks }, maxTasks)
+																	: taskDescriptionData.ids")
+
+
+		
+		(var sseConditionEntityFT:dhEntity =	"getEntity(_firstTaskEntityId)")
+		(var sseConditionsFT:dhComponent =		"sseConditionEntityFT.sseConditions")
+		(var taskDescriptionDataFT:dict =		"sseConditionsFT.taskDescriptionData ?: {}")
+		(var sseProgressMaxFT:number =			"_firstTaskEntityId		? isEpic	? epicTasksToComplete :
+																		  isChain	? progressMax
+																					: taskDescriptionDataFT.maxProgress
+																		: 0")
+		(var isBinaryTaskFT:bool =				"_firstTaskEntityId		? sseProgressMaxFT == 1
+																		: false")
+		(var sseProgressCurrentFT:number =		"_firstTaskEntityId		? (isEpic || isChain || isBinaryTaskFT)	? progressCurrent
+																												: taskDescriptionDataFT.currentProgress
+																		: 0")
+		(var isTaskDoneFT:bool =				"_firstTaskEntityId		? sseProgressCurrentFT >= sseProgressMaxFT
+																		: false")
+		
+
+
+		(var isFirstTaskOfOrTaskDone:bool =		"isOrTask ? true : false")
+
+		(var isThisFirstTaskDone:bool =			"(isTaskDone && $index == 0)")
+		(var isThisSecondTaskDone:bool =		"(isTaskDone && $index == 1) && !isTaskDoneFT")
+	)
+
+	(bind visible "!isDone || isThisFirstTaskDone || isThisSecondTaskDone")
+
+	(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
+
+	(style
+		(width = 100%)
+		(bind marginBottom "isOrTask && $index == 0 && !isDone ? MS : 0")
+	)
+
+	(tf
+		(bind visible "!isDone && $index == 1")
+
+		(class $TextDefaultNM)
+		(style
+			(width = 100%)
+			(marginTop =	"-M")
+			(marginBottom =	"SXS")
+			(textAlign = "center")
+			(alpha = "TA")
+		)
+
+		(text = 'IDS_OR')
+	)
+
+	(block
+		(bind visible "!(isProgressShown && !isSseOpenEnded && achievements.length == 0)")
+
+		(style
+			(width = 100%)
+			(bind marginBottom "isSseOpenEnded ? SXS : 0")
+		)
+
+		(controller $Instance renderer='TooltipSystemDescriptionText'
+			(bind enabled "!(isProgressShown && !isSseOpenEnded && achievements.length == 0)")
+			(args
+				_descriptionText = "sseTaskDescription"
+			)
+		)
+	)
+
+	(block
+		(bind visible "achievements.length > 0")
+
+		(style
+			(width = 100%)
+			(marginTop = "S")
+		)
+
+		(controller $Instance renderer='SSETooltipAchievements'
+			(bind enabled "achievements.length > 0")
+			(args
+				_achievements = "achievements"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='TooltipSystemDoubleProgressBarBlock'
+			(bind enabled "isProgressShown && !isSseOpenEnded")
+			(args
+				_title =			"achievements.length > 0 ? '' : sseTaskDescription"
+				_currentValue =		"sseProgressCurrent"
+				_maxValue =			"sseProgressMax"
+				_valueIncrement =	"sseProgressValueIncrement"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='ProgressParamsElement'
+			(bind enabled "isSseOpenEnded")
+			(args
+				_text =			'IDS_SSE_PORTAL_RESULT_COLON'
+				_param_1 =		"sseProgressBattle"
+				_param_2 =		"sseProgressCurrent"
+			)
+		)
+	)
+)

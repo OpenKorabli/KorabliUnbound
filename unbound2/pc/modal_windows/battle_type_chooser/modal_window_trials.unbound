@@ -4,15 +4,14 @@
 
 	(scope
 		(event evShowTrialInfo)
-		(var trialCollection:dhCollection = "getCollectionByPath(CC.operation, 'byStatus.weekly.trials.sorted')")
-		(var selectedTrialCollection:dhCollection = "getCollectionByPath(CC.operation, 'byStatus.weekly.trials.selectedTrials')")
-
+		(var trialCollection:dhCollection = "getCollection(CC.trial)")
+		(var selectedBattleTypeEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
 		(var hasTrials:bool = "trialCollection.length > 0")
 
-		(var preselectedBattleTypeEntityId:number = "	$event							? $event._battleTypeEntityId :
-														selectedTrialCollection.length	? selectedTrialCollection[0].id:
-														hasTrials						? trialCollection[0].id
-																						: 0" watch=false (event "evShowTrialInfo"))
+		(var preselectedBattleTypeEntityId:number = "	'_battleTypeEntityId' in $event			? $event._battleTypeEntityId :
+														selectedBattleTypeEntity.trial != null	? selectedBattleTypeEntity.id:
+														hasTrials								? trialCollection[0].id
+																								: 0" watch=false (event "evShowTrialInfo"))
 
 		(var battleTypeEntity:dhEntity = "getEntity(preselectedBattleTypeEntityId)")
 		(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
@@ -160,8 +159,8 @@
 		(var isSelected:bool = "battleTypeComponent.selected" (event "battleTypeComponent.evSelectionChanged"))
 		(var isPreselected:bool = "_preselectedBattleTypeEntityId == _battleTypeEntityId")
 
-		(var operationBattleComponent:dhComponent =	"battleTypeEntity.operation")
-		(var gpName:str = "operationBattleComponent.gpName" (event "operationBattleComponent.evStatusChanged"))
+		(var trialBattleComponent:dhComponent =	"battleTypeEntity.trial")
+		(var gpName:str = "trialBattleComponent.gpName ?: ''")
 		(var battleHeaderIDS:str = "'IDS_' + toUpper(gpName) + '_NAME'")
 
 		(var isNewBattle:bool = "battleTypeEntity.hasComponent(CC.newItem)")
@@ -281,8 +280,8 @@
 
 		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
 
-		(var operationBattleComponent:dhComponent =	"battleTypeEntity.operation")
-		(var gpName:str = "operationBattleComponent.gpName" (event "operationBattleComponent.evStatusChanged"))
+		(var trialBattleComponent:dhComponent =	"battleTypeEntity.trial")
+		(var gpName:str = "trialBattleComponent.gpName ?: ''")
 
 		(var battleHeaderIDS:str = "'IDS_' + toUpper(gpName) + '_NAME'")
 
@@ -291,11 +290,10 @@
 										PCVT003_FRAGS_PRIME: 2,
 										PCVT004_MANEUVER_PRIME: 2}")
 
-		(var trialEntity:dhEntity = "getPrimaryEntity(CC.trialParams, battleTypeGameParamId)")
-		(var trialParamsComponent:dhComponent = "trialEntity.trialParams")
-		(var totalRounds:number = "trialParamsComponent.totalRounds ?: 0" (event "trialParamsComponent.evTotalRoundsChanged"))
-		(var trialStatsComponent:dhComponent = "trialEntity.trialStats")
-		(var bestRound:number = "trialStatsComponent.bestRound ?: 0" (event "trialStatsComponent.evBestRoundChanged"))
+		(var trialEntity:dhEntity = "getPrimaryEntity(CC.trial, battleTypeGameParamId)")
+		(var trialComponent:dhComponent = "trialEntity.trial")
+		(var totalRounds:number = "trialComponent.totalRounds ?: 0")
+		(var bestRound:number = "trialComponent.bestRound ?: 0" (event "trialComponent.evBestRoundChanged"))
 	)
 
 	(macro MOUSE_EVENTS_DISPATCHER)
@@ -490,11 +488,13 @@
 		(macro MOUSE_HANDLER_SCOPE "'fullButton_'")
 		(macro MOUSE_HANDLER_SCOPE "'battleType_'")
 
-		(var battleType:str = "SC.Common.OPERATION_BATTLE_TYPE.VALUE_TO_NAME[SC.Common.OPERATION_BATTLE_TYPE.TRIAL]")
+		(var battleType:str = "SC.Common.BATTLE_TYPES.TRIAL_BATTLE")
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
 
-		(var selectedTrialsCollection:dhCollection = "getCollectionByPath(CC.operation, 'byStatus.weekly.trials.selectedTrials')")
-		(var isSelected:bool = "selectedTrialsCollection.length > 0")
+		(var selectedBattleTypeEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
+		(var isSelected:bool = "selectedBattleTypeEntity.trial != null")
 		(var selectedAnimationElement:str = "isSelected ? 'SelectedBattleTypeAnimation' : ''")
+		(var isSelectable:bool = "!selfPlayerEntity.hasComponent(CC.preBattlePlayerSimple)")
 
 		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.TRIAL_BATTLE_TYPE_CHOOSER"))
 
@@ -514,9 +514,9 @@
 
 	(name = 'typeItemTrial')
 
-	(bindcall externalCall "'sound.playSetSoundDirect'"		"['battle_type_choose', SoundEvent.OVER]"					init=false watch=false	(event "battleType_evRollOver"))
-	(bindcall externalCall "'sound.playSetSoundDirect'"		"['battle_type_choose', battleType + 'Battle_click']"		init=false watch=false	(event "battleType_evClicked"))
-	(bindcall externalCall "'inputMapping.onRequest'"		"['showTrials', {}]"										init=false watch=false	(event "battleType_evClicked"))
+	(bindcall externalCall "isSelectable ? 'sound.playSetSoundDirect'	: ''"	"['battle_type_choose', SoundEvent.OVER]"					init=false watch=false	(event "battleType_evRollOver"))
+	(bindcall externalCall "isSelectable ? 'sound.playSetSoundDirect'	: ''"	"['battle_type_choose', battleType + 'Battle_click']"		init=false watch=false	(event "battleType_evClicked"))
+	(bindcall externalCall "isSelectable ? 'inputMapping.onAction'		: ''"	"['navigateTo', { route: SC.Ui_windows.MODAL.TRIALS }]"		init=false watch=false	(event "battleType_evClicked"))
 
 	(style
 		(width = "BATTLE_TYRES_SIZE")
@@ -555,7 +555,9 @@
 			(macro MOUSE_EVENTS_DISPATCHER "'battleType_'")
 
 			(block
-				(bind colorTransform "fullButton_rollOver && !battleType_mouseDown	? COLOR_TRANSFORM_BATTLE_TYPE_ROLLOVER : {}")
+				(bind colorTransform "	isSelectable		&&
+										fullButton_rollOver	&& !battleType_mouseDown	? COLOR_TRANSFORM_BATTLE_TYPE_ROLLOVER
+																						: {}")
 				(class $BattleTypeIconSize)
 				(style (marginBottom = "M"))
 
@@ -572,14 +574,13 @@
 				
 				(block
 					(class $FullsizeAbsolute)
-					(style (macro DESATURATION_DEFAULT "true"))
-
+					(style (macro DESATURATION_BATTLE_TYPE "isSelectable"))
 					(element BattleTypeIcon _iconBattleName = "battleType")
 				)
 
 				
 				(block
-					(macro DEFAULT_CONTROL_MARKER_ANIMATION "markerData.isVisible")
+					(macro DEFAULT_CONTROL_MARKER_ANIMATION "markerData.isVisible && isSelectable")
 					(style
 						(position = "absolute")
 						(top = -9px)

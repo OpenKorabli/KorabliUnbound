@@ -1,0 +1,360 @@
+(def element ResultsScreen (arenaId:number)
+	(macro MODAL_WINDOW_INIT)
+
+	(scope
+		(event evSetAnimatedAppearOff)
+
+		(var isFirstTimeShown:bool =	true)
+		(bind isFirstTimeShown			"false"		init=false		(event "evSetAnimatedAppearOff"))
+
+		(struct highContrast = HIGH_CONTRAST_INFO())
+
+		(var sessionPrefs:dhComponent =			"getSingleComponent(CC.sessionPreference)")
+		(var PBSScreenActiveTabIndex:number =	"sessionPrefs.PBSScreenActiveTabIndex"	(event "sessionPrefs.evPBSScreenActiveTabIndexChanged"))
+
+		(struct PBSData = GET_BATTLE_RESULTS_SCOPE())
+
+		(var validTabIndex:number = "PBSData.isPersonalResultsOnly	? SC.Common.POST_BATTLE_SCREEN_TAB.PERSONAL_REPORT :
+									 PBSData.isSpectator			? SC.Common.POST_BATTLE_SCREEN_TAB.TEAM_REPORT
+																	: PBSScreenActiveTabIndex")
+
+		(var battleInfo:dhComponent =	"getSingleComponent(CC.battleInfo)")
+		(var isReplayPlaying:bool =		"battleInfo.isReplayPlaying")
+
+		(var battleResultsStructured:dhComponent =	"PBSData.battleResultsEntity.battleResultsStructured")
+		(var deficitList:str =				"battleResultsStructured.deficitList")
+		(var isDeficitListVisible:bool =	"toBool(deficitList) && !isReplayPlaying")
+
+		(var isTrainingBattle:bool =	"PBSData.battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+		(var isTournamentBattle:bool =	"PBSData.battleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
+		(var isClanBattle:bool =		"PBSData.battleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE")
+		(var isCustomBattle:bool =		"isTrainingBattle || isTournamentBattle")
+
+		(var divisionDataEntity:dhEntity =	"getSingleEntity(CC.division)")
+		(var balancerInfoEntity:dhEntity =	"getSingleEntity(CC.balancerInfo)")
+
+		(macro PULL_SHIP_ID)
+		(var shipOwnEntity:dhEntity =		"getPrimaryEntity(CC.ownShip, playerShipId)")
+		(var shipOwnComponent:dhComponent =	"shipOwnEntity.ownShip")
+		(var isShipReady:bool =				"shipOwnComponent.isReady"	(event "shipOwnComponent.evIsReadyChanged"))
+
+		(var selfPlayerEntity:dhEntity =	"getSingleEntity(CC.accountSelf)")
+		(var accountLevel:number =			"selfPlayerEntity.accountLevel.level"		(event "selfPlayerEntity.accountLevel.evLevelChanged"))
+		(var selfPlayerName:str =			"selfPlayerEntity.accountName.name"			(event "selfPlayerEntity.accountName.evChanged"))
+
+		(var continuousBattleEnterEntity:dhEntity = "getSingleEntity(CC.continuousBattleEnter)")
+		(var warningsMask:number =	"continuousBattleEnterEntity.continuousBattleEnter.warningsMask"	(event "continuousBattleEnterEntity.continuousBattleEnter.evChanged"))
+
+		(var isAgainToBattleButtonVisible:bool =	"accountLevel >= SC.Common.ACCOUNT_LEVEL.BATTLE_BONUSES &&
+													 divisionDataEntity == null &&
+													 balancerInfoEntity == null &&
+													 !(warningsMask & (1 << SC.Common.CONTINUOUS_BATTLE_ENTER_WARNING_FLAG.BATTLE_TYPE)) &&
+													 !(warningsMask & (1 << SC.Common.CONTINUOUS_BATTLE_ENTER_WARNING_FLAG.BATTLE_SHIP)) &&
+													 !(warningsMask & (1 << SC.Common.CONTINUOUS_BATTLE_ENTER_WARNING_FLAG.RESTRICTED_SHIP)) &&
+													 !isClanBattle &&
+													 !isCustomBattle")
+
+		(var playerVoiceChatEntity:dhEntity =	"getPrimaryEntity(CC.playerVoiceState, selfPlayerName)")
+		(var isSpeaking:bool =					"playerVoiceChatEntity.playerVoiceState.isSpeaking"		(event "playerVoiceChatEntity.playerVoiceState.evIsSpeakingChanged"))
+	)
+
+	(bindcall externalCall 'direct.action' "['setSessionPref', { prefName: 'PBSScreenActiveTabIndex', newValue: SC.Common.POST_BATTLE_SCREEN_TAB.PERSONAL_REPORT }]" on='addedToStage')
+
+	(style (align = "center"))
+
+	(block
+		(bind visible "!highContrast.isEnabled")
+
+		(class $FullsizeAbsolute)
+		(style (alpha = 0))
+
+		(macro PBS_BLOCK_SHOW_HIDE_ANIMATION
+			_showFromData =		"{ alpha: 0 }"
+			_showToData =		"{ alpha: 1 }"
+			_hideFromData =		"{ alpha: 1 }"
+			_hideToData =		"{ alpha: 0 }"
+			_showDuration =		"0.5"
+			_showDelay =		"0.8"
+			_hideDuration =		"0.15"
+		)
+
+		(element DeclareBlurLayer)
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style (hitTest = false))
+
+			(controller $Instance renderer='BlurMap'
+				(bind enabled "!highContrast.isEnabled")
+				(args
+					_blurType = "BLUR_TYPE.LOW"
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "highContrast.isEnabled")
+
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0)
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/modal_battle.png')
+			(backgroundSize = "fill")
+		)
+
+		(macro PBS_BLOCK_SHOW_ANIMATION
+			_showFromData =		"{ alpha: 0 }"
+			_showToData =		"{ alpha: 1 }"
+			_showDuration =		"0.5"
+			_showDelay =		"0.8"
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		)
+
+		(macro PBS_BLOCK_SHOW_ANIMATION
+			_showFromData =		"{ alpha: 0 }"
+			_showToData =		"{ alpha: 1.5 }"
+			_showDuration =		"0.5"
+			_showDelay =		"0.8"
+		)
+	)
+
+	(block
+		(style
+			(width = "{ 1280: 1077px, 1920: 1420px }")
+			(height = 100%)
+		)
+
+		(block
+			(style
+				(align = "center")
+				(width = 100%)
+				(bind marginTop "stageWidth >= 1440 ? MS : SXS")
+				(alpha = 0)
+				(visualOffsetY = 10px)
+			)
+
+			(macro PBS_BLOCK_SHOW_HIDE_ANIMATION
+				_hideFromData =		"{ alpha: 1 }"
+				_hideToData =		"{ alpha: 0 }"
+				_showDuration =		"0.3"
+				_showDelay =		"1.4"
+				_hideDuration =		"0.8"
+			)
+
+			(controller $Instance renderer='BattleResultsMainTabButtons'
+				(bind enabled "!PBSData.areTabsHidden")
+				(args
+					_currentTabIndex =			"validTabIndex"
+					_isTeamResultVisible =		"PBSData.isTeamResultVisible"
+					_isDetailedReportVisible =	"PBSData.isDetailedReportVisible"
+					_isCreditsAndExpVisible =	"!isCustomBattle"
+				)
+			)
+
+			(block
+				(style
+					(position = "absolute")
+					(top = "S")
+					(right = "-LM")
+				)
+
+				(element ModalWindowCloseIcon
+					_tooltipText = "isReplayPlaying ? 'IDS_TOOLTIP_MENU' : 'IDS_CLOSE'"
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(height = "{ 720: 630px, 1080: 738px }")
+				(bind marginTop "20 + (stageHeight - 720) * 0.1")
+				(visualOffsetY = 0px)
+			)
+
+			(macro PBS_BLOCK_HIDE_ANIMATION
+				_hideDuration = "0.15"
+			)
+
+			(controller $Instance
+				(bind renderer "BATTLE_RESULT_LAYOUT_RENDERER[validTabIndex]")
+				(args
+					_isFirstTimeShown = "isFirstTimeShown"
+				)
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(align = "center")
+				(width = 100%)
+				(bind bottom "10 + (stageHeight - 720) * 0.15")
+			)
+
+			(block
+				(name = 'BottomTabBarButtonDebriefing')
+
+				(style
+					(alpha = 0)
+					(visualOffsetY = 10px)
+				)
+
+				(macro PBS_BLOCK_SHOW_HIDE_ANIMATION
+					_hideFromData =		"{ alpha: 1 }"
+					_hideToData =		"{ alpha: 0 }"
+					_showDuration =		"0.3"
+					_showDelay =		"2"
+					_hideDuration =		"0.8"
+				)
+
+				(element DefaultButton
+					_label =			"isReplayPlaying ? 'IDS_BATTLE_STATS_RESTART_REPLAY' : 'IDS_BATTLE_STATS_CLOSE'"
+					_name =				"isReplayPlaying ? '' : 'btn_close'"
+					_width =			160px
+					_methods =			"[{ type: isReplayPlaying ? 'inputMapping.onAction' : '', name: 'restartReplay', args: {} }]"
+					_focusIndex =		1
+					_defaultFocused =	true
+				)
+
+				(block
+					(bind visible "isDeficitListVisible")
+
+					(style
+						(position = "absolute")
+						(left = "-LM")
+						(top = "-XXS")
+						(width = 38px)
+						(height = 38px)
+						(backgroundColor = "NO_COLOR")
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(bind enabled "isDeficitListVisible")
+						(args
+							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+							_text =				"deficitList"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+
+					(controller $Instance renderer='MarkerAttention'
+						(bind enabled "isDeficitListVisible")
+						(args
+							_size = "SIZE.MEDIUM"
+						)
+					)
+				)
+			)
+
+			(block
+				(style
+					(position = "absolute")
+					(right = "M")
+					(alpha = 0)
+					(visualOffsetY = 10px)
+				)
+
+				(macro PBS_BLOCK_SHOW_HIDE_ANIMATION
+					_hideFromData =		"{ alpha: 1 }"
+					_hideToData =		"{ alpha: 0 }"
+					_showDuration =		"0.3"
+					_showDelay =		"2.2"
+					_hideDuration =		"0.8"
+				)
+
+				(controller $Instance renderer='DefaultButton'
+					(bind enabled "isAgainToBattleButtonVisible")
+					(args
+						_type =					"SC.Ui_styles.BUTTON_TYPE.ACCENT"
+						_name =					'btn_again_to_battle'
+						_label =				'IDS_AGAIN'
+						_width =				146px
+						_isTransactionBtn =		true
+						_focusIndex =			2
+
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(height = 30px)
+			(bottom = 0px)
+		)
+
+		(block
+			(style
+				(width = 19px)
+				(height = 17px)
+				(marginLeft = "SXS")
+				(marginTop = "XS")
+			)
+
+			(element VoiceChatOutgoingIcon
+				_isSpeaking = "isSpeaking"
+			)
+		)
+	)
+)
+
+(def element PBSLoadingDataCaption (_isContentShown:bool)
+	(scope
+		(event evHideLoadingDataMessage)
+	)
+
+	(visible = false)
+
+	(style
+		(hitTest = false)
+		(position = "absolute")
+		(top = -30px)
+		(marginLeft = -50%)
+		(alpha = 0)
+		(visualOffsetY = 10px)
+	)
+
+	(controller $Animation
+		(bindcall play
+			watch =			false
+			from =			"DEFAULT_CONTENT_ANIM.STATES.INVISIBLE_IN"
+			to =			"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+			duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+			delay =			0.02
+			easing =		"Easing.line"
+			action =		"kill"
+			on =			'addedToStage'
+			(bind enabled "!_isContentShown")
+		)
+		(bindcall play
+			watch =			false
+			from =			"DEFAULT_CONTENT_ANIM.STATES.VISIBLE"
+			to =			"DEFAULT_CONTENT_ANIM.STATES.INVISIBLE_OUT"
+			duration =		"DEFAULT_CONTENT_ANIM.DURATIONS.APPEAR"
+			delay =			0.15
+			easing =		"Easing.line"
+			action =		"kill"
+			(event "evHideLoadingDataMessage")
+		)
+	)
+
+	(tf
+		(class $TextDefaultBold26NM)
+		(style (alpha = "TA"))
+		(text = "toUpper(tr('IDS_WAITING_SCREEN_LOADING_DATA'))")
+	)
+)

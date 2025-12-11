@@ -1,0 +1,756 @@
+(def element DetailedReportSection ()
+	(scope
+		(event evAddedToStage)
+		(event evStatsLoaded)
+		(event evHideLoadingDataMessage)
+
+		(var isContentShown:bool = false)
+		(bind isContentShown "true" init=false (event "evAddedToStage"))
+	)
+
+	(dispatch evAddedToStage			dir="EventDirection.NONE"	delay=0.15		on='addedToStage')
+	(dispatch evHideLoadingDataMessage	dir="EventDirection.DOWN"					(event "evStatsLoaded"))
+
+	(class $FullsizeAbsolute)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Instance renderer='RealDetailedReportSection'
+			(bind enabled "isContentShown")
+		)
+	)
+
+	(block
+		(class $MiddleVHAbsolutely)
+
+		(element PBSLoadingDataCaption
+			_isContentShown = "isContentShown"
+		)
+	)
+)
+
+(def element RealDetailedReportSection ()
+	(scope
+		(macro PBS_LOADING_ANIMATION_SCOPE)
+
+		(var battleResultEntity:dhEntity =			"getSingleEntity(CC.battleResultsStructured)")
+		(var battleResultsStructured:dhComponent =	"battleResultEntity.battleResultsStructured")
+
+		(var shipsInteractionsEntity:dhEntity =		"getEntity(battleResultsStructured.interactions[0])")
+		(var buildingInteractionsEntity:dhEntity =	"getEntity(battleResultsStructured.buildingInteractions[0])")
+		(var hasBattleStatsCarousel:bool =			"(shipsInteractionsEntity.battleResultsEntry.children.length + buildingInteractionsEntity.battleResultsEntry.children.length) > 0")
+	)
+
+	(macro PBS_LOADING_ANIMATION)
+	(style
+		(width = 100%)
+		(height = "{ 720: 600px, 1080: 738px }")
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(bind marginBottom "hasBattleStatsCarousel ? M : 0px")
+		)
+
+		(controller $Instance renderer='BattleStatsInteractionsCarousel'
+			(bind enabled "hasBattleStatsCarousel")
+		)
+	)
+
+	(scrollArea
+		(class $Fullsize)
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS)
+
+		(content
+			(class $Fullsize)
+			(hblock
+				(style
+					(width = 100%)
+					(gap = "XS")
+				)
+
+				(element BattleStatsDetailedReportColumn
+					_list = "battleResultsStructured.causedDamage"
+				)
+
+				(element BattleStatsDetailedReportColumn
+					_list = "battleResultsStructured.generalInfo"
+				)
+
+				(element BattleStatsDetailedReportColumn
+					_list = "battleResultsStructured.takenDamage"
+				)
+			)
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportColumn (_list:array = [])
+	(style
+		(width = "{ 1280: 357px, 1920: 471px }")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+	)
+
+	(controller $Repeat renderer='BattleStatsDetailedReportRow'
+		(bind count "_list.length")
+		(args
+			_entityId = "_list[$index]"
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportRow (_entityId:number = 0, _childrenLength:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var childrenCount:number =				"battleResultsEntry.children.length")
+
+		(var rendererType:str =		"battleResultsEntry.type ?: ''")
+		(var renderer:str =			"rendererType in BATTLE_STATS_DETAILED_REPORT_ROW_RENDERER ? BATTLE_STATS_DETAILED_REPORT_ROW_RENDERER[rendererType] : ''")
+	)
+
+	(style
+		(width = 100%)
+		(bind marginTop		"$index == 0 && isIn(rendererType, [SC.Result_screen.TYPES.LINE, SC.Result_screen.TYPES.SUBLINE])	? 5px :
+							 $index == 0 && (rendererType == SC.Result_screen.TYPES.PLAIN_LINE)									? 5px
+																																: 0px")
+		(bind marginBottom	"rendererType == SC.Result_screen.TYPES.SUBLINE && (($index + 1) == _childrenLength)							? S :
+							 rendererType == SC.Result_screen.TYPES.LINE && (($index + 1) == _childrenLength) && !(toBool(childrenCount))	? S :
+							 rendererType == SC.Result_screen.TYPES.PLAIN_LINE && (($index + 1) == _childrenLength)							? S
+																																			: 0px")
+	)
+
+	(controller $Instance
+		(bind enabled "renderer")
+		(bind renderer "renderer")
+		(args
+			_entityId =			"battleResultEntity.id"
+			_childrenLength =	"_childrenLength"
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportHeader (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var children:array =					"battleResultsEntry.children ?: []")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style
+			(width = 100%)
+			(height = 30px)
+			(scale9grid = 2)
+			(bind backgroundImage "'url:../service_kit/panel_backgrounds/pbs/' + battleResultsEntry.bgColor + '.png'")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = 6px)
+			)
+
+			(element BattleStatsDetailedReportRowItem
+				_entityId =		"_entityId"
+				_labelClass =	'$TextDefaultBold22NM'
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='BattleStatsDetailedReportRow'
+			(bind count "children.length")
+			(args
+				_entityId =			"children[$index]"
+				_childrenLength =	"children.length"
+			)
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportSubHeader (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var children:array =					"battleResultsEntry.children ?: []")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style
+			(width = 100%)
+			(height = 30px)
+			(scale9grid = 2)
+			(bind backgroundImage "'url:../service_kit/panel_backgrounds/pbs/' + battleResultsEntry.bgColor + '.png'")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = 6px)
+			)
+
+			(element BattleStatsDetailedReportRowItem
+				_entityId =		"_entityId"
+				_labelClass =	'$TextDefaultBold22NM'
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='BattleStatsDetailedReportRow'
+			(bind count "children.length")
+			(args
+				_entityId =			"children[$index]"
+				_childrenLength =	"children.length"
+			)
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportLine (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var children:array =					"battleResultsEntry.children ?: []")
+	)
+
+	(style
+		(width = 100%)
+		(bind marginTop "$index == 0 ? S : 0px")
+	)
+
+	(block
+		(style
+			(align = "middle")
+			(width = 100%)
+			(height = 20px)
+		)
+
+		(element BattleStatsDetailedReportRowItem
+			_entityId =		"_entityId"
+			_labelClass =	'$TextDefaultBoldNM'
+		)
+	)
+
+	(block
+		(style (width = 100%))
+
+		(controller $Repeat renderer='BattleStatsDetailedReportRow'
+			(bind count "children.length")
+			(args
+				_entityId =			"children[$index]"
+				_childrenLength =	"children.length"
+			)
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportSubLine (_entityId:number = 0)
+	(style
+		(align = "middle")
+		(width = 100%)
+		(height = 20px)
+	)
+
+	(element BattleStatsDetailedReportRowItem
+		_entityId =		"_entityId"
+		_labelClass =	'$TextDefaultNM'
+	)
+)
+
+(def element BattleStatsDetailedReportPlainLine (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var children:array =					"battleResultsEntry.children ?: []")
+	)
+
+	(style (width = 100%))
+
+	(element BattleStatsDetailedReportRowItem
+		_entityId =		"_entityId"
+		_labelClass =	'$TextDefaultBoldNM'
+	)
+
+	(controller $Repeat renderer='BattleStatsDetailedReportRow'
+		(bind count "children.length")
+		(args
+			_entityId =			"children[$index]"
+			_childrenLength =	"children.length"
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportList (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var children:array =					"battleResultsEntry.children ?: []")
+	)
+
+	(style
+		(flow = "tile_horizontal")
+		(align = "center")
+		(width = 100%)
+	)
+
+	(controller $Repeat renderer='BattleStatsDetailedReportListItem'
+		(bind count "children.length")
+		(args
+			_entityId = "children[$index]"
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportListItem (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =	"battleResultsEntry.values")
+		(var renderer:str =						"battleResultsEntry.type == SC.Result_screen.TYPES.PLANE		? 'BattleStatsDetailedReportListPlaneItem' :
+												 battleResultsEntry.type == SC.Result_screen.TYPES.MODULE_CRIT	? 'BattleStatsDetailedReportListModuleItem'
+																												: ''")
+	)
+
+	(controller $Tooltip
+		(renderer = 'ListItemTooltip')
+		(bind enabled "toBool(renderer)")
+		(args
+			_entityId = "_entityId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Instance
+		(bind enabled "toBool(renderer)")
+		(bind renderer "renderer")
+		(args
+			_battleResultsEntryValue = "battleResultsEntryValues[0]"
+		)
+	)
+)
+
+
+
+(def element ListItemTooltip (_entityId:number = 0)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =	"battleResultsEntry.values")
+		(var children:array =					"battleResultsEntry.children ?: []")
+		(var type:str =							"battleResultsEntry.type")
+		(var renderer:str =						"type == SC.Result_screen.TYPES.PLANE			? 'PBSPlaneIconWithAmount' :
+												 type == SC.Result_screen.TYPES.MODULE_CRIT		? 'PBSModuleIconWithAmount'
+																								: ''")
+
+		
+		(var iconType:str =						"toString(battleResultsEntryValues[0].type)")
+		(var amount:number =					"battleResultsEntryValues[0].value")
+
+		(var imagePath:str =					"type == SC.Result_screen.TYPES.PLANE			? 'url:../service_kit/battle_results/icon_stat_' + iconType + '.png' :
+												 type == SC.Result_screen.TYPES.MODULE_CRIT		? 'url:../battle_hud/state_panel/modules/' + BATTLE_RESULTS_MODULE_ICON_LIST[iconType] + '.png'
+																								: ''")
+	)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemHeaderWithIconAndText'
+				(bind enabled "toBool(renderer)")
+				(args
+					_imageUrl =			"imagePath"
+					_imageWidth =		44px
+					_imageHeight =		44px
+					_headerText =		"battleResultsEntry.subtitle ?: ''"
+					_subheaderText =	"battleResultsEntry.title ?: ''"
+					_headerIconType =	"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.PBS_WITH_AMOUNT"
+					_iconAmount =		"toString(amount)"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "toBool(renderer) && toBool(children)")
+			)
+		)
+
+		(block
+			(bind visible "toBool(children)")
+
+			(style (width = 100%))
+			(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
+
+			(controller $Repeat renderer='ShipInteractionsTooltipRow'
+				(bind count "children.length")
+				(args
+					_entityId = "children[$index]"
+				)
+			)
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportListPlaneItem (_battleResultsEntryValue:dict)
+	(style
+		(align = "center|middle")
+		(width = 60px)
+		(height = 44px)
+	)
+
+	(element PBSPlaneIconWithAmount
+		_iconType =	"_battleResultsEntryValue.type"
+		_amount =	"_battleResultsEntryValue.value"
+	)
+)
+
+(def element PBSPlaneIconWithAmount (_iconType:str = '', _amount:number = 0)
+	(style
+		(width = 25px)
+		(height = 25px)
+		(backgroundSize = "fill")
+		(bind backgroundImage "'url:../service_kit/battle_results/icon_stat_' + _iconType + '.png'")
+	)
+
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(position = "absolute")
+			(bottom = 0)
+			(left = 28px)
+		)
+
+		(bind text "_amount")
+	)
+)
+
+(def element BattleStatsDetailedReportListModuleItem (_battleResultsEntryValue:dict)
+	(style
+		(align = "center|middle")
+		(width = 60px)
+		(height = 60px)
+	)
+
+	(element PBSModuleIconWithAmount
+		_iconType =	"_battleResultsEntryValue.type"
+		_amount =	"_battleResultsEntryValue.value"
+	)
+)
+
+(def element PBSModuleIconWithAmount (_iconType:number = 0, _amount:number = 0)
+	(scope
+		(var moduleIcon:str = "BATTLE_RESULTS_MODULE_ICON_LIST[_iconType] ?: ''")
+	)
+
+	(style
+		(width = 44px)
+		(height = 44px)
+		(backgroundImage = "'url:../battle_hud/state_panel/modules/' + moduleIcon + '.png'")
+	)
+
+	(tf
+		(class $TextDefaultBold20NM)
+		(style
+			(position = "absolute")
+			(bottom = 0)
+			(left = 38px)
+		)
+
+		(bind text "_amount")
+	)
+)
+
+(def element BattleStatsDetailedReportTotalLine (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity = "getEntity(_entityId)")
+	)
+
+	(style
+		(align = "middle")
+		(width = 100%)
+		(height = 48px)
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(width = 100%)
+			(textAlign = "center")
+			(alpha = "TA")
+		)
+
+		(bind text "battleResultEntity.battleResultsEntry.title")
+	)
+)
+
+(def element BattleStatsDetailedReportRowItem (_entityId:number = 0, _labelClass:str = '')
+	(scope
+		(var battleResultsStructuredEntity:dhEntity =	"getSingleEntity(CC.battleResultsStructured)")
+		(var dataComponent:dhComponent =				"battleResultsStructuredEntity.dataComponent")
+		(var abuseReasons:array =						"dataComponent.data['personal']['player']['abuse_components'] ?: []")
+
+		(var battleResultsEntryEntity:dhEntity =	"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =		"battleResultsEntryEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =		"battleResultsEntry.values")
+		(var tooltipType:str =						"battleResultsEntry.tooltipType")
+		(var color:number =							"battleResultsEntry.color in RESULT_SCREEN_ROW_FONT_COLOR	? RESULT_SCREEN_ROW_FONT_COLOR[battleResultsEntry.color]
+																												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var rowAlpha:number =						"battleResultsEntryValues[0] == null || (battleResultsEntryValues[0].value ||
+																							 battleResultsEntryValues[1].value ||
+																							 battleResultsEntryValues[2].value)		? 1 : 0.5")
+
+		(var tooltipRenderer:str =	"tooltipType in BATTLE_STATS_DETAILED_REPORT_ROW_ITEM_TOOLTIP ? BATTLE_STATS_DETAILED_REPORT_ROW_ITEM_TOOLTIP[tooltipType] : ''")
+	)
+
+	(style
+		(width = 100%)
+		(bind alpha "rowAlpha")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(controller $Tooltip
+			(bind enabled "toBool(battleResultsEntry.hint)")
+			(renderer='SimpleStatusTooltip')
+			(args
+				_text = "battleResultsEntry.hint"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR "0")
+		)
+
+		(controller $Tooltip
+			(bind enabled "toBool(tooltipRenderer)")
+			(bind renderer "tooltipRenderer")
+			(args
+				_entityId =				"_entityId"
+				_abuseStatusPBS =		"battleResultsEntryValues[2].value"
+				_abuseReasonsPBS =		"abuseReasons"
+				_battlesToCleanPBS =	"battleResultsEntryValues[1].value"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR "1")
+		)
+	)
+
+	(block
+		(class $InfoBlockHorizontalIndent)
+
+		(tf
+			(bind class "_labelClass")
+			(style
+				(hitTest = false)
+				(bind textColor "color")
+				(bind alpha "color == SC.Ui_styles.SERVICE_COLORS.WHITE ? TA : 1")
+			)
+
+			(bind text "battleResultsEntry.title")
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(right = 0px)
+				(flow = "reverse_horizontal")
+			)
+
+			(controller $Repeat renderer='BattleStatsDetailedReportRowValue'
+				(bind count "battleResultsEntryValues.length")
+				(args
+					_type =			"battleResultsEntryValues[$index].type"
+					_hint =			"battleResultsEntryValues[$index].hint"
+					_value =		"toNumber(battleResultsEntryValues[$index].value) ?: 0"
+					_fontClass =	"_labelClass"
+				)
+			)
+		)
+	)
+)
+
+(def element PBSTeamKillerTooltip (_entityId:number = 0)
+	(scope
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+
+		(var battleResultsEntryEntity:dhEntity =	"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =		"battleResultsEntryEntity.battleResultsEntry")
+		(var abuseStatus:number =					"battleResultsEntry.values[2].value")
+
+		(var battleResultEntity:dhEntity =	"getSingleEntity(CC.battleResultsStructured)")
+		(var dataComponent:dhComponent =	"battleResultEntity.dataComponent")
+		(var abuseReasons:array =			"dataComponent.data['personal']['player']['abuse_components']"		(event "dataComponent.evDataChanged"))
+	)
+
+	(element AbuseStatusProfileTooltip
+		_abuseStatusPBS =		"abuseStatus"
+		_abuseReasonsPBS =		"abuseReasons"
+		_battlesToCleanPBS =	"battleResultsEntry.values[1].value"
+	)
+)
+
+(def element TakenDamageTooltip (_entityId:number = 0)
+	(scope
+		(var battleResultsStructured:dhComponent =	"getSingleComponent(CC.battleResultsStructured)")
+		(var battleResultsEntryEntity:dhEntity =	"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =		"battleResultsEntryEntity.battleResultsEntry")
+		(var tooltipType:str =						"battleResultsEntry.tooltipType")
+
+		(var shipInteractionsList:array = "	tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_ARTILLERY		? battleResultsStructured.takenArtilleryTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_TORPEDOES		? battleResultsStructured.takenTorpedoesTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_BOMBS			? battleResultsStructured.takenBombsTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_ROCKETS			? battleResultsStructured.takenRocketsTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_SKIP_BOMBS		? battleResultsStructured.takenSkipBombsTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_AIRSUPPORT		? battleResultsStructured.takenAirsupportTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_NAVAL_MINES		? battleResultsStructured.takenNavalMinesTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_DEPTH_CHARGES	? battleResultsStructured.takenDepthChargesTooltip :
+											tooltipType == SC.Result_screen.TOOLTIP_TYPES.TAKEN_OTHER			? battleResultsStructured.takenOtherTooltip
+																												: battleResultsStructured.takenOtherTooltip")
+	)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "SXS")
+		)
+
+		(controller $Repeat renderer='ShipInteractionsTooltipRow'
+			(bind count "shipInteractionsList.length")
+			(args
+				_entityId = "shipInteractionsList[$index]"
+			)
+		)
+	)
+)
+
+(def element BattleStatsDetailedReportRowValue (_type:str = '', _hint:str = '', _value:number = 0, _fontClass:str = '$TextDefaultNM')
+	(scope
+		(var renderer:str = "_type in BATTLE_STATS_DETAILED_REPORT_ROW_VALUE_RENDERER ? BATTLE_STATS_DETAILED_REPORT_ROW_VALUE_RENDERER[_type] : 'BattleStatsDetailedReportRowDefaultValue'")
+	)
+
+	(style
+		(bind hitTest "toBool(_hint)")
+		(flow = "horizontal")
+	)
+
+	(block
+		(style (backgroundColor = "NO_COLOR"))
+
+		(controller $Tooltip
+			(bind enabled "toBool(_hint) && toBool(renderer)")
+			(renderer='SimpleStatusTooltip')
+			(args
+				_text = "_hint"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Instance
+			(bind enabled "toBool(renderer)")
+			(bind renderer "renderer")
+			(args
+				_value =		"_value"
+				_fontClass =	"_fontClass"
+			)
+		)
+	)
+
+	(tf
+		(bind class "_fontClass")
+		(style
+			(marginLeft = "XS")
+			(marginRight = "XS")
+			(alpha = "TA")
+		)
+
+		(bind text "$index > 0 && toBool(renderer) ? '/' : ''")
+	)
+)
+
+(def element BattleStatsDetailedReportRowTimeValue (_value:number = 0, _fontClass:str = '$TextDefaultNM')
+	(tf
+		(bind class "_fontClass")
+		(style (alpha = "TA"))
+
+		(bind text "formatTime(_value, 'hh:mm  dd.MM.yyyy', '', true)")
+	)
+)
+
+(def element BattleStatsDetailedReportRowPeriodValue (_value:number = 0, _fontClass:str = '$TextDefaultNM')
+	(tf
+		(bind class "_fontClass")
+		(style (alpha = "TA"))
+
+		(bind text "formatTime(_value, 'mm:ss', '', true)")
+	)
+)
+
+(def element BattleStatsDetailedReportRowDistanceValue (_value:number = 0, _fontClass:str = '$TextDefaultNM')
+	(tf
+		(bind class "_fontClass")
+		(style (alpha = "TA"))
+
+		(bind text "formatSeparator(_value) + ' ' + tr('IDS_KILOMETER')")
+	)
+)
+
+(def element BattleStatsDetailedReportRowBoldValue (_value:number = 0, _fontClass:str = '$TextDefaultBoldNM')
+	(tf
+		(bind class "_fontClass")
+		(style (alpha = "TA"))
+
+		(bind text "formatSeparator(_value)")
+	)
+)
+
+(def element BattleStatsDetailedReportRowDefaultValue (_value:number = 0, _fontClass:str = '$TextDefaultNM')
+	(tf
+		(bind class "_fontClass")
+		(style (alpha = "TA"))
+
+		(bind text "formatSeparator(_value)")
+	)
+)
+
+(def element BattleStatsDetailedReportRowFloatValue (_value:number = 0, _fontClass:str = '$TextDefaultNM')
+	(scope
+		(var pickedPowerupsCount:number = "floor(_value) - _value < 0 ? formatSeparator(_value) : formatSeparator(_value, 0)")
+	)
+
+	(tf
+		(bind class "_fontClass")
+		(style (alpha = "TA"))
+
+		(bind text "pickedPowerupsCount")
+	)
+)
+
+(def element BattleStatsDetailedReportRowIntegerValue (_value:number = 0, _fontClass:str = '$TextDefaultNM')
+	(tf
+		(bind class "_fontClass")
+		(style (alpha = "TA"))
+
+		(bind text "formatSeparator(_value, 0)")
+	)
+)

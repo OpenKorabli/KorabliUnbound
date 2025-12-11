@@ -203,13 +203,121 @@
 	(var hasGlobalSseProgress:bool = "_sseGlobal.personalProgress > 0" (event "_sseGlobal.evChanged"))
 	(var isNotParticipatedInGlobalSse:bool = "isDone && isGlobalSse && (!_isManualRewardClaim && !isClaimed || _isManualRewardClaim && !hasGlobalSseProgress)")
 	(var isInactive:bool = "isReceived || isFailed || isLocked || isNotParticipatedInGlobalSse")
+)
 
+(def struct SSE_INTERACTIVE_BACKGROUND (	_isInactiveBackground:bool = false,
+											_isPinnedTask:bool = false,
+											_mouseDown:bool = false,
+											_rollOver:bool = false)
+	(var backgroundState:number = "	_isInactiveBackground	? SC.Ui_styles.BUTTON_STATE.UP :
+									_mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
+									_rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
+															: SC.Ui_styles.BUTTON_STATE.UP")
+
+	(var pinState:number = "	_isInactiveBackground	? SC.Ui_styles.BUTTON_STATE.UP :
+								_isPinnedTask			? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								_mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
+								_rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP")
+)
+
+(def struct GET_PINNED_TASKS ()
+	(var collection:dhCollection = "getCollectionByPath(CC.sseCore, 'motivator.pinned')")
+	(var isMaxReached:bool = "collection.length == SC.Sse.SSE_MOTIVATION_BANNER.MAX_PINNED_TASKS")
 )
 
 (def struct PULL_WINDOW_QUEUE ()
 	(var entity:dhEntity =			"getSingleEntity(CC.windowManager)")
 	(var component:dhComponent =	"entity.windowManager")
 	(var queue:array =				"component.windowQueue ?: []" (event "component.evWindowQueueChanged"))
+)
+
+(def struct GET_MOTIVATOR_INFO (_sseId:number = 0, _isFromTooltip:bool = false)
+	(var entity:dhEntity = "getEntity(_sseId)")
+	(var chain:dhComponent = "entity.sseChain")
+	(var epic:dhComponent = "entity.sseEpic")
+	(var task:dhComponent = "entity.sseTask")
+	(var core:dhComponent = "entity.sseCore")
+
+	(var sseTaskId:str = "entity.sseCore.id" (event "entity.sseCore.evChanged"))
+
+	(var progressCurrent:number = "entity.progress.value ?: 0" (event "entity.progress.evChanged"))
+	(var progressMax:number = "entity.progress.max ?: 0" (event "entity.progress.evChanged"))
+
+	(var isManualRewardClaim:bool = "chain.claimRewards || epic.claimRewards || task.claimRewards")
+	(var statuses:array = "core.statuses ?: []" (event "core.evStatusesChanged"))
+	(var isClaimRewardState:bool = "isManualRewardClaim && isIn(SC.Sse.SSE_STATUSES.DONE, statuses)")
+
+	
+	(var isEpic:bool = "entity && epic != null")
+	(var epicMaxTasks:number = "epic.tasksToComplete ?: 0")
+	(var epicName:str = "epic.name ?: subst('IDS_PL_SSE_COMPLETE_TASKS', [], { count: epicMaxTasks }, epicMaxTasks)" (event "epic.evChanged"))
+	(var isEpicTask:bool = "task.epicId != null")
+	(var epicTaskEntity:dhEntity = "getPrimaryEntity(CC.sseCore, task.epicId)")
+	(var epicTaskName:str = "epicTaskEntity.sseEpic.name ?: tr('IDS_SSE_MOTIVATOR_EPIC_TASK_COMMON_TITLE')" (event "epicTaskEntity.sseEpic.evChanged"))
+
+	
+	(var isChainTask:bool = "task.chainId != null")
+	(var isChain:bool = "entity && chain != null")
+	(var currentTaskId:str = "isChain ? chain.currentTaskId : ''" (event "chain.evChanged"))
+	(var coreEntity:dhEntity = "getPrimaryEntity(CC.sseCore, currentTaskId)")
+	(var chainName:str = "	chain.name	? chain.name
+										: subst('IDS_PL_SSE_COMPLETE_TASKS', [],
+												{ count: progressMax }, progressMax)" (event "chain.evChanged"))
+
+	
+	(var infoSourceComponent:dhComponent = "	isChainTask	? task :
+												isChain		? coreEntity.sseTask :
+												isEpic		? epic
+															: task")
+
+	(var nameToDisplay:str = "	isEpic						? epicName :
+								isEpicTask					? epicTaskName :
+								isChain						? chainName + (_isFromTooltip ? '' : tr('IDS_COLON')):
+								infoSourceComponent.name	? infoSourceComponent.name
+															: 'IDS_TASK'")
+
+	
+	(var rewardSourceComponent:dhComponent = "	!isChain			? infoSourceComponent :
+												isClaimRewardState	? chain
+																	: coreEntity.sseTask")
+	(var rewards:array = "rewardSourceComponent.rewards" (event "rewardSourceComponent.evChanged"))
+
+	
+	(var taskConditions:array = "infoSourceComponent.conditions ?: []" (event "infoSourceComponent.evChanged"))
+	(var conditionId:number = "taskConditions[0] ?: 0")
+	(var conditionEntity:dhEntity = "getEntity(conditionId)")
+	(var conditions:dhComponent = "conditionEntity.sseConditions")
+)
+
+(def struct GET_SSE_TYPE_ICON (_sseEntityId:number = 0)
+	(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
+	(var sseTaskComponent:dhComponent =		"sseEntity.sseTask")
+	(var progressComponent:dhComponent =	"sseEntity.progress")
+	(var sseCoreComponent:dhComponent =		"sseEntity.sseCore")
+
+	(var progressMax:number = "progressComponent.max" (event "progressComponent.evChanged") (event "progressComponent.evMaxChanged"))
+	(var taskConditions:array = "sseTaskComponent.conditions" (event "sseTaskComponent.evChanged"))
+
+	(var sseConditionEntity:dhEntity = "getEntity(taskConditions.length == 1 ? taskConditions[0] : -1)")
+	(var conditionCategory:str = "sseConditionEntity.sseConditions.conditionCategory" (event "sseConditionEntity.sseConditions.evUpdate"))
+
+	(var isGlobalSse:bool =		"sseEntity.hasComponent(CC.sseGlobal)")
+	(var isEpic:bool =			"sseEntity.hasComponent(CC.sseEpic)")
+	(var isChainParent:bool =	"sseEntity.hasComponent(CC.sseChain)")
+
+	(var isChainTask:bool = "sseTaskComponent.chainId != null")
+	(var isGlobal:bool = "isGlobalSse && isChainParent || isGlobalSse && !isChainTask")
+	(var isOrTask:bool = "sseTaskComponent.conditions.length > 1")
+	(var isRepeatableTask:bool = "!isEpic && !isChainParent && (progressMax > 1 || progressMax == 0)")
+	(var isAggregator:bool = "conditionCategory == SC.Sse.SSE_CONDITION_CATEGORY.COMPLETE_TASK")
+	(var type:str = "	isEpic				? SSE_TYPE_ICON.EPIC :
+						isGlobal			? SSE_TYPE_ICON.GLOBAL :
+						isAggregator		? SSE_TYPE_ICON.AGGREGATOR :
+						isChainParent		? SSE_TYPE_ICON.CHAIN :
+						isRepeatableTask	? SSE_TYPE_ICON.TASK_REPEATABLE :
+						isOrTask			? SSE_TYPE_ICON.TASK_OR
+											: SSE_TYPE_ICON.TASK")
 )
 
 (def struct GET_TEAM_NAME (_isChallenge:bool=false)

@@ -1,0 +1,210 @@
+(def constant MODAL_WINDOW_ECO_BOOST_BUY_WIDTH 400px)
+
+(def element ModalWindowBuyEcoBoost (_ecoBoostId:number=0, _isCommonBoost:bool=false)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var accountGold:number =		"accountResourceComponent.gold ?: 0"	(event "accountResourceComponent.evChangedGold"))
+		(var accountCredits:number =	"accountResourceComponent.credits ?: 0"	(event "accountResourceComponent.evChangedCredit"))
+
+		(var ecoBoostEntity:dhEntity =			"getPrimaryEntity(CC.ecoBoost, _ecoBoostId)")
+		(var ecoBoostComponent:dhComponent =	"ecoBoostEntity.ecoBoost")
+		(var ecoBoostId:number =				"ecoBoostComponent.id")
+
+		(struct ecoBoostPrice = PULL_PRICE(_entityId = "toString(ecoBoostId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var totalPrice:number =	"ecoBoostPrice.info.finalPrice")
+		(var priceCurrency:str =	"ecoBoostPrice.info.currency")
+
+		(var priceDeficit:number =	"totalPrice - (ecoBoostPrice.info.currency == SC.Common.CURRENCIES.GOLD ? accountGold : accountCredits)")
+		(var isDeficit:bool =		"priceDeficit > 0")
+		(var priceInfo:dict =		"{	finalPrice:	totalPrice,
+										currency:	priceCurrency,
+										basePrice:	ecoBoostPrice.info.basePrice,
+										type:		ecoBoostPrice.info.type,
+										till:		ecoBoostPrice.info.till,
+										isPrivate:	ecoBoostPrice.info.isPrivate }")
+		(var currenciesPanelPrices:array =	"[{ finalPrice: -totalPrice, currency: priceCurrency }]")
+
+		(var multiBoostsCollection:dhCollection = "getCollection(CC.ecoBoost).getChildByPath('availableToUser.' + 'byType.' + SC.Common.ECOBOOST_TYPES.LINKABLE)")
+		(var multiBoost:dhEntity = "multiBoostsCollection.getEntityAtIndex(0)")
+		(var multiboostsAmount:number = "multiBoost.countComponent.value" (event "multiBoost.countComponent.evChanged"))
+		(var linkMultiboostFromStorage:bool = "!_isCommonBoost && multiboostsAmount > 0")
+
+		(var headerText:str = "	_isCommonBoost				? 'IDS_MODAL_WINDOW_TITLE_ECOBOOST_PURCHASE' :
+								linkMultiboostFromStorage	? 'IDS_MODAL_WINDOW_TITLE_MULTIBOOST_LINK'
+															: 'IDS_MODAL_WINDOW_TITLE_MULTIBOOST_PURCHASE'")
+
+		(macro PULL_SHIP_ID)
+		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+
+		(var ecoBoostRestrictions:dhComponent = "ecoBoostEntity.shipListRestrictions")
+		(var ecoboostLevelFiltersRoman:str ="ecoBoostRestrictions ? ecoBoostRestrictions.levelString : ''" (event "ecoBoostRestrictions.evUpdate"))
+		(var hasLevelRestrictions:bool = "ecoboostLevelFiltersRoman.length > 0")
+
+		(var name:str = "ecoBoostEntity.ecoBoost.name")
+		(var type:number = "ecoBoostEntity.ecoBoost.type ?: 0" (event "ecoBoostEntity.ecoBoost.evUpdated"))
+		(var rarity:number = "ecoBoostEntity.ecoBoost.rarity")
+
+		(var itemHeaderText:str = "	_isCommonBoost				? 'IDS_' + name :
+									!linkMultiboostFromStorage	? subst('IDS_MULTIBOOST_WITH_SHIP_TITLE', [],{ shipName: shipInfo.shipComponent.nameUpper }) :
+									hasLevelRestrictions		? subst('IDS_MULTIBOOST_WITH_LEVEL_TITLE',[],{ levelRange: ecoboostLevelFiltersRoman })
+																: tr('IDS_MULTIBOOST_TITLE')")
+		(var itemSubheaderText:str = "_isCommonBoost ? tr('IDS_ECONOMIC_BOOST_TYPE_EXPENDABLE_' + rarity) : 'IDS_ECONOMIC_BOOST_TYPE_MULTIBOOST'")
+	)
+	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'openYesNoConfirmation']" init=false watch=false on=addedToStage)
+
+	(style (align = "center|middle"))
+
+	(block
+		(style
+			(align = "center")
+			(width = "MODAL_WINDOW_ECO_BOOST_BUY_WIDTH")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(width = 100%)
+				(bind marginBottom "linkMultiboostFromStorage ? SXS : S")
+			)
+
+			(element ModalWindowShortHeader
+				_header = "headerText"
+				_hasDivider = "linkMultiboostFromStorage"
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='CurrenciesPanel'
+					(bind enabled "!linkMultiboostFromStorage")
+					(args
+						_priceInfo = "currenciesPanelPrices"
+						_width = "MODAL_WINDOW_ECO_BOOST_BUY_WIDTH"
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.3)
+			(style (marginBottom = "SXS"))
+
+			(controller $Tooltip
+				(bind renderer "_isCommonBoost ? 'EconomicBoostTooltip' : 'MultiBoostTooltip'")
+				(args
+					_id = "_ecoBoostId"
+					_noMouseInstructions = true
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+				_headerIconType =	"MODAL_WINDOW_SYSTEM_PURCHASABLE_ITEM_ICON.ECONOMIC_BOOST"
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_headerText =		"itemHeaderText"
+				_subheaderText =	"itemSubheaderText"
+				_imageWidth =		80px
+				_imageHeight =		80px
+				_maxWidth =			300px
+				_data =				"{	ecoBoostName: name,
+										ecoBoostType: type}"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(bind visible "!linkMultiboostFromStorage")
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(controller $Instance renderer='ModalWindowSystemPurchaseItemPriceAndInfo'
+				(bind enabled "!linkMultiboostFromStorage")
+				(args
+					_priceInfo =		"priceInfo"
+					_questionString =	'IDS_QUESTION_PURCHASE_AND_INSTALL_FOR'
+					_isDeficit =		"isDeficit"
+					_deficit =			"priceDeficit"
+					_isWarningText =	"isDeficit"
+				)
+			)
+		)
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(bind visible "linkMultiboostFromStorage")
+			(style (marginBottom = "M"))
+
+			(tf
+				(class $TextDefault26NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_QUESTION_MULTIBOOST_LINK')
+			)
+
+			(block
+				(style
+					(marginLeft = "M")
+					(marginRight = "S")
+				)
+				(element ShipLineItemNM
+					_shipId = "viewedShipId"
+					_withFlag = false
+					_fontClass = '$TextDefaultBold26NM'
+				)
+			)
+
+			(tf
+				(class $TextDefault26NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_QUESTION')
+			)
+		)
+		(block
+			(bind visible "linkMultiboostFromStorage")
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "linkMultiboostFromStorage")
+				(args
+					_text = 'IDS_WARNING_MULTIBOOST_BEFORE_LINK'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_width = 100%
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_isDeficit =	"isDeficit && !linkMultiboostFromStorage"
+				_okMethods =	"[{	type: 'inputMapping.onRequest',
+									name: _isCommonBoost ? 'buyAndInstallEcoBoost' : linkMultiboostFromStorage ? 'linkMultiboost' : 'buyMultiboost',
+									args: { boostId: _ecoBoostId } }]"
+			)
+		)
+	)
+)

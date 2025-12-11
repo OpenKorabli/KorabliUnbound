@@ -4,153 +4,166 @@
 
 (def element SlotRageModeRenderer (_entityId:number)
 	(scope
-		(var selfVehicleEntity:gfx = "$datahub.getSingleEntity(CC.selfVehicle)")
-		(var shipTTX:gfx = "selfVehicleEntity.selfVehicle.shipTTX")
+		(var selfVehicleComponent:dhComponent = "getSingleComponent(CC.selfVehicle)")
+		(var avatarId:number = "getSingleEntity(CC.playerAvatar).avatar.id")
+		(var shipTTX:dict = "selfVehicleComponent.shipTTX")
 
-		(var rageModeSlotEntity:gfx = "$datahub.getEntity(_entityId)")
-		(var rageModeVisualDataComponent:gfx = "rageModeSlotEntity.visualSlotData")
+		(var rageModeSlotEntity:dhEntity = "getEntity(_entityId)")
+		(var rageModeVisualDataComponent:dhComponent = "rageModeSlotEntity.visualSlotData")
 		(var consumableName:str = "shipTTX.specials.rageMode.name")
 
-		
-		(var command:number = "rageModeVisualDataComponent ? rageModeVisualDataComponent.commandId : CMD_NONE")
-		(var isAutoUsage:bool = "command == CMD_AUTO")
+		(var commandId:number = "rageModeVisualDataComponent ? rageModeVisualDataComponent.commandId : CMD_NONE")
+		(var isAutoUsage:bool = "commandId == CMD_AUTO")
 
-		(var itemImageUrl:str = "'url:../consumables/rageMode_' + consumableName + '.png'")
-
-		(var _width:number = "SLOT_SIZE")
-		(var _height:number = "SLOT_SIZE")
-
-		(var rageModeStateEntity:gfx = "$datahub.getSingleEntity(CC.rageModeState)")
-		(var rageModeStateComponent:gfx = "rageModeStateEntity.rageModeState" (event "rageModeStateEntity.evAdded") (event "rageModeStateEntity.evRemoved"))
+		(var rageModeStateEntity:dhEntity = "getSingleEntity(CC.rageModeState)")
+		(var rageModeStateComponent:dhComponent = "rageModeStateEntity.rageModeState")
 		(var currentRageModeState:number = "rageModeStateComponent ? rageModeStateComponent.state : SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
 
 		(var isCharged:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.CHARGED")
-		(var atWork:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.ACTIVE")
+		(var isWorking:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.ACTIVE")
+		(var isInstant:bool = "rageModeStateComponent.isInstant")
 
 		(var currentProgress:number = "rageModeStateComponent ? rageModeStateComponent.currentProgress : 0" (event "rageModeStateComponent.evCurrentProgressChanged"))
 
-		(var timerEntity:gfx = "$datahub.getSingleEntity(CC.timer)")
-		(var countdown:gfx = "rageModeStateEntity && rageModeStateEntity.hasComponent(CC.countDown) ? rageModeStateEntity.countDown : null" (event "rageModeStateEntity.evAdded") (event "rageModeStateEntity.evRemoved"))
-		(var duration:number = "countdown ? countdown.duration : 1")
-		(var remainTime:number = "countdown ? countdown.endTime - timerEntity.timer.currentTime : 0" (event "timerEntity.timer.evFrequent") (event "countdown.evEndTimeChanged"))
-		(var percentPassed:number = "countdown && duration != 0 ? remainTime / duration : 1")
+		(var timerComponent:dhComponent = "getSingleComponent(CC.timer)")
+		(var countdownComponent:dhComponent = "rageModeStateEntity.countDown")
+		(var remainTime:number = "countdownComponent ? countdownComponent.endTime - timerComponent.currentTime : 0" (event "timerComponent.evFrequent") (event "countdownComponent.evEndTimeChanged"))
+		(var percentPassed:number = "countdownComponent && !isInstant ? remainTime / countdownComponent.duration : 1")
 
-		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
-		(var altVision:bool = "cameraEntity.camera.altVision" (event "cameraEntity.camera.evAltVisionChanged"))
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var isAltVision:bool = "cameraComponent.altVision" (event "cameraComponent.evAltVisionChanged"))
 	)
 
 	(style
-		(width = "_width")
-		(height = "_height")
+		(width = "SLOT_SIZE")
+		(height = "SLOT_SIZE")
 		(marginRight = "PANEL_ITEM_MARGIN")
 		(marginBottom = "PANEL_HOTKEY_GAP")
 		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
 	)
 
+	(macro MOUSE_LMB_EXTERNAL_CALL 'direct.action' "['weaponSlot.pressed', [commandId]]" "!isAutoUsage")
+
+	(block
+		(bind visible "!isAltVision || isInstant")
+
+		(style (position = "absolute"))
+
+		(controller $Instance
+			(bind renderer "isInstant ? 'RageModeProgressInstant' : 'RageModeProgressDefault'")
+			(args
+				_rageModeStateEntity = "rageModeStateEntity"
+			)
+		)
+	)
+
+	(element SlotItem
+		_itemImageUrl 	= "'url:../consumables/rageMode_' + consumableName + '.png'"
+		_isSelectable 	= false
+		_width 			= "SLOT_SIZE"
+		_height 		= "SLOT_SIZE"
+	)
+
+	(block
+		(bind visible "!isWorking && isAltVision")
+
+		(style (position = "absolute"))
+
+		(controller $Instance renderer='RageModeAltInfo'
+			(bind enabled "!isInstant")
+			(args
+				_currentProgress 	= "currentProgress"
+				_remainTime 		= "remainTime"
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "isWorking")
+
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='SlotReloadBar'
+			(bind enabled "!isInstant")
+			(args
+				_isWorking 		= "isWorking"
+				_percentPassed 	= "percentPassed"
+				_remainTime 	= "remainTime > 0 ? remainTime : 0"
+			)
+		)
+	)
+
+	
 	(block
 		(class $FullsizeAbsolute)
 
-		(macro MOUSE_LMB_EXTERNAL_CALL 'direct.action' "['weaponSlot.pressed', [command]]" "!isAutoUsage")
-
-		(element RageModeProgress "rageModeStateEntity" "consumableName"
-			(bind visible "!altVision")
-			(style (position = "absolute"))
+		(controller $FxInstance lifetime=0.5
+			(renderer = 'SlotWorkStartedFX')
+			(bindcall create (bind enabled "isWorking"))
 		)
 
-		(element SlotItem
-			_itemImageUrl 	= "itemImageUrl"
-			_isSelectable 	= false
-			_width 			= "_width"
-			_height 		= "_height"
-		)
-
-		(element RageModeAltInfo
-					_currentProgress="currentProgress"
-					_remainTime="remainTime"
-			(bind visible "!atWork && altVision")
-			(style (position = "absolute"))
-		)
-
-		
-		(block
-			(bind visible "atWork")
-
-			(class $FullsizeAbsolute)
-
-			(element SlotReloadBar
-				_isWorking = "atWork"
-				_percentPassed = "percentPassed"
-				_remainTime = "remainTime > 0 ? remainTime : 0"
+		(controller $FxInstance lifetime=0.5
+			(renderer = 'SlotWorkStartedFX')
+			(args
+				_isAccented = true
 			)
+			(bindcall create (bind enabled "isCharged && !isInstant"))
 		)
 
-		
-		(block
-			(class $FullsizeAbsolute)
-			(controller $FxInstance lifetime=0.5
-				(renderer = 'SlotWorkStartedFX')
-				(bindcall create (bind enabled "atWork"))
-			)
-			(controller $FxInstance lifetime=0.5
-				(renderer = 'SlotWorkStartedFX')
-				(args
-					accented = true
-				)
-				(bindcall create (bind enabled "isCharged"))
-			)
-			(controller $FxInstance lifetime=0.5
-				(renderer = 'SlotReloadStartedFX')
-				(bindcall create (bind enabled "!atWork"))
-			)
+		(controller $FxInstance lifetime=0.5
+			(renderer = 'SlotReloadStartedFX')
+			(bindcall create (bind enabled "!isWorking && !isInstant"))
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(bottom = "-HOTKEY_SIZE[SIZE.MEDIUM] - PANEL_HOTKEY_GAP")
+			(hcenter = 0px)
 		)
 
-		
 		(controller $Instance renderer='HotkeyIndicator'
 			(bind enabled "!isAutoUsage")
 			(args
-				_commandId = "command"
-			)
-			(exprs
-				(style
-					(bottom = "-HOTKEY_SIZE[SIZE.MEDIUM] - PANEL_HOTKEY_GAP")
-					(position = "absolute")
-					(hcenter = 0px)
-				)
+				_commandId = "commandId"
 			)
 		)
+	)
 
-		
-		(controller $Instance renderer='LabelAuto'
-			(bind enabled "isAutoUsage")
-		)
+	
+	(controller $Instance renderer='LabelAuto'
+		(bind enabled "isAutoUsage")
+	)
 
-		(block
-			(class $FullsizeAbsolute)
-			(style (backgroundColor = "NO_COLOR"))
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
 
-			(controller $Tooltip
-				(renderer = 'BattleWeaponTooltip')
-				(args
-					_ammoType = "rageModeVisualDataComponent.id"
-				)
-				(align = "bottom|center")
-				(position = "border")
-				(offset = [0, 20])
-				(screenBoundsOffset = {left:10, top:30, right:10, bottom:100})
-				(macro SIMPLE_TOOLTIP_ANIMATION)
+		(controller $Tooltip
+			(renderer = 'BattleWeaponTooltip')
+			(args
+				_ammoType = "rageModeVisualDataComponent.id"
+				_entityId = "avatarId"
 			)
+			(align = "bottom|center")
+			(position = "border")
+			(offset = [0, 20])
+			(screenBoundsOffset = {left:10, top:30, right:10, bottom:100})
+			(macro SIMPLE_TOOLTIP_ANIMATION)
 		)
 	)
 )
 
-(def element RageModeProgress (_rageModeStateEntity:gfx, _consumableName:str = 'default')
+(def element RageModeProgressDefault (_rageModeStateEntity:dhEntity)
 	(scope
+		(var selfVehicleComponent:dhComponent = "getSingleComponent(CC.selfVehicle)")
+		(var shipTTX:dict = "selfVehicleComponent.shipTTX")
+		(var rageModeTTX:dict = "shipTTX.specials.rageMode")
 
-		(var selfVehicleEntity:gfx = "$datahub.getSingleEntity(CC.selfVehicle)")
-		(var shipTTX:gfx = "selfVehicleEntity.selfVehicle.shipTTX")
-		(var rageModeTTX:gfx = "shipTTX.specials.rageMode")
-
-		(var rageModeStateComponent:gfx = "_rageModeStateEntity && _rageModeStateEntity.hasComponent(CC.rageModeState) ? _rageModeStateEntity.rageModeState : null" (event "_rageModeStateEntity.evAdded") (event "_rageModeStateEntity.evRemoved"))
+		(var rageModeStateComponent:dhComponent = "_rageModeStateEntity.rageModeState")
 		(var currentRageModeState:number = "rageModeStateComponent ? rageModeStateComponent.state : SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
 
 		(var currentProgress:number = "rageModeStateComponent ? rageModeStateComponent.currentProgress : 0" (event "rageModeStateComponent.evCurrentProgressChanged"))
@@ -173,17 +186,15 @@
 		(var fillMaskHeight:number = "MASK_HEIGHT * currentProgressAnim * 0.01")
 		(var decrementedMaskBottomOffset:number = "MASK_HEIGHT * ((currentProgressAnim - decrementCount) * 0.01)")
 
-		(var timerEntity:gfx = "$datahub.getSingleEntity(CC.timer)")
-		(var countdown:gfx = "_rageModeStateEntity && _rageModeStateEntity.hasComponent(CC.countDown) ? _rageModeStateEntity.countDown : null" (event "_rageModeStateEntity.evAdded") (event "_rageModeStateEntity.evRemoved"))
-		(var remainTime:number = "countdown ? countdown.endTime - timerEntity.timer.currentTime : 0" (event "timerEntity.timer.evFrequent") (event "countdown.evEndTimeChanged"))
+		(var timerComponent:dhComponent = "getSingleComponent(CC.timer)")
+		(var countdownComponent:dhComponent = "_rageModeStateEntity.countDown")
+		(var remainTime:number = "countdownComponent ? countdownComponent.endTime - timerComponent.currentTime : 0" (event "timerComponent.evFrequent") (event "countdownComponent.evEndTimeChanged"))
 
 		(var isDecayOn:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.DECAYING || (currentRageModeState == SC.Battle.RAGE_MODE_STATE.DECAY_DELAY && remainTime < decrementPeriodLong)")
 		(var isCharged:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.CHARGED")
 
 		(var fillImageColorName:str = "isCharged ? '_green' : '_yellow'")
 
-		(var backgroundImageUrl:str = "'url:../consumables/rageMode_background' + '_track.png'")
-		(var alertImageUrl:str = "'url:../consumables/rageMode_background' + '_white.png'")
 		(var fillImageUrl:str = "'url:../consumables/rageMode_background' + fillImageColorName + '.png'")
 	)
 	(block 
@@ -198,7 +209,7 @@
 				(width = "SLOT_SIZE")
 				(height = "SLOT_SIZE")
 				(backgroundSize = "fill")
-				(bind backgroundImage "backgroundImageUrl")
+				(backgroundImage = 'url:../consumables/rageMode_background_track.png')
 			)
 			(block 
 				(isMask = true)
@@ -256,7 +267,7 @@
 				(width = "SLOT_SIZE")
 				(height = "SLOT_SIZE")
 				(backgroundSize = "fill")
-				(bind backgroundImage "alertImageUrl")
+				(backgroundImage = 'url:../consumables/rageMode_background_white.png')
 			)
 			(block 
 				(isMask = true)
@@ -269,6 +280,41 @@
 					(bind bottom "3px + decrementedMaskBottomOffset")
 					(bind height "MASK_HEIGHT * (decrementCount * 0.01)")
 				)
+			)
+		)
+	)
+)
+
+(def element RageModeProgressInstant (_rageModeStateEntity:dhEntity)
+	(scope
+		(var rageModeStateComponent:dhComponent = "_rageModeStateEntity.rageModeState")
+		(var currentRageModeState:number = "rageModeStateComponent ? rageModeStateComponent.state : SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
+
+		(var isWorking:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.ACTIVE")
+	)
+
+	(style
+		(width = "SLOT_SIZE")
+		(height = "SLOT_SIZE")
+		(backgroundSize = "fill")
+		(backgroundImage = 'url:../consumables/rageMode_background_track.png')
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "fill")
+			(backgroundImage = 'url:../consumables/rageMode_background_green.png')
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.3
+				from = "{alpha: 2}"
+				to = "{alpha: 0}"
+				action = "kill"
+				(bind enabled "isWorking")
 			)
 		)
 	)

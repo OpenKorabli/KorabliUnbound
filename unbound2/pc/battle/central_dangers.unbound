@@ -7,22 +7,22 @@
 })
 (def constant DANGER_HIDE_DURATION 0.3)
 
+
 (def layout CentralDangersContainer ()
 	(scope
-		(var stageComponent:gfx = "$datahub.getSingleEntity(CC.stage).stage")
-		(var stageWidth:number = "stageComponent.width" (event "stageComponent.evStageSizeChanged"))
-		(var stageHeight:number = "stageComponent.height" (event "stageComponent.evStageSizeChanged"))
+		(struct stageSize = STAGE_SIZE())
 
 		(macro IS_ALIVE)
 		(var isSubmarine:bool = "selfAvatarEntity.avatar.ship.ref.ship.subtype == ShipTypes.SUBMARINE" (event "selfAvatarEntity.avatar.evShipRefChanged"))
 
-		(var ownCarrierComponent:gfx = "$datahub.getSingleComponent(CC.aircarrier)")
-		(var activeSquadron:number = "ownCarrierComponent ? ownCarrierComponent.activeSquadron : ActiveSquadron.NONE" (event "ownCarrierComponent.evStateChanged"))
-		(var isOnPlane:bool = "activeSquadron != ActiveSquadron.NONE")
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+		(var isControllingSquadron:bool = "controlledSquadronId != DEFAULT_SQUADRON_ID")
 
-		(var dangersCollectionPath:str = "	isOnPlane	? 'aircraftDangers' :
-											isSubmarine	? 'submarineDangers'
-														: 'shipDangers'")
+		(var dangersCollectionPath:str = "	isControllingSquadron 	? 'aircraftDangers' :
+											isSubmarine 			? 'submarineDangers'
+																	: 'shipDangers'"
+		)
 
 		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
 		(var cameraMode:number = "cameraEntity.camera.mode" (event "cameraEntity.camera.evModeChanged"))
@@ -41,15 +41,15 @@
 	)
 
 	(style
+		(hitTest = false)
 		(position = "absolute")
-		(bind width "stageWidth")
-		(bind height "stageHeight")
-		(hitTest = "false")
+		(bind width "stageSize.width")
+		(bind height "stageSize.height")
 	)
 
 	(block
 		(class $FullsizeAbsolute)
-		(bind visible "(isOnPlane || isAlive) && !isTactical && cameraMode != SC.Battle.CAMERA_MODE.SHELLTRACKER && cameraMode != SC.Battle.CAMERA_MODE.RTSAIRSUPPORT")
+		(bind visible "(isControllingSquadron || isAlive) && !isTactical && cameraMode != SC.Battle.CAMERA_MODE.SHELLTRACKER && cameraMode != SC.Battle.CAMERA_MODE.RTSAIRSUPPORT")
 
 		(block
 			(class $FullsizeAbsolute)
@@ -61,7 +61,7 @@
 		(block
 			(class $FullsizeAbsolute)
 			(controller $Instance renderer='ReceivedHitsContainer'
-				(bind enabled "activeSquadron == ActiveSquadron.NONE")
+				(bind enabled "!isControllingSquadron")
 			)
 		)
 
@@ -69,10 +69,16 @@
 			(class $FullsizeAbsolute)
 			(element DangerItemContainer "dangersCollectionPath")
 		)
+
 		(block
 			(class $FullsizeAbsolute)
-			(style (align = "center|top") (right = "SXS") (top = "21%"))
-			(controller $Instance 
+			(style
+				(align = "center|top")
+				(right = "SXS")
+				(top = 21%)
+			)
+
+			(controller $Instance
 				(renderer='IndicatorCollision')
 				(bind enabled "isCollision")
 			)
@@ -84,7 +90,7 @@
 )
 
 
-(def element DistGuide (radius:number) layout=true
+(def element DistGuide (radius:number)
 	(style (position = "absolute"))
 	(controller $Sector
 		(arc = "360")
@@ -98,7 +104,7 @@
 	)
 )
 
-(def element DistGuidesContainer () layout=true
+(def element DistGuidesContainer ()
 	(class $FullsizeAbsolute)
 	(style (align = "center|middle"))
 
@@ -112,14 +118,15 @@
 
 
 
-(def element NearEnemyItemContainer () layout=true
+(def element NearEnemyItemContainer ()
 	(scope
 		(macro IS_ALIVE)
 
-		(var aircarrier:gfx = "$datahub.getSingleComponent(CC.aircarrier)")
-		(var activeSquadron:number = "aircarrier ? aircarrier.activeSquadron : ActiveSquadron.NONE" (event "aircarrier.evStateChanged"))
-		(var squadronCameraMode:str = "aircarrier.squadronCameraMode" (event "aircarrier.evSquadronCameraModeChanged"))
-		(var isOnPlane:bool = "activeSquadron != ActiveSquadron.NONE")
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var squadronCameraMode:str = "aircarrierComponent.squadronCameraMode" (event "aircarrierComponent.evSquadronCameraModeChanged"))
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+		(var isControllingSquadron:bool = "controlledSquadronId != DEFAULT_SQUADRON_ID")
+
 		(var lastLookSquadronCamera:bool = "squadronCameraMode == SquadronCameraModes.SQUADRON_DEAD || squadronCameraMode == SquadronCameraModes.LAST_SQUADRON_ATTACKED")
 
 		(var nearestEnemyIndication:gfx = "$datahub.getSingleComponent(CC.nearestEnemyIndication)")
@@ -131,7 +138,7 @@
 		(var resultAngle:number = "radToGrad(angle - cameraAngle)")
 	)
 
-	(bind visible "isAlive && !(isOnPlane || lastLookSquadronCamera)")
+	(bind visible "isAlive && !(isControllingSquadron || lastLookSquadronCamera)")
 
 	(class $FullsizeAbsolute)
 	(style
@@ -156,7 +163,7 @@
 
 
 
-(def element ReceivedHitsContainer () layout=true
+(def element ReceivedHitsContainer ()
 	(scope
 		(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
 		(var waveHitDanger:gfx = "battleDataEntity.waveHitDanger" (event "battleDataEntity.evAdded"))
@@ -196,7 +203,7 @@
 	)
 )
 
-(def element ReceievedDamageFX (yaw:number) layout=true
+(def element ReceievedDamageFX (yaw:number)
 	(scope
 		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
 		(var cameraComponent:gfx = "cameraEntity.camera")
@@ -229,7 +236,7 @@
 	)
 )
 
-(def element ReceievedWaveHitFX (yaw:number, hitCount:number) layout=true
+(def element ReceievedWaveHitFX (yaw:number, hitCount:number)
 	(scope
 		(event evAddedToStage)
 		(var isShortFX:bool = "hitCount > 1 ? true : false")
@@ -246,7 +253,7 @@
 	)
 )
 
-(def element ShortReceievedWaveHitFX (yaw:number) layout=true
+(def element ShortReceievedWaveHitFX (yaw:number)
 	(scope
 		(event evRadialFx)
 
@@ -303,7 +310,7 @@
 	)
 )
 
-(def element LongReceievedWaveHitFX (yaw:number) layout=true
+(def element LongReceievedWaveHitFX (yaw:number)
 	(scope
 		(event evRadialFx)
 
@@ -359,7 +366,7 @@
 	)
 )
 
-(def element ReceievedWaveHitRadialFX () layout=true
+(def element ReceievedWaveHitRadialFX ()
 	(style
 		(position = "absolute")
 		(hcenter = 0)
@@ -406,7 +413,7 @@
 	)
 )
 
-(def element ReceievedWaveHitRadialFXTWO () layout=true
+(def element ReceievedWaveHitRadialFXTWO ()
 	(style
 		(position = "absolute")
 		(hcenter = 0)
@@ -457,7 +464,7 @@
 
 
 
-(def element DangerItemContainer (_collectionPath:str) layout=true
+(def element DangerItemContainer (_collectionPath:str)
 	(scope
 		(var dangersCollection:gfx = "_collectionPath ? $datahub.getCollection(CC.visibleDanger).getChildByPath(_collectionPath) : null")
 	)
@@ -479,7 +486,7 @@
 	)
 )
 
-(def element DangerItem (_entityId:number, _hideAnim:bool=false) layout=true
+(def element DangerItem (_entityId:number, _hideAnim:bool=false)
 	(scope
 		(var dangerEntity:gfx = "$datahub.getEntity(_entityId)")
 		(var visibleDanger:gfx = "dangerEntity ? dangerEntity.visibleDanger : null")
@@ -509,7 +516,7 @@
 	)
 )
 
-(def element IndicatorCollision () layout=true
+(def element IndicatorCollision ()
 	(controller $Animation
 		(play
 			keyframes=
@@ -540,7 +547,7 @@
 	)
 )
 
-(def element CollisionDangerItem (_entityId:number, _hideAnim:bool=false) layout=true
+(def element CollisionDangerItem (_entityId:number, _hideAnim:bool=false)
 	(scope
 		(var dangerEntity:gfx = "$datahub.getEntity(_entityId)")
 		(var visibleDanger:gfx = "dangerEntity ? dangerEntity.visibleDanger : null")
@@ -587,7 +594,7 @@
 	)
 )
 
-(def element SimpleDangerItem (_entityId:number, _hideAnim:bool=false) layout=true
+(def element SimpleDangerItem (_entityId:number, _hideAnim:bool=false)
 	(scope
 		(event evAddedToStage)
 

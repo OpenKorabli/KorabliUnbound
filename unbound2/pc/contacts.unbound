@@ -218,7 +218,7 @@
 		
 		(var contactsGroupCollection:gfx = "$datahub.getCollection(CC.groupViewElements).getChildByPath('contacts.sorted')")
 		(var contactsGroup:array = "contactsGroupCollection.items ?: []" (event "contactsGroupCollection.evAdded") (event "contactsGroupCollection.evRemoved"))
-		(var inputText:str = "$event ? $event.value : ''" (event "evContactInputStrChanged"))
+		(var inputText:str = "$event ? $event.value : ''" (event "evGroupCreationComplete"))
 
 		(var isCreatingGroup:bool = false)
 		(bind isCreatingGroup "true" init=false watch=false (event "addGroupButtonClicked"))
@@ -253,9 +253,9 @@
 					(style (width = 100%))
 
 					(controller $DynamicRepeat renderer='ContactsGroupElement'
-						(bind count "contactsGroup.length")
+						(bind items "contactsGroup")
 						(args
-							_groupEntity = "contactsGroup[$index]"
+							_groupEntity = "$item"
 							_playerContext = "_playerContext"
 						)
 						(itemHeight = 33px)
@@ -481,9 +481,9 @@
 			)
 
 			(controller $DynamicRepeat renderer='PlayerContactItemWithRollover'
-				(bind count "contacts.length")
+				(bind items "contacts")
 				(args
-					_entityId = "contacts[$index].id"
+					_entityId = "$item.id"
 					_currentGroupId = "_groupEntity.groupOfElements.isLocal ? null : toString(_groupEntity.groupOfElements.groupId)"
 					_playerContext = "_playerContext"
 				)
@@ -778,22 +778,26 @@
 	)
 )
 
-(def element PlayerContactItemWithRollover (_entityId:number, _currentGroupId:str, _playerContext:dict, _teamId:number, _isShort:bool=false, _nickNameWidth:str='')
+(def element PlayerContactItemWithRollover (_entityId:number,
+											_playerContext:dict,
+											_isShort:bool=false,
+											_nickNameWidth:str='',
+											_currentGroupId:str=null,
+											_teamId:number=null)
 	(scope
 		(event evMenuItemClicked)
 
-		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
-		(var entityAccount:gfx = "$datahub.getEntity(_entityId)")
+		(var entityAccount:dhEntity = "getEntity(_entityId)")
 		(var isAccountOnline:bool = "entityAccount.accountStatus.online" (event "entityAccount.accountStatus.evOnlineChanged"))
 		(var groupIdsOfAccount:array = "entityAccount.elementInGroups.groupIds ?: []" (event "entityAccount.elementInGroups.evGroupsChanged"))
 
 		(var pureName:str = "entityAccount.accountName.name" (event "entityAccount.accountName.evChanged"))
 
-		(var referralComponent:gfx = "entityAccount.referral" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var referralComponent:dhComponent = "entityAccount.referral")
 		(var referralType:number = "referralComponent.type" (event "referralComponent.evTypeUpdated"))
 		(var isRefSysParticipant:bool = "referralType != null")
 
-		(var isInvitedToDivision:bool = "entityAccount.hasComponent(CC.playerInvitedToPrebattleInfo)" (event "entityAccount.evAdded") (event "entityAccount.evRemoved"))
+		(var isInvitedToDivision:bool = "entityAccount.hasComponent(CC.playerInvitedToPrebattleInfo)")
 		
 		(var isSelfPlayer:bool = "entityAccount.accountSimple.isSelfPlayer")
 		(var isSuspended:bool = "entityAccount.accountSimple.suspended" (event "entityAccount.accountSimple.evSuspendedChanged"))
@@ -834,8 +838,8 @@
 		(bind alpha "isAccountOnline ? 1 : 0.5")
 		(bind hitTest "!isSuspended || (isSuspended && groupIdsOfAccount.length > 0)")
 	)
+
 	(macro MOUSE_EVENTS_DISPATCHER)
-	
 	(block
 		(class $FullsizeAbsolute)
 
@@ -913,12 +917,26 @@
 
 		
 		(block
-			(bind visible "!isSelfPlayer")
+			(visible = "!isSelfPlayer")
 			(style (alpha = 0))
 
 			(controller $Animation
-				(bindcall play to="{ alpha: 1, visible: true }" delay=0.2 duration=0.3 easing="Easing.quad_out" action="kill" (bind enabled "rollOver"))
-				(bindcall play to="{ alpha: 0, visible: false }" duration=0.3 easing="Easing.quad_out" action="kill" (bind enabled "!rollOver"))
+				(bindcall play
+					to="{ 	alpha: 1,
+							visible: true }"
+					delay=0.2
+					duration=0.3
+					easing="Easing.quad_out"
+					action="kill"
+					(bind enabled "!isSelfPlayer && rollOver"))
+
+				(bindcall play
+					to="{ 	alpha: 0,
+							visible: false }"
+					duration=0.1
+					easing="Easing.quad_out"
+					action="kill"
+					(bind enabled "!isSelfPlayer && !rollOver"))
 			)
 
 			(controller $Instance renderer='PlayerContactItemButtonList'
@@ -933,7 +951,7 @@
 	)
 )
 
-(def element PlayerContactItemButtonList (_entityAccount:gfx, _isShort:bool, _playerContext:dict)
+(def element PlayerContactItemButtonList (_entityAccount:dhEntity, _isShort:bool, _playerContext:dict)
 	(scope
 		(macro PULL_TRAINING_ROOM_ENTITY)
 		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
@@ -1204,9 +1222,9 @@
 				
 				(controller $DynamicRepeat
 					(bind renderer "_searchGroup.elementName")
-					(bind count "_searchGroup.elements.length")
+					(bind items "_searchGroup.elements")
 					(args
-						_entityId = "_searchGroup.elements[$index].id"
+						_entityId = "$item.id"
 						_isSearch = true
 						_teamId = "_teamId"
 						_playerContext = "_playerContext"
@@ -1260,9 +1278,9 @@
 				)
 
 				(controller $DynamicRepeat renderer='ChannelsGroupElement'
-					(bind count "channelsGroup.length")
+					(bind items "channelsGroup")
 					(args
-						_groupEntity = "channelsGroup[$index]"
+						_groupEntity = "$item"
 					)
 
 					(itemHeight = 33px)
@@ -1468,7 +1486,7 @@
 			_soundSet = 'dropdown'
 
 			_methods = "[	{	type: 'inputMapping.onAction',
-								name: isChannelOpened ? 'upChannelWindow' : 'joinChannel',
+								name: isChannelOpened ? '' : 'joinChannel',
 								args: {	channelId: channel.channelId }
 							},
 							{	type: isChannelOpened && !isChatBoxOpened ? 'inputMapping.onAction' : '',
@@ -1478,13 +1496,20 @@
 		)
 	)
 
-	(hblock
-		(style (paddingLeft = "M") (width = 100%) (marginTop = 6px) (hitTest = false))
+	(block
+		(style 
+			(paddingLeft = "M")
+			(paddingRight = "S")
+			(width = 100%)
+			(marginTop = 6px)
+			(hitTest = false)
+		)
 		
 		(element ChannelTitleWithIcon
 			_channelEntityId = "_entityId"
 			_bold = "isChannelOpened"
-			_maxWidth = 268
+			_width = 100%
+			_textMaxWidth = 100%
 			_isSearch = "_isSearch"
 		)
 	)
@@ -1520,7 +1545,8 @@
 		(element ChannelTitleWithIcon
 			_channelEntityId = "_channelEntityId"
 			_bold = true
-			_maxWidth = 216
+			_width = 100%
+			_textMaxWidth = 100%
 			_isSearch = "_isSearch"
 		)
 		(element TooltipSystemHorizontalDivider)
@@ -1542,7 +1568,13 @@
 	)
 )
 
-(def element ChannelTitleWithIcon (_channelEntityId:number, _bold:bool=false, _maxWidth:number=300, _isSearch:bool=false, _channelHeader:str='', _isClanDivision:bool=false)
+(def element ChannelTitleWithIcon (	_channelEntityId:number,
+									_bold:bool=false,
+									_isSearch:bool=false,
+									_isChannelHeader:bool=false,
+									_isClanDivision:bool=false,
+									_width:number="auto",
+									_textMaxWidth:number="auto")
 	(scope
 		(var channel:gfx = "$datahub.getEntity(_channelEntityId).channel")
 
@@ -1550,17 +1582,20 @@
 		(var hasNewMessages:bool = "countNewMessages > 0")
 
 		(var isInvitation:bool = "channel.isInvitation" (event "channel.evOpenChanged") (event "channel.evInvitationRefused"))
-		(var isAccountOnline:bool = "channel.user.ref.accountStatus.online" (event "channel.user.ref.accountStatus.evOnlineChanged"))
+		
+		(var entityAccount:dhEntity = "getEntity(channel.user.ref.id)")
 
-		(var inBattle:bool = "channel.user.ref.accountStatus.inBattle" (event "channel.user.ref.accountStatus.evInBattleChanged"))
-		(var channelTypeIdent:str = "channel.typeIdent ?: SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE" (event "channel.evTypeChanged"))
+		(var isAccountOnline:bool = "entityAccount.accountStatus.online" (event "entityAccount.accountStatus.evOnlineChanged"))
+
+		(var inBattle:bool = "entityAccount.accountStatus.inBattle" (event "entityAccount.accountStatus.evInBattleChanged"))
+		(var channelTypeIdent:str = "channel.typeIdent" (event "channel.evTypeChanged"))
 
 		(var isDivision:bool = "channelTypeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE ")
 		(var isClanChat:bool = "channelTypeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.CLAN ")
 
-		(var rawChannelName:str = "	channel.nameIds != null		? tr(channel.nameIds) :
-									channel.user.ref != null	? channel.user.ref.accountName.nickName
-																: channel.name" (event "channel.evNameChanged") (event "channel.user.ref.accountName.evChanged"))
+		(var rawChannelName:str = "	channel.nameIds != null	? tr(channel.nameIds) :
+									entityAccount != null	? entityAccount.accountName.nickName
+															: channel.name" (event "channel.evNameChanged") (event "entityAccount.accountName.evChanged"))
 
 		
 		(var selfPlayerEntity:gfx = "$datahub.getSingleEntity(CC.accountSelf)")
@@ -1601,32 +1636,39 @@
 								isDivision						?	tr('IDS_DIVISION')
 																:	rawChannelName + (channel.ownerNickName != null && _isSearch	? ' (' + channel.ownerNickName + ')'
 																																	: '')")
-	
-		(var channelGroupStatusIcon:str = "'url:../service_kit/chat_channels/' +	(	isInvitation		? 'group_open' :
-																						channel.isSecured	? 'group_closed' :
-																						isDivision			? 'division'
-																											: channelTypeIdent) + '.png'")
-	)
-	(bind name "_channelHeader	? '' :
-				isDivision		? 'channelTitle_' + channelTypeIdent :
-				isClanChat		? 'channelTitle_' + clanTag
- 								: ''")
+		(var groupType:str = "	isInvitation		? 'group_open' :
+								channel.isSecured	? 'group_closed' :
+								isDivision			? 'division'
+													: channelTypeIdent")
 
-	(style (hitTest = false) (flow = "horizontal") (bind width "_maxWidth") (bind maxWidth "_maxWidth"))
+		(var channelGroupStatusIcon:str = "'url:../service_kit/chat_channels/' + groupType + '.png'")
+	)
+	(bind name "_isChannelHeader	? '' :
+				isDivision			? 'channelTitle_' + channelTypeIdent :
+				isClanChat			? 'channelTitle_' + clanTag
+ 									: ''")
+
+	(style
+		(hitTest = false)
+		(flow = "horizontal")
+		(bind width "_width")
+	)
 
 	(block
 		(style
 			(width = 19px)
 			(height = 19px)
+			(marginTop = "!_isChannelHeader ? 0px : XXS")
 			(marginRight = "XS")
-			(bind backgroundImage "channelGroupStatusIcon")
+			(bind backgroundImage "groupType ? channelGroupStatusIcon : ''")
 		)
 	)
 
 	(block
-		(bind visible "inBattle && channel.user.ref != null")
+		(bind visible "inBattle && entityAccount != null")
 		(style
-			(marginRight = 1px)
+			(marginRight = "S")
+			(marginTop = "XXS")
 			(width = 13px)
 			(height = 18px)
 			(backgroundImage = 'url:../service_kit/divisions_icons/player_in_battle_other_team.png')
@@ -1635,7 +1677,7 @@
 	)
 
 	(block
-		(bind visible "!isAccountOnline && channel.user.ref != null")
+		(bind visible "!isAccountOnline && entityAccount != null")
 		(style
 			(marginRight = 1px)
 			(width = 19px)
@@ -1645,28 +1687,30 @@
 	)
 
 	(tf
-		(bind name "_channelHeader	? '' :
-					isDivision 		? 'channelName_' + channelTypeIdent :
-					isClanChat		? 'channelName_' + clanTag
-									: ''")
+		(bind name "_isChannelHeader	? '' :
+					isDivision 			? 'channelName_' + channelTypeIdent :
+					isClanChat			? 'channelName_' + clanTag
+										: ''")
 
-		(bind class "_bold ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+		(bind class "	_isChannelHeader && channelName.length > 27 	? '$TextDefaultBold14NM' : 
+						_isChannelHeader && channelName.length < 27 	? '$TextDefaultBold18NM' :
+						!_isChannelHeader && _bold 						? '$TextDefaultBoldNM' 
+																		: '$TextDefaultNM'")
 
 		(style
 			(wordWrap = false)
 			(elideMode = true)
-			(marginTop = "XS")
-			(maxWidth = 100%)
 			(noTranslate = true)
+			(bind maxWidth "_textMaxWidth")
+			(bind marginTop "!_isChannelHeader || channelName.length < 27 ? XS : 6px")
 			(bind alpha "	isDivision 														? 1 :
-							!isAccountOnline && _channelHeader && channel.user.ref != null	? TS
+							!isAccountOnline && _isChannelHeader && entityAccount != null	? TS
 																							: TC")
 
 			(bind textColor "isDivision	? SC.Ui_styles.SERVICE_COLORS.YELLOW
 										: SC.Ui_styles.SERVICE_COLORS.WHITE")
 		)
-		(bind text "!isClanChat					?	channelName :
-					selfClanTag && selfClanName	?	channelName : 'IDS_CLAN_CHAT_HEADER'")
+		(bind text "channelName")
 	)
 
 	(block

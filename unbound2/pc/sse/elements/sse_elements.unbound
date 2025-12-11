@@ -30,7 +30,44 @@
 	SC.Ui_styles.BUTTON_STATE.UP:		0.5
 })
 
+(def constant SSE_CARD_PIN_ANGLE_HOVER_THUMB_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED:	0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED:	1,
+	SC.Ui_styles.BUTTON_STATE.DOWN:		0.2,
+	SC.Ui_styles.BUTTON_STATE.OVER:		0.5,
+	SC.Ui_styles.BUTTON_STATE.UP:		0
+})
+
 (def constant BG_COLOR_SSE_LINK_LINE 0x66FFFFFF)
+
+(def constant SSE_REWARD_CATEGORY_MOTIVATOR_VIEW "[
+	SC.Sse.SSE_REWARD_CATEGORY.CAMO,
+	SC.Sse.SSE_REWARD_CATEGORY.CHOICE,
+	SC.Sse.SSE_REWARD_CATEGORY.CHOICE_CLAIM,
+	SC.Sse.SSE_REWARD_CATEGORY.COLLECTION,
+	SC.Sse.SSE_REWARD_CATEGORY.CREW,
+	SC.Sse.SSE_REWARD_CATEGORY.ECOBOOST,
+	SC.Sse.SSE_REWARD_CATEGORY.ENSIGN,
+	SC.Sse.SSE_REWARD_CATEGORY.LOOTBOX,
+	SC.Sse.SSE_REWARD_CATEGORY.META_CURRENCY,
+	SC.Sse.SSE_REWARD_CATEGORY.MODERNIZATION,
+	SC.Sse.SSE_REWARD_CATEGORY.SIGNAL,
+	SC.Sse.SSE_REWARD_CATEGORY.STEEL,
+	SC.Sse.SSE_REWARD_CATEGORY.STREAM_PRM_REWARD,
+	SC.Sse.SSE_REWARD_CATEGORY.XP
+]")
+
+(def constant SSE_TYPE_ICON "{
+	EPIC: 'epic',
+	GLOBAL: 'global',
+	AGGREGATOR: 'aggregator',
+	CHAIN: 'chain',
+	TASK_REPEATABLE: 'task_repeatable',
+	TASK_OR: 'task_or',
+	TASK: 'task'
+}")
+
+(def constant SSE_CARD_THIRD_LEVEL_SCROLL_ANIMATED_DISTANCE 280px)
 
 (def element SseCommonChild (_isEmptyCategory:bool, _itemsByCategory:dhCollection, _parentLength:number, _entityDetailedId:number, _isEpic:bool, _epicTasks:dhCollection, _isChain:bool, _chainTasks:dhCollection, _activeTaskIndex:number)
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
@@ -89,7 +126,7 @@
 				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
 					_singleStep = "100px"
 					_wheelScrollAcceleration = "0.7"
-					_maxScrollingAnimatedDistance = "280px"
+					_maxScrollingAnimatedDistance = "SSE_CARD_THIRD_LEVEL_SCROLL_ANIMATED_DISTANCE"
 				)
 
 				(repeatController = 'SseCardSimpleContainer')
@@ -239,7 +276,6 @@
 		(var statusesCount:number = "_isCardSimple ? 1 : statuses.length")
 	)
 	(style (width = 100%))
-
 	(controller $Repeat renderer='SseStatusRender'
 		(bind enabled "statuses.length > 0")
 		(bind count "statusesCount")
@@ -538,8 +574,8 @@
 		(var sseWindowStateEntity:dhEntity = "getSingleEntity(CC.sseWindowState)")
 		(var selectedCategoryId:str = "sseWindowStateEntity.sseWindowState.selectedTag" (event "sseWindowStateEntity.sseWindowState.evChanged"))
 
-		(var battlePassEntity:dhEntity = "getSingleEntity(CC.battlePass)")
-		(var finishTime:number = "battlePassEntity.battlePass.finishTime ?: 0" (event "battlePassEntity.battlePass.evChanged"))
+		(var battlePassEntity:dhComponent = "getSingleComponent(CC.battlePass)")
+		(var finishTime:number = "battlePassEntity.finishTime ?: 0" (event "battlePassEntity.evChanged"))
 		(var isLastBattlePassDay:bool = "(finishTime - serverTime) < DAY_IN_SEC")
 		(macro COUNTDOWN_SCOPE "'formattedFinishTime'" "finishTime" "'HIGHEST,WITH_DAYS'")
 
@@ -763,50 +799,194 @@
 
 (def element SseTypeIcon (_sseEntityId:number, _isBig:bool = false, _isPostBattle:bool = false)
 	(scope
-		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
-		(var sseTaskComponent:dhComponent =		"sseEntity.sseTask")
-		(var progressComponent:dhComponent =	"sseEntity.progress")
-
-		(var progressMax:number = "progressComponent.max" (event "progressComponent.evChanged") (event "progressComponent.evMaxChanged"))
-		(var taskConditions:array = "sseTaskComponent.conditions" (event "sseTaskComponent.evChanged"))
-	
-		(var sseConditionEntity:dhEntity = "getEntity(taskConditions.length == 1 ? taskConditions[0] : -1)")
-		(var conditionCategory:str = "sseConditionEntity.sseConditions.conditionCategory" (event "sseConditionEntity.sseConditions.evUpdate"))
-
-		(var isGlobalSse:bool =		"sseEntity.hasComponent(CC.sseGlobal)")
-		(var isEpic:bool =			"sseEntity.hasComponent(CC.sseEpic)")
-		(var isChainParent:bool =	"sseEntity.hasComponent(CC.sseChain)")
-
-		(var isChainTask:bool = "sseTaskComponent.chainId != null")
-		(var isGlobal:bool = "isGlobalSse && isChainParent || isGlobalSse && !isChainTask")
-		(var isOrTask:bool = "sseTaskComponent.conditions.length > 1")
-		(var isRepeatableTask:bool = "!isEpic && !isChainParent && (progressMax > 1 || progressMax == 0)")
-		(var isAggregator:bool = "conditionCategory == SC.Sse.SSE_CONDITION_CATEGORY.COMPLETE_TASK")
-		(var type:str = "	isEpic				? 'epic' :
-							isGlobal			? 'global' :
-							isAggregator		? 'aggregator' :
-							isChainParent		? 'chain' :
-							isRepeatableTask	? 'task_repeatable' :
-							isOrTask			? 'task_or'
-												: 'task'")
+		(struct sseType = GET_SSE_TYPE_ICON(_sseEntityId = "_sseEntityId"))
 	)
+
 	(style
 		(bind width "_isBig ? 32px : 24px")
 		(bind height "_isBig ? 32px : 24px")
-		(bind backgroundImage "'url:../sse/type_icons/sse_type_' + type + (_isBig ? '_32' : '_24') + '.png'")
+		(bind backgroundImage "'url:../sse/type_icons/sse_type_' + sseType.type + (_isBig ? '_32' : '_24') + '.png'")
 	)
 
 	(controller $Tooltip
 		(bind enabled "!_isPostBattle")
-		(renderer = 'SimpleStatusTooltip')
+		(renderer = 'SseTypeIconTooltip')
 		(args
-			_text = "tr('IDS_SSE_ICON_HINT_' + type)"
+			_type = "sseType.type"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )
 
-(def element SseTaskDescription (_sseEntityId:number, _conditionId:number, _indexNumber:number, _isHeader:bool, _isThirdLevel:bool, _isDetails:bool, _textClass:str = '', _isShipMasteryTask:bool = false)
+(def element SseTypeIconTooltip (_type:str = '', _isPinned:bool = false, _hasMouseInstruction:bool = false)
+	(scope
+		(var isDescriptionVisible:bool = "_type != SSE_TYPE_ICON.TASK")
+		(var isMouseInstructionVisible:bool = "_type != SSE_TYPE_ICON.TASK_OR && _hasMouseInstruction")
+
+		(var tooltipWidth:number = "isMouseInstructionVisible ? DEFAULT_TOOLTIP_WIDTH : auto")
+	)
+	(style (bind width "tooltipWidth"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		_width = "tooltipWidth"
+
+		
+		(element StatusLine
+			_text = "'IDS_SSE_ICON_HINT_' + _type"
+			_width = auto
+			_maxWidth = 270
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isMouseInstructionVisible")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isMouseInstructionVisible")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text = "_isPinned ? 'IDS_SSE_MOTIVATOR_UNPIN_HINT' : 'IDS_SSE_MOTIVATOR_PIN_HINT'"
+				)
+			)
+		)
+	)
+)
+
+(def element SseTypeIconWithPin (	_sseEntityId:number,
+									_isPinned:bool = false,
+									_isPinShown:bool = false,
+									_hasMouseInstruction:bool = false)
+	(scope
+		(event evSseTypeIconAnimStart)
+
+		(struct sseInfo = GET_SSE_TYPE_ICON(_sseEntityId = "_sseEntityId"))
+
+		(var isCurrentPin:bool = "_isPinned" watch=false)
+		(bind isCurrentPin "_isPinned" init=false watch=false (event "evSseTypeIconAnimStart"))
+		(bind isCurrentPin "_isPinned" init=false (bind enabled "!_isPinned"))
+	)
+	(style (backgroundColor = "NO_COLOR"))
+
+	(controller $Tooltip
+		(renderer = 'SseTypeIconTooltip')
+		(args
+			_hasMouseInstruction = "_hasMouseInstruction"
+			_isPinned = "_isPinned"
+			_type = "sseInfo.type"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(style
+			(width = 32px)
+			(height = 32px)
+			(bind backgroundImage "'url:../sse/type_icons/sse_type_' + sseInfo.type + '_32' + (isCurrentPin ? '_pinned' : '') + '.png'")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "_isPinShown"
+			_alpha = "_isPinShown ? 0.3 : 1"
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(alpha = "_isPinned ? 1 : 0")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "_isPinned"
+			_alpha = "_isPinned ? 1 : 0"
+		)
+		(element SsePinnedTaskIcon
+			_sseId = "sseInfo.sseCoreComponent.id"
+			_isPinned = "_isPinned"
+			_isPinShown = "_isPinShown"
+		)
+	)
+)
+
+(def element SsePinnedTaskIcon (	_isPinned:bool = false,
+									_isFromMotivator:bool = false,
+									_isPinShown:bool = false)
+	(style
+		(width = 32px)
+		(height = 32px)
+		(align = "center|middle")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(alpha = "_isPinShown ? 0.3 : 1")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "_isPinShown"
+			_alpha = "_isPinShown ? 0.3 : 1"
+		)
+		(element SseIconPin
+			_isPinned = "_isPinned"
+			_isFromMotivator = "_isFromMotivator"
+		)
+	)
+
+	(block
+		(style (alpha = "_isPinShown ? 1 : 0"))
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "_isPinShown"
+			_alpha = "_isPinShown ? 1 : 0"
+		)
+		(element CloseButton
+			_name = 'unpinMotivatorTask'
+			_tooltipText = ''
+			_safeZone = -10px
+		)
+	)
+)
+
+(def element SseIconPin (_isPinned:bool = false, _isFromMotivator:bool = false)
+	(scope
+		(event evPinAnimEnded)
+	)
+	(dispatch evSseTypeIconAnimStart dir="EventDirection.UP" (event "evPinAnimEnded"))
+	(style
+		(width = 32px)
+		(height = 32px)
+		(bind backgroundImage "_isFromMotivator ? 'url:../sse/motivator/banner_task_pin.png' : 'url:../sse/motivator/sse_type_pin.png'")
+	)
+
+	(controller $Animation
+		(bindcall play
+			easing="Easing.quint_in"
+			duration = 0.2
+			from = {alpha:0, visible:false, visualScaleX: 1.2, visualScaleY: 1.2, visualOffsetX:10px, visualOffsetY:-15px}
+			to = {alpha:1, visible:true, visualScaleX: 1, visualScaleY: 1, visualOffsetX:0px, visualOffsetY:0px}
+			watch = false
+			action = "kill"
+			reverse = "!_isPinned"
+			(bind trigger "_isPinned")
+		)
+		(dispatch evPinAnimEnded on=evAnimEnded)
+	)
+)
+
+(def element SseTaskDescription (	_sseEntityId:number,
+									_conditionId:number,
+									_indexNumber:number,
+									_isHeader:bool,
+									_isThirdLevel:bool,
+									_isDetails:bool,
+									_isShipMasteryTask:bool = false,
+									_textClass:str = '',
+									_isPostBattle:bool = false)
 	(scope
 		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
 		(var sseOpenEndedComponent:dhComponent =		"sseEntity.sseOpenEnded")
@@ -859,78 +1039,67 @@
 		(var ribbons:array =					"taskDescriptionData.ribbons ?: []")
 		(var isSubRibbon:bool =					"taskDescriptionData.isSubRibbon")
 		(var achievementType:str =				"taskDescriptionData.achievementType ?: ''")
+		(var achievementText:array =			"taskDescriptionData.achievementText ?: []")
 		(var achievementCount:number =			"taskDescriptionData.maxProgress ?: 0")
 		(var tooltipAchievements:array =		"taskDescriptionData.tooltipAchievements ?: []")
 		(var countableIdsMaxProgress:number =	"taskDescriptionData.maxProgress ?: 0")
 
 		(var isThirdLevelOrNotHeaderDetails:bool = "_isDetails && !_isHeader || _isThirdLevel")
-		(var isShortSSEAchievementTaskDescription:bool = "isThirdLevelOrNotHeaderDetails && !isSseOpenEnded && achievementType && !_isShipMasteryTask")
-		(var isAchievementTypeTask:bool = "achievementType && achievementType != 'battle_any'")
+		(var isCustomAchievementTaskDescription:bool = "isThirdLevelOrNotHeaderDetails && !isSseOpenEnded && achievementType && !_isShipMasteryTask")
 		(var isAnyBattleAchievementTask:bool = "achievementType == 'battle_any' && achievements.length == 0")
 
-		(var sseTaskDescription:str = "	sseTaskDescriptionBase					? isAnyBattleAchievementTask	? countableIdsMaxProgress == 1	? 'IDS_EARN_ANY_BATTLE_ACHIEVEMENT_SINGLE'
-																																				: subst('IDS_EARN_ANY_BATTLE_ACHIEVEMENT_PLURAL', [], { _amount: countableIdsMaxProgress }, countableIdsMaxProgress)
-																												: (_indexNumber > 0 ? _indexNumber + '. ' : '' ) + tr(sseTaskDescriptionBase)
-																				: ''") 
-		(var achievementTypeText:str = "isAchievementTypeTask ? subst('IDS_PL_SSE_CONDITIONS_ACHIEVEMENT_DESC_' + achievementType,[], {count: achievementCount}, achievementCount) : ''")
+		(var sseTaskDescription:str = "	sseTaskDescriptionBase	? isAnyBattleAchievementTask	? countableIdsMaxProgress == 1	? 'IDS_EARN_ANY_BATTLE_ACHIEVEMENT_SINGLE'
+																																: subst('IDS_EARN_ANY_BATTLE_ACHIEVEMENT_PLURAL', [], { _amount: countableIdsMaxProgress }, countableIdsMaxProgress)
+																								: (_indexNumber > 0 ? _indexNumber + '. ' : '' ) + tr(sseTaskDescriptionBase)
+																: ''") 
 	)
+
 
 	(style (width = 100%))
 
-	(tf
-		(bind class "	_textClass	?	_textClass :
-						_isHeader	?	_isDetails					? '$TextDefaultBold22NM' :
-										_isThirdLevel && !isOrTask	? '$TextDefault18NM'
-																	: '$TextDefaultBold18NM'
-									: '$TextDefault18NM'")
-		(style
-			(width = 100%)
-			(bind textColor "SC.Ui_styles.SERVICE_COLORS.WHITE")
-			(bind alpha "_isHeader ? TA : TC")
-		)
-
-		(bind text "sseTaskDescription")
-	)
-
-	(hblock
-		(bind visible "isShortSSEAchievementTaskDescription")
-
-		(style
-			(width = 100%)
-			(align = "middle")
-			(marginTop = "S")
-		)
+	(block
+		(style (width = 100%))
+		(bind visible "!isCustomAchievementTaskDescription")
 
 		(tf
 			(bind class "	_textClass	?	_textClass :
 							_isHeader	?	_isDetails					? '$TextDefaultBold22NM' :
+											_isPostBattle				? '$TextDefaultNM' :
 											_isThirdLevel && !isOrTask	? '$TextDefault18NM'
 																		: '$TextDefaultBold18NM'
 										: '$TextDefault18NM'")
-
 			(style
-				(bind textColor " isStatusDone	? SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE
-												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(width = 100%)
+				(bind textColor "SC.Ui_styles.SERVICE_COLORS.WHITE")
 				(bind alpha "_isHeader ? TA : TC")
-				(marginRight = "S")
 			)
 
-			(bind text "achievementTypeText")
+			(bind text "sseTaskDescription")
+		)
+	)
+
+	(htile
+		(bind visible "isCustomAchievementTaskDescription")
+
+		(style
+			(width = 100%)
+			(vgap = "S")
 		)
 
-		(block
-			(controller $Instance renderer='AchievementTypeInfoItem'
-				(bind enabled "isShortSSEAchievementTaskDescription")
-				(args
-					_achievementType =		"achievementType"
-					_tooltipAchievements =	"tooltipAchievements"
-				)
+		(controller $Repeat renderer='AchievementTextHolder'
+			(bind count "achievementText.length")
+			(args
+				_value =				"achievementText[$index]"
+				_isStatusDone =			"isStatusDone"
+				_isLastWord =			"achievementText.length - 1 == $index"
+				_achievementType =		"achievementType"
+				_tooltipAchievements =	"tooltipAchievements"
 			)
 		)
 	)
 
 	(htile
-		(bind visible "isThirdLevelOrNotHeaderDetails && ribbons")
+		(bind visible "isThirdLevelOrNotHeaderDetails && ribbons && !_isPostBattle")
 
 		(style
 			(width = 100%)
@@ -939,7 +1108,7 @@
 		)
 
 		(controller $Repeat renderer='RibbonIconItem'
-			(bind enabled "isThirdLevelOrNotHeaderDetails && ribbons")
+			(bind enabled "isThirdLevelOrNotHeaderDetails && ribbons && !_isPostBattle")
 			(bind count "ribbons.length")
 			(args
 				_ribbonId =		"ribbons[$index]"
@@ -949,7 +1118,7 @@
 	)
 
 	(htile
-		(bind visible "isThirdLevelOrNotHeaderDetails && achievements")
+		(bind visible "isThirdLevelOrNotHeaderDetails && achievements && !_isPostBattle")
 
 		(style
 			(width = 100%)
@@ -958,12 +1127,12 @@
 		)
 
 		(controller $Repeat renderer='AchievementItem'
-			(bind enabled "isThirdLevelOrNotHeaderDetails && achievements")
+			(bind enabled "isThirdLevelOrNotHeaderDetails && achievements && !_isPostBattle")
 			(bind count "achievements.length")
 			(args
 				_achievementEntityId =	"achievements[$index]"
 				_achievementsLen =		"achievements.length"
-				_isShipMasteryTask =	"_isShipMasteryTask"
+				_textClass =			"_isShipMasteryTask ? '$TextDefaultNM' : '$TextDefault18NM'"
 			)
 		)
 	)
@@ -1039,7 +1208,11 @@
 	)
 )
 
-(def element AchievementItem (_achievementEntityId:number, _achievementsLen:number, _isPostBattle:bool = false, _isShipMasteryTask:bool = false)
+(def element AchievementItem (	_achievementEntityId:number,
+								_achievementsLen:number,
+								_isPostBattle:bool = false,
+								_isTextUnderlined:bool = true,
+								_textClass:str = '$TextDefaultNM')
 	(scope
 		(var achievementEntity:dhEntity = "getPrimaryEntity(CC.achievement, _achievementEntityId)")
 		(var achievementsLeft:number = "_achievementsLen - $index - 1")
@@ -1064,13 +1237,13 @@
 		)
 
 		(tf
-			(bind class "_isShipMasteryTask || _isPostBattle ? '$TextDefaultNM' : '$TextDefault18NM'")
+			(bind class "_textClass")
 			(style (alpha = "TA"))
 			(bind text "tr('IDS_LEFT_QUOTE') + tr(achievementEntity.achievementInfo.nameIDS) + tr('IDS_RIGHT_QUOTE')")
 		)
 
 		(block
-			(bind visible "!_isPostBattle")
+			(bind visible "_isTextUnderlined")
 			(style
 				(width = 100%)
 				(position = "absolute")
@@ -1085,7 +1258,7 @@
 	(tf
 		(bind visible "isCommaVisible || isOrVisible")
 
-		(bind class "_isShipMasteryTask || _isPostBattle ? '$TextDefaultNM' : '$TextDefault18NM'")
+		(bind class "_textClass")
 		(style
 			(bind marginLeft "isCommaVisible ? XXS : S")
 			(marginRight = "S")
@@ -1096,7 +1269,47 @@
 	)
 )
 
-(def element SseProgress (_sseEntityId:number, _conditionId:number)
+(def element AchievementTextHolder (_value:str, _isStatusDone:bool, _isLastWord:bool, _achievementType:str, _tooltipAchievements:array)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+	)
+
+	(hblock
+		(tf
+			(class $TextDefault18NM)
+
+			(style
+				(bind textColor " _isStatusDone	? SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE
+												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(alpha = "TC")
+				(marginRight = "S")
+			)
+
+			(bind text "_value")
+		)
+
+		(block
+			(macro STRUCT_MOUSE_DISPATCHER
+				_mouseHandler = "mouseHandler"
+			)
+
+			(dispatch evAchievementInfoHovered args="{ isHovered: true }" dir="EventDirection.UP" (event "mouseHandler.evRollOver"))
+			(dispatch evAchievementInfoHovered args="{ isHovered: false }" dir="EventDirection.UP" (event "mouseHandler.evRollOut"))
+
+			(style (marginTop = "-XS"))
+
+			(controller $Instance renderer='AchievementTypeInfoItem'
+				(bind enabled "_isLastWord")
+				(args
+					_achievementType =		"_achievementType"
+					_tooltipAchievements =	"_tooltipAchievements"
+				)
+			)
+		)
+	)
+)
+
+(def element SseProgress (_sseEntityId:number, _conditionId:number, _isPostBattle:bool = false, _isPostBattleSseItem:bool = false)
 	(scope
 		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
 		(var sseEpicComponent:dhComponent =		"sseEntity.sseEpic")
@@ -1130,14 +1343,14 @@
 		(var progressBeforeBattle:number = "sseProgressMax ? (sseProgressCurrent - sseProgressBattle) / sseProgressMax : 0")
 		(var progressAfterBattle:number = "sseProgressMax ? sseProgressBattle / sseProgressMax : 0")
 
-		(var isSseProgressEnabled:bool = "sseProgressMax > 1")
+		(var isSseProgressEnabled:bool = "sseProgressMax > 1 && !_isPostBattle")
 	)
 	(style (width = 100%))
 
 	(block
 		(style
-			(bind marginTop "isSseProgressEnabled ? 6px : 0px")
 			(width = 100%)
+			(bind marginTop "isSseProgressEnabled ? 6px : 0px")
 		)
 
 		(controller $Instance renderer='DoubleProgressBar'
@@ -1152,7 +1365,7 @@
 	)
 
 	(block
-		(bind visible "isSseProgressEnabled")
+		(bind visible "isSseProgressEnabled && !_isPostBattleSseItem")
 		(style (marginTop = "XS"))
 
 		(controller $Instance renderer='DefaultDividedCounter'
@@ -1204,7 +1417,7 @@
 	)
 )
 
-(def element SseRewardCategory (_sseEntityId:number)
+(def element SseRewardCategory (_sseEntityId:number, _isMotivatorView:bool = false)
 	(scope
 		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
 		(var sseOpenEndedComponent:dhComponent =		"sseEntity.sseOpenEnded")
@@ -1215,6 +1428,10 @@
 		(var sseCoreComponent:dhComponent =				"sseEntity.sseCore")
 		(var sseGlobalComponent:dhComponent =			"sseEntity.sseGlobal")
 
+		(var currentChainTaskId:str = "sseChainComponent.currentTaskId ?: ''" (event "sseChainComponent.evChanged"))
+		(var coreChainTaskEntity:dhEntity = "getPrimaryEntity(CC.sseCore, currentChainTaskId)")
+		(var sseChainTaskComponent:dhComponent = "coreChainTaskEntity.sseTask")
+
 		(var isManualRewardClaim:bool = "sseChainComponent.claimRewards || sseEpicComponent.claimRewards || sseTaskComponent.claimRewards")
 		(struct sseTaskStatusFlags = SSE_TASKS_STATUS_FLAGS(_sseOpenEnded =			"sseOpenEndedComponent"
 															_sseCorePersistent =	"sseCorePersistentComponent"
@@ -1222,16 +1439,31 @@
 															_sseGlobal =			"sseGlobalComponent"
 															_isManualRewardClaim =	"isManualRewardClaim" ))
 
-		(var rewardCategorySseEpic:str =	"sseEpicComponent.rewardCategory"	(event "sseEpicComponent.evChanged"))
-		(var rewardCategorySseChain:str =	"sseChainComponent.rewardCategory"	(event "sseChainComponent.evChanged"))
-		(var rewardCategorySseTask:str =	"sseTaskComponent.rewardCategory"	(event "sseTaskComponent.evChanged"))
+		(var rewardCategorySseEpic:str =		"sseEpicComponent.rewardCategory"	(event "sseEpicComponent.evChanged"))
+		(var rewardCategorySseChain:str =		"sseChainComponent.rewardCategory"	(event "sseChainComponent.evChanged"))
+		(var rewardCategorySseTask:str =		"sseTaskComponent.rewardCategory"	(event "sseTaskComponent.evChanged"))
+		(var rewardCategorySseChainTask:str =	"sseChainTaskComponent.rewardCategory"	(event "sseChainTaskComponent.evChanged"))
 
+		(var statuses:array = "sseCoreComponent.statuses ?: []" (event "sseCoreComponent.evStatusesChanged"))
+		(var isMotivatorClaimRewardState:bool = "isManualRewardClaim && isIn(SC.Sse.SSE_STATUSES.DONE, statuses)")
 		(var isClaimRewardAvailable:bool = "sseTaskStatusFlags.isDone && !sseTaskStatusFlags.isClaimed && !sseTaskStatusFlags.isNotParticipatedInGlobalSse")
 
-		(var rewardCategory:str = "	isManualRewardClaim		? 'choice' + (isClaimRewardAvailable ? '_claim' : '') :
+		(var choiceRewardCategory:str = "'choice' + (isClaimRewardAvailable ? '_claim' : '')")
+
+		(var rewardCategory:str = "	isManualRewardClaim		? choiceRewardCategory :
 									rewardCategorySseEpic	? rewardCategorySseEpic :
 									rewardCategorySseChain	? rewardCategorySseChain
 															: rewardCategorySseTask")
+
+		(var epicRewardCategory:str = "isManualRewardClaim ? choiceRewardCategory : rewardCategorySseEpic")
+		(var chainRewardCategory:str = "isMotivatorClaimRewardState ? choiceRewardCategory : rewardCategorySseChainTask")
+		(var motivatorRewardCategorySource:str = "	isMotivatorClaimRewardState	? 'choice_claim' :
+													rewardCategorySseEpic		? epicRewardCategory :
+													rewardCategorySseChainTask	? chainRewardCategory :
+													isManualRewardClaim			? choiceRewardCategory
+																				: rewardCategorySseTask")
+		(var motivatorRewardCategory:str = "	isIn(rewardCategory, SSE_REWARD_CATEGORY_MOTIVATOR_VIEW)	? motivatorRewardCategorySource
+																											: SC.Sse.SSE_REWARD_CATEGORY.OTHER")
 	)
 
 	(controller $Tooltip
@@ -1245,7 +1477,8 @@
 	(controller $Instance renderer='RewardCategory'
 		(bind enabled "rewardCategory")
 		(args
-			_rewardCategory = "rewardCategory"
+			_size = "_isMotivatorView ? SIZE.LARGE : SIZE.MEDIUM"
+			_rewardCategory = "_isMotivatorView ? motivatorRewardCategory : rewardCategory"
 			_isReceived = "sseTaskStatusFlags.isReceived"
 			_isUnavailable = "sseTaskStatusFlags.isNotParticipatedInGlobalSse"
 			_isRewardActive = "isManualRewardClaim && isClaimRewardAvailable"
@@ -1314,7 +1547,8 @@
 										_selectedRewardIndex:number = null,
 										_isInClaimWindow:bool = false)
 	(scope
-		(macro SIMPLE_MOUSE_OVER_DOWN_SELECTED_COLORTRANSFORM_SCOPE)
+		(struct mouseHandler = MOUSE_HANDLER())
+
 		(var isSelected:bool = "_selectedRewardIndex == $index")
 
 		(var sseEntity:dhEntity = "getEntity(_sseEntityId)")
@@ -1339,50 +1573,49 @@
 																_isManualRewardClaim =	"isManualRewardClaim"))
 	)
 	(dispatch "'evBroadcastSelectedRewardIndex'" args="{ selectedRewardIndex: $index }" dir="EventDirection.UP" on='leftClick')
+	(macro STRUCT_MOUSE_DISPATCHER _mouseHandler = "mouseHandler")
 
 	(style (flow = "horizontal"))
 
 	(block
 		(bind visible "isManualRewardClaim && $index")
 		(style
+			(hitTest = false)
 			(height = 100%)
 			(align = "center|middle")
-			(paddingLeft = "S")
+			(paddingLeft = "M")
 			(paddingRight = "M")
-			(hitTest = false)
 		)
+
 		(tf
 			(class $TextDefaultNM)
 			(style (alpha = "TC"))
 			(text = 'IDS_OR')
 		)
 	)
-	(block
-		(macro MOUSE_OVER_DOWN_COLORTRANSFORM _isActive="_isInClaimWindow" _isSelected="isSelected")
-		(style (backgroundColor = "NO_COLOR"))
-		
-		(block
-			(bind visible "isSelected")
-			(class $FullsizeAbsolute)
-			(style
-				(paddingBottom = "-XS")
-				(paddingLeft = "-S")
-			)
 
-			(block
-				(class $Fullsize)
-				(style
-					(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-					(scale9grid = 2)
-					(hitTest = false)
-				)
-			)
+	(block
+		(style
+			(height = 100px)
+			(align = "center|middle")
 		)
 
-		(element RewardItemAdapter
-			_entityId = "_rewardEntityId"
-			_isReceived = "sseTaskStatusFlags.isReceived"
-			_isClickDisabled = "isClickDisabled"
+		(element ControlBackground
+			_mouseDown = "_isInClaimWindow ? mouseHandler.mouseDown : false"
+			_mouseOver = "_isInClaimWindow ? mouseHandler.rollOver : false"
+			_selected = "isSelected"
+			_hasInnerBackground = "_isInClaimWindow"
+		)
+
+		(block
+			(style (paddingTop = "_isInClaimWindow ? -XS : 0px"))
+
+			(element RewardItemAdapter
+				_entityId = "_rewardEntityId"
+				_isReceived = "sseTaskStatusFlags.isReceived"
+				_isClickDisabled = "isClickDisabled"
+				_iconMargin = "XS"
+			)
 		)
 	)
 )
@@ -1481,7 +1714,9 @@
 	)
 )
 
-(def element SSeCardInteractiveBackground (	_state:number = 0, _isAttention:bool = false)
+(def element SseCardInteractiveBackground (	_state:number = "SC.Ui_styles.BUTTON_STATE.DISABLED",
+											_pinState:number = "SC.Ui_styles.BUTTON_STATE.DISABLED",
+											_isAttention:bool = false)
 	(class $Fullsize)
 
 	(block
@@ -1526,6 +1761,23 @@
 		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
 			_trigger = "_state"
 			_alpha = "SSE_CARD_ATTENTION_BORDER_LINE_ALPHA[_state]"
+			_duration = "0.12"
+		)
+	)
+
+	(block
+		(alpha = "SSE_CARD_PIN_ANGLE_HOVER_THUMB_ALPHA[_pinState]")
+		(style
+			(position = "absolute")
+			(width = 64px)
+			(height = 64px)
+			(backgroundImage = 'url:../sse/motivator/task_pinned_angle.png')
+			(borderRadiusTopLeft = "XS")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "_pinState"
+			_alpha = "SSE_CARD_PIN_ANGLE_HOVER_THUMB_ALPHA[_pinState]"
 			_duration = "0.12"
 		)
 	)

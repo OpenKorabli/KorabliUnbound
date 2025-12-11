@@ -16,9 +16,9 @@
 		(var markerYaw:number = "radToGrad(_markerEntity.mapPosition.yaw)" (event "evEnterFrame"))
 		(var markerScale:number = "_itemScale / _mapScale")
 
-		(var aircarrier:gfx = "$datahub.getSingleComponent(CC.aircarrier)")
-		(var activeSquadron:number = "aircarrier.activeSquadron" (event "aircarrier.evStateChanged"))
-		(var isControlledByPlayer:bool = "_markerEntity.ownSquadron && _markerEntity.ownSquadron.id == activeSquadron")
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+		(var isControllingSquadron:bool = "controlledSquadronId != DEFAULT_SQUADRON_ID")
 
 		(var planeTypeInt:number = "_markerEntity.plane.planeType")
 		(var markerElement:gfx = "planeTypeInt == SC.Battle.PLANES_TYPES.AIRSHIP ? 'MapMarkerAirshipicon' : 'MapMarkerSquadronIcon'")
@@ -26,16 +26,17 @@
 
 		(var minimapEntity:gfx = "$datahub.getSingleEntity(CC.minimap)")
 		(var minimapComponent:gfx = "minimapEntity.minimap")
-		(var angleToRotate:number = "minimapComponent && !isControlledByPlayer ? minimapComponent.rotationAngleDeg : 0" (event "minimapComponent.evRotationAngleDegChanged"))
+		(var angleToRotate:number = "minimapComponent && !isControllingSquadron ? minimapComponent.rotationAngleDeg : 0" (event "minimapComponent.evRotationAngleDegChanged"))
 	)
 
-	(style
-		(bind rotation "-(angleToRotate)")
-	)
+	(style (bind rotation "-angleToRotate"))
 
-	(controller $Instance (renderer = 'MapMarkerRanges') 
-		(bind enabled "isControlledByPlayer")
-		(args entity="_markerEntity" mapScale="_mapScale")
+	(controller $Instance renderer='MapMarkerRanges'
+		(bind enabled "isControllingSquadron")
+		(args
+			_entity 	= "_markerEntity"
+			_mapScale 	= "_mapScale"
+		)
 	)
 
 	(block
@@ -99,12 +100,13 @@
 		(var healthComponent:gfx = "_markerEntity.health" (event "_markerEntity.evAdded"))
 
 		(var relationComponent:gfx = "_markerEntity.relation")
-		(var isSelf:bool = "relationComponent ? relationComponent.value == SC.Battle.DIPLOMACY_RELATIONS.SELF : false"  (event "relationComponent.evChanged"))
+		(var isSelf:bool = "relationComponent.value == SC.Battle.DIPLOMACY_RELATIONS.SELF" (event "relationComponent.evChanged"))
 		(var relationName:str = "SC.Battle.PLAYER_RELATION.NAMES[SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationComponent.value]]" (event "relationComponent.evChanged"))
 
-		(var aircarrier:gfx = "$datahub.getSingleComponent(CC.aircarrier)")
-		(var activeSquadron:number = "aircarrier.activeSquadron" (event "aircarrier.evStateChanged"))
-		(var isControlledByPlayer:bool = "_markerEntity.ownSquadron && _markerEntity.ownSquadron.id == activeSquadron")
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+		(var isCurrentSquadronControlled:bool = "controlledSquadronId == squadronComponent.id")
+
 		(var planeTypeName:str = "PLANE_TYPE_TO_STR[planeTypeInt]")
 		(var planeFullName:str = "planeTypeName + ammoPostfix + postfix + '_' + relationName")
 		(var planeSubName:str = "	isConsumable				? 'consumables_' :
@@ -112,26 +114,31 @@
 																: ''")
 		(var markerIconPath:str = "'swf:../battle_hud/markers/minimap/plane_svg/plane_svg.swf:' + planeSubName + planeFullName")
 	)
+
 	(style
 		(position = "absolute")
-		(width = 20px) (height = 20px)
-		(bind rotation "isSelf && isControlledByPlayer ? _rotation : 0")
+		(width = 20px)
+		(height = 20px)
+		(bind rotation "isSelf && isCurrentSquadronControlled ? _rotation : 0")
 	)
 
 	(block
-		(bind visible "isControlledByPlayer")
+		(bind visible "isCurrentSquadronControlled")
 		(style
-			(width = 16px) (height = 20px)
+			(width = 16px)
+			(height = 20px)
 			(backgroundImage = 'swf:../battle_hud/markers/minimap/ship/ship_self_svg/ship_self_svg.swf:alive')
 		)
 	)
 	(block
 		(bind name "'minimapPlane_' + planeTypeName")
-		(bind visible "!isControlledByPlayer")
+		(bind visible "!isCurrentSquadronControlled")
 		(style
 			(position = "absolute")
-			(width = 20px) (height = 20px)
-			(visualOffsetX = -50%) (visualOffsetY = -50%)
+			(width = 20px)
+			(height = 20px)
+			(visualOffsetX = -50%)
+			(visualOffsetY = -50%)
 			(bind backgroundImage "markerIconPath")
 		)
 	)

@@ -1,6 +1,19 @@
+(def constant COUNTER_ICONS {
+	CAUSED_DAMAGE		: 'caused_damage',
+	CAUSED_AVIA_DAMAGE	: 'caused_avia_damage',
+	BLOCKED_DAMAGE		: 'blocked_damage',
+	ASSISTED_DAMAGE		: 'assisted_damage'
+})
+
+(def constant COUNTER_ASSIST_SUBTYPES {
+	SPOT	: 'by_spot',
+	SMOKE	: 'by_smoke',
+	SCOUT	: 'by_scout'
+})
+
 (def css $DamageCounterDropShadowFilter ()
-	(filters 
-		(dropShadow 
+	(filters
+		(dropShadow
 			(distance = 0.1)
 			(angle = 90)
 			(color = 0x000000)
@@ -13,30 +26,20 @@
 	)
 )
 
-(def constant COUNTER_ICONS {
-	CAUSED_DAMAGE: 'caused_damage',
-	CAUSED_AVIA_DAMAGE: 'caused_avia_damage',
-	ASSISTED_DAMAGE: 'assisted_damage',
-	BLOCKED_DAMAGE: 'blocked_damage'
-})
 
-(def constant DAMAGE_COUNTER_TOOLTIP_WIDTH 320)
-
-(def element DamageWidget () layout=true
+(def element DamageWidget ()
 	(scope
 		(struct showAdditionalDamageCounters = GET_PREF_BOOL(_option="'ui.showAdditionalDamageCounters'"))
 
-		(var battleDataEntity:gfx = "$datahub.getSingleEntity(CC.battleData)")
-		(var battleDamage:gfx = "battleDataEntity.battleDamage" (event "battleDataEntity.evAdded"))
+		(var battleDamageComponent:dhComponent = "getSingleComponent(CC.battleDamage)")
 
-		(var damageEnemy:number = "battleDamage.enemy" (event "battleDamage.evChanged"))
-		(var damageAvia:number = "battleDamage.avia" (event "battleDamage.evChanged"))
-		(var damageAssisted:number = "battleDamage.spot" (event "battleDamage.evChanged"))
-		(var damageBlocked:number = "battleDamage.aggro" (event "battleDamage.evChanged"))
+		(var damageEnemy:number = "battleDamageComponent.enemy" (event "battleDamageComponent.evChanged"))
+		(var damageAvia:number = "battleDamageComponent.avia" (event "battleDamageComponent.evChanged"))
+		(var damageBlocked:number = "battleDamageComponent.aggro" (event "battleDamageComponent.evChanged"))
+		(var damageAssisted:number = "battleDamageComponent.assistTotal" (event "battleDamageComponent.evChanged"))
 	)
 
 	(style
-		(align = "left")
 		(marginTop = "XXS")
 		(marginLeft = "XS")
 	)
@@ -44,54 +47,70 @@
 	
 	(block
 		(style (marginBottom = "XXS"))
-		(controller $Instance (renderer = 'DamageWidgetCounter')
+
+		(controller $Instance renderer='DamageWidgetCounter'
 			(bind enabled "damageEnemy > 0")
-			(args "COUNTER_ICONS.CAUSED_DAMAGE" "damageEnemy" true)
+			(args
+				_counterType 	= "COUNTER_ICONS.CAUSED_DAMAGE"
+				_counterValue 	= "damageEnemy"
+				_isLarge 		= true
+			)
 		)
 	)
 
 	
 	(block
-		(controller $Instance (renderer = 'DamageWidgetCounter')
+		(controller $Instance renderer='DamageWidgetCounter'
 			(bind enabled "damageAvia > 0")
-			(args "COUNTER_ICONS.CAUSED_AVIA_DAMAGE" "damageAvia")
+			(args
+				_counterType 	= "COUNTER_ICONS.CAUSED_AVIA_DAMAGE"
+				_counterValue 	= "damageAvia"
+			)
 		)
 	)
 
 	
 	(block
-		(controller $Instance (renderer = 'DamageWidgetCounter')
+		(controller $Instance renderer='DamageWidgetCounter'
 			(bind enabled "showAdditionalDamageCounters.value && damageBlocked > 0")
-			(args "COUNTER_ICONS.BLOCKED_DAMAGE" "damageBlocked")
+			(args
+				_counterType 	= "COUNTER_ICONS.BLOCKED_DAMAGE"
+				_counterValue 	= "damageBlocked"
+			)
 		)
 	)
 
 	
 	(block
-		(controller $Instance (renderer = 'DamageWidgetCounter')
+		(controller $Instance renderer='DamageWidgetCounter'
 			(bind enabled "showAdditionalDamageCounters.value && damageAssisted > 0")
-			(args "COUNTER_ICONS.ASSISTED_DAMAGE" "damageAssisted")
+			(args
+				_counterType 	= "COUNTER_ICONS.ASSISTED_DAMAGE"
+				_counterValue 	= "damageAssisted"
+			)
 		)
 	)
 )
 
-(def element DamageWidgetCounter (_counterType:str, _count:number, _big:bool=false) layout=true
+(def element DamageWidgetCounter (_counterType:str, _counterValue:number, _isLarge:bool=false)
 	(scope
 		(event evShow)
 
 		(var damageValue:number = 0)
 		(controller $Animation
-			(bindcall play	duration = 0.6
-							to = "{ damageValue: _count}"
-							easing="Easing.cubic_out"
-							(bind trigger "_count")
-							(event "evShow")
+			(bindcall play
+				duration = 0.6
+				to = "{ damageValue: _counterValue}"
+				easing = "Easing.cubic_out"
+				(bind trigger "_counterValue")
+				(event "evShow")
 			)
 		)
-		(var textFieldWidth:number = "	damageValue < 10000 	? 70 :
-										damageValue < 100000 	? 80 :
-										damageValue < 1000000	? 90
-																: 110")
+		(var textFieldWidth:number = "	damageValue < 10000 	? 70px :
+										damageValue < 100000 	? 80px :
+										damageValue < 1000000	? 90px
+																: 110px"
+		)
 	)
 
 	(dispatch evShow on='addedToStage')
@@ -99,59 +118,110 @@
 	(style
 		(flow = "horizontal")
 		(align = "middle")
-		(bind marginTop "!(_big) ? -XS : 0")
-		(bind marginBottom "!(_big) ? -S : 0")
+		(bind marginTop "_isLarge ? 0px : -XS")
+		(bind marginBottom "_isLarge ? 0px : -S")
 	)
 
 	(controller $Tooltip
-		(renderer='DamageWidgetCounterTooltip')
-		(args "_counterType")
-		(align="bottom|left")
-		(position="trackMouse")
-		(offset={x:"5px", y:"0"})
-		(macro SIMPLE_TOOLTIP_ANIMATION)
+		(renderer = "_counterType == COUNTER_ICONS.ASSISTED_DAMAGE 	? 'AssistDamageWidgetCounterTooltip'
+																	: 'DamageWidgetCounterTooltip'"
+		)
+		(args
+			_counterType = "_counterType"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(align = "bottom|left")
 	)
 
 	
 	(block
 		(style
-			(width = 32) (height = 32)
-			(bind backgroundImage "'url:../battle_hud/damage_widget/icon_counter_' + _counterType + '.png'")
+			(width = 32px)
+			(height = 32px)
 			(marginRight = "XS")
+			(backgroundImage = "'url:../battle_hud/damage_widget/icon_counter_' + _counterType + '.png'")
 		)
 	)
 
 	
 	(block
-		(style
-			(bind width "textFieldWidth + (_big ? 0 : -36)")
-		)
+		(style (bind width "textFieldWidth + (_isLarge ? 0px : -36px)"))
 
 		(tf
-			(bind class "_big ? '$TextDefaultBold26NM' : '$TextDefaultBoldNM'")
+			(bind class "_isLarge ? '$TextDefaultBold24NM' : '$TextDefaultBoldNM'")
 			(class $DamageCounterDropShadowFilter)
 			(bind text "formatSeparator(ceil(damageValue))")
 		)
 	)
 )
 
-(def element DamageWidgetCounterTooltip (_counterType:str) layout=true
-	(style (width = "DAMAGE_COUNTER_TOOLTIP_WIDTH") (hitTest = false))
+(def element DamageWidgetCounterTooltip (_counterType:str)
+	(style (width = 320px))
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(controller $Instance renderer='TooltipSystemHeaderSubheaderText'
-			(args
-				_headerText = "toUpper('IDS_' + _counterType + '_HINT_HEADER')"
-			)
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "'IDS_' + _counterType + '_HINT_HEADER'"
 		)
 
-		(controller $Instance renderer='TooltipSystemHorizontalDivider')
+		(element TooltipSystemHorizontalDivider)
 
-		(controller $Instance renderer='TooltipSystemDescriptionText'
-			(args
-				_descriptionText="toUpper('IDS_' + _counterType + '_HINT')"
+		(element TooltipSystemDescriptionText
+			_descriptionText = "'IDS_' + _counterType + '_HINT'"
+		)
+	)
+)
+
+(def element AssistDamageWidgetCounterTooltip (_counterType:str)
+	(scope
+		(var battleDamageComponent:dhComponent = "getSingleComponent(CC.battleDamage)")
+
+		(var damageAssistedBySpot:number = "battleDamageComponent.assistSpot" (event "battleDamageComponent.evChanged"))
+		(var damageAssistedBySmoke:number = "battleDamageComponent.assistSmoke" (event "battleDamageComponent.evChanged"))
+		(var damageAssistedByScout:number = "battleDamageComponent.assistScout" (event "battleDamageComponent.evChanged"))
+	)
+
+	(style (width = 320px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "'IDS_' + _counterType + '_HINT_HEADER'"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = "'IDS_' + _counterType + '_HINT'"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemCounterLine
+					_title			= "'IDS_' + COUNTER_ICONS.ASSISTED_DAMAGE + '_' + COUNTER_ASSIST_SUBTYPES.SPOT + '_HINT'"
+					_count 			= "damageAssistedBySpot"
+					_isCounterBold 	= true
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemCounterLine
+					_title 			= "'IDS_' + COUNTER_ICONS.ASSISTED_DAMAGE + '_' + COUNTER_ASSIST_SUBTYPES.SMOKE + '_HINT'"
+					_count 			= "damageAssistedBySmoke"
+					_isCounterBold 	= true
+				)
+			)
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+				(element TooltipSystemCounterLine
+					_title 			= "'IDS_' + COUNTER_ICONS.ASSISTED_DAMAGE + '_' + COUNTER_ASSIST_SUBTYPES.SCOUT + '_HINT'"
+					_count 			= "damageAssistedByScout"
+					_isCounterBold 	= true
+				)
 			)
 		)
 	)

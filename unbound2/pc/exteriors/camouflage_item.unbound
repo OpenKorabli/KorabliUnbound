@@ -1,4 +1,6 @@
-(def element PermoflageItem (_exteriorEntity:gfx, _permoflageFirstBuyGoldDiscount:number, _isActionsAvailable:bool, _previewExteriorId:number)
+(def constant SHIP_CAMOUFLAGE_ITEM_SIZE 80px)
+
+(def element PermoflageItem (_exteriorEntity:dhEntity, _permoflageFirstBuyGoldDiscount:number, _isActionsAvailable:bool, _previewExteriorId:number)
 	(scope
 		
 		(event evClicked)
@@ -21,6 +23,7 @@
 		(var clickArea_mouseDown:bool ="$event.isDown" init=false watch=false (event "clickArea_evMouseDown") (event "clickArea_evStageMouseUp"))
 
 		(var exteriorsInStorage:number = "_exteriorEntity.countComponent.value" (event "_exteriorEntity.countComponent.evChanged"))
+		(var hasInStorage:bool = "exteriorsInStorage > 0")
 
 		(var isLinkedToShip:bool = "_exteriorEntity.ownCamouflage.isLinkedToShip" (event "_exteriorEntity.ownCamouflage.evUpdated"))
 
@@ -29,12 +32,14 @@
 		(var hasColorSchemeConfig:bool = "_exteriorEntity.ownCamouflage.hasColorSchemeConfig" (event "_exteriorEntity.ownCamouflage.evUpdated"))
 		
 
-		(var isInstalled:bool = "_exteriorEntity.hasComponent(CC.installedCamouflage)" (event "_exteriorEntity.evAdded") (event "_exteriorEntity.evRemoved"))
+		(var isPreviewed:bool = "_previewExteriorId && (_previewExteriorId == _exteriorEntity.ownCamouflage.id)")
+
+		(var isInstalled:bool = "_exteriorEntity.hasComponent(CC.installedCamouflage)")
 
 		(struct peculiarityPref = GET_PREF_BOOL(_option = "'ui.peculiarityEnabled'"))
 		(var isPeculiarityDisabled:bool = "!peculiarityPref.value && _exteriorEntity.exteriorConfig.peculiarity && !(_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !isLinkedToShip)")
 
-		(var isNew:bool = "_exteriorEntity.hasComponent(CC.newItem)" (event "_exteriorEntity.evAdded") (event "_exteriorEntity.evRemoved"))
+		(var isNew:bool = "_exteriorEntity.hasComponent(CC.newItem)")
 
 		(struct permoflagePrice = PULL_PRICE(_entityId = "_exteriorEntity.ownCamouflage.id" _actionId = "SC.Common.PRICE_ACTION.BUY"))
 		(var isItemSaleIcon:bool = "(_permoflageFirstBuyGoldDiscount || permoflagePrice.info.discountPercent > 0) && exteriorsInStorage == 0 && _exteriorEntity.exteriorConfig.canBuy")
@@ -44,7 +49,7 @@
 																																																						: SC.Ui_common.CAMOUFLAGE_ACTIONS.UNINSTALL :
 								_previewExteriorId == _exteriorEntity.ownCamouflage.id												? SC.Ui_common.EXTERIOR_ACTIONS.DISABLE_PREVIEW :
 								(_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && isLinkedToShip) ||
-								(_exteriorEntity.exteriorConfig.type != SC.Exteriors.EXTERIOR_TYPE.MSKIN && exteriorsInStorage > 0)	? SC.Ui_common.CAMOUFLAGE_ACTIONS.INSTALL
+								(_exteriorEntity.exteriorConfig.type != SC.Exteriors.EXTERIOR_TYPE.MSKIN && hasInStorage)			? SC.Ui_common.CAMOUFLAGE_ACTIONS.INSTALL
 																																	: SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW")
 
 		(var actionParams:dict = "	clickAction == SC.Ui_common.CAMOUFLAGE_ACTIONS.UNINSTALL						?	{exteriorId: _exteriorEntity.ownCamouflage.id} :
@@ -54,44 +59,54 @@
 
 		(var setUserPrefParams:dict = "clickAction == SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW	? { value: _exteriorEntity.ownCamouflage.id, name: 'previewExteriorId' }
 																							: { value: 0, name: 'previewExteriorId' }")
-	
-		(var camouflageColorTransform:dict = "!_isActionsAvailable		? CT_NONE :
-												clickArea_mouseDown		? COLOR_TRANSFORM_MOUSE_DOWN :
-												rollOver				? COLOR_TRANSFORM_MOUSE_OVER
-																		: CT_NONE")
+
+		(var singlePermoflageIcon:str = "_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.PERMOFLAGE	? 'url:../exteriors/permoflages/' + _exteriorEntity.exteriorConfig.name + '.png'
+																														: 'url:../exteriors/skins/' + _exteriorEntity.exteriorConfig.name + '.png'")
+
+		(var hasMultipleVersions:bool = "camoColorSchemes.length > 0")
 	)
 	(bind name "'ExteriorItemDock_' + _exteriorEntity.exteriorConfig.name")
 
 	
 	(dispatch evClicked on='leftClick')
-	(dispatch evRollOver on='rollOver' args="{isOver: true}")
-	(dispatch evRollOut on='rollOut' args="{isOver: false}")
-	(dispatch evMouseDown on='mouseDown' args="{isDown: true}")
-	(dispatch evStageMouseUp on='stageMouseUp' args="{isDown: false}")
+	(dispatch evRollOver on='rollOver'			args="{isOver: true}")
+	(dispatch evRollOut on='rollOut'			args="{isOver: false}")
+	(dispatch evMouseDown on='leftMouseDown'	args="{isDown: true}")
+	(dispatch evStageMouseUp on='stageMouseUp'	args="{isDown: false}")
 
 	(bindcall externalCall "isNew ? 'inputMapping.onAction' : ''" "['makeSeen', {entityId: _exteriorEntity.id}]" init=false watch=false on='rollOver')
 
-	(class $ExteriorItemPadding)
-	(style (width = 84px) (backgroundColor = "NO_COLOR"))
+	(style
+		(height = "SHIP_CAMOUFLAGE_ITEM_SIZE")
+		(width = "SHIP_CAMOUFLAGE_ITEM_SIZE")
+	)
+
+	(element ControlBackground
+		_mouseDown = "clickArea_mouseDown"
+		_mouseOver = "rollOver"
+		_selected = "isInstalled || isPreviewed"
+		_isSelectedStateInteractive = true
+	)
 
 	(block
-		(class $ExteriorItemSize)
-		(style (backgroundColor = "NO_COLOR"))
-
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT _colorTransform = "camouflageColorTransform")
+		(class $Fullsize)
+		(style
+			(align = "center|middle")
+			(backgroundColor = "NO_COLOR")
+		)
 
 		(block
-			(bind visible "camoColorSchemes.length == 0")
+			(bind visible "!hasMultipleVersions")
+			(class $ExteriorItemSize)
 			(style
-				(bind backgroundImage "_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.PERMOFLAGE	? 'url:../exteriors/permoflages/' + _exteriorEntity.exteriorConfig.name + '.png'
-																													: 'url:../exteriors/skins/' + _exteriorEntity.exteriorConfig.name + '.png'")
-				(bind alpha "exteriorsInStorage > 0 ? 1 : 0.3")
+				(bind backgroundImage "singlePermoflageIcon")
+				(bind alpha "hasInStorage ? 1 : 0.3")
 			)
 		)
 
 		(block
 			(controller $Instance renderer='CamouflageRepaintedIcon'
-				(bind enabled "camoColorSchemes.length > 0")
+				(bind enabled "hasMultipleVersions")
 				(args
 					_camouflageId = "_exteriorEntity.ownCamouflage.id"
 					_isNotOwned = "exteriorsInStorage == 0"
@@ -100,14 +115,24 @@
 		)
 
 		(block
-			(style (position = "absolute") (right = 0px) (bottom = 0px))
+			(style
+				(position = "absolute")
+				(right = "XXS")
+				(bottom = "XXS")
+			)
+
 			(controller $Instance renderer='InfinityCounterIcon' (bind enabled "!(_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !isLinkedToShip)"))
 		)
 
 		(block
-			(style (position = "absolute") (right = 0px) (bottom = 0px))
+			(style
+				(position = "absolute")
+				(right = "XXS")
+				(bottom = "XXS")
+			)
+
 			(controller $Instance renderer='ImageItemsCounter'
-				(bind enabled "exteriorsInStorage > 0 && _exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !isLinkedToShip")
+				(bind enabled "hasInStorage && _exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !isLinkedToShip")
 				(args
 					_amount = "exteriorsInStorage"
 				)
@@ -115,26 +140,16 @@
 		)
 
 		(block
-			(style (position = "absolute") (left = 0px) (top = 0px))
-			(controller $Instance renderer='LinkableItemIcon' (bind enabled "_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !isLinkedToShip"))
-		)
-	)
+			(style
+				(position = "absolute")
+				(left = "XXS")
+				(top = "XXS")
+			)
 
-	(block
-		(bind visible "isInstalled || _previewExteriorId == _exteriorEntity.ownCamouflage.id")
-
-		(class $ExteriorItemSizeWithBorder)
-		(style
-			(hitTest = false)
-			(position = "absolute")
-			(top = "-XXS") (left = "-XXS")
-			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-			(scale9grid = 2)
-			(bind alpha "isInstalled ? 1 : 0.7")
+			(controller $Instance renderer='LinkableItemIcon'
+				(bind enabled "_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !isLinkedToShip")
+			)
 		)
-	
-		(bind colorTransform "isInstalled	? COLOR_TRANSFORM_ACCENT_BLUE
-											: CT_NONE")
 	)
 
 	(block
@@ -144,33 +159,43 @@
 
 	(block
 		(macro DEFAULT_CONTROL_MARKER_ANIMATION "isItemSaleIcon")
-		(style (position = "absolute") (right = 0))
+		(style
+			(position = "absolute")
+			(right = "XXS")
+			(top = "XXS")
+		)
+
 		(controller $Instance renderer='ItemSaleIcon' (bind enabled "isItemSaleIcon"))
 	)
 
 	(block
 		(class $FullsizeAbsolute)
-		(style (backgroundColor = "NO_COLOR"))
+		(style (padding = "-XS"))
 
-		
-		(dispatch clickArea_evClicked on='leftClick')
-		(dispatch clickArea_evRollOver on='rollOver'			args="{isOver: true}")
-		(dispatch clickArea_evRollOut on='rollOut'				args="{isOver: false}")
-		(dispatch clickArea_evMouseDown on='mouseDown'			args="{isDown: true}")
-		(dispatch clickArea_evStageMouseUp on='stageMouseUp'	args="{isDown: false}")
+		(block
+			(class $Fullsize)
+			(style (backgroundColor = "NO_COLOR"))
 
-		
-		(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.OVER]" init=false watch=false (event "evRollOver"))
-		(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.PRESS]" init=false watch=false (event "evMouseDown"))
-		(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.CLICK]" init=false watch=false (event "evClicked"))
+			
+			(dispatch clickArea_evClicked on='leftClick')
+			(dispatch clickArea_evRollOver on='rollOver'			args="{isOver: true}")
+			(dispatch clickArea_evRollOut on='rollOut'				args="{isOver: false}")
+			(dispatch clickArea_evMouseDown on='leftMouseDown'		args="{isDown: true}")
+			(dispatch clickArea_evStageMouseUp on='stageMouseUp'	args="{isDown: false}")
 
-		(bindcall externalCall "clickAction ? 'inputMapping.onAction' : ''" "[clickAction, actionParams]" init=false watch=false (event "clickArea_evClicked"))
-		(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', setUserPrefParams]" init=false watch=false (event "clickArea_evClicked"))
+			
+			(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.OVER]" init=false watch=false (event "evRollOver"))
+			(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.PRESS]" init=false watch=false (event "evMouseDown"))
+			(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.CLICK]" init=false watch=false (event "evClicked"))
 
-		(controller $Tooltip
-			(renderer = 'CamouflageTooltip')
-			(args _id = "_exteriorEntity.ownCamouflage.id")
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			(bindcall externalCall "clickAction ? 'inputMapping.onAction' : ''" "[clickAction, actionParams]" init=false watch=false (event "clickArea_evClicked"))
+			(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', setUserPrefParams]" init=false watch=false (event "clickArea_evClicked"))
+
+			(controller $Tooltip
+				(renderer = 'CamouflageTooltip')
+				(args _id = "_exteriorEntity.ownCamouflage.id")
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
 		)
 	)
 
@@ -178,14 +203,18 @@
 		(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNew")
 		(style
 			(position = "absolute")
-			(top = -6px)
-			(right= "MS")
+			(top = "-XXS")
+			(right = "LS")
 		)
 		(element MarkerNew)
 	)
 
 	(block
-		(style (position = "absolute"))
+		(style
+			(position = "absolute")
+			(top = "XXS")
+			(left = "XXS")
+		)
 
 		(controller $Instance renderer='OverColorPickerController'
 			(bind enabled "hasColorSchemeConfig")
@@ -200,7 +229,9 @@
 
 	(block
 		(style
-			(position = "absolute") (width = 100%) (bottom = -22px)
+			(position = "absolute")
+			(width = 100%)
+			(bottom = "-S")
 			(visualOffsetY = "_isActionsAvailable && rollOver ? 0px : S")
 			(alpha = "_isActionsAvailable && rollOver ? 1 : 0")
 		)
@@ -216,8 +247,11 @@
 				(bind trigger "_isActionsAvailable && rollOver")
 			)
 		)
+
+		
 		(block
 			(style (width = 100%))
+
 			(controller $Instance renderer='CamouflagePriceButton'
 				(bind enabled "exteriorsInStorage == 0 && _exteriorEntity.exteriorConfig.canBuy")
 				(args
@@ -226,14 +260,18 @@
 				)
 			)
 		)
+
 		
 		(block
-			(style (width = 100%) (align = "center"))
+			(style
+				(align = "center")
+				(width = 100%)
+			)
 
 			(controller $Instance renderer='DefaultButton'
 				(bind enabled "_exteriorEntity.exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN && !isLinkedToShip")
 				(args
-					_width = 84
+					_width = 80px
 					_size = "SIZE.SMALL"
 					_isTransactionBtn = true
 					_label = 'IDS_LINK_MSKIN_UPPER_CASE'
@@ -247,7 +285,7 @@
 	)
 )
 
-(def element CamouflageItem (_exteriorEntity:gfx, _isActionsAvailable:bool, _groupLength:number, _previewExteriorId:number)
+(def element CamouflageItem (_exteriorEntity:dhEntity, _isActionsAvailable:bool, _groupLength:number, _previewExteriorId:number)
 	(scope
 		
 		(event evClicked)
@@ -271,11 +309,10 @@
 
 		(var exteriorsInStorage:number = "_exteriorEntity.countComponent.value" (event "_exteriorEntity.countComponent.evChanged"))
 		(var camoGroup:str = "_exteriorEntity.ownCamouflage.camoGroup" (event "_exteriorEntity.ownCamouflage.evUpdated"))
-
+		(var hasInStorage:bool = "exteriorsInStorage > 0")
 
 		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.EXTERIOR_FINAL ]"))
-
 
 		(struct peculiarityPref = GET_PREF_BOOL(_option = "'ui.peculiarityEnabled'"))
 		(var isPeculiarityDisabled:bool = "!peculiarityPref.value && _exteriorEntity.exteriorConfig.peculiarity")
@@ -285,28 +322,27 @@
 		(var hasColorSchemeConfig:bool = "_exteriorEntity.ownCamouflage.hasColorSchemeConfig" (event "_exteriorEntity.ownCamouflage.evUpdated"))
 		
 
-		(var isInstalled:bool = "_exteriorEntity.hasComponent(CC.installedCamouflage)" (event "_exteriorEntity.evAdded") (event "_exteriorEntity.evRemoved"))
+		(var isDisablePreviewAction:bool = "_previewExteriorId && !(_previewExteriorId == _exteriorEntity.ownCamouflage.id)")
 
-		(var isNew:bool = "_exteriorEntity.hasComponent(CC.newItem)" (event "_exteriorEntity.evAdded") (event "_exteriorEntity.evRemoved"))
+		(var isPreviewed:bool = "(_previewExteriorId == _exteriorEntity.ownCamouflage.id) && exteriorsInStorage == 0")
+		(var isInstalled:bool = "_exteriorEntity.hasComponent(CC.installedCamouflage)")
+		(var isNew:bool = "_exteriorEntity.hasComponent(CC.newItem)")
 
 		(var clickAction:str = "!_isActionsAvailable									? null :
- 								isInstalled												? _previewExteriorId && !(_previewExteriorId == _exteriorEntity.ownCamouflage.id)	? SC.Ui_common.EXTERIOR_ACTIONS.DISABLE_PREVIEW
- 																																											: SC.Ui_common.CAMOUFLAGE_ACTIONS.UNINSTALL :
- 								_previewExteriorId == _exteriorEntity.ownCamouflage.id	? SC.Ui_common.EXTERIOR_ACTIONS.DISABLE_PREVIEW :
- 								exteriorsInStorage > 0									? SC.Ui_common.CAMOUFLAGE_ACTIONS.INSTALL
- 																						: SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW")
+								isInstalled												? isDisablePreviewAction	? SC.Ui_common.EXTERIOR_ACTIONS.DISABLE_PREVIEW
+																													: SC.Ui_common.CAMOUFLAGE_ACTIONS.UNINSTALL :
+								_previewExteriorId == _exteriorEntity.ownCamouflage.id	? SC.Ui_common.EXTERIOR_ACTIONS.DISABLE_PREVIEW :
+								hasInStorage											? SC.Ui_common.CAMOUFLAGE_ACTIONS.INSTALL
+																						: SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW")
 
- 		(var actionParams:dict = "	clickAction == SC.Ui_common.CAMOUFLAGE_ACTIONS.UNINSTALL							?	{exteriorId: _exteriorEntity.ownCamouflage.id} :
- 									clickAction == SC.Ui_common.EXTERIOR_ACTIONS.DISABLE_PREVIEW &&
- 									_previewExteriorId && !(_previewExteriorId == _exteriorEntity.ownCamouflage.id)		?	{exteriorId: _previewExteriorId}
- 																														:	{exteriorId: _exteriorEntity.ownCamouflage.id}")
- 		(var setUserPrefParams:dict = "clickAction == SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW	? { value: _exteriorEntity.ownCamouflage.id, name: 'previewExteriorId' }
- 																							: { value: 0, name: 'previewExteriorId' }")
+		(var actionParams:dict = "	clickAction == SC.Ui_common.CAMOUFLAGE_ACTIONS.UNINSTALL						?	{exteriorId: _exteriorEntity.ownCamouflage.id} :
+									clickAction == SC.Ui_common.EXTERIOR_ACTIONS.DISABLE_PREVIEW &&
+									_previewExteriorId && !(_previewExteriorId == _exteriorEntity.ownCamouflage.id)	?	{exteriorId: _previewExteriorId}
+																													:	{exteriorId: _exteriorEntity.ownCamouflage.id}")
+		(var setUserPrefParams:dict = "clickAction == SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW	? { value: _exteriorEntity.ownCamouflage.id, name: 'previewExteriorId' }
+																							: { value: 0, name: 'previewExteriorId' }")
 
-		(var camouflageColorTransform:dict = "!_isActionsAvailable		? CT_NONE :
-												clickArea_mouseDown		? COLOR_TRANSFORM_MOUSE_DOWN :
-												rollOver				? COLOR_TRANSFORM_MOUSE_OVER
-																		: CT_NONE")
+		(var hasMultipleVersions:bool = "camoColorSchemes.length > 0")
 	)
 
 	(bind name "'ExteriorItemDock_' + _exteriorEntity.exteriorConfig.name")
@@ -315,15 +351,22 @@
 	(dispatch evClicked on='leftClick')
 	(dispatch evRollOver on='rollOver'			args="{isOver: true}")
 	(dispatch evRollOut on='rollOut'			args="{isOver: false}")
-	(dispatch evMouseDown on='mouseDown'		args="{isDown: true}")
+	(dispatch evMouseDown on='leftMouseDown'	args="{isDown: true}")
 	(dispatch evStageMouseUp on='stageMouseUp'	args="{isDown: false}")
 
 	(bindcall externalCall "isNew ? 'inputMapping.onAction' : ''" "['makeSeen', {entityId: _exteriorEntity.id}]" init=false watch=false on='rollOver')
 
-	(class $ExteriorItemPadding)
 	(style
-		(width = 84px)
+		(height = "SHIP_CAMOUFLAGE_ITEM_SIZE")
+		(width = "SHIP_CAMOUFLAGE_ITEM_SIZE")
 		(backgroundColor = "NO_COLOR")
+	)
+
+	(element ControlBackground
+		_mouseDown = "clickArea_mouseDown"
+		_mouseOver = "rollOver"
+		_selected = "isInstalled || isPreviewed"
+		_isSelectedStateInteractive = true
 	)
 
 	
@@ -333,26 +376,30 @@
 			_tipId =			"checkedTipId.value"
 			_tipPositioning =	"TIP_POSITION_RIGHT"
 			_offsetX =			"M"
-			_pointerOffset =	-52
+			_pointerOffset =	-52px
 			_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
 		)
 	)
 
 	(block
-		(class $ExteriorItemSize)
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT _colorTransform = "camouflageColorTransform")
+		(class $Fullsize)
+		(style
+			(align = "center|middle")
+			(backgroundColor = "NO_COLOR")
+		)
 
 		(block
-			(bind visible "camoColorSchemes.length == 0")
-			(bind alpha "exteriorsInStorage > 0 ? 1 : 0.3")
+			(bind visible "!hasMultipleVersions")
+			(class $ExteriorItemSize)
 			(style
 				(bind backgroundImage "'url:../exteriors/camouflages/' + _exteriorEntity.exteriorConfig.name + '.png'")
+				(bind alpha "hasInStorage ? 1 : 0.3")
 			)
 		)
 
 		(block
 			(controller $Instance renderer='CamouflageRepaintedIcon'
-				(bind enabled "camoColorSchemes.length > 0")
+				(bind enabled "hasMultipleVersions")
 				(args
 					_camouflageId = "_exteriorEntity.ownCamouflage.id"
 					_isNotOwned = "exteriorsInStorage == 0"
@@ -362,64 +409,51 @@
 
 		(block
 			(bind name "'item_count_' + _exteriorEntity.ownCamouflage.id")
-
 			(style
 				(position = "absolute")
-				(right = 0px)
-				(bottom = 0px)
+				(right = "XXS")
+				(bottom = "XXS")
 			)
 
 			(controller $Instance renderer='ImageItemsCounter'
-				(bind enabled "exteriorsInStorage > 0")
+				(bind enabled "hasInStorage")
 				(args
 					_amount = "exteriorsInStorage"
 				)
 			)
 		)
 	)
-	(block
-		(bind visible "isInstalled || (_previewExteriorId == _exteriorEntity.ownCamouflage.id) && exteriorsInStorage == 0")
-
-		(class $ExteriorItemSizeWithBorder)
-		(style
-			(hitTest = false)
-			(position = "absolute")
-			(top = "-XXS")
-			(left = "-XXS")
-			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-			(scale9grid = 2)
-			(bind alpha "isInstalled ? 1 : 0.7")
-		)
-		(bind colorTransform "	isInstalled && exteriorsInStorage == 0	? COLOR_TRANSFORM_WHITE_TO_ORANGE :
-								isInstalled								? COLOR_TRANSFORM_ACCENT_BLUE
-																		: CT_NONE")
-	)
 
 	(block
 		(class $FullsizeAbsolute)
-		(style (backgroundColor = "NO_COLOR"))
+		(style (padding = "-XS"))
 
-		
-		(dispatch clickArea_evClicked on='leftClick')
-		(dispatch clickArea_evRollOver on='rollOver'			args="{isOver: true}")
-		(dispatch clickArea_evRollOut on='rollOut'				args="{isOver: false}")
-		(dispatch clickArea_evMouseDown on='mouseDown'			args="{isDown: true}")
-		(dispatch clickArea_evStageMouseUp on='stageMouseUp'	args="{isDown: false}")
+		(block
+			(class $Fullsize)
+			(style (backgroundColor = "NO_COLOR"))
 
-		
-		(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.OVER]" init=false watch=false (event "evRollOver"))
-		(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.PRESS]" init=false watch=false (event "evMouseDown"))
-		(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.CLICK]" init=false watch=false (event "evClicked"))
+			
+			(dispatch clickArea_evClicked on='leftClick')
+			(dispatch clickArea_evRollOver on='rollOver'			args="{isOver: true}")
+			(dispatch clickArea_evRollOut on='rollOut'				args="{isOver: false}")
+			(dispatch clickArea_evMouseDown on='leftMouseDown'		args="{isDown: true}")
+			(dispatch clickArea_evStageMouseUp on='stageMouseUp'	args="{isDown: false}")
 
-		(bindcall externalCall "clickAction ? 'inputMapping.onAction' : ''" "[clickAction, actionParams]" init=false watch=false (event "clickArea_evClicked"))
-		(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', setUserPrefParams]" init=false watch=false (event "clickArea_evClicked"))
+			
+			(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.OVER]" init=false watch=false (event "evRollOver"))
+			(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.PRESS]" init=false watch=false (event "evMouseDown"))
+			(bindcall externalCall 'sound.playSetSoundDirect' "[clickAction ? 'button_camouflage' : '', SoundEvent.CLICK]" init=false watch=false (event "evClicked"))
 
-		(controller $Tooltip
-			(renderer = 'CamouflageTooltip')
-			(args
-				_id = "_exteriorEntity.ownCamouflage.id"
+			(bindcall externalCall "clickAction ? 'inputMapping.onAction' : ''" "[clickAction, actionParams]" init=false watch=false (event "clickArea_evClicked"))
+			(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', setUserPrefParams]" init=false watch=false (event "clickArea_evClicked"))
+
+			(controller $Tooltip
+				(renderer = 'CamouflageTooltip')
+				(args
+					_id = "_exteriorEntity.ownCamouflage.id"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
 
@@ -427,8 +461,8 @@
 		(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNew")
 		(style
 			(position = "absolute")
-			(top = -6px)
-			(right= "MS")
+			(top = "-XXS")
+			(right = "LS")
 		)
 
 		(element MarkerNew)
@@ -436,17 +470,21 @@
 
 	(block
 		(macro DEFAULT_CONTROL_MARKER_ANIMATION "isInstalled && exteriorsInStorage == 0")
+		(class $FullsizeAbsolute)
 		(style
-			(position = "absolute")
-			(top = "S")
-			(left = 11px)
+			(align = "middle")
+			(paddingLeft = 21px)
 		)
 
 		(element MarkerAttention _size = "SIZE.MEDIUM")
 	)
 
 	(block
-		(style (position = "absolute"))
+		(style
+			(position = "absolute")
+			(top = "XXS")
+			(left = "XXS")
+		)
 
 		(controller $Instance renderer='OverColorPickerController'
 			(bind enabled "hasColorSchemeConfig")
@@ -460,7 +498,11 @@
 	)
 
 	(block
-		(style (position = "absolute"))
+		(style
+			(position = "absolute")
+			(top = "XXS")
+			(left = "XXS")
+		)
 		(controller $Instance renderer='PeculiarityDisabledIcon' (bind enabled "isPeculiarityDisabled"))
 	)
 
@@ -468,7 +510,7 @@
 		(style
 			(position = "absolute")
 			(width = 100%)
-			(bottom = -22px)
+			(bottom = "-S")
 			(visualOffsetY = "_isActionsAvailable && rollOver ? 0px : S")
 			(alpha = "_isActionsAvailable && rollOver ? 1 : 0")
 		)
@@ -496,13 +538,13 @@
 
 (def element CamouflageItemStatic (_id:number, _amount:number=0, _isReward:bool=false, _params:dict={}, _isAmountVisible:bool=true)
 	(scope
-		(var exteriorEntity:gfx = "$datahub.getPrimaryEntity(CC.exteriorConfig, _id)")
-		(var exteriorConfig:gfx = "exteriorEntity.exteriorConfig")
+		(var exteriorEntity:dhEntity = "getPrimaryEntity(CC.exteriorConfig, _id)")
+		(var exteriorConfig:dhComponent = "exteriorEntity.exteriorConfig")
 
 		(var isAvailableFakeColorSchemes:bool = "'colorsNum' in _params && _params.colorsNum")
 		(var fakeColorScheme:dict = "isAvailableFakeColorSchemes ? _params : null")
 
-		(var ownCamouflage:gfx = "exteriorEntity && exteriorEntity.ownCamouflage ? exteriorEntity.ownCamouflage : null")
+		(var ownCamouflage:dhComponent = "exteriorEntity && exteriorEntity.ownCamouflage ? exteriorEntity.ownCamouflage : null")
 		(var camoColorSchemesDH:array = "ownCamouflage ? ownCamouflage.camoColorSchemes : []" (event "ownCamouflage.evUpdated"))
 		(var isLinkedToShip:bool = "ownCamouflage ? ownCamouflage.isLinkedToShip : false" (event "ownCamouflage.evUpdated"))
 
@@ -511,7 +553,6 @@
 
 		(var isUnlinkedMSkin:bool = "	(exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN) &&
 										((_isReward && !('shipId' in _params)) || (!_isReward && !isLinkedToShip))")
-
 	)
 	(bind name "'ExteriorItemDock_' + exteriorConfig.name")
 
@@ -546,7 +587,7 @@
 )
 
 (def element CamouflageItemView (	_camouflageId:number, _camoName:str, _exteriorType:number, _peculiarity:str, _amount:number=0, _useRepaintedIcon:bool=false,
-									_fakeColorScheme:dict=null, _isUnlinkedMSkin:bool=false, _exteriorsInStorage:bool=false, _isReward:bool=false, _isAmountVisible:bool=true)
+									_fakeColorScheme:dict=null, _isUnlinkedMSkin:bool=false, _exteriorsInStorage:bool=false, _isReward:bool=false, _isAmountVisible:bool=true, _forceShowIcon:bool=false)
 	(scope
 		(var isAmountVisible:bool = "_isAmountVisible && ((_amount > 0 && (_exteriorType == SC.Exteriors.EXTERIOR_TYPE.CAMOUFLAGE || _isUnlinkedMSkin)) || _amount < 0)")
 		(var pathImageUrl:str = "_exteriorType == SC.Exteriors.EXTERIOR_TYPE.CAMOUFLAGE 	? 'url:../exteriors/camouflages/' + _camoName + '.png' :
@@ -566,12 +607,13 @@
 
 		(class $Fullsize)
 		(style (bind backgroundImage "pathImageUrl"))
-		(bind alpha "!_exteriorsInStorage && !_isReward ? 0.2 : 1")
+		(bind alpha "!_exteriorsInStorage && !_isReward && !_forceShowIcon ? 0.2 : 1")
 	)
 
 	(block
 		(style (width = 100%))
-		(bind alpha "!_exteriorsInStorage && !_isReward ? 0.2 : 1")
+		(bind alpha "!_exteriorsInStorage && !_isReward && !_forceShowIcon ? 0.2 : 1")
+
 		(controller $Instance renderer='CamouflageRepaintedIcon'
 			(bind enabled "_useRepaintedIcon")
 			(args
@@ -587,16 +629,24 @@
 	)
 
 	(block
-		(class $FullsizeAbsolute)
-		(style (align = "bottom|right"))
+		(style
+			(position = "absolute")
+			(right = "XXS")
+			(bottom = "XXS")
+		)
+
 		(controller $Instance renderer='InfinityCounterIcon'
 			(bind enabled "isInfinityCounterIconVisible")
 		)
 	)
 
 	(block
-		(class $FullsizeAbsolute)
-		(style (align = "bottom|right"))
+		(style
+			(position = "absolute")
+			(right = "XXS")
+			(bottom = "XXS")
+		)
+
 		(controller $Instance renderer='ImageItemsCounter'
 			(bind enabled "isAmountVisible")
 			(args
@@ -606,23 +656,31 @@
 	)
 
 	(block
-		(style (position = "absolute"))
+		(style
+			(position = "absolute")
+			(left = "XXS")
+			(top = "XXS")
+			(borderRadius = "XS")
+		)
+
 		(controller $Instance renderer='LinkableItemIcon'
 			(bind enabled "_isUnlinkedMSkin")
 		)
 	)
 )
 
-(def element OverColorPickerController (_exteriorEntity:gfx, _rollOver:bool, _isActionsAvailable:bool, _previewExteriorId:number)
+(def element OverColorPickerController (_exteriorEntity:dhEntity, _rollOver:bool, _isActionsAvailable:bool, _previewExteriorId:number)
 	(scope
-		(var exteriorsInStorage:gfx = "_exteriorEntity.countComponent.value" (event "_exteriorEntity.countComponent.evChanged"))
-		(var camoColorSchemes:gfx = "_exteriorEntity.ownCamouflage.camoColorSchemes" (event "_exteriorEntity.ownCamouflage.evUpdated"))
+		(var exteriorsInStorage:number = "_exteriorEntity.countComponent.value" (event "_exteriorEntity.countComponent.evChanged"))
+		(var camoColorSchemes:array = "_exteriorEntity.ownCamouflage.camoColorSchemes" (event "_exteriorEntity.ownCamouflage.evUpdated"))
 	)
+
 	(block
 		(style
 			(hitTest = false)
 			(position = "absolute")
-			(width = 19px) (height = 19px)
+			(height = 19px)
+			(width = 19px)
 			(backgroundImage = 'url:../service_kit/unified_status_icons/icon_repainted.png')
 			(macro DESATURATION_DEFAULT "exteriorsInStorage")
 		)
@@ -648,7 +706,7 @@
 	)
 )
 
-(def element RollOverCamoColorPreview (_exteriorEntity:gfx, _colorSchemeEntityId:number, _rollOver:bool, _isActionsAvailable:bool, _previewExteriorId:number)
+(def element RollOverCamoColorPreview (_exteriorEntity:dhEntity, _colorSchemeEntityId:number, _rollOver:bool, _isActionsAvailable:bool, _previewExteriorId:number)
 	(scope
 		
 		(event evClicked)
@@ -660,39 +718,39 @@
 		(var rollOver:bool = "$event.isOver" init=false watch=false (event "evRollOver") (event "evRollOut"))
 		(var mouseDown:bool ="$event.isDown" init=false watch=false (event "evMouseDown") (event "evStageMouseUp"))
 
-		(var exteriorsInStorage:gfx = "_exteriorEntity.countComponent.value" (event "_exteriorEntity.countComponent.evChanged") (event "_exteriorEntity.evAdded") (event "_exteriorEntity.evRemoved"))
+		(var exteriorsInStorage:number = "_exteriorEntity.countComponent.value" (event "_exteriorEntity.countComponent.evChanged"))
 
-		(var colorSchemeEntity:gfx = "$datahub.getEntity(_colorSchemeEntityId)")
+		(var ownCamouflage:dhComponent = "_exteriorEntity.ownCamouflage")
+		(var colorSchemeEntity:dhEntity = "getEntity(_colorSchemeEntityId)")
 		(var pickedCamoColorScheme:number = "_exteriorEntity.ownCamouflage.pickedCamoColorScheme" (event "_exteriorEntity.ownCamouflage.evUpdated"))
 		(var previewCamoColorScheme:number = "_exteriorEntity.ownCamouflage.previewCamoColorScheme" (event "_exteriorEntity.ownCamouflage.evUpdated"))
-		(var isInstalled:bool = "_exteriorEntity.hasComponent(CC.installedCamouflage)" (event "_exteriorEntity.evAdded") (event "_exteriorEntity.evRemoved"))
+		(var isInstalled:bool = "_exteriorEntity.hasComponent(CC.installedCamouflage)")
 
-		(var selectedColorScheme:number = "_previewExteriorId == _exteriorEntity.ownCamouflage.id ? previewCamoColorScheme : pickedCamoColorScheme")
+		(var selectedColorScheme:number = "_previewExteriorId == ownCamouflage.id ? previewCamoColorScheme : pickedCamoColorScheme")
 
-		(var clickAction:str = "isInstalled				? _previewExteriorId && !(_previewExteriorId == _exteriorEntity.ownCamouflage.id)	?	SC.Ui_common.EXTERIOR_ACTIONS.CHANGE_COLOR
-																																			:	selectedColorScheme == _colorSchemeEntityId	? null
-																																															: SC.Ui_common.EXTERIOR_ACTIONS.CHANGE_COLOR:
+		(var clickAction:str = "isInstalled				? _previewExteriorId && !(_previewExteriorId == ownCamouflage.id)	?	SC.Ui_common.EXTERIOR_ACTIONS.CHANGE_COLOR
+																															:	selectedColorScheme == _colorSchemeEntityId	? null
+																																											: SC.Ui_common.EXTERIOR_ACTIONS.CHANGE_COLOR :
 								exteriorsInStorage > 0	? SC.Ui_common.CAMOUFLAGE_ACTIONS.INSTALL
 														: SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW")
 
-		(var tooltipStatus:dict = "	isInstalled	&& (_previewExteriorId && !(_previewExteriorId == _exteriorEntity.ownCamouflage.id))	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
-																																			_text: 'IDS_MOUSE_INSTRUCTION_PREVIEW_CAMO_COLOR' } :
-									clickAction == SC.Ui_common.CAMOUFLAGE_ACTIONS.INSTALL											?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
-																																			_text: 'IDS_MOUSE_INSTRUCTION_INSTALL_CAMO_COLOR' } :
-									clickAction == SC.Ui_common.EXTERIOR_ACTIONS.CHANGE_COLOR										?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
-																																			_text: 'IDS_MOUSE_INSTRUCTION_CHANGE_CAMO_COLOR' } :
-									clickAction == SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW											?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
-																																			_text: 'IDS_MOUSE_INSTRUCTION_PREVIEW_CAMO_COLOR' }
-																																	:	null")
+		(var tooltipStatus:dict = "	isInstalled	&& (_previewExteriorId && !(_previewExteriorId == ownCamouflage.id))	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																																_text: 'IDS_MOUSE_INSTRUCTION_PREVIEW_CAMO_COLOR' } :
+									clickAction == SC.Ui_common.CAMOUFLAGE_ACTIONS.INSTALL								?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																																_text: 'IDS_MOUSE_INSTRUCTION_INSTALL_CAMO_COLOR' } :
+									clickAction == SC.Ui_common.EXTERIOR_ACTIONS.CHANGE_COLOR							?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																																_text: 'IDS_MOUSE_INSTRUCTION_CHANGE_CAMO_COLOR' } :
+									clickAction == SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW								?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																																_text: 'IDS_MOUSE_INSTRUCTION_PREVIEW_CAMO_COLOR' }
+																														:	null")
 
-		(var setUserPrefParams:dict = "clickAction == SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW	? { value: _exteriorEntity.ownCamouflage.id, name: 'previewExteriorId' }
+		(var setUserPrefParams:dict = "clickAction == SC.Ui_common.EXTERIOR_ACTIONS.PREVIEW	? { value: ownCamouflage.id, name: 'previewExteriorId' }
 																							: { value: 0, name: 'previewExteriorId' }")
 		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
-		
+
 		(macro PULL_SHIP_ID)
-		
-		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
-		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+
+		(var ownShipComponent:dhComponent = "getPrimaryComponent(CC.ownShip, playerShipId)")
 		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
 		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
 	)
@@ -700,7 +758,7 @@
 	(dispatch evClicked on='leftClick')
 	(dispatch evRollOver on='rollOver'			args="{isOver: true}")
 	(dispatch evRollOut on='rollOut'			args="{isOver: false}")
-	(dispatch evMouseDown on='mouseDown'		args="{isDown: true}")
+	(dispatch evMouseDown on='leftMouseDown'	args="{isDown: true}")
 	(dispatch evStageMouseUp on='stageMouseUp'	args="{isDown: false}")
 
 	(bindcall externalCall 'sound.playSetSoundDirect' "['press', SoundEvent.OVER]" init=false watch=false (event "evRollOver"))
@@ -708,11 +766,12 @@
 	(bindcall externalCall 'sound.playSetSoundDirect' "['press', SoundEvent.CLICK]" init=false watch=false (event "evClicked"))
 
 	(bindcall externalCall "clickAction ? 'inputMapping.onAction' : ''" "[clickAction, {	disabledExteriorId: _previewExteriorId,
-																							exteriorId: toNumber(_exteriorEntity.ownCamouflage.id),
+																							exteriorId: toNumber(ownCamouflage.id),
 																							colorsSchemeIndex: toNumber(colorSchemeEntity.colorScheme.index) }]" init=false watch=false on='leftClick')
 	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', setUserPrefParams]" init=false watch=false on='leftClick')
 
 	(style (backgroundColor = "NO_COLOR"))
+
 	(block
 		(style
 			(hitTest = false)
@@ -727,7 +786,8 @@
 			(style
 				(width = 21px)
 				(height = 21px)
-				(backgroundColor = "C_DARK")
+				(borderRadius = "XS")
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.BLACK")
 			)
 			(bind colorTransform "{	redOffset:		colorSchemeEntity.colorScheme.colorUI[0],
 									greenOffset:	colorSchemeEntity.colorScheme.colorUI[1],
@@ -737,20 +797,20 @@
 		(block
 			(class $FullsizeAbsolute)
 			(style
-				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-				(scale9grid = 2)
-				(bind alpha "!(selectedColorScheme == _colorSchemeEntityId && (_previewExteriorId == _exteriorEntity.ownCamouflage.id || isInstalled)) && rollOver ? 1 : 0.5")
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+				(scale9grid = 4)
+				(bind alpha "!(selectedColorScheme == _colorSchemeEntityId && (_previewExteriorId == ownCamouflage.id || isInstalled)) && rollOver ? 1 : 0.5")
 			)
 		)
 
 		(block
-			(bind visible "selectedColorScheme == _colorSchemeEntityId && (_previewExteriorId == _exteriorEntity.ownCamouflage.id || isInstalled)")
+			(bind visible "selectedColorScheme == _colorSchemeEntityId && (_previewExteriorId == ownCamouflage.id || isInstalled)")
 			(class $FullsizeAbsolute)
 
-
 			(style
-				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-				(scale9grid = 2)
+				(padding = -1px)
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+				(scale9grid = 4)
 				(bind alpha "isInstalled ? 1 : 0.65")
 			)
 			(bind colorTransform "isInstalled	?	COLOR_TRANSFORM_ACCENT_BLUE
@@ -782,8 +842,7 @@
 																				: camouflagePrice.info")
 		(var isDeficit:bool = "finalCamouflagePriceInfo.finalPrice > accountResource[finalCamouflagePriceInfo.currency]" (event "accountResource.evChangedGold") (event "accountResource.evChangedCredit"))
 
-		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
-		(var ownShipComponent:dhComponent = "shipEntity.ownShip")
+		(var ownShipComponent:dhComponent =	"getPrimaryComponent(CC.ownShip, playerShipId)")
 		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
 		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
 	)
@@ -796,7 +855,13 @@
 
 	(block
 		(bind visible "isDeficit")
-		(style (hitTest = false) (marginTop = 6px) (marginLeft = "XXS") (marginBottom = "XXS"))
+		(style
+			(hitTest = false)
+			(marginTop = 18px)
+			(marginLeft = "XXS")
+			(marginBottom = "XXS")
+		)
+
 		(controller $Instance renderer='PriceTag'
 			(bind enabled "isDeficit")
 			(args
@@ -809,7 +874,7 @@
 	(controller $Instance renderer='DefaultButton'
 		(bind enabled "!isDeficit && !isShipInBalancer && !isShipReadyForBattle")
 		(args
-			_width = 84
+			_width = 80px
 			_enabled = true
 			_size = "SIZE.SMALL"
 			_isTransactionBtn = true
@@ -824,7 +889,8 @@
 
 (def element LinkableItemIcon ()
 	(style
-		(width = 19px) (height = 19px)
+		(width = 19px)
+		(height = 19px)
 		(backgroundImage = 'url:../service_kit/icons/icon_linked.png')
 		(backgroundSize = "fill")
 	)
@@ -832,22 +898,27 @@
 
 (def element InfinityCounterIcon ()
 	(style
-		(width = 19px) (height = 19px) (padding = 1px)
+		(width = 19px)
+		(height = 19px)
+		(padding = 1px)
 		(backgroundImage = 'url:../service_kit/icons/infinite_large.png')
 	)
 )
 
 (def element ItemSaleIcon ()
 	(style
-		(width = 19px) (height = 19px) (margin = -1px)
+		(width = 19px)
+		(height = 19px)
+		(margin = -1px)
 		(bind backgroundImage "'url:../service_kit/unified_status_icons/icon_' + SC.Ui_styles.UNIFIED_STATUS.SALE_AVAILABLE + '.png'")
 	)
 )
 
 (def element PeculiarityDisabledIcon (_width:number=19, _height:number=19)
 	(style
-		(bind width "_width") (bind height "_height")
 		(backgroundImage = 'url:../service_kit/icons/icon_hidden_content.png')
 		(backgroundSize = "fill")
+		(bind width "_width")
+		(bind height "_height")
 	)
 )

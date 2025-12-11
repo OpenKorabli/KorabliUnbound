@@ -3,22 +3,40 @@
 		(var contactsAndChannelsInfotipIsVisible:bool = false)
 	)
 	(bindcall externalCall "'inputMapping.onAction'" "['clearSearchResult', {}]" init=false watch=false (bind trigger "contactsAndChannelsInfotipIsVisible"))
-	
+	(style (width = 100%))
+
 	(block
 		(class $FullsizeAbsolute)
 		(element DockSubmenuItem)
 	)
 
 	(hblock
-		(style (width = 100%) (height = 30px) (hitTest = false) (align = "middle") (paddingLeft = 5px))
-		
-		(mc icon_plus
-			(style (marginTop = 1px))
+		(style
+			(hitTest = false)
+			(width = 100%)
+			(height = 30px)
+			(align = "middle")
+			(paddingLeft = 5px)
 		)
+
+		(block
+			(style
+				(width = 10px)
+				(height = 10px)
+				(backgroundSize = "fill")
+				(marginTop = 1px)
+				(alpha = "TC")
+				(backgroundImage = 'url:../service_kit/icons/icon_plus.png')
+			)
+		)
+
 		(tf
 			(class $TextDefaultBoldNM)
-			(style (marginLeft = 4px) (alpha = "TC"))
-			(text =  'IDS_INVITE_PLAYER')
+			(style
+				(marginLeft = "XS")
+				(alpha = "TC")
+			)
+			(text = 'IDS_INVITE_PLAYER')
 		)
 	)
 
@@ -46,35 +64,2565 @@
 	)
 )
 
-(def element OpenChannelElementBackground (_rollOver:bool=false, _mouseDown:bool=false)
+(def element OpenChannelList ()
 	(scope
-		(var state:number = "	_mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
-								_rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+		(var openedChannels:dhCollection = "getCollectionByPath(CC.channel, 'openedChannels')")
+	)
+	(style (width = 100%))
+
+	(scrollArea
+		(style
+			(maxWidth = 100%)
+			(height = 27px)
+		)
+
+		(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+			_singleStep = "120px"
+			_wheelScrollAcceleration = "0.8"
+			_maxScrollingAnimatedDistance = "280px"
+			_isScrollBarVisible = "false"
+			_hasShadow = "true"
+		)
+
+		(content
+			(style
+				(height = 100%)
+				(flow = "horizontal")
+				(hgap = "XS")
+			)
+
+			(controller $Repeat renderer='OpenChannelElement'
+				(bind items "openedChannels")
+				(args
+					_itemEntity = "$item"
+				)
+			)
+		)
+	)
+)
+
+(def constant CHAT_BOX_DEFAULT_MIN_WIDTH	440)
+(def constant CHAT_BOX_DEFAULT_MIN_HEIGHT	260)
+
+(def constant CHAT_BOX_DEFAULT_DIVISION_MIN_WIDTH	580)
+(def constant CHAT_BOX_DEFAULT_DIVISION_MIN_HEIGHT	300)
+
+(def constant CHAT_BOX_DEFAULT_WIDTH	500)
+(def constant CHAT_BOX_DEFAULT_HEIGHT	310)
+
+(def constant CHAT_BOX_DEFAULT_DIVISION_WIDTH	600)
+(def constant CHAT_BOX_DEFAULT_DIVISION_HEIGHT	340)
+
+(def element OpenChannelElement (_itemEntity:dhEntity)
+	(scope
+		(event evChatWindowOpen)
+		(event evChatWindowClose)
+		(event evMenuItemClicked)
+
+		(macro MOUSE_HANDLER_SCOPE)
+		(var channel:dhComponent =		"_itemEntity.channel")
+		(var isChatBoxOpened:bool =		"channel.isChatBoxOpened"	(event "channel.evChatBoxOpenChanged"))
+		(var isPasswordNeeded:bool =	"channel.isWaitingPassword"	(event "channel.evOpenChanged"))
+		(var isInvitation:bool =		"channel.isInvitation"		(event "channel.evOpenChanged") (event "channel.evInvitationRefused"))
+		(var channelTypeIdent:str =		"channel.typeIdent"			(event "channel.evTypeChanged"))
+		(var channelId:str =			"channel.channelId")
+
+		(var isChatBoxVisible:bool = false)
+
+		(var selectedBattleTypeEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
+		(var selectedBattleType:str = "selectedBattleTypeEntity.battleType.type")
+
+		(var isClanDivision:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE")
+		(var isDivisionChat:bool = "channelTypeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE")
+
+		(var isSteadyChannel:bool = "isIn(channelTypeIdent, [	SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE,
+																SC.Channel.CHANNEL_TYPE_IDENT_VALUE.CLAN,
+																SC.Channel.CHANNEL_TYPE_IDENT_VALUE.TRAINING_ROOM])")
+
+		(var state:number = "	mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
 											: SC.Ui_styles.BUTTON_STATE.UP")
 
 		(var buttonAlpha:number = "APPLIED_FILTERS_BUTTON_ALPHA[state]")
+
+		(var isActiveChannel:bool = "rollOver || isChatBoxVisible || isInvitation")
+
+		
+		(struct stageSize = STAGE_SIZE())
+		(struct userPrefs = USER_PREF_DATA())
+		
+		(var globalLayoutBounds:array = "$globalLayoutBounds" (event "$evLayoutBoundsChanged"))
+
+		(var chatBoxPositionX:number =	"userPrefs.prefs.chatBoxPositionX[channelId] ?:	globalLayoutBounds[0]")
+		(var chatBoxPositionY:number =	"userPrefs.prefs.chatBoxPositionY[channelId] ?:	globalLayoutBounds[1] - XS")
+
+		(var chatBoxMinWidth:number =	"isDivisionChat ? CHAT_BOX_DEFAULT_DIVISION_MIN_WIDTH : CHAT_BOX_DEFAULT_MIN_WIDTH")
+		(var chatBoxMinHeight:number =	"isDivisionChat ? CHAT_BOX_DEFAULT_DIVISION_MIN_HEIGHT : CHAT_BOX_DEFAULT_MIN_HEIGHT")
+
+		(var chatBoxWidth:number =	"	userPrefs.prefs.chatBoxWidth[channelId]	? userPrefs.prefs.chatBoxWidth[channelId] :
+										isDivisionChat							? CHAT_BOX_DEFAULT_DIVISION_WIDTH
+																				: CHAT_BOX_DEFAULT_WIDTH")
+
+		(var chatBoxHeight:number =	"	userPrefs.prefs.chatBoxHeight[channelId]	? userPrefs.prefs.chatBoxHeight[channelId] :
+										isDivisionChat								? CHAT_BOX_DEFAULT_DIVISION_HEIGHT
+																					: CHAT_BOX_DEFAULT_HEIGHT")
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(dispatch evChatWindowOpen dir="EventDirection.NONE" (bind enabled "isChatBoxOpened") (bind trigger "isChatBoxOpened"))
+	(dispatch evChatWindowOpen dir="EventDirection.NONE" on='addedToStage' (bind enabled "isChatBoxOpened"))
+
+	(dispatch evChatWindowClose dir="EventDirection.DOWN" (bind enabled "!isChatBoxOpened") (bind trigger "isChatBoxOpened"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setChatBoxOpenedState', { channelId: channelId, opened: !isChatBoxOpened }]" watch=false on='leftClick')
+
+	(bindcall externalCall "'inputMapping.onAction'" "['setChannelChatBoxIsDisplay', { state: isChatBoxOpened, entityId: _itemEntity.id }]" watch=false (event "evChatWindowOpen"))
+	(bindcall externalCall "'inputMapping.onAction'" "['setChannelChatBoxIsDisplay', { state: isChatBoxOpened, entityId: _itemEntity.id }]" watch=false (event "evChatWindowClose"))
+	
+	(style
+		(height = 27px)
+		(backgroundColor = "NO_COLOR")
+		(alpha = 0)
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.15
+			from = "{ alpha: 0 }"
+			to = "{ alpha: 1 }"
+			easing = "Easing.quad_in"
+			on = 'addedToStage'
+		)
+	)
+
+	(block
+		(style (height = 100%))
+
+		(block
+			(class $FullsizeAbsolute)
+
+			(block
+				(class $FullsizeAbsolute)
+				
+				(element BlurMapRoundedWithContrastPanel
+					_blurType = "ROUNDED_BLUR_TYPE.LOW"
+				)
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(hitTest = false)
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+					(borderRadius = "XS")
+					(alpha = "buttonAlpha")
+				)
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+					_trigger = "state"
+					_alpha = "buttonAlpha"
+				)
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "NO_COLOR"))
+
+			(controller $Tooltip
+				(renderer = 'ChatBox')
+				(args
+					_channelEntityId = "_itemEntity.id"
+					_currentWidth = "chatBoxWidth"
+					_currentHeight = "chatBoxHeight"
+				)
+
+				(bindcall show animation =	{	delay:		0.3,
+												duration:	0.3,
+												easing:		"Easing.cubic_out",
+												from:		{ alpha: 0, top: 10px },
+												to:			{ alpha: 1, top: 0px }} (event "evChatWindowOpen"))
+
+				(bindcall hide animation =	{	duration:	0.15,
+												easing:		"Easing.cubic_out",
+												from:		{ alpha: 1, top: 0px },
+												to:			{ alpha: 0, top: -5px }} (event "evChatWindowClose"))
+
+				(hideAnimation = {	duration:	0.15,
+									easing:		"Easing.cubic_out",
+									from:		{ alpha: 1, top: 0px },
+									to:			{ alpha: 0, top: -5px} })
+
+				(screenBoundsOffset = 6px)
+
+				(bind resizeLimits "{ minWidth:chatBoxMinWidth, maxWidth:stageSize.width, minHeight:chatBoxMinHeight, maxHeight:stageSize.height }")
+				(gripMask = "grip.left | grip.right | grip.up | grip.down")
+
+				(bind dragPos "{ x: chatBoxPositionX, y: chatBoxPositionY }")
+
+				(align = "top|innerLeft")
+				(position = "draggable")
+				(tooltipType = "interactive")
+
+				(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { value: $event.x, name: 'chatBoxPositionX', subName: channelId }]" watch=false on='evDragPosChanged')
+				(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { value: $event.y, name: 'chatBoxPositionY', subName: channelId }]" watch=false on='evDragPosChanged')
+
+				(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { value: $event.newWidth,		name: 'chatBoxWidth',	subName: channelId }]" watch=false on='evSizeChanged')
+				(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { value: $event.newHeight,	name: 'chatBoxHeight',	subName: channelId }]" watch=false on='evSizeChanged')
+			)
+
+			(block
+				(class $Fullsize)
+				(style (backgroundColor = "NO_COLOR"))
+
+				(controller $Tooltip
+					(renderer = 'OpenedChannelHintTooltip')
+					(args
+						_isSteadyChannel = "isSteadyChannel"
+						_isChatBoxOpened = "isChatBoxOpened"
+						_isDivisionChat = "isDivisionChat"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(controller $Tooltip
+					(renderer = 'ChatDropDownMenu')
+					(bind enabled "!isSteadyChannel")
+					(args
+						_channelEntityId = "_itemEntity.id"
+						_isDropDown = false
+					)
+					(macro DEFAULT_MENU_BEHAVIOUR "1")
+					(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+				)
+			)
+		)
+
+		(block
+			(bind name "'openChannel_' + channelTypeIdent")
+
+			(style
+				(height = 100%)
+				(alpha = "isActiveChannel ? 1 : 0.6")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					to = "{ alpha: isActiveChannel ? 1 : 0.6 }"
+					easing = "Easing.quad_in"
+					action = "kill"
+					watch = false
+					(bind trigger "isActiveChannel")
+				)
+			)
+
+			(hblock
+				(style
+					(height = 100%)
+					(paddingLeft = "S")
+					(paddingTop = 3px)
+					(bind paddingRight "isDivisionChat ? 14px : S")
+				)
+
+				(element ChannelTitleWithIcon
+					_channelEntityId = "_itemEntity.id"
+					_bold = "isDivisionChat"
+					_textMaxWidth = 122px
+					_isClanDivision = "isClanDivision"
+				)
+
+				(block
+					(bind visible "!isSteadyChannel")
+					(style
+						(paddingTop = 5px)
+						(marginLeft = 6px)
+						(alpha = "isChatBoxVisible ? 1 : 0.6")
+					)
+
+					(controller $Animation
+						(bindcall play
+							duration = 0.15
+							to = "{ alpha: rollOver || isChatBoxVisible ? 1 : 0.6 }"
+							easing = "Easing.quad_in"
+							watch = false
+							action = "kill"
+							(bind trigger "rollOver || isChatBoxVisible")
+						)
+					)
+
+					(element CloseButton
+						_tooltipText = "isInvitation ? 'IDS_HINT_REJECT_INVITE' : 'IDS_CHANNEL_CLOSE'"
+						_methods = "[	{	type:	'inputMapping.onAction',
+											name:	!(isInvitation || isPasswordNeeded)	? 'leaveChannel' :
+													isInvitation						? 'refuseInvitation'
+																						: 'cancelEnterPassword',
+											args: { channelId: channelId }
+										}]"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element ResizeFrame ()
+	(class $FullsizeAbsolute)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(height = 6px)
+			(top = -3px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.up")
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(height = 6px)
+			(bottom = -3px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.down")
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 6px)
+			(height = 100%)
+			(left = -3px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.left")
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 6px)
+			(height = 100%)
+			(right = -3px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.right")
+	)
+
+	
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 12px)
+			(height = 12px)
+			(top = -5px)
+			(left = -5px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.up | grip.left")
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 12px)
+			(height = 12px)
+			(top = -5px)
+			(right = -5px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.up | grip.right")
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 12px)
+			(height = 12px)
+			(bottom = -5px)
+			(left = -5px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.down | grip.left")
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 12px)
+			(height = 12px)
+			(bottom = -5px)
+			(right = -5px)
+			(backgroundColor = "NO_COLOR")
+		)
+		(gripType = "grip.down | grip.right")
+	)
+)
+
+(def element OpenedChannelHintTooltip (_isSteadyChannel:bool, _isChatBoxOpened:bool, _isDivisionChat:bool)
+	(style (width = 300px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =	"	_isChatBoxOpened	? 'IDS_HINT_COLLAPSE_WINDOW' :
+						_isDivisionChat		? 'IDS_HINT_EXPAND_WINDOW'
+											: 'IDS_HINT_LEFT_CLICK_TO_OPEN_CHAT'"
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "!_isSteadyChannel"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "!_isSteadyChannel")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT"
+					_text =				'IDS_HINT_RIGHT_CLICK_FOR_CONTEXT_MENU'
+				)
+			)
+		)
+	)
+)
+
+(def element ChatBox (_channelEntityId:number, _currentWidth:number, _currentHeight:number)
+	(scope
+		(event evChatWindowClose)
+
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+		(var channelComponent:dhComponent = "getEntity(_channelEntityId).channel")
+		(var channelTypeIdent:str = 	"channelComponent.typeIdent" 			(event "channelComponent.evTypeChanged"))
+		(var isPasswordNeeded:bool = 	"channelComponent.isWaitingPassword" 	(event "channelComponent.evOpenChanged"))
+		(var isInvitation:bool = 		"channelComponent.isInvitation" 		(event "channelComponent.evOpenChanged") (event "channelComponent.evInvitationRefused"))
+
+		(var isDivisionChat:bool = 		"channelTypeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE")
+		(var isClanChat:bool = 			"channelTypeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.CLAN")
+
+		(var isSteadyChannel:bool = "isIn(channelTypeIdent, [	SC.Channel.CHANNEL_TYPE_IDENT_VALUE.CLAN,
+																SC.Channel.CHANNEL_TYPE_IDENT_VALUE.TRAINING_ROOM])")
+
+		(var isDragZone:bool = "true")
+		(bind isDragZone "false" init=false (event "evChatWindowClose"))
+	)
+	(style
+		(bind width "_currentWidth")
+		(bind height "_currentHeight")
+	)
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+		(bind dragZone "isDragZone")
+	)
+
+	(element ResizeFrame)
+
+	(block
+		(class $Fullsize)
+		(style (align = "center|middle"))
+
+		(element ChatBoxHeader
+			_channelEntityId = 	"_channelEntityId"
+			_isInvitation = 	"isInvitation"
+			_isPasswordNeeded = "isPasswordNeeded"
+			_isDivisionChat = 	"isDivisionChat"
+			_isClanChat = 		"isClanChat"
+			_isSteadyChannel = 	"isSteadyChannel"
+		)
+
+		(element HorizontalDividerTwoPx)
+
+		(element ChatBoxContent
+			_channelEntityId = 	"_channelEntityId"
+			_isPasswordNeeded = "isPasswordNeeded"
+			_isInvitation = 	"isInvitation"
+			_isDivisionChat = 	"isDivisionChat"
+		)
+	)
+)
+
+(def element MessageInput (_channelEntityId:number)
+	(scope
+		(event evMessageInputEnter)
+		(event evMessageInputChanged)
+
+		(var channelComponent:dhComponent = "getEntity(_channelEntityId).channel")
+
+		(var channelTypeIdent:str = "channelComponent.typeIdent" (event "channelComponent.evTypeChanged"))
+		(var channelId:str = 		"channelComponent.channelId")
+
+		(var chatRestrictionsComponent:dhComponent = "getSingleComponent(CC.chatRestrictions)")
+		(var isBlockDockAndClanChat:bool = 	"chatRestrictionsComponent.isBlockDockAndClanChat" 	(event "chatRestrictionsComponent.evBlockDockAndClanChatChanged"))
+		(var isBlockPrebattleChat:bool = 	"chatRestrictionsComponent.isBlockPrebattleChat" 	(event "chatRestrictionsComponent.evBlockPrebattleChatChanged"))
+
+		(var isInputBlockedForDockAndClanChat:bool = "isBlockDockAndClanChat && isIn(channelTypeIdent, SC.Channel.CHANNEL_TYPE_IDENT_VALUE.DOCK_AND_CLAN)")
+		(var isInputBlcokedForPrabettleChat:bool = "isBlockPrebattleChat && isIn(channelTypeIdent, SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE_AND_TRAINING)")
+
+		(var isInputEnabled:bool = "!isInputBlockedForDockAndClanChat && !isInputBlcokedForPrabettleChat")
+
+		(var inputText:str = '')
+		(bind inputText "$event.value" init=false watch=false (event "evMessageInputEnter") (event "evMessageInputChanged"))
+
+		(var defaultText:str = "inputText")
+		(bind defaultText "inputText" init=false watch=false (event "evMessageInputChanged"))
+		(bind defaultText "''" init=false watch=false (event "evMessageInputEnter"))
+
+		(var placeholderText:str = "isInputEnabled ? '' : 'IDS_CHAT_BLOCKED'")
+	)
+	(bindcall externalCall "inputText.length > 0 ? 'inputMapping.onAction' : ''" "['sendMessage', { message: inputText, channelId: channelId }]" init=false watch=false (event "evMessageInputEnter"))
+
+	(style (width = 100%))
+	
+	(element InputTextDefault
+		_onEnterEvent = 'evMessageInputEnter'
+		_onInputChangedEvent = 'evMessageInputChanged'
+		_isSmallButtonEnter = true
+		_defaultFocused = "isInputEnabled"
+		_onEnterTooltipText = 'IDS_SEND_MESSAGE'
+		_maxChars = 512
+		_defaultText = "defaultText"
+		_placeholderText = "placeholderText"
+		_enabled = "isInputEnabled"
+		_restrict = '[^<>]+'
+		_name = 'text_input'
+	)
+)
+
+(def element MessageBoxPanel (_channelEntityId:number)
+	(scope
+		(var channelMessageCollection:dhCollection = "getCollectionByPath(CC.channelMessage, 'byChannel.' + _channelEntityId)")
+		(var channelMessageCollectionLength:number = "channelMessageCollection.length")
+	)
+	(class $Fullsize)
+	(style
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(paddingBottom = 6px)
+		(borderRadiusBottomLeft = "XS")
+	)
+
+	(scrollArea
+		(class $Fullsize)
+		(style (align = "bottom"))
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_isDrag = "false"
+			_wheelScrollSpeed = "1.5"
+		)
+
+		(content
+			(style (width = 100%))
+
+			(controller $DynamicRepeat renderer='ChannelMessageRenderer'
+				(bind count "channelMessageCollectionLength")
+				(args
+					_currentChannelEntityId = "_channelEntityId"
+					_messageEntity = "channelMessageCollection[$index]"
+				)
+
+				(itemHeight = 24px)
+				(itemOffset = 48px)
+			)
+		)
+	)
+
+	(block
+		(style
+			(marginTop = 6px)
+			(paddingLeft = 6px)
+			(paddingRight = 6px)
+			(width = 100%)
+		)
+		(element MessageInput
+			_channelEntityId = "_channelEntityId"
+		)
+	)
+)
+
+(def element ChannelMessageRenderer (_currentChannelEntityId:number, _messageEntity:dhEntity)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evMenuItemClicked)
+		(var channelMessageComponent:dhComponent = "_messageEntity.channelMessage")
+
+		(var senderDBId:str = 	"channelMessageComponent.senderDBId")
+		(var extraData:dict = 	"channelMessageComponent.extraData")
+		(var time:str = 		"channelMessageComponent.time")
+		(var message:str = 		"channelMessageComponent.message")
+		(var messageId:number =	"channelMessageComponent.id")
+
+		(var channelId:str = "getEntity(_currentChannelEntityId).channel.channelId")
+
+		(var playerEntity:dhEntity = "getPrimaryEntity(CC.accountSimple, senderDBId)")
+		(var accountSimpleComponent:dhComponent = "playerEntity.accountSimple")
+		(var isSuspended:bool = "accountSimpleComponent.suspended" (event "accountSimpleComponent.evSuspendedChanged"))
+
+		(struct selfPlayer = PULL_SELF_PLAYER())
+		(var isContactContextMenuVisible:bool = false)
+
+		(var hitTestValue:bool = "(extraData == null) && !isSuspended")
+	)
+	(name = "'MessageListItem_' + toString(messageId)")
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(style
+		(width = 100%)
+		(bind hitTest "hitTestValue")
+	)
+
+	(controller $Tooltip
+		(bind enabled "senderDBId != selfPlayer.dbId")
+		(renderer = 'ContactContextMenu')
+		(args
+			_entityAccountId = "playerEntity.id"
+			_playerContext = "{type: 'startPrivateChat', channelId: channelId}"
+			_inviteType = "SC.Pre_battle.PRE_BATTLE_INVITE_TYPE.COMMON"
+		)
+		(macro DEFAULT_MENU_BEHAVIOUR)
+		(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+		(bind isContactContextMenuVisible "true" init=false on='evStartShow')
+		(bind isContactContextMenuVisible "false" init=false on='evHide')
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element MenuItemBackground
+			_state = "	rollOver 					? SC.Ui_styles.BUTTON_STATE.OVER :
+						isContactContextMenuVisible	? SC.Ui_styles.BUTTON_STATE.SELECTED
+													: SC.Ui_styles.BUTTON_STATE.UP"
+			_isRoundedBorder = false
+		)
+	)
+	
+	(hblock
+		(bind visible "extraData == null")
+
+		(style
+			(width = 100%)
+			(padding = 6px)
+		)
+
+		(tf
+			(class $TextDefault14NMWithoutShadow)
+			(style
+				(alpha = "TA")
+				(width = 38px)
+				(marginTop = "XXS")
+				(marginRight = "XS")
+			)
+			(bind htmlText "time")
+		)
+
+		(tf
+			(bind visible "!isSuspended")
+			(class $TextDefaultNM)
+			(style
+				(alpha = "TA")
+				(leading = -3)
+				(width = 100%)
+				(multiline = true)
+				(noTranslate = true)
+			)
+			(selectable = true)
+			(mouseEnabled = true)
+			(bind htmlText "message")
+		)
+
+		(tf
+			(bind visible "isSuspended")
+			(class $TextDefaultNM)
+			(style
+				(alpha = "TS")
+				(leading = -3)
+				(width = 100%)
+			)
+			(text = 'IDS_REMOVED_CHAT_MESSAGE')
+		)
+	)
+
+
+	(block
+		(bind visible "extraData != null")
+
+		(style
+			(width = 100%)
+			(padding = 6px)
+		)
+
+		(controller $Instance renderer='CVCMessageRenderer'
+			(bind enabled "extraData != null")
+			(args
+				_messageEntity = "_messageEntity"
+			)
+		)
+	)
+)
+
+(def element CVCMessageRenderer (_messageEntity:dhEntity)
+	(scope
+		(var channelMessageComponent:dhComponent = "_messageEntity.channelMessage")
+
+		(var extraData:dict = 	"channelMessageComponent.extraData")
+		(var time:str = 		"channelMessageComponent.time")
+
+		(var rating:str = 			"extraData.rating")
+		(var battleResult:str = 	"extraData.battleResult")
+		(var league:str = 			"extraData.league")
+		(var stage:str = 			"extraData.stage")
+		(var toLeagueId:number = 	"extraData.toLeagueId")
+		(var stageResult:number = 	"extraData.stageResult")
+		(var squadId:number = 		"extraData.squadId")
+		(var ratingDelta:number = 	"extraData.ratingDelta ?: 0")
+		(var progress:array = 		"extraData.progress")
+		(var division:array = 		"extraData.division ?: []")
+
+		(var clanLeagueStr:str = "	stageResult == 'division_victory' 	? 'IDS_CLAN_BATTLE_RAISED_DIVISION' :
+									stageResult == 'division_defeat'	? 'IDS_CLAN_BATTLE_DESCENDED_DIVISION' :
+									stageResult == 'promotion_victory' 	? 'IDS_CLAN_BATTLE_RAISED_LEAGUE' :
+									stageResult == 'promotion_defeat' 	? 'IDS_CLAN_PROMOTION_LOSE_BATTLE_FOR_LEAGUE' :
+									stageResult == 'demotion_victory' 	? 'IDS_CLAN_DEMOTION_WON_BATTLE_FOR_LEAGUE' :
+									stageResult == 'demotion_defeat' 	? 'IDS_CLAN_BATTLE_DESCENDED_LEAGUE':
+									stage == 'promotion'				? subst('IDS_CLAN_PROMOTION_BATTLE_FOR_LEAGUE', [], {leagueIndex: toLeagueId}) :
+									stage == 'demotion'					? subst('IDS_CLAN_DEMOTION_BATTLE_FOR_LEAGUE', [], {leagueIndex: toLeagueId})
+																		: ''")
+
+		(var battleResultText:str = "	battleResult == SC.Clan.CLAN_BATTLE_PROGRESS.DEFEAT 	? tr('IDS_DEFEAT') :
+										battleResult == SC.Clan.CLAN_BATTLE_PROGRESS.VICTORY 	? tr('IDS_VICTORY')
+																								: tr('IDS_DRAW')")
+		
+		(var battleResultFontColor:number = "	battleResult == SC.Clan.CLAN_BATTLE_PROGRESS.DEFEAT ? 0xFFFF6600 :
+												battleResult == SC.Clan.CLAN_BATTLE_PROGRESS.DRAW	? 0xFF9CBABA
+																									: SC.Ui_styles.SERVICE_COLORS.GREEN")
+	)
+	(style (width = 100%))
+
+	(tf
+		(class $TextDefault14NMWithoutShadow)
+		(style
+			(alpha = "TA")
+			(width = 38px)
+		)
+		(bind htmlText "time")
+	)
+
+	(hblock
+		(style (marginTop = 6px))
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(marginRight = "XS")
+				(alpha = "TA")
+				(bind textColor "battleResultFontColor")
+			)
+			(bind text "battleResultText")
+		)
+
+		(tf
+			(bind visible "ratingDelta != 0")
+			(class $TextDefaultBoldNM)
+			(style
+				(marginRight = "XS")
+				(alpha = "TA")
+				(bind textColor "battleResultFontColor")
+			)
+			(bind text "'+' + ratingDelta")
+		)
+
+		(hblock
+			(style 
+				(position = "absolute")
+				(left = 100%)
+				(top = -10px)
+				(paddingLeft = "XS")
+			)
+			(controller $Repeat renderer='ClanBattleResultsStarStatic'
+				(bind count "progress.length")
+				(args
+					_battleState = "progress[$index]"
+				)
+			)
+		)
+	)
+
+	(tf
+		(bind visible "clanLeagueStr != ''")
+		(bind class "stage != 'league' ? '$TextDefaultNM' : '$TextDefaultBoldNM'")
+		(style 
+			(marginTop = 6px)
+			(alpha = "TA")
+			(bind textColor "stage != 'league' ? SC.Ui_styles.SERVICE_COLORS.WHITE : battleResultFontColor")
+		)
+		(bind text "clanLeagueStr")
+	)
+
+	(hblock
+		(style (marginTop = 6px))
+		(tf
+			(bind visible "squadId != null")
+			(class $TextDefaultNM)
+			(style 
+				(marginRight = "XS")
+				(alpha = "TA")
+			)
+			(bind text "tr('IDS_CLAN_SQUAD_' + squadId) + ','")
+		)
+		(tf
+			(bind visible "league != null")
+			(class $TextDefaultNM)
+			(style 
+				(marginRight = "XS")
+				(alpha = "TA")
+			)
+			(bind text "tr('IDS_CLAN_LEAGUE_' + league)")
+		)
+		(block
+			(bind visible "division.length > 0")
+			(tf
+				(class $TextDefaultNM)
+				(style 
+					(marginRight = "XS")
+					(alpha = "TA")
+				)
+				
+				(bind text "shipLevelsToRoman(division)")
+			)
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_CLAN_BATTLES_LOGO_DIVISION'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+		(block
+			(bind visible "rating != null")
+			(tf
+				(class $TextDefaultNM)
+				(style (alpha = "TA"))
+				(bind text "rating")
+			)
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_CLAN_BATTLES_LOGO_RATING'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+)
+
+(def element ClanBattleResultsStarStatic (_battleState:str)
+	(style
+		(backgroundSize = "cover")
+		(width = 30px)
+		(height = 30px)
+		(marginRight = -5px)
+		(marginLeft = -5px)
+		(backgroundImage = "'url:../clans/stars/cvc_star_' + _battleState + '_small.png'")
+	)
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = "tr('IDS_CLAN_STAR_' + _battleState + '_DESCRIPTION')"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ChatBoxContentDivision (_channelEntityId:number)
+	(scope
+		(var divisionEntranceInfo:dhComponent = "getSingleComponent(CC.divisionEntranceInfo)")
+		(var isDivisionAvailable:bool = "divisionEntranceInfo.isDivisionAvailable" (event "divisionEntranceInfo.evisDivisionAvailableChanged"))
+
+		(var chatComponent:dhComponent = "getSingleComponent(CC.chat)")
+		(var isChatServerAvailable:bool = "chatComponent.isConnected" (event "chatComponent.evConnected") (event "chatComponent.evDisConnected"))
+
+		(var divisionRatingComponent:dhComponent = "getSingleComponent(CC.divisionRating)")
+		(var divisionLeagueName:str = 			"divisionRatingComponent.leagueName" 		(event "divisionRatingComponent.evChanged"))
+		(var divisionLeagueProgress:number = 	"divisionRatingComponent.leagueProgress" 	(event "divisionRatingComponent.evChanged"))
+
+		(var selectedBattleTypeCollection:dhCollection = "getCollection(CC.battleType).getChildByPath('selected')")
+		(var selectedBattleTypeEntity:dhEntity = "selectedBattleTypeCollection.length > 0 ? selectedBattleTypeCollection[0] : null")
+		(var selectedBattleTypeComponent:dhComponent = "selectedBattleTypeEntity.battleType")
+		(var battleType:str = "selectedBattleTypeComponent.type" (event "selectedBattleTypeComponent.evSelectionChanged"))
+
+		(var isRatingBattle:bool = "battleType == SC.Common.BATTLE_TYPES.RATING_BATTLE &&
+									divisionLeagueName != null &&
+									divisionLeagueProgress != null")
+	)
+	(class $Fullsize)
+	(style (backgroundColor = "NO_COLOR"))
+
+	(block
+		(style
+			(width = 100%)
+			(paddingLeft = 9px)
+			(paddingRight = "SXS")
+		)
+		(element FormationStatuses
+			_divisionsAvailable = "isDivisionAvailable"
+		)
+	)
+
+	(element HorizontalDividerTwoPx)
+
+	(block
+		(bind visible "isRatingBattle")
+		(style
+			(width = 100%)
+			(height = 36px)
+			(paddingTop = "XS")
+		)
+
+		(block
+			(style
+				(height = 100%)
+				(width = 100%)
+				(marginLeft = 9px)
+			)
+			(controller $Instance renderer='PlayerRatingStereotypeSmall'
+				(bind enabled "isRatingBattle")
+				(args
+					_rating = "divisionLeagueProgress"
+					_leagueName = "divisionLeagueName"
+					_hasTooltip = true
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+			)	
+			(controller $Instance renderer='HorizontalDividerTwoPx'
+				(bind enabled "isRatingBattle")
+			)
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+
+		(block
+			(style
+				(width = 320px)
+				(height = 100%)
+			)
+			(element FormationDivisionMainElement)
+		)
+
+		(element VerticalDivider)
+
+		(block
+			(class $Fullsize)
+			(controller $Instance renderer='MessageBoxPanel'
+				(bind enabled "isChatServerAvailable")
+				(args
+					_channelEntityId = "_channelEntityId"
+				)
+			)
+			(controller $Instance renderer='ServerIsUnavailable'
+				(bind enabled "!isChatServerAvailable")
+			)
+		)
+	)
+)
+
+(def element ParticipantsPanel (_channelEntityId:number)
+	(scope
+		(var participantsCollection:dhCollection = "getCollection(CC.channelParticipant).getChildByPath('channelParticipants_' + toString(_channelEntityId) + '.sorted')")
+
+		(var channelComponent:dhComponent = "getEntity(_channelEntityId).channel")
+
+		(var channelId:str = 		"channelComponent.channelId")
+		(var channelTypeIdent:str = "channelComponent.typeIdent" (event "channelComponent.evTypeChanged"))
+
+		(var isSteadyChannel:bool = "isIn(channelTypeIdent, [	SC.Channel.CHANNEL_TYPE_IDENT_VALUE.CLAN,
+																SC.Channel.CHANNEL_TYPE_IDENT_VALUE.TRAINING_ROOM])")
+	)
+	(style
+		(width = 220px)
+		(height = 100%)
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(borderRadiusBottomRight = "XS")
+	)
+
+	(block
+		(bind visible "!isSteadyChannel")
+		(style	
+			(width = 100%)
+			(paddingLeft = "XS")
+			(paddingRight = "XS")
+			(paddingTop = "XXS")
+		)
+
+		(controller $Instance renderer='ChatInvitePlayerButton'
+			(bind enabled "!isSteadyChannel")
+			(args
+				_channelId = "channelId"
+			)
+		)
+	)
+
+	(scrollArea
+		(class $Fullsize)
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_isDrag = "false"
+			_singleStep = "60px"
+			_wheelScrollAcceleration = "0.8"
+		)
+
+		(content
+			(style
+				(width = 100%)
+				(paddingLeft = "XS")
+				(paddingRight = "XS")
+				(paddingTop = "XXS")
+				(vgap = "XXS")
+			)
+			
+			(controller $Repeat renderer='ChatParticipantItem'
+				(bind count "participantsCollection.length")
+				(args
+					_entityId = "participantsCollection[$index].id"
+					_playerContext = "	{	type: 'channelParticipants',
+											channelTypeIdent: channelTypeIdent,
+											channelId: channelId }"
+				)
+			)
+		)
+	)
+)
+
+(def element ChatParticipantItem (_entityId:number, _playerContext:dict)
+	(scope
+		(var accountSimpleComponent:dhComponent = "getEntity(_entityId).accountSimple")
+		(var isSelfPlayer:bool = "accountSimpleComponent.isSelfPlayer")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(bind visible "isSelfPlayer")
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+			(borderRadius = "XS")
+		)
+	)
+
+	(element PlayerContactItemWithRollover
+		_entityId = "_entityId"
+		_isShort = true
+		_playerContext = "_playerContext"
+	)
+)
+
+(def element ClanChatDailyMessage ()
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(event evClanChatDailyMessageEnter)
+		(event evCloseButton)
+		(event evClickOnEditorTheMessage)
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var clanmanComponent:dhComponent = "selfPlayerEntity.clanman")
+
+		(var clanId:number = 	"clanmanComponent.clanId" 	(event "clanmanComponent.evClanIdChanged"))
+		(var role:str = 		"clanmanComponent.role" 	(event "clanmanComponent.evRoleChanged"))
+
+		(var isRoleEditor:bool = "role == 'commander' || role == 'executive_officer'")
+
+		(var clanEntity:dhEntity = "getPrimaryEntity(CC.clan, clanId)")
+		(var clanExtendedComponent:dhComponent = "clanEntity.clanExtended")
+
+		(var messageOfTheDay:str = 			"clanExtendedComponent.messageOfTheDay ?: ''" 	(event "clanExtendedComponent.evMessageOfTheDayChanged"))
+		(var messageOfTheDayState:number = 	"clanExtendedComponent.messageOfTheDayState" 	(event "clanExtendedComponent.evMessageOfTheDayStateChanged"))
+
+		(var attentionMessage:str = "'IDS_CLAN_CHAT_EDIT_MOTD_REASON_' + SC.Clan.CLAN_MESSAGE_OF_THE_DAY_STATE.VALUE_TO_NAME[messageOfTheDayState]")
+		(var isAttentionMessageState:bool = "messageOfTheDayState != SC.Clan.CLAN_MESSAGE_OF_THE_DAY_STATE.DEFAULT")
+
+		(var chatRestrictionsComponent:dhComponent = "getSingleComponent(CC.chatRestrictions)")
+		(var isBlockDockAndClanChat:bool = 			"chatRestrictionsComponent.isBlockDockAndClanChat" 			(event "chatRestrictionsComponent.evBlockDockAndClanChatChanged"))
+		(var isBlockDescriptionTextFields:bool = 	"chatRestrictionsComponent.isBlockDescriptionTextFields" 	(event "chatRestrictionsComponent.evBlockDescriptionTextFieldsChanged"))
+
+		(var inputText:str = '')
+		(bind inputText "$event.value" init=false watch=false (event "evClanChatDailyMessageEnter"))
+
+		(var isVisibleClanMessageEditor:bool = false)
+		(bind isVisibleClanMessageEditor "false" 	init=false (event "evCloseButton") (event "evClanChatDailyMessageEnter"))
+		(bind isVisibleClanMessageEditor "true" 	init=false (event "evClickOnEditorTheMessage"))
+
+		(var state:number = "	!isRoleEditor	? SC.Ui_styles.BUTTON_STATE.UP :
+								mouseDown		? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver		? SC.Ui_styles.BUTTON_STATE.OVER
+												: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var isVisibleContent:bool = "(messageOfTheDay != '' || isRoleEditor) && !isBlockDockAndClanChat && !isBlockDescriptionTextFields")
+	)
+	(bindcall externalCall "'inputMapping.onAction'" "['AccountClanComponent.setMessageOfTheDay', { message: inputText }]" init=false watch=false (event "evClanChatDailyMessageEnter"))
+
+	(bind visible "isVisibleContent")
+
+	(style (width = 100%))
+
+	(block
+		(bind visible "!isAttentionMessageState")
+
+		(style (width = 100%))
+
+		(block
+			(bind visible "!isVisibleClanMessageEditor")
+			(style
+				(width = 100%)
+				(paddingTop = "S")
+				(paddingBottom = "S")
+				(align = "middle")
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(macro MOUSE_HANDLER
+				_enabled="isRoleEditor"
+				_dispatchedEv="'evClickOnEditorTheMessage'"
+			)
+
+			(hblock
+				(style
+					(hitTest = false)
+					(width = 100%)
+					(align = "middle")
+					(paddingLeft = "SXS")
+					(paddingRight = "XS")
+				)
+
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(width = 100%)
+						(alpha = "TA")
+					)
+					(bind text "messageOfTheDay ?: 'IDS_CLAN_CHAT_EDIT_MOTD_DEFAULT_TEXT'")
+				)
+
+				(block
+					(bind visible "isRoleEditor")
+					(style
+						(width = 23px)
+						(height = 23px)
+						(backgroundImage = 'url:../service_kit/buttons/context/pencil.png')
+					)
+				)
+			)
+
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(bind enabled "isRoleEditor")
+				(args
+					_text = 'IDS_CLAN_CHAT_EDIT_MOTD_TOOLTIP'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(hblock
+			(bind visible "isVisibleClanMessageEditor")
+			(style
+				(width = 100%)
+				(padding = "SXS")
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='DescriptionInputText'
+					(bind enabled "isVisibleClanMessageEditor")
+					(args
+						_onEnterEvent = 'evClanChatDailyMessageEnter'
+						_defaultText = "messageOfTheDay"
+						_isSmallButtonEnter = true
+						_focusIndex = 0
+						_defaultFocused = true
+						_onEnterTooltipText = 'IDS_CLAN_CHAT_EDIT_MOTD_TOOLTIP'
+						_maxChars = 180
+						_placeholderText = "''"
+						_isEnterEnabledExternally = true
+					)
+				)
+			)
+
+			(block
+				(style (marginLeft = "S"))
+				(controller $Instance renderer='CloseButton'
+					(bind enabled "isVisibleClanMessageEditor")
+					(args
+						_dispatchedEv = 'evCloseButton'
+						_tooltipText = 'IDS_CLAN_CHAT_EDIT_MOTD_EXIT_TOOLTIP'
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(bind visible "isAttentionMessageState && isRoleEditor")
+		(style
+			(width = 100%)
+			(padding = "SXS")
+		)
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "isAttentionMessageState && isRoleEditor")
+			(args
+				_text = "attentionMessage"
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_textClass = '$TextDefaultNM'
+				_width = 100%
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='HorizontalDividerTwoPx'
+			(bind enabled "isVisibleContent")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='MenuItemBackground'
+			(bind enabled "!isVisibleClanMessageEditor")
+			(args
+				_state = "state"
+				_isRoundedBorder = "false"
+			)
+		)
+	)
+)
+
+(def element ChatBoxContentCommon (_channelEntityId:number)
+	(scope
+		(var channelComponent:dhComponent = "getEntity(_channelEntityId).channel")
+		(var typeIdent:str = "channelComponent.typeIdent")
+
+		(var pathForParticipantsCollection:str = "'channelParticipants_' + toString(_channelEntityId) + '.sorted'")
+		(var participantsCollection:dhCollection = "getCollection(CC.channelParticipant).getChildByPath(pathForParticipantsCollection)")
+		(var isVisibleParticipantsPanel:bool = "participantsCollection.length != 0")
+
+		(var chatComponent:dhComponent = "getSingleComponent(CC.chat)")
+		(var isChatServerAvailable:bool = "chatComponent.isConnected" (event "chatComponent.evConnected") (event "chatComponent.evDisConnected"))
 	)
 	(class $Fullsize)
 
 	(block
-		(class $FullsizeAbsolute)
+		(bind visible "typeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.CLAN")
+		(style (width = 100%))
+		(controller $Instance renderer='ClanChatDailyMessage'
+			(bind enabled "typeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.CLAN")
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+
+		(block
+			(class $Fullsize)
+
+			(controller $Instance renderer='ServerIsUnavailable'
+				(bind enabled "!isChatServerAvailable")
+			)
+
+			(controller $Instance renderer='MessageBoxPanel'
+				(bind enabled "isChatServerAvailable")
+				(args
+					_channelEntityId = "_channelEntityId"
+				)
+			)
+		)
+
+		(block
+			(bind visible "isVisibleParticipantsPanel")
+			(style (height = 100%))
+			(controller $Instance renderer='VerticalDivider'
+				(bind enabled "isVisibleParticipantsPanel")
+			)
+		)
+
+		(block
+			(bind visible "isVisibleParticipantsPanel")
+			(style (height = 100%))
+			(controller $Instance renderer='ParticipantsPanel'
+				(bind enabled "isVisibleParticipantsPanel")
+				(args
+					_channelEntityId = "_channelEntityId"
+				)
+			)
+		)
+	)
+)
+
+(def constant CHANNEL_INVITATION_NOT_DATA -1)
+
+(def element ChatBoxContentInvitation (_channelEntityId:number)
+	(scope
+		(var channelEntity:dhEntity = "getEntity(_channelEntityId)")
+		(var channelComponent:dhComponent = "channelEntity.channel")
 		
-		(element BlurMapRoundedWithContrastPanel
-			_blurType = "ROUNDED_BLUR_TYPE.LOW"
+		(var entityAccount:dhEntity = "getEntity(channelComponent.user.ref.id)")
+		(var accountNameComponent:dhComponent = "entityAccount.accountName")
+
+		(var channelName:str = "channelComponent.nameIds ? tr(channelComponent.nameIds) :
+								accountNameComponent.nickName ?:  channelComponent.name"	(event "channelComponent.evNameChanged")
+		 																					(event "accountNameComponent.evChanged"))
+
+		(var invitationEntity:dhEntity = "getEntity(channelComponent.invitationFromEntityId)")
+		(var isChannelInvitationNotData:bool = "channelComponent.invitationFromEntityId == CHANNEL_INVITATION_NOT_DATA")
+		
+		(struct serverTime = SERVER_TIME())
+		(struct invitationTimeExpiration = COUNTDOWN(_time = "channelComponent.refuseInvitationTimeExpiration ?: 0" _serverTime = "serverTime.value" _format = "'mm:ss'"))
+	)
+	(class $Fullsize)
+	(style
+		(align = "center|middle")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(borderRadiusBottomLeft = "XS")
+		(borderRadiusBottomRight = "XS")
+	)
+
+	(tf
+		(bind visible "isChannelInvitationNotData")
+		(class $TextDefault18NM)
+		(style
+			(alpha = "TA")
+			(noTranslate = true)
+		)
+		(bind text "channelComponent.invitationFromNickName")
+	)
+
+	(block
+		(bind visible "!isChannelInvitationNotData")
+		(controller $Instance renderer='PlayerContactItem'
+			(bind enabled "!isChannelInvitationNotData")
+			(args
+				_entityAccount = "invitationEntity"
+				_notTrancated = true
+				_width = "auto"
+				_fontClassCustom = '$TextDefault18NM'
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(marginTop = "S")
+			(alpha = "TC")
+		)
+		(text = 'IDS_INVITE_TO_THE_CHANNEL')
+	)
+
+	(tf
+		(class $TextDefault18NM)
+		(style 
+			(marginTop = "M")
+			(alpha = "TA")
+		)
+		(bind text "channelName")
+	)
+
+	(block
+		(style
+			(marginTop = "M")
+			(width = 58px)
+		)
+
+		(tf
+			(class $TextDefault26NM)
+			(style (alpha = "TA"))
+			(bind text "invitationTimeExpiration.value")
+		)
+
+		(controller $Tooltip
+			(renderer = 'SimpleStatusTooltip')
+			(args
+				_text = 'IDS_HINT_AUTOMATE_CANCEL'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
 
 	(block
+		(style
+			(marginTop = "M")
+			(paddingBottom = "S")
+		)
+
+		(element DefaultButton
+			_label = 'IDS_ACCEPT_INVITATION'
+			_dispatchedEv = 'evButtonShowBlurClicked'
+			_width = 210px
+			_methods = "[{	type: 'inputMapping.onAction',
+							name: 'joinChannel',
+							args: { channelId: channelComponent.channelId }}]"
+		)
+	)
+)
+
+(def element ChatBoxContentEnterPassword (_channelEntityId:number)
+	(scope
+		(event evInputPasswordEnter)
+		(event evInputPasswordChanged)
+		(event evHideWrongMessage)
+
+		(var channelEntity:dhEntity = "getEntity(_channelEntityId)")
+		(var channelComponent:dhComponent = "channelEntity.channel")
+
+		(var inputText:str = '')
+		(bind inputText "$event.value" init=false watch=false (event "evInputPasswordEnter"))
+	)
+	(bindcall externalCall "inputText.length > 0 ? 'inputMapping.onAction' : ''" "['joinChannel', { channelId: channelComponent.channelId, password: inputText }]" init=false watch=false (event "evInputPasswordEnter"))
+
+	(class $Fullsize)
+	(style
+		(align = "center|middle")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(borderRadiusBottomLeft = "XS")
+		(borderRadiusBottomRight = "XS")
+	)
+
+	(tf
+		(class $TextDefaultBold18NM)
+		(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+		(text = "toUpper(tr('IDS_CLOSED_CHANNEL'))")
+	)
+
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(alpha = "TA")
+			(marginTop = "M")
+		)
+		(text = 'IDS_HINT_ENTER_PASSWORD')
+	)
+
+	(block
+		(style
+			(width = 200px)
+			(marginTop = "M")
+		)
+
+		(element InputTextDefault
+			_onEnterEvent = 'evInputPasswordEnter'
+			_onInputChangedEvent = 'evInputPasswordChanged'
+			_isSmallButtonEnter = true
+			_defaultFocused = true
+			_onEnterTooltipText = 'IDS_HINT_JOIN'
+			_maxChars = 16
+		)
+
+		(controller $Tooltip
+			(renderer = 'WrongTextInputNotificationInfotip')
+			(args
+				_text = 'IDS_WRONG_PASSWORD_TRY_AGAIN'
+			)
+
+			(position = "border")
+			(macro CUSTOM_INFOTIP_BEHAVIOUR "channelComponent.evWrongPassword")
+			(macro TOOLTIP_HIDE_ON_EVENT "evHideWrongMessage")
+			(macro TOOLTIP_HIDE_ON_EVENT "evInputPasswordChanged")
+		)
+	)
+
+)
+
+(def element ChatBoxContent (	_channelEntityId:number,
+								_isPasswordNeeded:bool,
+								_isInvitation:bool,
+								_isDivisionChat:bool)
+	(scope
+		(var rendererName:str = "	_isInvitation 		? 'ChatBoxContentInvitation' :
+									_isPasswordNeeded 	? 'ChatBoxContentEnterPassword' :
+									_isDivisionChat 	? 'ChatBoxContentDivision'
+														: 'ChatBoxContentCommon'")
+	)
+
+	(class $Fullsize)
+	(style (backgroundColor = "NO_COLOR"))
+
+	(controller $Instance 
+		(bind renderer "rendererName")
+		(args
+			_channelEntityId = "_channelEntityId"
+		)
+	)
+)
+
+(def element ChatDropDownMenu (_channelEntityId:number, _isDropDown:bool)
+	(scope
+		(var channelEntity:dhEntity = "getEntity(_channelEntityId)")
+
+		(var channelComponent:dhComponent = "channelEntity.channel")
+
+		(var isFavorite:bool = 		"channelComponent.isFavorite" 	(event "channelComponent.evIsFavoriteChanged"))
+		(var isChannelOpened:bool = "channelComponent.opened" 		(event "channelComponent.evOpenChanged"))
+
+		
+		(var entityAccount:dhEntity = "getEntity(channelComponent.user.ref.id)")
+
+		(var elementInGroupsChannel:dhComponent = "channelEntity.elementInGroups")
+		(var elementInGroupsContact:dhComponent = "entityAccount.elementInGroups")
+
+		(var channelGroupIds:array = 	"elementInGroupsChannel.groupIds")
+		(var contactGroupIds:array = 	"elementInGroupsContact.groupIds" 	(event "elementInGroupsContact.evGroupsChanged"))
+
+		(var isAccountOnline:bool = 	"entityAccount.accountStatus.online"		(event "entityAccount.accountStatus.evOnlineChanged"))
+		(var pureName:str = 			"entityAccount.accountName.name" 			(event "entityAccount.accountName.evChanged"))
+		(var isIgnored:bool = 			"entityAccount.contact.isIgnored" 			(event "entityAccount.contact.evIsIgnoredChanged"))
+		(var accountDbId:number = 		"entityAccount.accountSimple.dbId")
+		(var isInDivisionContact:bool = "entityAccount.hasComponent(CC.preBattlePlayerSimple)")
+
+		(var isUserInContactGroup:bool = "contactGroupIds != null")
+		(var isMyChannel:bool = "isIn(CHANNEL_GROUP.MYCHANNELS, channelGroupIds)")
+
+		(var chatComponent:dhComponent = "getSingleComponent(CC.chat)")
+
+		(var isPrivateChannel:bool = 	"channelComponent.typeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PRIVATE")
+		(var isPrebattleChannel:bool = 	"channelComponent.typeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE")
+
+		(var canAddGroupEntitiesId:array = "elementInGroupsContact != null 	? elementInGroupsContact.canAddGroupEntitiesId
+																			: chatComponent.canAddGroupEntitiesId" 	(event "elementInGroupsContact.evCanAddGroupEntitiesChanged")
+																				 									(event "chatComponent.evRosterChanged"))
+	
+		(var contactsGroupCollection:dhCollection = "getCollection(CC.contactsGroup)")
+
+		(var isInTrainingRoom:bool = 		"getSingleEntity(CC.trainingRoomWindowState) != null")
+		(var isInBalancer:bool = 			"getSingleEntity(CC.balancerInfo) != null")
+		(var isTournamentRoomInfo:bool = 	"getSingleEntity(CC.tournamentRoomInfo) != null")
+
+		(var divisionComponent:dhComponent = "getSingleComponent(CC.division)")
+		(var shipRestrictions:dict = "divisionComponent.shipRestrictions" (event "divisionComponent.evShipRestrictionsChanged"))
+
+		(var playersInDivisionCollectionLength:number = "getCollection(CC.preBattlePlayerSimple).length")
+		(var invitedPlayersCollectionLength:number = 	"getCollection(CC.playerInvitedToPrebattleInfo).length")
+
+		(var freePlaces:number = "shipRestrictions.maxPlayers - playersInDivisionCollectionLength - invitedPlayersCollectionLength")
+
+		(var realmConstantsComponent:dhComponent = "getSingleComponent(CC.realmConstants)")
+		(var currentRegion:str = "realmConstantsComponent.currentRegion")
+
+		(var chatRestrictionsComponent:dhComponent = "getSingleComponent(CC.chatRestrictions)")
+		(var isBlockDockAndClanChat:bool = "chatRestrictionsComponent.isBlockDockAndClanChat" (event "chatRestrictionsComponent.evBlockDockAndClanChatChanged"))
+
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:dhComponent = 	"selfPlayerEntity.preBattlePlayerSimple")
+		(var clanmanSupplyInfoComponent:dhComponent = 		"selfPlayerEntity.clanmanSupplyInfo")
+		(var clanmanComponent:dhComponent = 				"selfPlayerEntity.clanman")
+
+		(var isSelfPlayerCommander:bool = 	"preBattlePlayerSimpleComponent.isCommander" 		(event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+		(var selfPreBattleId:number = 		"preBattlePlayerSimpleComponent.preBattleId" 		(event "preBattlePlayerSimpleComponent.evPreBattleIdChanged"))
+		(var hasClanSquadModifier:bool = 	"clanmanSupplyInfoComponent.hasClanSquadModifier"	(event "clanmanSupplyInfoComponent.evHasClanSquadModifierChanged"))
+		
+		(var role:str = 		"clanmanComponent.role" 	(event "clanmanComponent.evRoleChanged"))
+		(var clanId:number = 	"clanmanComponent.clanId" 	(event "clanmanComponent.evClanIdChanged"))
+
+		(var clanLadderInfoComponent:dhComponent = "getPrimaryEntity(CC.clanLadderInfo, clanId).clanLadderInfo")
+		(var leadingSquadId:number = "clanLadderInfoComponent.leadingSquadId")
+
+		(var clanTeamComponent:dhComponent = "getPrimaryEntity(CC.clanTeam, selfPreBattleId).clanTeam")
+		(var squadId:number = "clanTeamComponent.squadId" (event "clanTeamComponent.evSquadIdChanged"))
+
+		(var isCanCreateClanBattle:bool = " isIn(role, SC.Clan.CLAN_ROLE.CAN_INVITE)")
+
+		(var accountSimpleComponent:dhComponent = "getPrimaryEntity(CC.accountSimple, accountDbId).accountSimple")
+		(var isBanRequestAlreadySent:bool = "accountSimpleComponent.reported" (event "accountSimpleComponent.evReportedChanged"))
+
+		(var canInviteInDivision:bool = "	!isInTrainingRoom &&
+											!isTournamentRoomInfo &&
+											isPrivateChannel &&
+											isAccountOnline &&
+											!isInDivisionContact &&
+											freePlaces > 0 &&
+											!isInBalancer")
+
+		(var canSwitchClanSquad:bool = "	hasClanSquadModifier &&
+											isPrebattleChannel &&
+											isSelfPlayerCommander &&
+											!isInBalancer &&
+											isCanCreateClanBattle")
+
+		(var canAddToContact:bool = "!isIgnored && isPrivateChannel && !isUserInContactGroup")
+		(var canAddToGroup:bool = "!isIgnored && isPrivateChannel && ((canAddGroupEntitiesId.length > 0) && (contactsGroupCollection.length > 1))")
+		(var canRemoveFromContact:bool = "!isIgnored && isPrivateChannel && isUserInContactGroup")
+		(var canChannelClose:bool = "isChannelOpened && !isPrebattleChannel")
+		(var canChannelRename:bool = "isMyChannel && currentRegion != CN_REGION && !isBlockDockAndClanChat && _isDropDown")
+		(var canDismissDivision:bool = "isPrebattleChannel && isSelfPlayerCommander")
+	)
+	(class $ContextMenuDimensions)
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip = "true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
+		(style
+			(width = 100%)
+			(vgap = "XXS")
+		)
+
+		(block
+			
+			(bind visible "canChannelRename")
+
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "canChannelRename")
+				(args
+					_title = 'IDS_CHANNEL_RENAME'
+					_dispatchedEv = 'evChatChannelRenameStart'
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "canDismissDivision")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "canDismissDivision")
+				(args
+					_title = 'IDS_DISMISS_DIVISION'
+					_methods = "[ {
+									type:	'inputMapping.onRequest',
+									name:	'dismissDivision',
+									args:	{ subtitle : 'IDS_DISMISS_DIVISION_QUESTION' }
+								}]"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "isPrebattleChannel")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isPrebattleChannel")
+				(args
+					_title = 'IDS_LEAVE_DIVISION'
+					_methods = "[ {
+									type:	'inputMapping.onRequest',
+									name:	'leaveDivision',
+									args:	{ subtitle : 'IDS_LEAVE_DIVISION_QUESTION' }
+								}]"
+				)
+			)
+		)
+		(block
+			
+			(bind visible "canSwitchClanSquad")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItemExpand'
+				(bind enabled "canSwitchClanSquad")
+				(args
+					_title = 'IDS_SWITCH_CLAN_SQUAD'
+					_contextElement = 'SwitchClanSquadContextMenu'
+					_args = "{ _currentSquad: squadId, _leadingSquadId: leadingSquadId }"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "isPrivateChannel")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isPrivateChannel")
+				(args
+					_title = "isFavorite ? 'IDS_REMOVE_FROM_FAVORITES' : 'IDS_ADD_TO_FAVORITES'"
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'setChannelFavorite',
+									args:	{ 	channelId: channelComponent.channelId,
+												favorite: !isFavorite }
+								}]"
+				)
+			)
+		)
+
+		(block
+			
+			
+			(bind visible "canChannelClose")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "canChannelClose")
+				(args
+					_title = 'IDS_CHANNEL_CLOSE'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'leaveChannel',
+									args:	{ channelId: channelComponent.channelId }
+								}]"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "canInviteInDivision")
+			(style (width = 100%))
+
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "canInviteInDivision")
+				(args
+					_title = 'IDS_INVITE_IN_DIVISION'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'inviteToDivision',
+									args:	{ 	playerId: accountDbId,
+												playerName: pureName,
+												inviteType: SC.Pre_battle.PRE_BATTLE_INVITE_TYPE.COMMON }
+								}]"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "canAddToContact")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "canAddToContact")
+				(args
+					_title = 'IDS_ADD_TO_CONTACTS'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'addContact',
+									args:	{ dbId: accountDbId }
+								}]"
+				)
+			)
+		)
+	
+		(block
+			
+			(bind visible "canAddToGroup")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItemExpand'
+				(bind enabled "canAddToGroup")
+				(args
+					_title = 'IDS_ADD_TO_GROUP'
+					_contextElement = 'MoveToGroupContextSubMenu'
+					_args = "{	_entityAccountId: entityAccount.id,
+								_items: canAddGroupEntitiesId }"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "isPrivateChannel")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isPrivateChannel")
+				(args
+					_title = "isIgnored ? 'IDS_NOT_IGNORE_PLAYER' : 'IDS_IGNORE_PLAYER'"
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'userIgnoreContact',
+									args:	{ 	dbId: accountDbId,
+												ignore: !isIgnored }
+								}]"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "isPrivateChannel")
+			(style (width = 100%))
+
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isPrivateChannel")
+				(args
+					_title = 'IDS_REQUEST_BAN_PLAYER_DOCK'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'makeChatComplaint',
+									args:	{	subjectSpaID: accountDbId,
+												channelID: channelComponent.channelId }
+								}]"
+					_enabled = "!isBanRequestAlreadySent"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "canRemoveFromContact")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "canRemoveFromContact")
+				(args
+					_title = 'IDS_REMOVE_FROM_CONTACTS'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'removeContact',
+									args:	{ dbId: accountDbId }
+								}]"
+				)
+			)
+		)
+
+		(block
+			
+			(bind visible "isPrivateChannel")
+			(style (width = 100%))
+			(controller $Instance renderer='ContextMenuItem'
+				(bind enabled "isPrivateChannel")
+				(args
+					_title = 'IDS_PROFILE'
+					_methods = "[ {
+									type:	'inputMapping.onAction',
+									name:	'navigateTo',
+									args:	{ 	route: SC.Ui_windows.ROUTE.OVERLAY_BROWSER,
+												data: { url: SC.Ui_windows.GUI_URL.PLAYER_STATS,
+														accountId: toString(accountDbId) } }
+								}]"
+				)
+			)
+		)
+	)
+)
+
+(def element SwitchClanSquadContextMenu (_args:dict)
+	(scope
+		(event evContextSubMenuRollOver)
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE _prefix = "'MenuItemExpandContent_'")
+
+		(var hitTestState:bool = false)
+		(bind hitTestState "true" init=false (event "evStartShow"))
+		(bind hitTestState "false" init=false (event "evStartHide"))
+
+		(var clanSquadLadderInfoCollection:dhCollection = "getCollection(CC.clanSquadLadderInfo)")
+	)
+	(dispatch evContextSubMenuRollOver args="{ value: MenuItemExpandContent_rollOver }" dir="EventDirection.UP" (event "MenuItemExpandContent_evRollOver") (event "MenuItemExpandContent_evRollOut"))
+	(class $ContextMenuDimensions)
+	(style (bind hitTest "hitTestState"))
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip = "true")
+
+	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
+		(style
+			(width = 100%)
+			(vgap = "XXS")
+		)
+
+		(controller $Repeat renderer='ClanSquadSwitchMenuItem'
+			(bind count "clanSquadLadderInfoCollection.length")
+			(args
+				_currentSquad = "_args._currentSquad"
+				_leadingSquadId = "_args._leadingSquadId"
+				_clanSquadEntity = "clanSquadLadderInfoCollection[$index]"
+			)
+		)
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER _prefix = "'MenuItemExpandContent_'")
+)
+
+(def element ClanSquadSwitchMenuItem (_currentSquad:number, _leadingSquadId:number, _clanSquadEntity:dhEntity)
+	(scope
+		(var clanSquadLadderInfoComponent:dhComponent = "_clanSquadEntity.clanSquadLadderInfo")
+		(var squadId:number = "clanSquadLadderInfoComponent.squadId")
+
+		(var isSelected:bool = 	"squadId == _currentSquad")
+	)
+	(style (width = 100%))
+
+	(block
 		(class $FullsizeAbsolute)
+		(element DockSubmenuItem
+			_selected = "isSelected"
+			_method = " [ {	type:	!isSelected ? 'inputMapping.onAction' : '',
+							name:	'AccountClanComponent.setClanSquad',
+							args:	{ newSquadId: squadId }}]"
+		)
+	)
+	(block
 		(style
 			(hitTest = false)
-			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
-			(borderRadius = "XS")
-			(alpha = "buttonAlpha")
+			(width = 100%)
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+			(paddingTop = "S")
+			(paddingBottom = "S")
 		)
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
-			_trigger = "state"
-			_alpha = "buttonAlpha"
+
+		(element ClanSquadRatingInfo
+			_clanSquadEntity = "_clanSquadEntity"
+			_currentSquadId = "_currentSquad"
+			_leadingSquadId = "_leadingSquadId"
+		)
+	)
+)
+
+(def element ClanSquadRatingInfo (_clanSquadEntity:dhEntity, _currentSquadId:number, _leadingSquadId:number, _isDivisionTooltip:bool=false)
+	(scope
+		(var clanSquadLadderInfoComponent:dhComponent = "_clanSquadEntity.clanSquadLadderInfo")
+
+		(var leagueId:number = 		"clanSquadLadderInfoComponent.leagueId" 	(event "clanSquadLadderInfoComponent.evLeagueIdChanged"))
+		(var divisionId:number = 	"clanSquadLadderInfoComponent.divisionId" 	(event "clanSquadLadderInfoComponent.evDivisionIdChanged"))
+		(var rating:number = 		"clanSquadLadderInfoComponent.rating"		(event "clanSquadLadderInfoComponent.evRatingChanged"))
+		(var squadId:number =		"clanSquadLadderInfoComponent.squadId")
+
+		(var isLeading:bool = 	"squadId == _leadingSquadId")
+		(var isSelected:bool = 	"squadId == _currentSquadId")
+	)
+
+	(style
+		(width = 100%)
+		(bind alpha "isSelected ? TA : TC")
+	)
+
+	(hblock
+		(tf
+			(class $TextDefaultBold18NM)
+			(bind text "tr('IDS_CLAN_SQUAD_' + toString(squadId))")
+		)
+
+		(block
+			(bind visible "isLeading")
+			(style
+				(marginLeft = "S")
+				(marginTop = -3px)
+			)
+			(controller $Instance renderer='LeadingClanSquadIcon'
+				(bind enabled "isLeading")
+			)
+		)
+	)
+
+	(hblock
+		(style (marginTop = "SXS"))
+		(tf
+			(class $TextDefault18NM)
+			(style (leading = -3))
+			(bind text "tr('IDS_CLAN_LEAGUE_' + toString(leagueId))")
+		)
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(marginLeft = "S")
+				(leading = -3)
+			)
+			(bind text "shipLevelsToRoman(divisionId)")
+		)
+		(tf
+			(class $TextDefault18NM)
+			(style
+				(marginLeft = "S")
+				(leading = -3)
+			)
+			(bind text "rating")
+		)
+	)
+
+	(block
+		(bind visible "isSelected")
+		(style
+			(position = "absolute")
+			(right = 0)
+			(top = "SXS")
+			(width = 19px)
+			(height = 19px)
+			(backgroundSize = "cover")
+			(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
+		)
+	)
+
+	(block
+		(bind visible "_isDivisionTooltip")
+		(style (width = 100%))
+		(controller $Instance renderer='TooltipSystemHorizontalDivider'
+			(bind enabled "_isDivisionTooltip")
+		)
+	)
+)
+
+(def element ChatDropDownMenuButton (_channelEntityId:number, _isClanDivision:bool)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(event evMenuItemClicked)
+		(event evChatChannelRenameStart)
+
+		(var isDropDownMenuVisible:bool = false)
+
+		(var state:number = "	mouseDown || isDropDownMenuVisible	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								rollOver							? SC.Ui_styles.BUTTON_STATE.OVER
+																	: SC.Ui_styles.BUTTON_STATE.UP")
+
+	)
+	(class $Fullsize)
+	(style (backgroundColor = "NO_COLOR"))
+
+	(block
+		(class $FullsizeAbsolute)
+		(element MenuItemBackground _state = "state")
+	)
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(controller $Tooltip
+		(renderer = 'DivisionHeaderTooltip')
+		(args
+			_isClanDivision = "_isClanDivision"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Tooltip
+		(renderer = 'ChatDropDownMenu')
+		(args
+			_channelEntityId = "_channelEntityId"
+			_isDropDown = true
+		)
+		(macro DEFAULT_INFOTIP_BEHAVIOUR "1")
+		(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
+		(macro TOOLTIP_HIDE_ON_EVENT "evChatChannelRenameStart")
+
+		(offsetMap = "{ left:0px, top: 0px, right: 0px, bottom: XS }")
+		(align = "center|bottom")
+
+		(bind isDropDownMenuVisible "true" init=false on='evStartShow')
+		(bind isDropDownMenuVisible "false" init=false on='evStartHide')
+	)
+)
+
+(def element DivisionHeaderButton (_channelEntityId:number, _isClanDivision:bool, _isActive:bool)
+	(style
+		(height = 36px)
+		(flow = "horizontal")
+	)
+
+	(block
+		(style
+			(marginLeft = "XS")
+			(marginTop = 3px)
+		)
+		(element DivisionHeaderLock)
+	)
+
+	(hblock
+		(block
+			(name = 'ChatBoxHeader')
+
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(height = 30px)
+				(marginTop = 3px)
+				(bind hitTest "_isActive")
+			)
+
+			(element ChatDropDownMenuButton
+				_channelEntityId = "_channelEntityId"
+				_isClanDivision = "_isClanDivision"
+			)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(marginBottom = "XS")
+				(marginTop = 11px)
+				(marginLeft = "XS")
+			)
+
+			(element FormationHeader
+				_isClanDivision = "_isClanDivision"
+				_isLargeSize = true
+			)
+		)
+
+		(block
+			(bind visible "_isActive")
+			(style
+				(hitTest = false)
+				(marginLeft = 3px)
+				(marginTop = 11px)
+				(width = 16px)
+				(height = 16px)
+				(backgroundImage = 'url:../service_kit/buttons/navigate_arrow/down.png')
+				(alpha = "TC")
+			)
+		)
+	)
+)
+
+
+(def element CommonHeaderButton (	_channelEntityId:number,
+									_isActive:bool,
+									_isShowNavigateArrow:bool,
+									_isClanChat:bool)
+	(style
+		(height = 36px)
+		(flow = "horizontal")
+		(bind width "_isClanChat ? 100% : auto")
+	)
+
+	(block
+		(name = 'ChatBoxHeader')
+
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(height = 30px)
+			(marginTop = 3px)
+			(paddingRight = "-XXS")
+			(bind hitTest "_isActive")
+		)
+
+		(controller $Instance renderer='ChatDropDownMenuButton'
+			(bind enabled "_isShowNavigateArrow")
+			(args
+				_channelEntityId = "_channelEntityId"
+				_isClanDivision = "false"
+			)
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(marginBottom = "XS")
+			(marginTop = 7px)
+			(marginLeft = "XS")
+			(bind width "_isClanChat ? 100% : auto")
+		)
+
+		(element ChannelTitleWithIcon
+			_channelEntityId = "_channelEntityId"
+			_bold = true
+			_isChannelHeader = true
+			_width = "_isClanChat ? 100% : auto"
+			_textMaxWidth = "_isClanChat ? 100% : auto"
+		)
+	)
+
+	(block
+		(bind visible "_isShowNavigateArrow")
+		(style
+			(hitTest = false)
+			(marginLeft = 3px)
+			(marginTop = "SXS")
+			(width = 16px)
+			(height = 16px)
+			(backgroundImage = 'url:../service_kit/buttons/navigate_arrow/down.png')
+			(alpha = "TC")
+		)
+	)
+)
+
+(def element DivisionHeaderTooltip(_isClanDivision:bool)
+	(scope
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var selfPreBattleId:number = 		"selfPlayerEntity.preBattlePlayerSimple.preBattleId" 		(event "selfPlayerEntity.preBattlePlayerSimple.evPreBattleIdChanged"))
+		(var hasClanSquadModifier:bool = 	"selfPlayerEntity.clanmanSupplyInfo.hasClanSquadModifier" 	(event "selfPlayerEntity.clanmanSupplyInfo.evHasClanSquadModifierChanged"))
+		(var clanId:number = 				"selfPlayerEntity.clanman.clanId" 							(event "selfPlayerEntity.clanman.evClanIdChanged"))
+		
+		(var clanLadderInfoComponent:dhComponent = "getPrimaryComponent(CC.clanLadderInfo, clanId)")
+		(var leadingSquadId:number = "clanLadderInfoComponent.leadingSquadId")
+
+		(var clanTeamComponent:dhComponent = "getPrimaryComponent(CC.clanTeam, selfPreBattleId)")
+		(var squadId:number = "clanTeamComponent.squadId" (event "clanTeamComponent.evSquadIdChanged"))
+
+		(var clanSquadLadderInfoCollection:dhCollection = "getCollection(CC.clanSquadLadderInfo)")
+	)
+	(style
+		(hitTest = false)
+		(width = "DEFAULT_TOOLTIP_WIDTH")
+	)
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(block
+			(bind visible "_isClanDivision && hasClanSquadModifier")
+			(style (width = 100%))
+			(controller $Repeat renderer='ClanSquadRatingInfo'
+				(bind count "clanSquadLadderInfoCollection.length")
+				(args
+					_clanSquadEntity = "clanSquadLadderInfoCollection[$index]"
+					_currentSquadId = "squadId"
+					_leadingSquadId = "leadingSquadId"
+					_isDivisionTooltip = true
+				)
+			)
+		)
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text = 'IDS_HINT_CLICK_TO_CHOOSE_ACTION'
+		)
+	)
+)
+
+(def element ChatBoxHeaderControls (_channelEntityId:number, _isShowCloseButton:bool)
+	(scope
+		(var channelComponent:dhComponent = "getEntity(_channelEntityId).channel")
+		(var isInvitation:bool = 		"channelComponent.isInvitation" 		(event "channelComponent.evInvitationRefused") (event "channelComponent.evOpenChanged"))
+		(var isPasswordNeeded:bool = 	"channelComponent.isWaitingPassword" 	(event "channelComponent.evOpenChanged"))
+		(var typeIdent:str =	 		"channelComponent.typeIdent"			(event "channelComponent.evTypeChanged"))
+
+		(var isTrainingRoom:bool = 	"typeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.TRAINING_ROOM")
+		(var isDivisionChat:bool = 	"typeIdent == SC.Channel.CHANNEL_TYPE_IDENT_VALUE.PREBATTLE")
+
+		(var tournamentRoomInfoEntity:dhEntity = "getSingleEntity(CC.tournamentRoomInfo)")
+		(var isTournamentRoomInfo:bool = "tournamentRoomInfoEntity != null")
+	)
+
+	(style
+		(flow = "horizontal")
+		(backgroundColor = "NO_COLOR")
+		(paddingRight = "SXS")
+		(paddingLeft = "SXS")
+		(paddingTop = 10px)
+		(paddingBottom = 10px)
+	)
+
+	(block
+		(name = 'collapseChatWindow')
+		(style (marginTop = 9px))
+
+		(element ImageButton
+			_width = 12px
+			_height = 4px
+			_hitAreaMargin = "[-XS, -S, -XS, 0]"
+			_backgroundImage = 'url:../service_kit/buttons/button_collapse.png'
+			_methods = "[ {
+							type:	'inputMapping.onAction',
+							name:	'setChatBoxOpenedState',
+							args:	{ 	channelId: channelComponent.channelId,
+										opened: false }
+						}]"
+		)
+
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = 'IDS_HINT_COLLAPSE_WINDOW'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(name = 'ChatboxButtonClose')
+		(bind visible "_isShowCloseButton")
+		(style
+			(marginLeft = "6px")
+			(marginTop = 1px)
+		)
+
+		(controller $Instance renderer='CloseButton'
+			(bind enabled "_isShowCloseButton")
+			(args
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 	isTrainingRoom		? '' :
+											isInvitation		? 'refuseInvitation' :
+											isPasswordNeeded 	? 'cancelEnterPassword' :
+											!isDivisionChat		? 'leaveChannel'
+																: '',
+									args: isDivisionChat || isTrainingRoom 	?	{} 
+																		: 	{ channelId: channelComponent.channelId }},
+
+								{	type: 'inputMapping.onRequest',
+									name: 	isTrainingRoom	? 'closeTrainingRoom' :
+											isDivisionChat		? 'leaveDivision'
+															: '',
+									args: { subtitle: 'IDS_LEAVE_DIVISION_QUESTION'} }]"
+
+				_tooltipText =	"	isInvitation			? 'IDS_HINT_REJECT_INVITE' :
+									isTournamentRoomInfo	? 'IDS_TOURNAMENT_ROOM_QUITING' :
+									isTrainingRoom			? 'IDS_TRAINING_ROOM_QUITING' :
+									isDivisionChat			? 'IDS_LEAVE_DIVISION'
+															: 'IDS_CHANNEL_CLOSE'"
+			)
+		)
+	)
+)
+
+(def element ChatBoxHeaderDivisionCommon (_channelEntityId:number, _isSteadyChannel:bool)
+	(scope
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+		(var selfPreBattleId:number = 	"preBattlePlayerSimpleComponent.preBattleId" 	(event "preBattlePlayerSimpleComponent.evPreBattleIdChanged"))
+		(var isInBattleSelf:bool = 		"preBattlePlayerSimpleComponent.isInBattle" 	(event "preBattlePlayerSimpleComponent.evIsInBattleChanged"))
+		(var isMercenary:bool = 		"preBattlePlayerSimpleComponent.isMercenary" 	(event "preBattlePlayerSimpleComponent.evIsMercenaryChanged"))
+
+		(var preBattleEntity:dhEntity = "getPrimaryEntity(CC.preBattle, selfPreBattleId)")
+		(var preBattleComponent:dhComponent = "preBattleEntity.preBattle")
+		(var isFormationInBattle:bool =	"preBattleComponent.isInBattle" (event "preBattleComponent.evStatusChanged"))
+
+		(var isActiveDivisionControls:bool = "!_isSteadyChannel && !(isFormationInBattle && isInBattleSelf)")
+
+		(var fixedPrimeTimeEntity:dhEntity = "getPrimaryEntity(CC.clanBattlePrimeTime, 'fixed')")
+		(var chosenPrimeTimesCollection:dhCollection = "getCollectionByPath(CC.clanBattlePrimeTime, 'chosen')")
+		(var chosenPrimeTimeEntity:dhEntity = "chosenPrimeTimesCollection.length > 0 ? chosenPrimeTimesCollection[0] : null")
+		(var currentEntityId:number = "fixedPrimeTimeEntity ? fixedPrimeTimeEntity.id : chosenPrimeTimeEntity.id")
+		(var isPrimeTimeChosen:bool = "currentEntityId != null")
+
+		(var selectedBattleTypeEntity:dhEntity = "getSingleEntity(CC.battleType, 'selected')")
+		(var selectedBattleType:str = "selectedBattleTypeEntity.battleType.type")
+		(var isClanDivision:bool = "selectedBattleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE")
+
+		(var isShowPrimeTime:bool = "!isMercenary && isClanDivision")
+	)
+	(style
+		(width = 100%)
+		(paddingTop = "XXS")
+		(paddingBottom = "XXS")
+	)
+
+	(element DivisionHeaderButton
+		_channelEntityId = "_channelEntityId"
+		_isClanDivision = "isClanDivision"
+		_isActive = "isActiveDivisionControls"
+	)
+
+	(block
+		(bind visible "isShowPrimeTime")
+		(style
+			(height = 20px)
+			(marginLeft = 41px)
+		)
+		
+		(block
+			(style (position = "absolute"))
+			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM _duration="0.1" _fromAlpha=0 _toAlpha=1 _triggerExpression="isPrimeTimeChosen" _easing="Easing.quad_in")
+			(controller $Instance renderer='PrimeTimeStereotype'
+				(bind enabled "isPrimeTimeChosen")
+				(args
+					_entityId = "currentEntityId"
+					_isBold = true
+				)
+			)
+		)
+
+		(block
+			(style (position = "absolute"))
+			(macro CHANGE_ALPHA_BY_TRIGGER_ANIM _duration="0.1" _fromAlpha=0 _toAlpha=1 _triggerExpression="!isPrimeTimeChosen" _easing="Easing.quad_in")
+			(tf
+				(class $TextDefaultNM)
+				(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+				(text = 'IDS_CLAN_BATTLES_NO_CHOSEN_PRIMETIME')
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(right = 0px)
+		)
+
+		(element ChatBoxHeaderControls
+			_channelEntityId = "_channelEntityId"
+			_isShowCloseButton = "isActiveDivisionControls"
+		)
+	)
+)
+
+(def element ChatBoxHeaderCommon (	_channelEntityId:number,
+									_isSteadyChannel:bool,
+									_isClanChat:bool,
+									_isPasswordNeeded:bool,
+									_isInvitation:bool)
+	(scope
+		(event evChatChannelRenameStart)
+		(event evChannelHeaderEditingClose)
+
+		(var isRenameChannel:bool = false)
+		(bind isRenameChannel "true" init=false (event "evChatChannelRenameStart"))
+		(bind isRenameChannel "false" init=false  (event "evChannelHeaderEditingClose"))
+
+		(var isShowNavigateArrow:bool = "!_isPasswordNeeded && !_isSteadyChannel && !_isInvitation")
+	)
+	(style
+		(width = 100%)
+		(bind paddingLeft 	"isRenameChannel ? 0px : XS")
+		(bind paddingTop 	"isRenameChannel ? S : XXS")
+		(bind paddingBottom "isRenameChannel ? S : XXS")
+		(flow = "horizontal")
+	)
+
+	(block
+		(bind visible "!isRenameChannel")
+		(style (width = 100%))
+		(controller $Instance renderer='CommonHeaderButton'
+			(bind enabled "!isRenameChannel")
+			(args
+				_channelEntityId = "_channelEntityId"
+				_isActive = "!_isSteadyChannel"
+				_isShowNavigateArrow = "isShowNavigateArrow"
+				_isClanChat = "_isClanChat"
+			)
+		)
+	)
+
+	(block
+		(controller $Instance renderer='ChatBoxHeaderControls'
+			(bind enabled "!isRenameChannel")
+			(args
+				_channelEntityId = "_channelEntityId"
+				_isShowCloseButton = "!_isClanChat"
+			)
+		)
+	)
+
+	(block
+		(bind visible "isRenameChannel")
+		(style (width = 100%))
+
+		(controller $Instance renderer='ChannelHeaderEditing'
+			(bind enabled "isRenameChannel")
+			(args
+				_channelEntityId = "_channelEntityId"
+			)
+		)
+	)
+)
+
+(def element ChannelHeaderEditing (_channelEntityId:number)
+	(scope
+		(event evHideWrongMessage)
+		(event evChannelHeaderEditingEnter)
+		(event evChannelHeaderChangedEvent)
+		(event evShortName)
+
+		(var channelComponent:dhComponent = "getEntity(_channelEntityId).channel")
+		(var entityAccount:dhEntity = "getEntity(channelComponent.user.ref.id)")
+		(var accountNameComponent:dhComponent = "entityAccount.accountName")
+		(var channelName:str = "channelComponent.nameIds != null	? channelComponent.nameIds :
+								entityAccount != null 				? accountNameComponent.nickName
+																	: channelComponent.name" 	(event "channelComponent.evNameChanged")
+		 																						(event "accountNameComponent.evChanged"))
+		
+		(var inputText:str = '')
+		(bind inputText "$event.value" init=false watch=false (event "evChannelHeaderEditingEnter"))
+
+		(var channelTypeIdent:str = "channelComponent.typeIdent" (event "channelComponent.evTypeChanged"))
+		(var groupType:str = "channelComponent.isSecured ? 'group_closed' : channelTypeIdent")
+	)
+
+	(bindcall externalCall "inputText.length > 2 ? 'inputMapping.onAction' : ''" 
+							"['renameChannel', { channelId: channelComponent.channelId, newName: inputText }]" 
+							init=false
+							watch=false
+							(event "evChannelHeaderEditingEnter"))
+
+	(dispatch evChannelHeaderEditingClose dir="EventDirection.UP" args="{}" (bind enabled "inputText == channelName") (event "evChannelHeaderEditingEnter"))
+	(dispatch evChannelHeaderEditingClose dir="EventDirection.UP" args="{}"	(event "channelComponent.evNameChanged"))
+
+	(dispatch evShortName args="{}" (bind enabled "inputText.length < 3") (event "evChannelHeaderEditingEnter"))
+
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+		(paddingLeft = "SXS")
+		(paddingRight = "SXS")
+		(paddingTop = "XS")
+		(paddingBottom = "XS")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(style
+			(marginTop = "XS")
+			(marginRight = "XS")
+			(height = 19px)
+			(width = 19px)
+			(bind backgroundImage "groupType ? 'url:../service_kit/chat_channels/' + groupType + '.png' : ''")
+		)
+	)
+
+	(element InputTextDefault
+		_onEnterEvent = 'evChannelHeaderEditingEnter'
+		_onInputChangedEvent = 'evChannelHeaderChangedEvent'
+		_isSmallButtonEnter = true
+		_defaultFocused = true
+		_onEnterTooltipText = 'IDS_CHANNEL_RENAME'
+		_maxChars = 32
+		_defaultText = "channelName"
+		_onCloseButtonEvent = 'evChannelHeaderEditingClose'
+		_closeButtonTooltipText = 'IDS_CANCEL'
+		_tooltipText = 'IDS_HINT_ENTER_CHANNEL_NAME'
+		_restrict = '[^<>]+'
+	)
+
+	(controller $Tooltip
+		(renderer = 'WrongTextInputNotificationInfotip')
+		(args
+			_text = 'IDS_HINT_TITLE_TOO_SHORT'
+		)
+		(position = "border")
+		(macro CUSTOM_INFOTIP_BEHAVIOUR "evShortName")
+		(macro TOOLTIP_HIDE_ON_EVENT "evChannelHeaderChangedEvent")
+		(macro TOOLTIP_HIDE_ON_EVENT "evHideWrongMessage")
+	)
+)
+
+
+(def element ChatBoxHeader (_channelEntityId:number, 
+							_isInvitation:bool, 
+							_isPasswordNeeded:bool, 
+							_isDivisionChat:bool,
+							_isClanChat:bool,
+							_isSteadyChannel:bool)
+	(style (width = 100%))
+
+	(controller $Instance renderer='ChatBoxHeaderCommon'
+		(bind enabled "!_isDivisionChat")
+		(args
+			_channelEntityId = 	"_channelEntityId"
+			_isSteadyChannel = 	"_isSteadyChannel"
+			_isClanChat = 		"_isClanChat"
+			_isPasswordNeeded = "_isPasswordNeeded"
+			_isInvitation = 	"_isInvitation"
+		)
+	)
+
+	(controller $Instance renderer='ChatBoxHeaderDivisionCommon'
+		(bind enabled "_isDivisionChat")
+		(args
+			_channelEntityId = 	"_channelEntityId"
+			_isSteadyChannel = 	"_isSteadyChannel"
 		)
 	)
 )

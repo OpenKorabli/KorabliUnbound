@@ -1,6 +1,6 @@
-(def constant HEALTH_BAR_FILL_PADDING 1)
-(def constant HEALTH_BAR_DIVIDER_WIDTH 1)
-(def constant HEALTH_BAR_DIVIDER_HEIGHT 2)
+(def constant HEALTH_BAR_FILL_PADDING 1px)
+(def constant HEALTH_BAR_DIVIDER_WIDTH 1px)
+(def constant HEALTH_BAR_DIVIDER_HEIGHT 2px)
 
 (def constant PLANE_ICON_SIZE {
 	width: 26px,
@@ -35,9 +35,9 @@
 		(var isSelf:bool = "relationComponent && relationComponent.value == SC.Battle.PLAYER_RELATION.SELF")
 		(var relationName:str = "SC.Battle.PLAYER_RELATION.NAMES[SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationComponent.value]]" (event "relationComponent.evChanged"))
 
-		(var ownCarrierEntity:gfx = "$datahub.getSingleEntity(CC.aircarrier)")
-		(var activeSquadron:number = "ownCarrierEntity.aircarrier ? ownCarrierEntity.aircarrier.activeSquadron : DEFAULT_SQUADRON_OWNER_ID" (event "ownCarrierEntity.aircarrier.evStateChanged"))
-		(var isControlledByPlayer:bool = "isSelf && ownSquadronComponent && ownSquadronComponent.id == activeSquadron")
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+		(var isCurrentSquadronControlled:bool = "controlledSquadronId == squadronComponent.id")
 
 		(var planeFullName:str = "PLANE_TYPE_TO_STR[planeTypeInt] + ammoPostfix + postfix + '_' + relationName")
 		(var planeSubName:str = "	isConsumable				? 'consumables_' :
@@ -53,19 +53,22 @@
 		(align = "center|middle")
 	)
 	(block
-		(bind visible "isControlledByPlayer")
+		(bind visible "isCurrentSquadronControlled")
 		(style
 			(position = "absolute")
-			(width = 16px) (height = 20px)
-			(visualOffsetX = 50%) (visualOffsetY = 50%)
-			(bind rotation "_rotation")
+			(width = 16px)
+			(height = 20px)
+			(visualOffsetX = 50%)
+			(visualOffsetY = 50%)
 			(backgroundImage = 'swf:../battle_hud/markers/plane_svg/plane_svg.swf:self')
+			(bind rotation "_rotation")
 		)
 	)
 	(hblock
-		(bind visible "!isControlledByPlayer")
+		(bind visible "!isCurrentSquadronControlled")
 		(style
-			(width = 22px) (height = 22px)
+			(width = 22px)
+			(height = 22px)
 			(bind backgroundImage "markerIconPath")
 		)
 	)
@@ -121,17 +124,18 @@
 				(alpha = 1.17)
 				(style
 					(width = "healthBarWidth")
-					(bind backgroundColor "0xFFFFFFFF")
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
 					(backgroundSize = "fill")
 				)
 
 				(controller $Animation
-					(bindcall play  duration = "DAMAGE_BAR_TWEEN_DURATION"
-									action="kill"
-									watch=false
-									easing="Easing.quad_in"
-									to = "{ width: healthBarWidth }"
-									(event "healthComponent.evValueChanged")
+					(bindcall play
+						duration = "DAMAGE_BAR_TWEEN_DURATION"
+						to = "{width: healthBarWidth}"
+						action = "kill"
+						watch = false
+						easing = "Easing.quad_in"
+						(event "healthComponent.evValueChanged")
 					)
 				)
 			)
@@ -142,9 +146,9 @@
 				(class $FullsizeAbsolute)
 
 				(style
-					(bind width "healthBarWidth")
-					(bind backgroundColor "0xFFFFFFFF")
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
 					(backgroundSize = "fill")
+					(bind width "healthBarWidth")
 				)
 			)
 
@@ -162,9 +166,10 @@
 (def element MarkerHealthBarDivider (_dividerScaleSize:number)
 	(style
 		(position = "absolute")
-		(bind left "_dividerScaleSize * ($index + 1)")
-		(width = "HEALTH_BAR_DIVIDER_WIDTH") (height = "HEALTH_BAR_DIVIDER_HEIGHT")
+		(width = "HEALTH_BAR_DIVIDER_WIDTH")
+		(height = "HEALTH_BAR_DIVIDER_HEIGHT")
 		(backgroundImage = 'url:../battle_hud/markers/bar/bar_divider.png')
+		(bind left "_dividerScaleSize * ($index + 1)")
 	)
 )
 
@@ -204,11 +209,12 @@
 		(var relationValue:number = "relationComponent.value" (event "relationComponent.evChanged"))
 		(var isSelf:bool = "relationValue == SC.Battle.PLAYER_RELATION.SELF")
 		(var isEnemy:bool = "relationValue == SC.Battle.PLAYER_RELATION.ENEMY")
-		(var ownCarrierEntity:gfx = "$datahub.getSingleEntity(CC.aircarrier)")
-		(var activeSquadron:number = "ownCarrierEntity.aircarrier ? ownCarrierEntity.aircarrier.activeSquadron : DEFAULT_SQUADRON_OWNER_ID" (event "ownCarrierEntity.aircarrier.evStateChanged"))
-		(var isControlledByPlayer:bool = "isSelf && ownSquadronComponent && ownSquadronComponent.id == activeSquadron")
+
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
 
 		(macro GET_MARKER_ENTITY_COMPONENT 'squadron')
+		(var isCurrentSquadronControlled:bool = "controlledSquadronId == squadronComponent.id")
 		(var ownerEntity:gfx = "squadronComponent.owner.ref")
 		(var avatarComponent:gfx = "ownerEntity.avatar")
 		(var shipName:str = "avatarComponent.ship.ref.ship.nameUpper ?: ''" (event "avatarComponent.evShipRefChanged"))
@@ -221,9 +227,9 @@
 		(var isBot:bool = "avatarComponent.isBot || _markerEntity.hasComponent(CC.bot)")
 
 		
-		(dispatch evUpdateRotation args={} (event "timer.evFrequent") (bind enabled "isTactical && isControlledByPlayer"))
+		(dispatch evUpdateRotation args={} (event "timer.evFrequent") (bind enabled "isTactical && isCurrentSquadronControlled"))
 		(var planeRotation:number = "mapPositionComponent ? radToGrad(mapPositionComponent.yaw) : 0" (event "evUpdateRotation"))
-		(var iconRotation:number = "isTactical && isControlledByPlayer ? planeRotation : 0")
+		(var iconRotation:number = "isTactical && isCurrentSquadronControlled ? planeRotation : 0")
 
 		
 		(var isAlive:bool = "healthComponent && healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
@@ -233,15 +239,15 @@
 																	: distanceIndex")
 
 		(var isDistanceTypeFarthest:bool = "distanceType == SC.Battle.DISTANCE_TYPE.FARTHEST")
-		(var distanceItemVisibility:bool = "(!isIn(distanceType, [SC.Battle.DISTANCE_TYPE.TACTICAL, SC.Battle.DISTANCE_TYPE.FARTHEST]) || isAdaptiveAltVisionMode) && !isControlledByPlayer")
+		(var distanceItemVisibility:bool = "(!isIn(distanceType, [SC.Battle.DISTANCE_TYPE.TACTICAL, SC.Battle.DISTANCE_TYPE.FARTHEST]) || isAdaptiveAltVisionMode) && !isCurrentSquadronControlled")
 
-		(var healthBarItemVisible:bool = "((isAdaptiveAltVisionMode && distanceType <= SC.Battle.DISTANCE_TYPE.FARTHEST) || (distanceType == SC.Battle.DISTANCE_TYPE.NEAR)) && !(isControlledByPlayer)")
-		
+		(var healthBarItemVisible:bool = "((isAdaptiveAltVisionMode && distanceType <= SC.Battle.DISTANCE_TYPE.FARTHEST) || (distanceType == SC.Battle.DISTANCE_TYPE.NEAR)) && !isCurrentSquadronControlled")
+
 		(var farAdaptiveAltVisionMode:bool = "isAdaptiveAltVisionMode && distanceType <= SC.Battle.DISTANCE_TYPE.FAR")
 
-		(var ownerNameItemVisibility:bool = "distanceType != SC.Battle.DISTANCE_TYPE.TACTICAL && farAdaptiveAltVisionMode && !isControlledByPlayer && !isSelf && playerName != ''")
+		(var ownerNameItemVisibility:bool = "distanceType != SC.Battle.DISTANCE_TYPE.TACTICAL && farAdaptiveAltVisionMode && !isCurrentSquadronControlled && !isSelf && playerName != ''")
 		(var ownerShipNameItemVisibility:bool = "((distanceType != SC.Battle.DISTANCE_TYPE.TACTICAL && farAdaptiveAltVisionMode) || (distanceType == SC.Battle.DISTANCE_TYPE.TACTICAL && isAdaptiveAltVisionMode))
-													&& !isControlledByPlayer && !isSelf && shipName != ''")
+													&& !isCurrentSquadronControlled && !isSelf && shipName != ''")
 
 		(var planeIconScaled:bool = "!isTactical && ((distanceType >= SC.Battle.DISTANCE_TYPE.FAR && !isAdaptiveAltVisionMode) || (distanceType == SC.Battle.DISTANCE_TYPE.FARTHEST && !isFullAltVisionMode))")
 		(macro SCOPE_HIGHLIGHT_MARKER_ON_WORLD_MOUSE_OVER)
@@ -256,23 +262,24 @@
 		(width = 0) (height = 0)
 		(bind align "isTactical ? center|middle : center|bottom")
 	)
-	
+
 	(controller $Animation
-		(bindcall play	duration="DEATH_ANIMATION_DURATION"
-						from="{alpha: 0}"
-						to="{alpha: 1}"
-						init=false
-						watch=false
-						action="killAll"
-						reverse="!(isAlive)"
-						(bind trigger "isAlive")
+		(bindcall play
+			duration = "DEATH_ANIMATION_DURATION"
+			from = "{alpha: 0}"
+			to = "{alpha: 1}"
+			init = false
+			watch = false
+			action = "kill"
+			reverse = "!isAlive"
+			(bind trigger "isAlive")
 		)
 	)
 
 	
 	(block
 		(bind visible "!isSpectatorTrainingMode || isTactical")
-		(style (align="center|middle"))
+		(style (align = "center|middle"))
 		
 		(block
 			(style
@@ -316,7 +323,7 @@
 	
 	(block
 		(bind visible "isSpectatorInNotTacticalMap")
-		(style (align="center|middle"))
+		(style (align = "center|middle"))
 		
 		(block
 			(style (marginBottom = "XXS"))
@@ -332,7 +339,11 @@
 		)
 		(hblock
 			(macro BIND_SCALE "isDistanceTypeFarthest ? 0.7 : 1")
-			(style (align="center|middle") (marginTop = "-XS") (marginBottom = "-XXS"))
+			(style
+				(align = "center|middle")
+				(marginTop = "-XS")
+				(marginBottom = "-XXS")
+			)
 			
 			(block
 				(macro EFFECT_HIGHLIGHT_MARKER_ON_MOUSE_OVER)

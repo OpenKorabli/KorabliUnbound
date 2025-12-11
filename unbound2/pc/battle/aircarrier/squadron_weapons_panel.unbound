@@ -1,40 +1,54 @@
-(def element SquadronWeaponsPanel () layout=true
+(def element SquadronWeaponsPanel (_isActiveSquadron:bool=false, _activeSquadronIndex:number="DEFAULT_SQUADRON_OWNER_ID")
 	(scope
 		(macro IS_ALIVE)
-		(var _isActiveSquadron:bool = false)
-		(var _activeSquadronIndex:number = "DEFAULT_SQUADRON_OWNER_ID")
 
-		(var ownSquadronCollection:gfx = "$datahub.getCollection(CC.ownSquadron).child('byPlaneOrder')")
-		(var ownSquadronItemsArray:array = "ownSquadronCollection.items")
+		(var ownSquadronCollection:dhCollection = "getCollectionByPath(CC.ownSquadron, 'byPlaneOrder')")
 
 		(var selfAvatarId:number = "selfAvatarEntity.avatar.id ?: INVALID_PLAYER_AVATAR_ID")
 		(var battleConsumableCol:gfx = "$datahub.getCollection(CC.battleConsumable)")
 		(var squadronConsumablesCol:gfx = "battleConsumableCol.getChildByPath('byAvatarIdAndSquadronOwner.' + selfAvatarId + '_' + _activeSquadronIndex)")
 		(var squadronConsumablesColCount:number = "squadronConsumablesCol ? squadronConsumablesCol.items.length : 0" (event "squadronConsumablesCol.evAdded") (event "squadronConsumablesCol.evRemoved"))
+		(var shipType:str = "selfAvatarEntity.avatar.ship.ref.ship.subtype ?: ''" (event "selfAvatarEntity.avatar.evShipRefChanged"))
 
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var squadronCameraMode:str = "aircarrierComponent.squadronCameraMode" (event "aircarrierComponent.evSquadronCameraModeChanged"))
+
+		(var currentSquadronEntity:dhEntity = "getPrimaryEntity(CC.ownSquadron, _activeSquadronIndex)")
+		(var ownSquadronComponent:dhComponent = "currentSquadronEntity.ownSquadron")
+		(var squadronCount:number = "currentSquadronEntity.health.value" (event "currentSquadronEntity.health.evValueChanged"))
+
+		(var attackState:number = "ownSquadronComponent.attackState" (event "ownSquadronComponent.evAttackStateChanged"))
+		(var flightState:number = "ownSquadronComponent.state" (event "ownSquadronComponent.evStateChanged"))
+
+		(var isNotLastAttack:bool = "attackState == SC.Battle.SQUADRON_ATTACK_STATE.MAIN_SQUADRON_ATTACK && squadronCount != 0")
+		(var isAirplaneLaunching:bool = "flightState == AIRPLANE_FLIGHT_STATE_LAUNCHING")
+
+		(var isReturnSlotLocked:bool = "isNotLastAttack || isIn(attackState, SC.Battle.SQUADRON_ATTACK_STATE.LOCK_RETURN_ATTACKER_STATE) || !isAlive || isAirplaneLaunching")
+		(var isSwitchSlotLocked:bool = "attackState == SC.Battle.SQUADRON_ATTACK_STATE.MAIN_SQUADRON_ATTACK ||
+										isIn(attackState, SC.Battle.SQUADRON_ATTACK_STATE.LOCK_RETURN_ATTACKER_STATE) ||
+										!isAlive ||
+										isAirplaneLaunching ||
+										isIn(squadronCameraMode, [SquadronCameraModes.LAST_SQUADRON_ATTACKED, SquadronCameraModes.LAST_SQUADRON_ATTACK_START])"
+		)
+
+		(var airSupportWeaponSlotsCollection:dhCollection = "getCollectionByPath(CC.weaponSlot, 'byWeaponType.' + SC.Ships.SHIP_WEAPON_TYPES.AIR_SUPPORT)")
 	)
-	
+
 	(macro WEAPON_PANEL_ANIMATION "_isActiveSquadron")
 
 	(class $FullsizeAbsolute)
-	(style
-		(bind hitTest "_isActiveSquadron")
-	)
+	(style (bind hitTest "_isActiveSquadron"))
 
 	(hblock
 		(style
 			(position = "absolute")
-			(bottom = "28px")
-			(hcenter = "0px")
+			(bottom = 28px)
+			(hgap = "PANEL_ITEM_MARGIN")
+			(hcenter = 0px)
 		)
 
 		(element SlotSquadronWeapon
-			(scope
-				(bind _activeSquadron "_activeSquadronIndex")
-			)
-			(style
-				(marginRight = "PANEL_ITEM_MARGIN")
-			)
+			_activeSquadronIndex = "_activeSquadronIndex"
 		)
 
 		(hblock
@@ -52,29 +66,57 @@
 			)
 		)
 
-		(element SlotSquadronReturn
-			(scope
-				(bind _activeSquadron "_activeSquadronIndex")
-			)
-			(style
-				(marginLeft = "PANEL_ITEM_MARGIN")
-			)
+		
+		(element SlotSquadronControl
+			_imagePath 		= 'url:../aircraft/plane_return.png'
+			_commandName 	= 'CMD_LAND'
+			_tooltipText 	= 'IDS_BATTLE_HINT_SQUADRON_CONTROL_LAND'
+			_methodArgs 	= "['aircarrier.landPlane', []]"
+			_isLocked 		= "isReturnSlotLocked"
 		)
 
 		
 		(block
+			(controller $Instance renderer='SlotSquadronControl'
+				(bind enabled "shipType == ShipTypes.AIRCARRIER")
+				(args
+					_imagePath 		= 'url:../aircraft/plane_switch_to_ship.png'
+					_commandName 	= 'CMD_SHIP_AIRPLANE_SWITCH_CONTROL'
+					_tooltipText 	= 'IDS_BATTLE_HINT_SQUADRON_CONTROL_RETURN_TO_AIRCARRIER'
+					_methodArgs 	= "['aircarrier.switchControlFromAirplanesToShip', []]"
+					_isLocked 		= "isSwitchSlotLocked"
+				)
+			)
+		)
+
+		(hblock
 			(style
-				(height = "100%")
+				(height = 100%)
 				(position = "absolute")
 				(left = 100%)
 				(align = "middle")
+				(hgap = 20px)
 				(paddingLeft = "PANEL_ITEM_MARGIN")
 			)
-			(hblock
-				(controller $Repeat renderer='HangarItemRenderer' layout=false
-					(bind enabled "isAlive")
-					(bind count "ownSquadronItemsArray.length")
-					(args "ownSquadronItemsArray[$index]")
+
+			(hblock 
+				(controller $Repeat renderer='HangarItemRenderer'
+					(bind enabled "isAlive && _activeSquadronIndex != DEFAULT_SQUADRON_OWNER_ID")
+					(bind count "ownSquadronCollection.length")
+					(args
+						_ownSquadronEntity = "ownSquadronCollection.getEntityAtIndex($index)"
+					)
+				)
+			)
+
+			(hblock 
+				(style (hgap = 14px))
+				(controller $Repeat renderer='AirSupportInfoPanelItem'
+					(bind enabled "isAlive && _activeSquadronIndex != DEFAULT_SQUADRON_OWNER_ID")
+					(bind count "airSupportWeaponSlotsCollection.length")
+					(args
+						_airSupportWeaponSlotEntity = "airSupportWeaponSlotsCollection.getEntityAtIndex($index)"
+					)
 				)
 			)
 		)

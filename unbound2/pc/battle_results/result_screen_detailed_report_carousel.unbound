@@ -1,0 +1,931 @@
+(def css $FontBattleResultsShipLevelBold ()
+	(extends $TextDefaultBold18NM)
+	(extends $FontFpsDropShadowWhite)
+	(textColor = "SC.Ui_styles.SERVICE_COLORS.ALMOST_BLACK")
+)
+
+(def css $FontBattleResultsShipLevelLight ()
+	(extends $TextDefaultNM)
+	(extends $FontFpsDropShadowWhite)
+)
+
+(def element BattleStatsInteractionsCarousel ()
+	(scope
+		(event evCarouselScrollValueChanged)
+		(event evCarouselCanScrollChanged)
+		(event evScrollToPrev)
+		(event evScrollToNext)
+
+		(var carouselCanScrollLeft:bool =	"$event ? $event.down : false"	(event "evCarouselCanScrollChanged"))
+		(var carouselCanScrollRight:bool =	"$event ? $event.up : false"	(event "evCarouselCanScrollChanged"))
+
+
+		(var battleResultEntity:dhEntity =			"getSingleEntity(CC.battleResultsStructured)")
+		(var battleResultsStructured:dhComponent =	"battleResultEntity.battleResultsStructured")
+		(var shipsInteractionsEntity:dhEntity =		"getEntity(battleResultsStructured.interactions[0])")
+		(var buildingInteractionsEntity:dhEntity =	"getEntity(battleResultsStructured.buildingInteractions[0])")
+
+		(var shipsItems:array =			"shipsInteractionsEntity.battleResultsEntry.children ?: []")
+		(var buildingsItems:array =		"buildingInteractionsEntity.battleResultsEntry.children ?: []")
+
+		(struct stageSize = STAGE_SIZE())
+
+		(var PBSWidth:number =		"1077px + (stageSize.width - 1280px) * 0.5")
+		(var isScrollNeeded:bool =	"PBSWidth < (shipsItems.length + buildingsItems.length) * PBS_SHIP_CAROUSEL_ITEM_WIDTH")
+	)
+
+	(style
+		(width = 100%)
+		(bind height "buildingsItems.length ? PBS_BUILDING_CAROUSEL_ITEM_HEIGHT : PBS_SHIP_CAROUSEL_ITEM_HEIGHT")
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style (align = "middle"))
+
+		(block
+			(bind visible "isScrollNeeded")
+
+			(controller $Instance renderer='DefaultScrollButton'
+				(bind enabled "isScrollNeeded")
+				(args
+					_buttonCarouselName =	'buttonPBSShipCarouselLeft'
+					_canScroll =			"carouselCanScrollLeft"
+					_clickDispatchedEv =	'evScrollToPrev'
+					_direction =			"ScrollDirection.LEFT"
+				)
+			)
+		)
+
+		(scrollArea
+			(class $Fullsize)
+
+			(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+				_singleStep =				"PBS_SHIP_CAROUSEL_ITEM_WIDTH"
+				_wheelScrollAcceleration =	"0.8"
+				_canScrollChangedEvent =	"'evCarouselCanScrollChanged'"
+				_valueChangedEvent =		"'evCarouselScrollValueChanged'"
+				_isScrollBarVisible =		"false"
+			)
+
+			(repeatController = 'BattleResultsInteraction')
+			(scrollPerItem = true)
+
+			(content
+				(style
+					(width = 100%)
+					(flow = "horizontal")
+					(gap = "SXS")
+				)
+
+				(controller $DynamicRepeat renderer='BattleResultsInteractionShipItem' name='BattleResultsInteraction'
+					(bind count "shipsItems.length")
+					(args
+						_entityId = "shipsItems[$index]"
+					)
+					(bind itemWidth "PBS_SHIP_CAROUSEL_ITEM_WIDTH")
+					(bind itemHeight "PBS_SHIP_CAROUSEL_ITEM_HEIGHT")
+				)
+
+				(controller $DynamicRepeat renderer='BattleResultsInteractionBuildingItem' name='BattleResultsInteraction'
+					(bind count "buildingsItems.length")
+					(args
+						_entityId = "buildingsItems[$index]"
+					)
+					(bind itemWidth "PBS_BUILDING_CAROUSEL_ITEM_WIDTH")
+					(bind itemHeight "PBS_BUILDING_CAROUSEL_ITEM_HEIGHT")
+				)
+			)
+
+			(bindcall scrollLeft	(event "evScrollToPrev"))
+			(bindcall scrollRight	(event "evScrollToNext"))
+		)
+
+		(block
+			(bind visible "isScrollNeeded")
+
+			(controller $Instance renderer='DefaultScrollButton'
+				(bind enabled "isScrollNeeded")
+				(args
+					_buttonCarouselName =	'buttonPBSShipCarouselRight'
+					_canScroll =			"carouselCanScrollRight"
+					_clickDispatchedEv =	'evScrollToNext'
+					_direction =			"ScrollDirection.RIGHT"
+				)
+			)
+		)
+	)
+)
+
+(def element BattleStatsInteractionsCarouselSlot (_entityId:number, _thumbState:number, _thumbAlpha:number)
+	(scope
+		(struct highContrast = HIGH_CONTRAST_INFO())
+
+		(var windowManager:dhComponent =	"getSingleComponent(CC.windowManager)")
+		(var windowQueue:array =			"windowManager.windowQueue ?: []" (event "windowManager.evWindowQueueChanged"))
+		(var isInRealPBS:bool =				"isIn(SC.Ui_windows.MODAL.RESULT_SCREEN, windowQueue)")
+		(var isHighContrast:bool =			"isInRealPBS || highContrast.isEnabled")
+	)
+
+	(class $FullsizeAbsolute)
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapRoundedPanel'
+			(bind enabled "!isHighContrast")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "NO_COLOR"))
+
+		(controller $Tooltip
+			(renderer='BattleResultsShipInteractionsTooltip')
+			(args
+				_entityId = "_entityId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(block
+			(bind visible "isHighContrast && !isInRealPBS")
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.CONTRAST_PANEL")
+				(borderRadius = "XS")
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(alpha = "_thumbAlpha")
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(borderRadius = "XS")
+			)
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger =	"_thumbState"
+				_alpha =	"_thumbAlpha"
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(alpha = "isHighContrast ? 0.2 : 0.3")
+			)
+
+			(block
+				(class $Fullsize)
+				(style
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(borderRadius = "XS")
+				)
+
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_CT "isHighContrast ? CT_NONE : COLOR_TRANSFORM_DARK_BLUE")
+			)
+		)
+	)
+)
+
+(def element BattleResultsInteractionShipItem (_entityId:number = 0)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var battleResultsEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultsEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =	"battleResultsEntry.values ?: []")
+
+		(var playerName:str =		"battleResultsEntryValues[1].value")
+		(var isEnemy:bool =			"!battleResultsEntryValues[2].value")
+		(var isKilled:bool =		"!battleResultsEntryValues[3].value")
+		(var killedByMe:number =	"battleResultsEntryValues[4].value")
+		(var planesKilled:number =	"battleResultsEntryValues[5].value")
+		(var causedDamage:number =	"battleResultsEntryValues[6].value")
+		(var totalHits:number =		"battleResultsEntryValues[7].value")
+		(var isBot:bool =			"battleResultsEntryValues[9].value")
+
+		(var thumbState:number =	"mouseHandler.rollOver ? SC.Ui_styles.BUTTON_STATE.OVER : SC.Ui_styles.BUTTON_STATE.UP")
+		(var thumbAlpha:number =	"CAROUSEL_THUMB_STATE_ALPHA.DEFAULT[thumbState]")
+	)
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+
+	(style
+		(width = "PBS_SHIP_CAROUSEL_ITEM_WIDTH")
+		(height = "PBS_SHIP_CAROUSEL_ITEM_HEIGHT")
+	)
+
+	(element BattleStatsInteractionsCarouselSlot
+		_entityId =		"_entityId"
+		_thumbState =	"thumbState"
+		_thumbAlpha =	"thumbAlpha"
+	)
+
+	(block
+		(style
+			(align = "center")
+			(width = 100%)
+			(paddingTop = 20px)
+		)
+
+		(element BattleResultsShipTitleWithIconAndLevel
+			_shipId =		"battleResultsEntryValues[0].value"
+			_isEnemy =		"isEnemy"
+			_isKilled =		"isKilled"
+		)
+
+		(tf
+			(bind class "isKilled ? '$FontBattleResultsShipLevelLight' : '$TextDefaultNM'")
+			(style
+				(hitTest = false)
+				(width = 100%)
+				(marginBottom = "S")
+				(textAlign = "center")
+				(leading = -5)
+				(bind noTranslate "!isBot")
+				(alpha = "isKilled ? 1 : TA")
+				(textColor = "isKilled ? SC.Ui_styles.SERVICE_COLORS.ALMOST_BLACK : SC.Ui_styles.SERVICE_COLORS.WHITE")
+			)
+
+			(bind text "playerName")
+		)
+
+		(hblock
+			(block
+				(bind visible "toBool(killedByMe)")
+
+				(style (marginRight = "S"))
+
+				(controller $Tooltip
+					(renderer='SimpleStatusTooltip')
+					(args
+						_text = 'IDS_BATTLE_STATS_KILL_HINT'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(element BattleResultsIconStats
+					_type = "BATTLE_RESULTS_ICON_STATS.KILL"
+				)
+			)
+
+			(hblock
+				(bind visible "planesKilled > 0")
+
+				(style (marginRight = "SXS"))
+
+				(controller $Tooltip
+					(renderer='SimpleStatusTooltip')
+					(args
+						_text = 'IDS_BATTLE_STATS_PLANE_HINT'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(element BattleResultsIconStats
+					_type = "BATTLE_RESULTS_ICON_STATS.PLANE"
+				)
+
+				(tf
+					(class $TextDefaultBold22NM)
+					(style
+						(marginTop = "S")
+						(alpha = "TA")
+					)
+
+					(bind text "planesKilled")
+				)
+			)
+
+			(hblock
+				(bind visible "causedDamage > 0 || totalHits > 0")
+
+				(controller $Tooltip
+					(renderer='SimpleStatusTooltip')
+					(args
+						_text = 'IDS_BATTLE_STATS_DAMAGE_HINT'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+
+				(element BattleResultsIconStats
+					_type = "BATTLE_RESULTS_ICON_STATS.DAMAGE"
+				)
+
+				(tf
+					(class $TextDefaultBold22NM)
+					(style
+						(marginTop = "S")
+						(alpha = "TA")
+					)
+
+					(bind text "formatSeparator(causedDamage)")
+				)
+			)
+		)
+	)
+)
+
+(def element BattleResultsShipTitleWithIconAndLevel (_shipId:number = 0, _isEnemy:bool = false, _isKilled:bool = false)
+	(scope
+		(macro PULL_SHIP_SCOPE "_shipId" "'shipEntity'" "'shipInfo'")
+		(var isLevelIconShown:bool = "shipInfo.levelIcon.length > 0")
+	)
+
+	(style
+		(flow = "horizontal")
+		(height = 20px)
+	)
+
+	(block
+		(style
+			(marginTop = -7px)
+			(marginRight = "XS")
+		)
+
+		(element ShipIcon
+			_shipType =		"shipInfo.subtype"
+			_isEnemy =		"_isEnemy"
+			_isKilled =		"_isKilled"
+			_isWhite =		true
+		)
+	)
+
+	(element ShipLevelNM
+		_levelIcon =	"isLevelIconShown ? shipInfo.levelIcon + (_isKilled ? '_sunk' : '') : ''"
+		_levelRome =	"shipInfo.levelRome"
+		_fontClass =	"_isKilled ? '$FontBattleResultsShipLevelBold' : '$TextDefaultBold18NM'"
+		_textColor =	"_isKilled ? SC.Ui_styles.SERVICE_COLORS.ALMOST_BLACK : SC.Ui_styles.SERVICE_COLORS.WHITE"
+	)
+
+	(tf
+		(bind class "_isKilled ? '$FontBattleResultsShipLevelBold' : '$TextDefaultBold18NM'")
+		(style
+			(marginLeft = "XS")
+			(bind alpha "_isKilled ? 1 : TA")
+		)
+
+		(bind text "toUpper(tr(shipInfo.nameIDS))")
+	)
+)
+
+(def element BattleResultsInteractionBuildingItem (_entityId:number = 0)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var battleResultsEntryEntity:dhEntity =	"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =		"battleResultsEntryEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =		"battleResultsEntry.values ?: []")
+
+		(var paramsId:number =			"battleResultsEntryValues[0].value")
+		(var name:str =					"battleResultsEntryValues[1].value")
+		(var suppressionCount:number =	"battleResultsEntryValues[2].value")
+		(var buildingType:str =			"battleResultsEntryValues[3].value")
+		(var causedDamage:number =		"battleResultsEntryValues[4].value")
+		(var totalHits:number =			"battleResultsEntryValues[5].value")
+		(var killedByMe:number =		"battleResultsEntryValues[6].value")
+		(var isAlive:bool =				"battleResultsEntryValues[7].value")
+		(var planesKilled:number =		"battleResultsEntryValues[8].value")
+
+		(var groundIconName:str = "!isAlive || suppressionCount > 0 ? (buildingType + '_dead') : buildingType")
+
+		(var thumbState:number =	"mouseHandler.rollOver ? SC.Ui_styles.BUTTON_STATE.OVER : SC.Ui_styles.BUTTON_STATE.UP")
+		(var thumbAlpha:number =	"CAROUSEL_THUMB_STATE_ALPHA.DEFAULT[thumbState]")
+	)
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+
+	(style
+		(width = "PBS_BUILDING_CAROUSEL_ITEM_WIDTH")
+		(height = "PBS_BUILDING_CAROUSEL_ITEM_HEIGHT")
+		(align = "center")
+	)
+
+	(element BattleStatsInteractionsCarouselSlot
+		_entityId =		"_entityId"
+		_thumbState =	"thumbState"
+		_thumbAlpha =	"thumbAlpha"
+	)
+
+	(block
+		(style
+			(width = 80px)
+			(height = 26px)
+			(marginTop = "SXS")
+			(backgroundImage = "'url:../service_kit/battle_results/team_results_ground_objects/' + groundIconName + '.png'")
+		)
+	)
+
+	(block
+		(style (marginBottom = "MS"))
+
+		(element BattleResultsBuildingIconWithTitle
+			_name =					"name"
+			_buildingType =			"buildingType"
+			_isAlive =				"isAlive"
+			_suppressionCount =		"suppressionCount"
+		)
+	)
+
+	(hblock
+		(hblock
+			(bind visible "suppressionCount > 0")
+
+			(style (marginRight = "S"))
+
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(args
+					_text = "buildingType == 'Complex'	? 'IDS_BATTLE_STATS_FORT_BUILDING_SUPPRESSIONS_HINT'
+														: 'IDS_BATTLE_STATS_WATCHTOWER_BUILDING_SUPPRESSIONS_HINT'"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element BattleResultsIconStats
+				_type = "BATTLE_RESULTS_ICON_STATS.SUPPRESSION"
+			)
+
+			(tf
+				(class $TextDefaultBold22NM)
+				(style (alpha = "TA"))
+
+				(bind text "suppressionCount")
+			)
+		)
+
+		(hblock
+			(bind visible "toBool(killedByMe)")
+
+			(style (marginRight = "S"))
+
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(args
+					_text = 'IDS_YOU_DESTROYED_THIS_BUILDING'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element BattleResultsIconStats
+				_type = "BATTLE_RESULTS_ICON_STATS.BUILDING_KILL"
+			)
+		)
+
+		(hblock
+			(bind visible "planesKilled > 0")
+
+			(style (marginRight = "S"))
+
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(args
+					_text = 'IDS_BATTLE_STATS_AIRBASE_PLANES_HINT'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element BattleResultsIconStats
+				_type = "BATTLE_RESULTS_ICON_STATS.PLANE"
+			)
+
+			(tf
+				(class $TextDefaultBold22NM)
+				(style (alpha = "TA"))
+
+				(bind text "planesKilled")
+			)
+		)
+
+		(hblock
+			(bind visible "causedDamage > 0 || totalHits > 0")
+
+			(style (marginRight = "S"))
+
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(args
+					_text = "'IDS_BATTLE_STATS_' + buildingType + '_BUILDING_DAMAGE_HINT'"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element BattleResultsIconStats
+				_type = "BATTLE_RESULTS_ICON_STATS.DAMAGE"
+			)
+
+			(tf
+				(class $TextDefaultBold22NM)
+				(style
+					(marginTop = "S")
+					(alpha = "TA")
+				)
+
+				(bind text "formatSeparator(causedDamage)")
+			)
+		)
+	)
+)
+
+(def element BattleResultsBuildingIconWithTitle (_isAlive:bool = false, _suppressionCount:number = 0, _buildingType:str = '', _name:str = '')
+	(scope
+		(var buildingState:str =				"_isAlive && !_suppressionCount ? '_N' : '_D'")
+		(var buildingKey:str =					"_buildingType + buildingState")
+		(var buildingAsset:dict =				"BATTLE_RESULTS_BUILDING_ICON_WITH_STATUS[buildingKey]")
+		(var isDestroyedBuildingState:bool =	"buildingState == '_D'")
+	)
+
+	(style
+		(height = 20px)
+		(flow = "horizontal")
+		(align = "middle")
+	)
+
+	(block
+		(style
+			(width = "buildingAsset.width")
+			(height = "buildingAsset.height")
+			(backgroundImage = "'url:../battle_hud/markers/building_icons/normal/' + buildingAsset.image + '.png'")
+		)
+	)
+
+	(tf
+		(bind class "isDestroyedBuildingState ? '$FontBattleResultsShipLevelBold' : '$TextDefaultBold18NM'")
+		(style
+			(marginLeft = "XS")
+			(bind alpha "isDestroyedBuildingState ? 1 : TA")
+		)
+
+		(bind text "_name")
+	)
+)
+
+(def element BattleResultsShipInteractionsTooltip (_entityId:number = 0)
+	(scope
+		(var battleResultsEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultsEntity.battleResultsEntry")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(controller $Repeat renderer='ShipInteractionsTooltipRow'
+		(bind count "battleResultsEntry.children.length")
+		(args
+			_entityId = "battleResultsEntry.children[$index]"
+		)
+	)
+)
+
+(def element ShipInteractionsTooltipRow (_entityId:number = 0)
+	(scope
+		(var battleResultsEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultsEntity.battleResultsEntry")
+
+		(var type:str =			"battleResultsEntry.type")
+		(var renderer:str =		"type in BATTLE_RESULTS_SHIP_INTERACTIONS_TOOLTIP_ROW_RENDERER ? BATTLE_RESULTS_SHIP_INTERACTIONS_TOOLTIP_ROW_RENDERER[type] : ''")
+	)
+
+	(style
+		(width = 100%)
+		(bind marginTop "type == SC.Result_screen.TYPES.SUBLINE && $index == 0 ? -S : 0px")
+	)
+
+	(controller $Instance
+		(bind enabled "toBool(renderer)")
+		(bind renderer "renderer")
+		(args
+			_entityId = "_entityId"
+		)
+	)
+)
+
+(def element ShipInteractionsBuildingTooltipHeader (_entityId:number = 0)
+	(scope
+		(var battleResultsEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultsEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =	"battleResultsEntry.values ?: []")
+
+		(var buildingType:str =				"battleResultsEntryValues[0].value")
+		(var name:str =						"battleResultsEntryValues[1].value")
+		(var suppressionCount:number =		"battleResultsEntryValues[2].value")
+		(var isAlive:bool =					"battleResultsEntryValues[3].value")
+	)
+
+	(style
+		(width = 100%)
+		(backgroundColor = 0x12ffffff)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(padding = "SXS")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginLeft = "-XS")
+			)
+
+			(element BattleResultsBuildingIconWithTitle
+				_name =					"name"
+				_buildingType =			"buildingType"
+				_isAlive =				"isAlive"
+				_suppressionCount =		"suppressionCount"
+			)
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(maxWidth = 285px)
+				(marginTop = "S")
+				(alpha = "TA")
+			)
+
+			(text  = 'IDS_BATTLE_STATS_BUILDING_DAMAGE_NOT_FOR_STATS')
+		)
+	)
+)
+
+
+(def element ShipInteractionsTooltipHeader (_entityId:number = 0)
+	(scope
+		(var battleResultsEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultsEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =	"battleResultsEntry.values ?: []")
+
+		(var shipId:number =		"battleResultsEntryValues[0].value")
+		(var playerName:str =		"battleResultsEntryValues[1].value")
+		(var isPlayerAlly:bool =	"battleResultsEntryValues[2].value")
+		(var isPlayerSelf:bool =	"battleResultsEntryValues[3].value")
+		(var isPlayerTk:bool =		"battleResultsEntryValues[5].value")
+
+		(var killerShipId:number =			"battleResultsEntryValues[6].value")
+		(var killerName:str =				"battleResultsEntryValues[7].value")
+		(var isKillerAlly:bool =			"battleResultsEntryValues[8].value")
+		(var isKillerSelf:bool =			"battleResultsEntryValues[9].value")
+		(var killerInMyDivision:number =	"battleResultsEntryValues[10].value")
+		(var isKillerTk:bool =				"battleResultsEntryValues[11].value")
+		(var deathReasonId:number =			"battleResultsEntryValues[12].value")
+		(var isBot:bool =					"battleResultsEntryValues[13].value")
+		(var isKillerBot:bool =				"battleResultsEntryValues[14].value")
+	)
+
+	(class $InfoBlockHorizontalIndent)
+	(style
+		(marginTop = "SXS")
+		(marginBottom = 5px)
+	)
+
+	(element PBSPlayerWithShip
+		_shipId =			"shipId"
+		_name =				"playerName"
+		_isEnemy =			"!isPlayerAlly"
+		_isTeamKiller =		"isPlayerTk"
+		_fontSize =			"SIZE.LARGE"
+		_isSelf =			"isPlayerSelf"
+		_isBot =			"isBot"
+		_isInMyDivision =	false
+	)
+
+	(tf
+		(bind visible "deathReasonId != DEATH_REASON_NONE")
+
+		(class $TextDefaultNM)
+		(style
+			(width = 100%)
+			(marginTop = "-XXS")
+			(marginBottom = "S")
+			(alpha = "TA")
+		)
+
+		(bind text "'IDS_BATTLE_STATS_DAMAGED_BY_' + deathReasonId")
+	)
+
+	(block
+		(controller $Instance renderer='PBSPlayerWithShip'
+			(bind enabled "killerShipId")
+			(args
+				_shipId =			"killerShipId"
+				_name =				"killerName"
+				_isEnemy =			"!isKillerAlly"
+				_isTeamKiller =		"isKillerTk"
+				_fontSize =			"SIZE.MEDIUM"
+				_isSelf =			"isKillerSelf"
+				_isBot =			"isKillerBot"
+				_isInMyDivision =	"toBool(killerInMyDivision)"
+			)
+		)
+	)
+)
+
+(def element ShipInteractionsHeader (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var children:array =					"battleResultsEntry.children ?: []")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(style
+			(width = 100%)
+			(height = 30px)
+			(scale9grid = 2)
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/pbs/grey.png')
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "S")
+			)
+
+			(element BattleStatsDetailedReportRowItem
+				_entityId =		"_entityId"
+				_labelClass =	'$TextDefaultBold20NM'
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(vgap = "XS")
+		)
+
+		(controller $Repeat renderer='ShipInteractionsTooltipRow'
+			(bind count "children.length")
+			(args
+				_entityId = "children[$index]"
+			)
+		)
+	)
+)
+
+(def element ShipInteractionsLine (_entityId:number = 0)
+	(style
+		(width = 100%)
+		(height = 26px)
+		(scale9grid = 2)
+		(backgroundImage = 'url:../service_kit/panel_backgrounds/pbs/alphablack.png')
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginTop = 6px)
+		)
+
+		(element BattleStatsDetailedReportRowItem
+			_entityId =		"_entityId"
+			_labelClass =	'$TextDefaultBold18NM'
+		)
+	)
+)
+
+(def element ShipInteractionsSubLine (_entityId:number = 0)
+	(style
+		(width = 100%)
+		(marginTop = "S")
+	)
+
+	(element BattleStatsDetailedReportRowItem
+		_entityId =		"_entityId"
+		_labelClass =	'$TextDefaultNM'
+	)
+)
+
+(def element ShipInteractionsTooltipEmptyLine ()
+	(style
+		(width = 100%)
+		(height = 8px)
+	)
+)
+
+(def element ShipInteractionsPlayer (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =		"getEntity(_entityId)")
+		(var battleResultsEntry:dhComponent =	"battleResultEntity.battleResultsEntry")
+		(var battleResultsEntryValues:array =	"battleResultsEntry.values ?: []")
+
+		(var shipId:number =				"battleResultsEntryValues[0].value")
+		(var playerName:str =				"battleResultsEntryValues[1].value")
+		(var isPlayerAlly:bool =			"battleResultsEntryValues[2].value")
+		(var isPlayerSelf:bool =			"battleResultsEntryValues[3].value")
+		(var isPlayerInMyDivision:bool =	"toBool(battleResultsEntryValues[4].value)")
+		(var isPlayerTk:bool =				"battleResultsEntryValues[5].value")
+		(var isBot:bool =					"battleResultsEntryValues[6].value")
+	)
+
+	(style (width = 100%))
+
+	(block
+		(class $InfoBlockHorizontalIndent)
+		(style
+			(marginBottom = "-XXS")
+			(marginTop = 10px)
+		)
+
+		(element PBSPlayerWithShip
+			_shipId =			"shipId"
+			_name =				"playerName"
+			_isEnemy =			"!isPlayerAlly"
+			_isTeamKiller =		"isPlayerTk"
+			_fontSize =			"SIZE.LARGE"
+			_isSelf =			"isPlayerSelf"
+			_isInMyDivision =	"isPlayerInMyDivision"
+			_isBot =			"isBot"
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "XXS")
+			(vgap = "XS")
+		)
+
+		(controller $Repeat renderer='ShipInteractionsTooltipRow'
+			(bind count "battleResultsEntry.children.length")
+			(args
+				_entityId = "battleResultsEntry.children[$index]"
+			)
+		)
+	)
+)
+
+(def element ShipInteractionsTooltipLine (_entityId:number = 0)
+	(scope
+		(var battleResultEntity:dhEntity =	"getEntity(_entityId)")
+		(var hint:str =						"battleResultEntity.battleResultsEntry.hint ?: ''")
+	)
+
+	(style
+		(width = 100%)
+		(backgroundColor = 0x12ffffff)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginTop = "SXS")
+		)
+
+		(element BattleStatsDetailedReportRowItem
+			_entityId =		"_entityId"
+			_labelClass =	'$TextDefaultBold20NM'
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(padding = "SXS")
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(maxWidth = 290px)
+				(leading = -1)
+				(alpha = "TC")
+			)
+
+			(bind text "hint")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(bottom = 0px)
+		)
+
+		(element HorizontalDividerTwoPx)
+	)
+)
+
+(def element BattleResultsIconStats (_type:str = "BATTLE_RESULTS_ICON_STATS.KILL")
+	(style
+		(width = 30px)
+		(height = 30px)
+		(alpha = 0.9)
+		(backgroundImage = "'url:../service_kit/battle_results/icon_stats/' + _type + '.png'")
+	)
+)

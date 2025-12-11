@@ -1,0 +1,233 @@
+(def constant MODAL_WINDOW_EXTERIOR_BUY_WIDTH 400px)
+
+(def element ModalWindowBuyCamouflage (exteriorId:number=0)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(var exteriorEntity:dhEntity = "getPrimaryEntity(CC.exteriorConfig, exteriorId)")
+		(var exteriorConfig:dhComponent = "exteriorEntity.exteriorConfig")
+		(var ownCamouflage:dhComponent = "exteriorEntity.ownCamouflage")
+		(var exteriorName:str = "exteriorConfig.name ?: ''")
+
+		(var isCamouflage:bool =	"exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.CAMOUFLAGE")
+		(var isPermoflage:bool =	"exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.PERMOFLAGE")
+		(var isMSkin:bool =			"exteriorConfig.type == SC.Exteriors.EXTERIOR_TYPE.MSKIN")
+
+		(var headerText:str =	"	isCamouflage	? 'IDS_MODAL_WINDOW_TITLE_CAMOUFLAGE_PURCHASE' :
+									isMSkin			? 'IDS_MODAL_WINDOW_TITLE_PERMOFLAGE_LINK'
+													: 'IDS_MODAL_WINDOW_TITLE_PERMOFLAGE_PURCHASE'")
+
+		(var exteriorPriceName:str = "!isCamouflage	? toString(exteriorId)
+													: 'CAMOUFLAGE_GROUP_' + ownCamouflage.camoGroup")
+
+		(struct camouflagePrice = PULL_PRICE(_entityId = "exteriorPriceName" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var accountResource:dhComponent =	"getSingleComponent(CC.accountResource)")
+
+		(macro PULL_SHIP_ID)
+		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "playerShipId"))
+		(var permoflageFirstBuyGoldDiscount:number = "shipInfo.ownShipComponent ? shipInfo.ownShipComponent.permoflageFirstBuyGoldDiscount : 0" (event "shipInfo.ownShipComponent.evPermoflageFirstBuyGoldDiscountChanged"))
+
+		(var isFirstBuyDiscount:bool = "!isCamouflage && permoflageFirstBuyGoldDiscount")
+		(var finalCamouflagePriceInfo:dict = "isFirstBuyDiscount	? {	currency: SC.Common.CURRENCIES.GOLD,
+																		finalPrice: camouflagePrice.info.basePrice - permoflageFirstBuyGoldDiscount,
+																		basePrice: camouflagePrice.info.basePrice,
+																		type: DISCOUNT_TYPE.FIRST_PERMOFLAGE }
+																	: camouflagePrice.info")
+		(var priceDeficit:number = "finalCamouflagePriceInfo.finalPrice - accountResource[finalCamouflagePriceInfo.currency]" (event "accountResource.evChangedGold") (event "accountResource.evChangedCredit"))
+		(var isDeficit:bool = "priceDeficit > 0")
+
+		(var exteriorEntityRestrictions:dhComponent =	"exteriorEntity.shipListRestrictions")
+		(var exteriorEntityLevelFiltersRoman:str =		"exteriorEntityRestrictions ? exteriorEntityRestrictions.levelString : ''")
+		(var hasLevelRestrictions:bool =				"exteriorEntityLevelFiltersRoman.length > 0")
+
+		(var hasColorSchemeConfig:bool =			"ownCamouflage.hasColorSchemeConfig" (event "ownCamouflage.evUpdated"))
+		(var previewCamoColorScheme:number =		"ownCamouflage.previewCamoColorScheme" (event "ownCamouflage.evUpdated"))
+		(var previewColorSchemeEntity:dhEntity =	"getEntity(previewCamoColorScheme)")
+		(var previewColorSchemeIndex:number =		"previewColorSchemeEntity.colorScheme.index")
+
+		(var headerIconPath:str = "	isCamouflage	? 'url:../exteriors/camouflages/' + exteriorConfig.name + '.png' :
+									isPermoflage	? 'url:../exteriors/permoflages/' + exteriorConfig.name + '.png'
+													: 'url:../exteriors/skins/' + exteriorConfig.name + '.png'")
+		(var itemHeaderText:str = "	isPermoflage			? subst('IDS_EXTERIOR_NAME_WITH_SHIP',	[],{exteriorName: tr('IDS_' + exteriorName), shipName: shipInfo.shipComponent.nameUpper}) :
+									hasLevelRestrictions	? subst('IDS_EXTERIOR_NAME_WITH_LEVEL',	[],{exteriorName: tr('IDS_' + exteriorName), levelRange: exteriorEntityLevelFiltersRoman})
+															: tr('IDS_' + exteriorName)")
+		(var itemSubheaderText:str = "'IDS_EXTERIOR_TYPE_' + SC.Exteriors.EXTERIOR_TYPE.VALUE_TO_NAME[exteriorConfig.type]")
+		(var headerIconType:str = "hasColorSchemeConfig	? MODAL_WINDOW_SYSTEM_PURCHASABLE_ITEM_ICON.CAMO_REPAINT
+														: MODAL_WINDOW_SYSTEM_PURCHASABLE_ITEM_ICON.CAMO")
+
+		(var isLinkedToShip:bool = "ownCamouflage ? ownCamouflage.isLinkedToShip : false" (event "ownCamouflage.evUpdated"))
+		(var isUnlinkedMSkin:bool = "isMSkin && !isLinkedToShip")
+
+		(var currenciesPanelPrices:array = "[{currency: finalCamouflagePriceInfo.currency, finalPrice: -finalCamouflagePriceInfo.finalPrice}]")
+
+		(macro USER_PREF_DATA)
+		(var previewExteriorId:number = "toNumber(userPrefs.previewExteriorId)")
+	)
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'openYesNoConfirmation']" init=false watch=false on=addedToStage)
+
+	(style (align = "center|middle"))
+
+	(block
+		(style
+			(align = "center")
+			(width = "MODAL_WINDOW_EXTERIOR_BUY_WIDTH")
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style
+				(width = 100%)
+				(marginBottom = "S")
+			)
+
+			(element ModalWindowShortHeader
+				_header = "headerText"
+				_hasDivider = "false"
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='CurrenciesPanel'
+					(bind enabled "!isMSkin")
+					(args
+						_priceInfo = "currenciesPanelPrices"
+						_width = "MODAL_WINDOW_EXTERIOR_BUY_WIDTH"
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.3)
+			(style (marginBottom = "SXS"))
+
+			(controller $Tooltip
+				(bind renderer 'CamouflageTooltip')
+				(args
+					_id = "exteriorId"
+					_noMouseInstructions =	true
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+				_headerIconType =	"headerIconType"
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+				_headerText =		"itemHeaderText"
+				_subheaderText =	"itemSubheaderText"
+				_imageWidth =		60px
+				_imageHeight =		60px
+				_maxWidth =			300px
+				_data =				"{	camouflageId: exteriorId,
+										camoName: exteriorConfig.name,
+										exteriorType: exteriorConfig.type,
+										peculiarity: exteriorConfig.peculiarity,
+										isUnlinkedMSkin: isUnlinkedMSkin,
+										isAmountVisible: false }"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(element HorizontalDividerTwoPx)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(bind visible "!isMSkin")
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+
+			(controller $Instance renderer='ModalWindowSystemPurchaseItemPriceAndInfo'
+				(bind enabled "!isMSkin")
+				(args
+					_priceInfo =		"finalCamouflagePriceInfo"
+					_questionString =	'IDS_QUESTION_PURCHASE_AND_INSTALL_FOR'
+					_isDeficit =		"isDeficit"
+					_deficit =			"priceDeficit"
+					_isWarningText =	"isDeficit"
+				)
+			)
+		)
+
+		(hblock
+			(bind visible "isMSkin")
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(tf
+				(class $TextDefault26NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_QUESTION_MSKIN_LINK')
+			)
+
+			(block
+				(style
+					(marginLeft = "M")
+					(marginRight = "S")
+				)
+
+				(element ShipLineItemNM
+					_shipId = "playerShipId"
+					_withFlag = false
+					_fontClass = '$TextDefaultBold26NM'
+				)
+			)
+
+			(tf
+				(class $TextDefault26NM)
+				(style (alpha = "TA"))
+				(text = 'IDS_QUESTION')
+			)
+		)
+
+		
+		(block
+			(bind visible "isMSkin")
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+			(style
+				(width = 100%)
+				(marginTop = "M")
+				(marginBottom = "MS")
+			)
+
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "isMSkin")
+				(args
+					_text = 'IDS_WARNING_MSKIN_BEFORE_LINK'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+					_width = 100%
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(width = 100%)
+				(align = "center")
+			)
+
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_isDeficit =	"isDeficit"
+				_okMethods =	"[	{	type:	'inputMapping.onRequest',
+										name:	isMSkin ? 'installCamouflage' : 'buyAndInstallCamouflage',
+										args:	{ exteriorId: exteriorId, colorsSchemeIndex: hasColorSchemeConfig ? previewColorSchemeIndex : null }},
+									{	type:	'inputMapping.onAction',
+										name:	'setCompareInfo',
+										args:	{ clear: true }},
+									{	type:	'inputMapping.onAction',
+										name:	'setUserPref',
+										args:	{ name: 'previewExteriorId', value: 0 }}
+								]"
+			)
+		)
+	)
+)

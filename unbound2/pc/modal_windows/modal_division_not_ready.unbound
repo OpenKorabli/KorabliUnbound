@@ -1,0 +1,647 @@
+(def constant MODAL_WINDOW_PREBATTLE_NOT_READY_WIDTH 816px)
+(def constant FORMATION_PLAYER_LIST_WIDTH 400px)
+
+(def constant PRE_BATTLE_COUNT_DOWN_TYPES {
+	NONE: 0,
+	SOFT: 1,
+	HARD: 2
+})
+
+(def element ModalWindowPreBattleNotReady (windowState:number, countdownType:number, timer:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(var trainingRoomEntity:dhEntity = "getSingleEntity(CC.trainingRoomWindowState)")
+	)
+	(style (align = "center|middle"))
+
+	(controller $Instance renderer="trainingRoomEntity == null 	? 'ModalWindowDivisionNotReadyContent'
+																: 'ModalWindowTrainingNotReadyContent'"
+		(args
+			_trainingRoomEntity = "trainingRoomEntity"
+		)
+	)
+)
+
+(def element ModalWindowDivisionNotReadyContent ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evAnimationHiddenUnreadyControlsEnded)
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+
+		(var isSelfPlayerCommander:bool = "preBattlePlayerSimpleComponent.isCommander" (event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+
+		(var divisionDataComponent:dhComponent = "getSingleComponent(CC.division)")
+		(var isReadyInDivision:bool = 			"divisionDataComponent.isReady" 		(event "divisionDataComponent.evIsReadyChanged"))
+		(var isEveryoneReadyInDivision:bool = 	"divisionDataComponent.isEveryoneReady" (event "divisionDataComponent.evIsEveryoneReadyChanged"))
+		(var windowStateDivision:number = 		"divisionDataComponent.windowState" 	(event "divisionDataComponent.evWindowStateChanged"))
+		(var timer:number = 					"divisionDataComponent.timer" 			(event "divisionDataComponent.evTimerChanged"))
+
+		(struct serverTime = SERVER_TIME())
+		(struct timeBeforeStartDivisionBattle = COUNTDOWN(_time = "timer ?: 0" _serverTime = "serverTime.value" _format = "'mm:ss'"))
+
+		(var headerTitle:str = " 	isEveryoneReadyInDivision 	? 'IDS_DIVISION_READY' : 
+									!isReadyInDivision			? 'IDS_DIVISION_LEAVES_WITHOUT_YOU'
+																: 'IDS_INCOMPLETE_DIVISION'")
+		
+		(var isDivisionStateGoToBattle:bool = "windowStateDivision == PRE_BATTLE_COUNT_DOWN_TYPES.HARD")
+
+		(var isUnreadyPlayerControlsVisible:bool = "!isSelfPlayerCommander && !isReadyInDivision" watch=false)
+		(bind isUnreadyPlayerControlsVisible "!isSelfPlayerCommander && !isReadyInDivision" init=false watch=false (event "evAnimationHiddenUnreadyControlsEnded"))
+	)
+	(style 
+		(width = "MODAL_WINDOW_PREBATTLE_NOT_READY_WIDTH")
+		(align = "center")
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+		(style 
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+		(element ModalWindowShortHeader
+			_header = "headerTitle"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(bind visible "!isReadyInDivision")
+		(style (marginBottom = "MS"))	
+		(controller $Instance renderer='InstructionBigTech'
+			(bind enabled "!isReadyInDivision")
+			(args
+				_instructionText = 'IDS_DIVISION_LEAVES_WITHOUT_YOU_INFO'
+				_maxWidth = "MODAL_WINDOW_PREBATTLE_NOT_READY_WIDTH"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(bind visible "isReadyInDivision")
+		(style 
+			(width = "FORMATION_PLAYER_LIST_WIDTH")
+			(marginBottom = "MS")
+		)
+		(controller $Instance renderer='FormationPlayersListForDivision'
+			(bind enabled "isReadyInDivision")
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(bind visible "isReadyInDivision && !isDivisionStateGoToBattle")
+		(style (marginBottom = "L"))
+
+		(controller $Instance renderer='InstructionBigTech'
+			(bind enabled "isReadyInDivision && !isDivisionStateGoToBattle")
+			(args
+				_instructionText = 'IDS_DIVISION_NOT_READY_COMMANDER_INFO'
+				_maxWidth = "MODAL_WINDOW_PREBATTLE_NOT_READY_WIDTH"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style 
+			(width = 100%)
+			(marginBottom = "M")
+		)
+		(element HorizontalDividerTwoPx)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+
+		(element TimeBeforeStartPrebattle
+			_time = "timeBeforeStartDivisionBattle.value"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+		(controller $Instance renderer='CommanderControls'
+			(bind enabled "isSelfPlayerCommander")
+			(args
+				_isPreBattleStateGoToBattle = "isDivisionStateGoToBattle"
+			)
+		)
+
+		(controller $Instance renderer='UnreadyPlayerControls'
+			(bind enabled "isUnreadyPlayerControlsVisible")
+			(args
+				_isTrainingRoom = false
+				_isReady = "isReadyInDivision"
+			)
+		)
+	)
+)
+
+(def element ModalWindowTrainingNotReadyContent (_trainingRoomEntity:dhEntity)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evAnimationHiddenUnreadyControlsEnded)
+		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var preBattlePlayerSimpleComponent:dhComponent = "selfPlayerEntity.preBattlePlayerSimple")
+
+		(var isSelfPlayerCommander:bool = 	"preBattlePlayerSimpleComponent.isCommander" 	(event "preBattlePlayerSimpleComponent.evIsCommanderChanged"))
+		(var isSelfPlayerReady:bool = 		"preBattlePlayerSimpleComponent.isReady" 		(event "preBattlePlayerSimpleComponent.evIsReadyChanged"))
+		(var selfPreBattleId:number = 		"preBattlePlayerSimpleComponent.preBattleId" 	(event "preBattlePlayerSimpleComponent.evPreBattleIdChanged"))
+
+		(var trainingRoomWindowStateComponent:dhComponent = "_trainingRoomEntity.trainingRoomWindowState")
+		(var timer:number = 				"trainingRoomWindowStateComponent.timer" (event "trainingRoomWindowStateComponent.evTimerChanged"))
+		(var notReadyWindowState:number = 	"trainingRoomWindowStateComponent.notReadyWindowState" (event "trainingRoomWindowStateComponent.evNotReadyWindowStateChanged"))
+
+		(struct serverTime = SERVER_TIME())
+		(struct timeBeforeStartTrainingBattle = COUNTDOWN(_time = "timer ?: 0" _serverTime = "serverTime.value" _format = "'mm:ss'"))
+
+		(var preBattlePlayersLength:number = "getCollection(CC.preBattlePlayerSimple).length")
+		(var preBattlePlayersReadyLength:number = "getCollectionByPath(CC.preBattlePlayerSimple, 'byPreBattle.' + selfPreBattleId + '.readyPlayers').length")
+		(var isEveryoneReadyInTraining:bool = "preBattlePlayersReadyLength == preBattlePlayersLength")
+
+		(var isTrainingStateGoToBattle:bool = "notReadyWindowState == PRE_BATTLE_COUNT_DOWN_TYPES.HARD")
+
+		(var headerTitle:str = " 	isEveryoneReadyInTraining 	? 'IDS_DIVISION_READY' : 
+									!isSelfPlayerReady			? 'IDS_DIVISION_LEAVES_WITHOUT_YOU'
+																: 'IDS_INCOMPLETE_DIVISION'")
+		
+		(var isUnreadyPlayerControlsVisible:bool = "!isSelfPlayerCommander && !isSelfPlayerReady" watch=false)
+		(bind isUnreadyPlayerControlsVisible "!isSelfPlayerCommander && !isSelfPlayerReady" init=false watch=false (event "evAnimationHiddenUnreadyControlsEnded"))
+	)
+	(style 
+		(width = "MODAL_WINDOW_PREBATTLE_NOT_READY_WIDTH")
+		(align = "center")
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+		(style 
+			(width = 100%)
+			(bind marginBottom "isSelfPlayerReady ? L : MS")
+		)
+		(element ModalWindowShortHeader
+			_header = "headerTitle"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(bind visible "!isSelfPlayerReady")
+		(style (marginBottom = "MS"))	
+		(controller $Instance renderer='InstructionBigTech'
+			(bind enabled "!isSelfPlayerReady")
+			(args
+				_instructionText = 'IDS_DIVISION_LEAVES_WITHOUT_YOU_INFO'
+				_maxWidth = "MODAL_WINDOW_PREBATTLE_NOT_READY_WIDTH"
+			)
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(bind visible "isSelfPlayerReady")
+		(style (marginBottom = "MS"))
+
+		(block
+			(style 
+				(width = "FORMATION_PLAYER_LIST_WIDTH")
+				(marginRight = "M")
+			)
+			(controller $Instance renderer='FormationStatusTraining'
+				(bind enabled "isSelfPlayerReady")
+				(args
+					_teamId = 0
+				)
+			)
+		)
+
+		(block
+			(style (width = "FORMATION_PLAYER_LIST_WIDTH"))
+			(controller $Instance renderer='FormationStatusTraining'
+				(bind enabled "isSelfPlayerReady")
+				(args
+					_teamId = 1
+				)
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(bind visible "isSelfPlayerReady && !isTrainingStateGoToBattle")
+		(style (marginBottom = "L"))
+		(controller $Instance renderer='InstructionBigTech'
+			(bind enabled "isSelfPlayerReady && !isTrainingStateGoToBattle")
+			(args
+				_instructionText = 'IDS_DIVISION_NOT_READY_COMMANDER_INFO'
+				_maxWidth = "MODAL_WINDOW_PREBATTLE_NOT_READY_WIDTH"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style 
+			(width = 100%)
+			(marginBottom = "M")
+		)
+		(element HorizontalDividerTwoPx)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+		(style 
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+
+		(element TimeBeforeStartPrebattle
+			_time = "timeBeforeStartTrainingBattle.value"
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+		(controller $Instance renderer='CommanderControls'
+			(bind enabled "isSelfPlayerCommander")
+			(args
+				_isPreBattleStateGoToBattle = "isTrainingStateGoToBattle"
+			)
+		)
+
+		(controller $Instance renderer='UnreadyPlayerControls'
+			(bind enabled "isUnreadyPlayerControlsVisible")
+			(args
+				_isTrainingRoom = true
+				_isReady = "isSelfPlayerReady"
+			)
+		)
+	)
+)
+
+(def element CommanderControls (_isPreBattleStateGoToBattle:bool)
+	(visible = "!_isPreBattleStateGoToBattle")
+	(style (alpha = "_isPreBattleStateGoToBattle ? 0 : 1"))
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.1
+			to = "{ alpha: 0, visible: false }"
+			easing = "Easing.quad_in"
+			watch = false
+			(bind enabled "_isPreBattleStateGoToBattle")
+		)
+	)
+
+	(element DefaultButton
+		_width = 160px
+		_name = 'btn_cancel'
+		_isTransactionBtn = true
+		_label = 'IDS_CANCEL'
+		_focusIndex = 1
+		_enabled = "!_isPreBattleStateGoToBattle"
+	)
+)
+
+(def element UnreadyPlayerControls (_isTrainingRoom:bool, _isReady:bool)
+	(scope
+		(event ItemChooser_evShipItemSelected)
+
+		(var selectedBattleTypeComponent:dhComponent = "getSingleEntity(CC.battleType, 'selected').battleType")
+		(var battleTypeReasons:array = 	"selectedBattleTypeComponent.battleTypeReasons" (event "selectedBattleTypeComponent.evDisableReasonChanged"))
+		(var battleTypeStatus:number =	"selectedBattleTypeComponent.status" 			(event "selectedBattleTypeComponent.evStatusChanged"))
+		
+		(var shipForDivision:dhCollection =	"getCollectionByPath(CC.ownShip, 'forDivision.sorted')")
+		(var isReadyBtnEnabled:bool = "(shipForDivision.length > 0) && (battleTypeStatus != SC.Common.BATTLE_TYPE_STATE.DISABLED) && !_isReady")
+
+		(var isRepeatStatusTooltipVisible:bool = "battleTypeReasons.length > 0")
+		(var isSimpleStatusTooltipVisible:bool = "battleTypeReasons.length == 0 && shipForDivision.length == 0")
+
+		(var shipList:array = "shipForDivision.items")
+
+		(var curItemIndex:number = 0)
+		(bind curItemIndex "$event.selectedIndex" init=false watch=false (event "ItemChooser_evShipItemSelected"))
+
+		(var shipId:number = "shipForDivision.length > 0 ? shipForDivision[curItemIndex].ship.id : null" watch=false)
+		(bind shipId "shipForDivision[curItemIndex].ship.id" init=false watch=false (bind trigger "curItemIndex"))
+	)
+	(style
+		(bind hitTest "!_isReady")
+		(align = "center")
+	)
+
+	(controller $Animation
+		(controllerEvents evAnimationEnded)
+		(bindcall play
+			duration = 0.1
+			to = "{ alpha: 0, visible: false }"
+			easing = "Easing.quad_in"
+			watch = false
+			onEndedEvent = 'evAnimationEnded'
+			(bind enabled "_isReady")
+		)
+		(dispatch evAnimationHiddenUnreadyControlsEnded dir="EventDirection.UP" on='evAnimationEnded')
+	)
+
+
+	(hblock
+		(bind visible "shipForDivision.length > 0")
+		(style (marginBottom = "MS"))
+
+		(tf
+			(class $TextDefault18NM)
+			(style 
+				(alpha = "TA")
+				(marginRight = 6px)
+				(marginTop = "S")
+			)
+			(text = 'IDS_YOUR_SHIP')
+		)
+
+		(controller $Instance renderer='ItemChooser'
+			(bind enabled "shipForDivision.length > 0")
+			(args
+				_items = "shipList"
+				_choosedItemRenderer = 'ShipItemChoosedRenderer'
+				_listItemRenderer = 'ShipItemChooser'
+				_onItemSelectedEvent = 'evShipItemSelected'
+				_dropDownWidth = 200px
+				_curIndex = "curItemIndex"
+			)
+		)
+	)
+
+	(block
+		(bind visible "shipForDivision.length == 0")
+		(style (marginBottom = "L"))
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "shipForDivision.length == 0")
+			(args
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
+				_text = 'IDS_NO_ALLOWED_SHIPS_FOR_THIS_BATTLE'
+				_textClass = '$TextDefault18NM'
+			)
+		)
+	)
+
+	(hblock
+		(block
+			(style (marginRight = "MS"))
+			(element DefaultButton
+				_name = 'set_ready_button'
+				_width = 160px
+				_label = 'IDS_FORMATION_SET_READY_GO_BATTLE'
+				_focusIndex = 0
+				_defaultFocused = true
+				_enabled = "isReadyBtnEnabled"
+				_methods = "_isTrainingRoom ?	[{	type: 'inputMapping.onAction',
+													name: 'setIsReadyInTrainingRoom',
+													args: { isReady: true, shipId: shipId }}] 
+											:	[{	type: 'inputMapping.onRequest',
+													name: 'playerJoinedBattle',
+													args: { shipId: shipId }}]"
+			)
+
+			(controller $Tooltip
+				(renderer = 'PreBattleNotReadyMultiparagraphTooltip')
+				(bind enabled "isRepeatStatusTooltipVisible")
+				(args
+					_tooltipDataArray = "battleTypeReasons"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(bind enabled "isSimpleStatusTooltipVisible")
+				(args
+					_text = 'IDS_NO_ALLOWED_SHIPS_FOR_THIS_BATTLE'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(element DefaultButton
+			_name = 'btn_cancel'
+			_width = 160px
+			_focusIndex = 0
+			_defaultFocused = true
+			_isTransactionBtn = true
+			_label = 'IDS_FORMATION_STAY_IN_DOCK'
+			_focusIndex = 1
+			_enabled = "!_isReady"
+		)
+	)
+)
+
+(def element FormationPlayersListForDivision ()
+	(scope
+		(var preBattlePlayerSimpleComponent:dhComponent = "getSingleEntity(CC.accountSelf).preBattlePlayerSimple")
+		(var preBattleId:number = "preBattlePlayerSimpleComponent.preBattleId" (event "preBattlePlayerSimpleComponent.evPreBattleIdChanged"))
+		(var preBattlePlayerSimpleCollection:dhCollection = "getCollectionByPath(CC.preBattlePlayerSimple, 'byPreBattle.' + preBattleId + '.preBattleMembers.sorted')")
+	)
+	(style
+		(width = 100%)
+		(gap = "XXS")
+	)
+
+	(controller $Repeat renderer='BigFormationPlayerItem'
+		(bind count "preBattlePlayerSimpleCollection.length")
+		(args
+			_entityAccountId = "preBattlePlayerSimpleCollection[$index].id"
+			_isTrainingRoom = false
+		)
+	)
+)
+
+(def element BigFormationPlayerItem (_entityAccountId:number, _isTrainingRoom:bool, _height:number)
+	(style
+		(width = 100%)
+		(height = "FORMATION_PLAYER_ITEM_HEIGHT.SMALL")
+	)
+
+	(controller $Instance renderer='FormationPlayerItem'
+		(args
+			_entityAccountId = "_entityAccountId"
+			_isTrainingRoom = "_isTrainingRoom"
+			_isModalPreBattleNotReady = true
+		)
+	)
+)
+
+(def element FormationPlayersListForTrainingRoom (_teamId:number)
+	(scope
+		(var preBattlePlayerSimpleComponent:dhComponent = "getSingleEntity(CC.accountSelf).preBattlePlayerSimple")
+		(var preBattleId:number = "preBattlePlayerSimpleComponent.preBattleId" (event "preBattlePlayerSimpleComponent.evPreBattleIdChanged"))
+		(var preBattlePlayerSimpleCollection:dhCollection = "getCollectionByPath(CC.preBattlePlayerSimple, 'byPreBattleAndTeam.' + preBattleId + '_' + _teamId + '.preBattleMembers.sorted')")
+	)
+	(style (width = 100%))
+
+	(scrollArea
+		(style
+			(width = 100%)
+			(maxHeight = "{	720: FORMATION_PLAYER_ITEM_HEIGHT.SMALL * 7.5 + XXS * 7,
+							1000: FORMATION_PLAYER_ITEM_HEIGHT.SMALL * 12 + XXS * 11 }")
+		)
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_singleStep = "FORMATION_PLAYER_ITEM_HEIGHT.SMALL"
+		)
+
+		(scrollPerItem = true)
+		(repeatController = 'BigFormationPlayer')
+
+		(content
+			(style
+				(vgap = "XXS")
+				(width = 100%)
+			)
+
+			(controller $DynamicRepeat renderer='BigFormationPlayerItem' name='BigFormationPlayer'
+				(bind count "preBattlePlayerSimpleCollection.length")
+				(args
+					_entityAccountId = "preBattlePlayerSimpleCollection[$index].id"
+					_isTrainingRoom = true
+				)
+
+				(itemHeight = "FORMATION_PLAYER_ITEM_HEIGHT.SMALL")
+				(itemOffset = "FORMATION_PLAYER_ITEM_HEIGHT.SMALL * 2 + XXS")
+			)
+		)
+	)
+)
+
+(def element FormationStatusTraining (_teamId:number)
+	(scope
+		(var preBattlePlayerSimpleComponent:dhComponent = "getSingleEntity(CC.accountSelf).preBattlePlayerSimple")
+		(var preBattleId:number = "preBattlePlayerSimpleComponent.preBattleId" (event "preBattlePlayerSimpleComponent.evPreBattleIdChanged"))
+	)
+	(style 
+		(width = 100%)
+		(align = "center")
+	)
+
+	(block
+		(style (marginBottom = "SXS"))
+		(element FormationHeader
+			_isTrainingRoom = true
+			_isLargeSize = true
+			_teamId = "_teamId"
+		)
+	)
+
+	(block
+		(style (marginBottom = "S"))
+		(element FormationShipClassesStatus
+			_preBattleId = "preBattleId"
+			_teamId = "_teamId"
+		)
+	)
+
+	(element FormationPlayersListForTrainingRoom
+		_teamId = "_teamId"
+	)
+)
+
+(def element ShipItemChoosedRenderer (_item:gfx)
+	(style
+		(paddingTop = 10px)
+		(paddingBottom = "SXS")
+		(paddingLeft = 10px)
+		(paddingRight = "XS")
+	)
+	(element ShipLineItemNM
+		_shipId = "_item.ship.id"
+	)
+)
+
+(def element ShipItemChooser (_curItemIndex:number, _item:gfx, _listItemRendererData:gfx={})
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+	)
+
+	(dispatch evMenuClosed dir="EventDirection.UP" on='leftClick')
+	(dispatch evItemChooserInner args="{ _curItemIndex: $index }" dir="EventDirection.UP" on='leftClick')
+
+	(style
+		(width = 100%)
+		(height = 36px)
+	)
+	(macro MOUSE_EVENTS_DISPATCHER)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element MenuItemBackground
+			_state = "	rollOver 				? SC.Ui_styles.BUTTON_STATE.OVER :
+						_curItemIndex == $index	? SC.Ui_styles.BUTTON_STATE.SELECTED
+												: SC.Ui_styles.BUTTON_STATE.UP"
+		)
+	)
+
+	(block
+		(style
+			(marginTop = "SXS")
+			(paddingLeft = "S")
+			(paddingRight = "XS")
+			(width = 100%)
+		)
+		(element ShipLineItemNM
+			_shipId = "_item.ship.id"
+			_width = '100%'
+		)
+	)
+)
+
+(def element PreBattleNotReadyMultiparagraphTooltip (_tooltipDataArray:array)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemStatusMultiparagraph
+			_unifiedStatus		= "SC.Ui_styles.UNIFIED_STATUS.WARNING"
+			_paragraphs			= "_tooltipDataArray"
+		)
+	)
+)
+
+(def element TimeBeforeStartPrebattle (_time:str)
+	(style 
+		(width = 100%)
+		(align = "center")
+	)
+
+	(tf
+		(class $TextDefault26NM)
+		(style
+			(marginBottom = "SXS")
+			(alpha = "TA")
+		)
+		(text = 'IDS_FORMATION_GO_TO_BATTLE_AFTER')
+	)
+
+	(tf
+		(class $TextDefault26NM)
+		(style 
+			(marginBottom = "M")
+			(alpha = "TA")
+			(width = 66px)
+		)
+		(bind text "_time")
+	)
+
+	(block
+		(style (width = 100%))
+		(element HorizontalDividerTwoPx)
+	)
+)
