@@ -87,14 +87,19 @@
 	)
 )
 
-(def element HotkeyIndicator (	_commandId:number, _size:number="SIZE.MEDIUM",
-								_fxOnDown:bool=true, _active:bool=false, _toggled:bool=false,
-								_overwriteState:number="HotkeyState.INVALID",
-								_isOnSettingsScreen:bool=false, _isForceIndex:bool=false, _forceShownIndex:number=0)
+(def element HotkeyIndicator (	_commandId:number,
+								_size:number = "SIZE.MEDIUM",
+								_fxOnDown:bool = true,
+								_active:bool = false,
+								_toggled:bool = false,
+								_overwriteState:number = "HotkeyState.INVALID",
+								_isOnSettingsScreen:bool = false,
+								_isForceIndex:bool = false,
+								_forceShownIndex:number = 0)
 	(scope
-		(var command:gfx = "$datahub.getPrimaryEntity(CC.commandMappingCommand, _commandId)")
-		(var commandName:str = "command.commandMappingCommandName.commandName")
-		(var isCmdDown:bool = "command ? command.commandMappingCommand.isDown : null" (event "command.commandMappingCommand.evIsDownChanged"))
+		(var commandEntity:dhEntity = "getPrimaryEntity(CC.commandMappingCommand, _commandId)")
+		(var commandName:str = "commandEntity.commandMappingCommandName.commandName")
+		(var isCmdDown:bool = "commandEntity.commandMappingCommand.isDown" (event "commandEntity.commandMappingCommand.evIsDownChanged"))
 
 		(struct mainCommand = GET_COMMAND(_commandName="commandName" _binding="0"))
 		(var cmdMappingKeyIndex:number = "	_isForceIndex				? _forceShownIndex :
@@ -103,9 +108,9 @@
 
 		(struct preferenceCommand = GET_COMMAND(_commandName="commandName" _binding="cmdMappingKeyIndex"))
 
-		(var inputKeyEntity:gfx = "$datahub.getPrimaryEntity(CC.inputKey, preferenceCommand.keyCode)")
-		(var keyPureName:str = "inputKeyEntity ? inputKeyEntity.inputKey.pureName : ''")
-		(var keyName:str = "inputKeyEntity ? inputKeyEntity.inputKey.name : ''")
+		(var inputKeyComponent:dhComponent = "getPrimaryComponent(CC.inputKey, preferenceCommand.keyCode)")
+		(var keyPureName:str = "inputKeyComponent.pureName ?: ''")
+		(var keyName:str = "inputKeyComponent.name ?: ''")
 		(var isMouseKey:bool = "isIn(preferenceCommand.keyCode, [MOUSE_LEFT_CLICK, MOUSE_RIGHT_CLICK, MOUSE_MIDDLE_CLICK])")
 
 		(var isModMouseKey:bool = "isMouseKey && preferenceCommand.mods")
@@ -115,7 +120,9 @@
 																			: _toggled 	? HotkeyState.POSITIVE
 																						: HotkeyState.DEFAULT")
 
-		(var isEmptyHotkeyFrameShown:bool = "_isOnSettingsScreen && (preferenceCommand.keyCode == 0)")
+		(var isEmptyHotkeyFrameShown:bool = "_isOnSettingsScreen && preferenceCommand.keyCode == 0")
+
+		(var isKeyWithMod:bool = "preferenceCommand.mods != 0 && !isEmptyHotkeyFrameShown")
 	)
 
 	
@@ -129,28 +136,28 @@
 
 	
 	(block
-		(controller $Instance layout=true
-			(bind enabled "(preferenceCommand.mods != 0) && !isEmptyHotkeyFrameShown")
-			(exprs
-				(style
-					(flow = "horizontal")
-					(align = "middle")
-				)
-				(element HotKey
-					_size 			= "_size"
-					_isKeyActive 	= "isKeyActive"
-					_command 		= "command"
-					_hotkeyState 	= "hotkeyState"
-					_fxOnDown 		= "_fxOnDown"
-					_keyCode 		= "preferenceCommand.mods"
-				)
-				(tf
-					(class $HotkeyTextWhite)
-					(style (marginTop = -2px))
-					(text = ' + ')
-				)
+		(controller $Instance renderer='HotKey'
+			(bind enabled "isKeyWithMod")
+			(args
+				_size 			= "_size"
+				_isKeyActive 	= "isKeyActive"
+				_commandEntity 	= "commandEntity"
+				_hotkeyState 	= "hotkeyState"
+				_fxOnDown 		= "_fxOnDown"
+				_keyCode 		= "preferenceCommand.mods"
 			)
 		)
+	)
+
+	(tf
+		(bind visible "_isOnSettingsScreen && isKeyWithMod")
+		(class $HotkeyTextWhite)
+		(style
+			(marginTop = "-XXS")
+			(marginRight = "XXS")
+			(marginLeft = "XXS")
+		)
+		(text = 'IDS_SIGN_PLUS')
 	)
 
 	
@@ -160,12 +167,13 @@
 			(args
 				_size 			= "_size"
 				_isKeyActive 	= "isKeyActive"
-				_command 		= "command"
+				_commandEntity 	= "commandEntity"
 				_hotkeyState 	= "hotkeyState"
 				_fxOnDown 		= "_fxOnDown"
 				_keyCode 		= "preferenceCommand.keyCode"
 			)
 		)
+
 		(controller $Instance renderer='MouseKeyIndicator'
 			(bind enabled "isMouseKey && !isEmptyHotkeyFrameShown")
 			(args
@@ -185,8 +193,12 @@
 	)
 )
 
-(def element HotKey (	_command:gfx, _size:number, _isKeyActive:bool,
-						_hotkeyState:number, _fxOnDown:bool, _keyCode:number)
+(def element HotKey (	_commandEntity:dhEntity,
+						_size:number,
+						_isKeyActive:bool,
+						_hotkeyState:number,
+						_fxOnDown:bool,
+						_keyCode:number)
 	(scope
 		(var inputKeyEntityWatcher:gfx = "$datahub.getPrimWatcher(CC.inputKey, _keyCode)")
 		(var inputKeyEntity:gfx = "inputKeyEntityWatcher.entity" (event "inputKeyEntityWatcher.event"))
@@ -201,14 +213,15 @@
 
 		(var paramScaleX:number = "($globalLayoutBounds[2] + hotkeyScaleSize) / max(1, $globalLayoutBounds[2])" (event "$evLayoutBoundsChanged")) 
 		(var paramScaleY:number = "($globalLayoutBounds[3] + hotkeyScaleSize) / max(1, $globalLayoutBounds[3])" (event "$evLayoutBoundsChanged")) 
-
 	)
+
 	(style
 		(align = "center|middle")
 		(bind minWidth "hotkeySize")
 		(bind minHeight "hotkeySize")
 		(bind maxWidth "isShortKeyName ? hotkeySize : 999")
 	)
+
 	(element HotkeyBackground _hotkeyState="_hotkeyState"
 		(class $FullsizeAbsolute)
 		(bind alpha "_isKeyActive ? 1 : 0.6")
@@ -228,11 +241,12 @@
 					to = "{scaleX:paramScaleX, scaleY:paramScaleY, alpha:0.0, visible:false}"
 					duration = 0.25
 					watch = false
-					(event "_command.commandMappingCommand.evCall")
+					(event "_commandEntity.commandMappingCommand.evCall")
 				)
 			)
 		)
 	)
+
 	(tf
 		(bind alpha "_isKeyActive ? 1 : 0.85")
 		(style
@@ -240,9 +254,9 @@
 			(bind marginRight "marginForText")
 		)
 		(bind class "HOTKEY_FONTS[_size]")
-		
-		(bind text "inputKeyEntity	? (isShortKeyName || NOT_LOCALIZE_KEYS[keyPureName])	? toUpper(tr(keyPureName))
-																							: toUpper(tr('IDS_' + keyName))
+
+		(bind text "inputKeyEntity	? (isShortKeyName || NOT_LOCALIZE_KEYS[keyPureName])	? keyPureName
+																							: 'IDS_' + keyName
 									: ''")
 	)
 )

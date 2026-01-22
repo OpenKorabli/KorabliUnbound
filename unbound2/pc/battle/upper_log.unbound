@@ -1,20 +1,32 @@
-(def constant UPPER_LOG_WIDTH 560)
-(def constant UPPER_LOG_HEIGHT 70)
+(def constant UPPER_LOG_WIDTH 494px)
+(def constant UPPER_LOG_HEIGHT 70px)
+
 (def constant PREBATTLE_TIMER_DELAY 0.70)
 (def constant DIGIT_MINUS_ONE '-1')
 (def constant DIGIT_ZERO '0')
 (def constant UPPER_LOG_MESSAGE_RENDERERS {
-	SC.Common.UPPER_LOG_ITEM_RENDERERS.COMMON: 	'UpperLogCommonMessage',
-	SC.Common.UPPER_LOG_ITEM_RENDERERS.EVENT: 	'UpperLogEventMessage',
+	SC.Common.UPPER_LOG_ITEM_RENDERERS.COMMON:			'UpperLogCommonMessage',
+	SC.Common.UPPER_LOG_ITEM_RENDERERS.EVENT:			'UpperLogEventMessage',
+	SC.Common.UPPER_LOG_ITEM_RENDERERS.ACHIEVEMENT:		'UpperLogAchievementMessage',
 })
 (def constant INVALID_TIME -1)
 
 
-(def macro MESSAGE_SCOPE (_message:expression)
-	(var message:gfx = "_message" watch=false)
-	(var color:number = "message.logMessage.color")
-	(var textIDS:str = "message.logMessage.text")
-	(var substituteMap:gfx = "message.logMessage.substitutes ? message.logMessage.substitutes : {}")
+(def struct MESSAGE_SCOPE (_message:dhEntity)
+	(var color:number = "_message.logMessage.color")
+	(var textIDS:str = "_message.logMessage.text")
+	(var substituteMap:dict = "_message.logMessage.substitutes ? _message.logMessage.substitutes : {}")
+
+	
+	
+
+	
+	
+	(var containerShowTime:number =	"$event[1][0] ?: 0" (event "_message.logMessage.evShow"))
+	(var textShowTime:number = 		"$event[1][1] ?: 0" (event "_message.logMessage.evShow"))
+
+	(var containerHideTime:number = "$event[1][0] ?: 0" (event "_message.logMessage.evHide"))
+	(var textHideTime:number = 		"$event[1][1] ?: 0" (event "_message.logMessage.evHide"))
 )
 
 (def element UpperLog (_isChallengesEnabled:bool, _isTrialsEnabled:bool)
@@ -22,7 +34,7 @@
 		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
 		(var isCustomCountdownEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.CUSTOM_COUNTDOWN) > 0")
 
-		(var messagesCollection:gfx = "$datahub.getCollection(CC.upperLogMessage)")
+		(var messagesCollection:dhCollection = "getCollection(CC.upperLogMessage)")
 
 		(var battleDataEntity:dhEntity = "getSingleEntity(CC.battleData)")
 		(var labelGameModeDescription:str = "battleDataEntity.battleInfo.gameModeDescription")
@@ -40,6 +52,8 @@
 		(var currentTime:number = "timerComponent.currentTime ?: 0" (event "timerComponent.evFrequent"))
 		(var endTime:number = "battleTimeAtMomentRender + currentTimeAtMomentRender")
 		(var countdownBattleTime:number = "battleTimeAtMomentRender != INVALID_TIME ? endTime - currentTime : INVALID_TIME")
+
+		(var hasPrebattleText:bool ="countdownBattleTime >= 0 && isBeginningOfBattle && !_isChallengesEnabled && !_isTrialsEnabled && !isCustomCountdownEnabled && !isCinematicActive")
 	)
 
 	(name = 'UpperLog')
@@ -47,15 +61,6 @@
 	(style
 		(width = "UPPER_LOG_WIDTH")
 		(hitTest = false)
-	)
-
-	(controller $Animation
-		(bindcall play
-			duration = 0.1
-			from = "{alpha: 1}"
-			to = "{alpha: 0}"
-			(bind enabled "battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
-		)
 	)
 
 	(block
@@ -67,36 +72,9 @@
 
 		(controller $Repeat renderer='UpperLogMessage'
 			(bind enabled "countdownBattleTime < 0 && battleState != SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN")
-			(bind count "messagesCollection.items.length" watch=false (event "messagesCollection.evAdded"))
-			(bindcall removeChildAt "$event[1]" (event "messagesCollection.evRemoved"))
-		)
-	)
-
-	(block
-		(style
-			(position = "absolute")
-			(width = 100%)
-			(align = "center")
-		)
-
-		(controller $Instance renderer='PrebattleText'
-			(bind enabled "countdownBattleTime >= 0 && isBeginningOfBattle && !_isChallengesEnabled && !_isTrialsEnabled && !isCustomCountdownEnabled && !isCinematicActive")
+			(bind items "messagesCollection")
 			(args
-				_labelGameModeDescription = "labelGameModeDescription"
-				_battleTime = "countdownBattleTime"
-			)
-		)
-	)
-
-	(block
-		(style
-			(position = "absolute")
-			(width = 100%)
-			(align = "center")
-		)
-		(controller $Instance renderer='BattleChallengesRoundCountdown'
-			(bind enabled "_isChallengesEnabled && !isCinematicActive")
-			(args
+				_messageEntity = "$item"
 				_battleState = "battleState"
 			)
 		)
@@ -108,76 +86,147 @@
 			(width = 100%)
 			(align = "center")
 		)
-		(controller $Instance renderer='TrialRoundCountdown'
-			(bind enabled "_isTrialsEnabled && !isCinematicActive")
-			(args
-				_battleState = "battleState"
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.1
+				from = "{alpha: 1}"
+				to = "{alpha: 0}"
+				(bind enabled "battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
 			)
 		)
-	)
 
-	(block
-		(style
-			(position = "absolute")
-			(width = 100%)
-			(align = "center")
+		(block
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(align = "center")
+			)
+
+			(controller $Instance renderer='PrebattleText'
+				(bind enabled "hasPrebattleText")
+				(args
+					_labelGameModeDescription = "labelGameModeDescription"
+					_battleTime = "countdownBattleTime"
+				)
+			)
 		)
-		(controller $Instance renderer='CustomStartBattleCountdown'
-			(bind enabled "isCustomCountdownEnabled && !isCinematicActive")
-			(args
-				_battleState = "battleState"
-				_countdownBattleTime = "countdownBattleTime"
+
+		(block
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(align = "center")
+			)
+			(controller $Instance renderer='BattleChallengesRoundCountdown'
+				(bind enabled "_isChallengesEnabled && !isCinematicActive")
+				(args
+					_battleState = "battleState"
+				)
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(align = "center")
+			)
+			(controller $Instance renderer='TrialRoundCountdown'
+				(bind enabled "_isTrialsEnabled && !isCinematicActive")
+				(args
+					_battleState = "battleState"
+				)
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(align = "center")
+			)
+			(controller $Instance renderer='CustomStartBattleCountdown'
+				(bind enabled "isCustomCountdownEnabled && !isCinematicActive")
+				(args
+					_battleState = "battleState"
+					_countdownBattleTime = "countdownBattleTime"
+				)
 			)
 		)
 	)
 )
 
+(def animation MoveUpperLogMessage()
+	from =		{ visualOffsetY: 0px }
+	to =		{ visualOffsetY: 150px }
+)
 
-(def element UpperLogMessage ()
+(def animation HideUpperLogMessage()
+	from =		{ alpha: 1 }
+	to =		{ alpha: 0 }
+)
+
+(def element UpperLogMessage (_messageEntity:dhEntity, _battleState:number)
 	(scope
-		(var messagesCollection:gfx = "$datahub.getCollection(CC.upperLogMessage)")
-		(var message:gfx = "messagesCollection.items[$index]" watch=false)
-		(var itemRendererId:number = "message.logMessage.itemRendererId")
-		(var upperLogItemName:str = "itemRendererId ? UPPER_LOG_MESSAGE_RENDERERS[itemRendererId] : UPPER_LOG_MESSAGE_RENDERERS[SC.Common.LOWER_LOG_ITEM_RENDERERS.DEFAULT]")
+		(event evEndBattleIdlingStarted)
+		(var itemRendererId:number = "_messageEntity.logMessage.itemRendererId")
+		(var isAchievementMessage:bool = "itemRendererId == SC.Common.UPPER_LOG_ITEM_RENDERERS.ACHIEVEMENT")
+		(var upperLogItemName:str = "itemRendererId ? UPPER_LOG_MESSAGE_RENDERERS[itemRendererId]
+													: UPPER_LOG_MESSAGE_RENDERERS[SC.Common.LOWER_LOG_ITEM_RENDERERS.DEFAULT]")
 	)
+	(dispatch evEndBattleIdlingStarted (bind enabled "_battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING") (bind trigger "_battleState"))
+	(dispatch evEndBattleIdlingStarted on='addedToStage' (bind enabled "_battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING"))
 
 	(controller $Animation
 		(bindcall play
-			duration = "$event[1]"
-			delay = "0"
-			from="{alpha:0, marginTop: -15}"
-			to="{alpha:1, marginTop: 0}"
-			watch=false
-			action="killAll"
-			(event "message.logMessage.evShow")
-		)
-
-		(bindcall play
-			duration = "$event[1]"
-			delay = "0"
-			to="{alpha:0}"
-			watch=false
-			action="killAll"
-			(event "message.logMessage.evHide")
+			name =		"isAchievementMessage	? 'MoveUpperLogMessage'
+												: 'HideUpperLogMessage'"
+			duration =	"isAchievementMessage	? 0.35
+												: 0.1"
+			easing =	"isAchievementMessage	? Easing.circ_out
+												: Easing.line"
+			watch =		false
+			action =	"kill"
+			(event "evEndBattleIdlingStarted")
 		)
 	)
 
 	(controller $Instance (renderer="upperLogItemName")
 		(args
-			_message = "message"
+			_message = "_messageEntity"
 		)
 	)
 )
 
-(def element UpperLogCommonMessage (_message:gfx)
+(def element UpperLogCommonMessage (_message:dhEntity)
 	(scope
-		(macro MESSAGE_SCOPE "_message")
+		(struct messageScope = MESSAGE_SCOPE(_message = "_message"))
 	)
 
 	(style
 		(width = "UPPER_LOG_WIDTH")
 		(height = "UPPER_LOG_HEIGHT")
 		(align = "center|middle")
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = "messageScope.containerShowTime"
+			from = "{alpha: 0, marginTop: -15px}"
+			to = "{alpha: 1, marginTop: 0px}"
+			watch = false
+			action = "killAll"
+			(event "_message.logMessage.evShow")
+		)
+
+		(bindcall play
+			duration = "messageScope.containerHideTime"
+			to = "{alpha: 0}"
+			watch = false
+			action = "killAll"
+			(event "_message.logMessage.evHide")
+		)
 	)
 
 	(tf
@@ -185,38 +234,283 @@
 		(style
 			(width = 100%)
 			(textAlign = "center")
-			(bind textColor "color")
+			(bind textColor "messageScope.color")
 			(align = "middle")
 		)
-		(bindcall substitute imageOffset="6" substitutionMap="substituteMap" sourceText="textIDS" postfix='' init=true)
+		(bindcall substitute imageOffset="6" substitutionMap="messageScope.substituteMap" sourceText="messageScope.textIDS" postfix='' init=true)
 	)
 )
 
-(def element UpperLogEventMessage (_message:gfx)
+(def element UpperLogEventMessage (_message:dhEntity)
 	(scope
-		(macro MESSAGE_SCOPE "_message")
+		(struct messageScope = MESSAGE_SCOPE(_message = "_message"))
+		(var isNormalSpeedAnimation:bool = "messageScope.textHideTime == SC.Ui_common.UPPER_LOG_EVENT_MESSAGE_ANIMATION_SETTINGS.TEXT_HIDE_TIME")
+	)
+	(style (width = "UPPER_LOG_WIDTH"))
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(pivotX = "UPPER_LOG_WIDTH / 2")
+			(marginLeft = 50%)
+			(borderRadius = "XS")
+			(scaleX = 0)
+			(alpha = 0)
+			(backgroundColor = "BATTLE_SEMI_TRANSPARENT_BACKGROUNDS.BG_INTENSE")
+		)
+
+		(controller $Animation
+			(bindcall play
+				id = 'logBackgroundAnimation'
+				duration = "messageScope.containerShowTime"
+				to = "{ alpha: 1, scaleX: 1}"
+				watch = false
+				easing = "Easing.circ_out"
+				(event "_message.logMessage.evShow")
+			)
+
+			(bindcall play
+				id = 'logBackgroundAnimation'
+				delay = "isNormalSpeedAnimation ? messageScope.textHideTime + 0.15 : messageScope.textHideTime + 0.05"
+				duration = "isNormalSpeedAnimation ? messageScope.containerHideTime - 0.15 : messageScope.containerHideTime - 0.05"
+				to = "{ alpha: 0, scaleX: 0}"
+				watch = false
+				easing = "Easing.circ_out"
+				(event "_message.logMessage.evHide")
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(height = 100%)
+				(left = "S")
+				(paddingTop = "S")
+				(paddingBottom = "S")
+			)
+			(element UpperLogVerticalLine)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(height = 100%)
+				(right = "S")
+				(paddingTop = "S")
+				(paddingBottom = "S")
+			)
+			(element UpperLogVerticalLine)
+		)
 	)
 
-	(style
-		(width = "UPPER_LOG_WIDTH")
-		(height = "UPPER_LOG_HEIGHT")
-		(bind backgroundImage "'url:../battle_hud/central_log/lower_log_bg_9scale.png'")
-		(backgroundSize = "fill")
-		(scale9grid = [4, 3, 4, 3])
-		(align = "center|middle")
-	)
-
-	(tf
+	(block
 		(style
 			(width = 100%)
-			(margin = [18, 16, 16, 18])
-			(textAlign = "center")
+			(align = "middle")
+			(paddingTop = "M")
+			(paddingBottom = "M")
+			(paddingLeft = "MS")
+			(paddingRight = "MS")
 		)
-		(class $TextDefaultBold18NM)
-		(bindcall substitute imageOffset="6" substitutionMap="substituteMap" sourceText="textIDS" postfix='' init=true)
+
+		(tf
+			(class $TextDefault20NM)
+			(style
+				(width = 100%)
+				(textAlign = "center")
+				(alpha = 0)
+				(visualOffsetY = "-S")
+			)
+
+			(controller $Animation
+				(bindcall play
+					id = 'logTextAnimation'
+					duration = "messageScope.textShowTime - 0.15"
+					delay = "messageScope.containerShowTime + 0.15"
+					to = "{ alpha: 1, visualOffsetY: 0px }"
+					watch = false
+					easing = "Easing.circ_out"
+					action = "kill"
+					(event "_message.logMessage.evShow")
+				)
+
+				(bindcall play
+					id = 'logTextAnimation'
+					duration = "messageScope.textHideTime"
+					to = "{ alpha: 0 }"
+					watch = false
+					easing = "Easing.circ_out"
+					action = "kill"
+					(event "_message.logMessage.evHide")
+				)
+			)
+			(bindcall substitute imageOffset="6" substitutionMap="messageScope.substituteMap" sourceText="messageScope.textIDS" postfix='' init=true)
+		)
 	)
 )
 
+(def element UpperLogVerticalLine ()
+	(style
+		(height = 100%)
+		(width = 2px)
+		(borderRadius = "XXS")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+	)
+)
+
+(def element UpperLogAchievementMessage (_message:dhEntity)
+	(scope
+		(struct messageScope = MESSAGE_SCOPE(_message = "_message"))
+		(var achievementEntity:dhEntity = "getEntity(_message.logMessage.state)")
+		(var achievementComponent:dhComponent = "achievementEntity.achievement")
+		(var achievementInfo:dhComponent = "achievementEntity.achievementInfo")
+		(var achievementName:str = "achievementInfo.name ?: ''")
+		(var nameIDS:str = "achievementInfo.nameIDS")
+		(var rarity:number = "achievementInfo.rarity")
+		(var typeIDS:str = "rarity ? 'IDS_ACHIEVEMENT_RARITY_' + SC.Common.UNIFIED_ITEM_RARITY.VALUE_TO_NAME[rarity] : ''")
+	)
+	(bindcall externalCall 'sound.playSetSoundDirect' "['achievement_earned_battle', achievementComponent.id]" watch=false on='addedToStage')
+
+	(style
+		(hitTest = false)
+		(width = "ACHIEVEMENT_LOG_WIDTH")
+		(height = "ACHIEVEMENT_LOG_HEIGHT")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(pivotX = 50%)
+			(marginLeft = 50%)
+			(borderRadius = "XS")
+			(scaleX = 0)
+			(alpha = 0)
+			(backgroundColor = "BATTLE_SEMI_TRANSPARENT_BACKGROUNDS.BG_LIGHT")
+		)
+
+		(controller $Animation
+			(bindcall play
+				id ='showAchievementBg'
+				delay = "ACHIEVEMENT_LOG_DELAY_SHOW"
+				duration = "ACHIEVEMENT_LOG_DURATION_SHOW"
+				to = "{ alpha: 1, scaleX: 1}"
+				easing = "Easing.expo_in_out"
+				action = "kill"
+				on='addedToStage'
+			)
+
+			(bindcall play
+				id ='hideAchievementBg'
+				delay = "messageScope.textHideTime + 0.1"
+				duration = "messageScope.containerHideTime - (messageScope.textHideTime + 0.1)"
+				to = "{ alpha: 0, scaleX: 0}"
+				watch = false
+				easing = "Easing.quint_out"
+				action = "kill"
+				(event "_message.logMessage.evHide")
+			)
+		)
+	)
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(hitTest = false)
+			(width = 560px)
+			(height = 176px)
+			(top = -40px)
+			(backgroundImage = 'url:../animations/spine/rewards/achievement_effect/achievement_effect.skel')
+			(backgroundSize = "fill")
+		)
+
+		(controller $Animation
+			(bindcall play
+				id ='hideAchievementEffect'
+				duration = "messageScope.textHideTime"
+				to = "{ alpha: 0 }"
+				watch = false
+				easing = "Easing.quad_in"
+				action = "kill"
+				(event "_message.logMessage.evHide")
+			)
+		)
+
+		(controller $Spine
+			(bindcall play sequence="{ name:'show',		repeatCount:1			}" append=true	(event "_message.logMessage.evShow"))
+			(bindcall play sequence="{ name:'static',	repeatCount:-1,	mix:0.3	}" append=true	(event "_message.logMessage.evShow"))
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(style
+			(width = 100%)
+			(align = "middle")
+			(paddingTop = "SXS")
+			(paddingBottom = "SXS")
+			(paddingLeft = "MS")
+			(paddingRight = "MS")
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				id ='showAchievementContent'
+				delay = "ACHIEVEMENT_LOG_DURATION_SHOW + ACHIEVEMENT_LOG_DELAY_SHOW + 0.15"
+				duration = "ACHIEVEMENT_LOG_DURATION_SHOW + 0.5"
+				to = "{ alpha: 1 }"
+				watch = false
+				easing = "Easing.circ_out"
+				action = "kill"
+				on='addedToStage'
+			)
+
+			(bindcall play
+				id ='hideAchievementContent'
+				duration = "messageScope.textHideTime"
+				to = "{ alpha: 0 }"
+				watch = false
+				easing = "Easing.quad_in"
+				action = "kill"
+				(event "_message.logMessage.evHide")
+			)
+		)
+
+		(block
+			(style (marginRight = "M"))
+			(element AchievementBattleIcon
+				_iconName = "achievementName"
+				_size = 80px
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(style
+				(align = "middle")
+				(vgap="S")
+			)
+
+			(tf
+				(class $TextDefaultBold18NM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+				(bind text "nameIDS")
+			)
+
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+				(bind text "typeIDS")
+			)
+		)
+	)
+)
 
 (def element PrebattleText (_battleTime:number, _labelGameModeDescription:str)
 	(scope
@@ -454,7 +748,7 @@
 				(width = 100%)
 				(alpha = 0)
 			)
-			(controller $Animation 
+			(controller $Animation
 				(bindcall play
 					duration="0.15"
 					delay="0"
@@ -503,7 +797,7 @@
 				(alpha = 0)
 				(position = "absolute")
 			)
-			(controller $Animation 
+			(controller $Animation
 				(bindcall play
 					duration="0.15"
 					delay="0"
@@ -963,7 +1257,7 @@
 				)
 			)
 
-			(controller $Animation 
+			(controller $Animation
 				(bindcall play
 					duration = 0.15
 					from = "{alpha: 0}"

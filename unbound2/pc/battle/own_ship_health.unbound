@@ -23,7 +23,8 @@
 	BLACK: 			{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:255, greenOffset:-100, blueOffset:-220, alphaOffset:0 },
 	POSITIVE_REGEN: { redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:-150, greenOffset:50, blueOffset:-15, alphaOffset:-100 },
 	NEGATIVE_DPS: 	{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:255, greenOffset:255, blueOffset:255, alphaOffset:-60 },
-	MAX_REGEN: 		{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:50, greenOffset:50, blueOffset:50, alphaOffset:-200 }
+	MAX_REGEN: 		{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:50, greenOffset:50, blueOffset:50, alphaOffset:-200 },
+	SHIELD: 		{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:0, greenOffset:-57, blueOffset:-98, alphaOffset:0 }
 })
 
 (def css $TextHealth ()
@@ -168,14 +169,15 @@
 (def element ShipHealthLabel (_entityId:number=0)
 	(scope
 		(var entity:gfx = "$datahub.getEntity(_entityId)")
-
 		(macro HEALTH_PERCENT_AND_ALIVE "entity")
+		(var shieldComponent:gfx = "entity.shield" (event "entity.evAdded") (event "entity.evRemoved"))
+		(var maxShield:number = "shieldComponent ? shieldComponent.shieldMaxHealth : 0" (event "shieldComponent.evShieldMaxHealthChanged"))
 	)
 
 	(style
 		(flow = "horizontal")
 		(align = "middle|right")
-		(gap = "XXS")
+		(gap = "-XXS")
 	)
 
 	(tf
@@ -190,17 +192,61 @@
 	)
 
 	(tf
-		(style (marginLeft = "-XS"))
 		(class $TextHealth)
 		(class $FontEnableReadability)
 		(text = '/')
 	)
 
 	(tf
-		(style (marginLeft = "-XS"))
 		(class $TextHealth)
 		(class $FontEnableReadability)
 		(bind text "formatSeparator(maxHealth)")
+	)
+
+	(controller $Instance renderer='ShipShieldLabel'
+		(bind enabled "maxShield > 0")
+		(args
+			_entityId = "_entityId"
+		)
+	)
+)
+
+(def element ShipShieldLabel (_entityId:number=0)
+	(scope
+		(var entity:gfx = "$datahub.getEntity(_entityId)")
+		(var shieldComponent:gfx = "entity.shield")
+		(var shieldMaxHealth:number = "shieldComponent ? shieldComponent.shieldMaxHealth : 1" (event "shieldComponent.evShieldMaxHealthChanged"))
+		(var shieldHealth:number = "shieldComponent ? shieldComponent.shieldHealth : 1" (event "shieldComponent.evShieldHealthChanged"))
+	)
+
+	(style
+		(position = "absolute")
+		(width = 100%)
+		(flow = "horizontal")
+		(align = "middle|right")
+		(gap = "-XXS")
+		(top = 19px)
+	)
+
+	(tf
+		(class $TextHealthBold)
+		(class $FontEnableReadability)
+		(style
+			(textColor ="C_SHIELD")
+		)
+		(bind text "formatSeparator(shieldHealth)")
+	)
+
+	(tf
+		(class $TextHealth)
+		(class $FontEnableReadability)
+		(text = '/')
+	)
+
+	(tf
+		(class $TextHealth)
+		(class $FontEnableReadability)
+		(bind text "formatSeparator(shieldMaxHealth)")
 	)
 )
 
@@ -386,6 +432,8 @@
 		(var isSelfObserved:bool = "_isSelfObserved")
 		(var entity:gfx = "$datahub.getEntity(entityId)")
 		(var healthComponent:gfx = "entity.health")
+		(var shieldComponent:gfx = "entity.shield" (event "entity.evAdded") (event "entity.evRemoved"))
+		(var maxShield:number = "shieldComponent ? shieldComponent.shieldMaxHealth : 1" (event "shieldComponent.evShieldMaxHealthChanged"))
 		(var isAlive:bool = "healthComponent != null ? healthComponent.isAlive : false" (event "healthComponent.evIsAliveChanged"))
 		(var shipInfo:gfx = "_shipInfo")
 		(var masteryRank:number = "entity.avatar.masteryRank")
@@ -411,12 +459,29 @@
 		(style
 			(width = 100%)
 			(align = "center")
+			(bind visualOffsetY "maxShield > 0 ? -S : 0px")
 		)
 
 		(controller $Instance renderer='NewHealthBar'
 			(args
 				_entityId = "entityId"
 				_shipInfo = "shipInfo"
+			)
+			(bindcall recreate (bind trigger "entityId"))
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = "S")
+			(width = 100%)
+			(align = "center")
+		)
+		(controller $Instance renderer='ShieldsBar'
+			(bind enabled "maxShield > 0")
+			(args
+				_entityId = "entityId"
 			)
 			(bindcall recreate (bind trigger "entityId"))
 		)
@@ -454,6 +519,36 @@
 	)
 )
 
+(def element ShieldsBar (_entityId:number = 0)
+	(scope
+		(var entityId:number = "_entityId")
+		(var entity:gfx = "$datahub.getEntity(entityId)")
+		(var shieldComponent:gfx = "entity.shield")
+		(var healthComponent:gfx = "entity.health")
+		(var shieldMaxHealth:number = "shieldComponent ? shieldComponent.shieldMaxHealth : 0" (event "shieldComponent.evShieldMaxHealthChanged"))
+		(var isAlive:bool = "healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
+	)
+
+	(bind visible "isAlive && shieldMaxHealth")
+
+	(style
+		(width = "NEW_BAR_IMAGE_WIDTH")
+		(height = "NEW_BAR_IMAGE_HEIGHT - 4")
+		(align = "center|middle")
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(align = "center|middle")
+			(backgroundImage = 'img://gui/battle_hud/own_ship_health/shield_bar_border.png')
+		)
+
+		(element NewShieldHealthBarValue entity="entity")
+
+	)
+)
+
 (def element NewHealthBar (_shipInfo:gfx, _entityId:number = 0)
 	(name = 'vehicle_hp_text')
 	(scope
@@ -462,6 +557,7 @@
 		(var shipInfo:gfx = "_shipInfo")
 		(var healthComponent:gfx = "entity.health")
 		(var maxHealth:number = "healthComponent.max" (event "healthComponent.evMaxChanged"))
+		(var shieldMaxHealth:number = "healthComponent.shieldMaxHealth" (event "healthComponent.evShieldMaxHealthChanged"))
 		(var isAlive:bool = "healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
 
 		(var shortName:str = "shipInfo.ship.shortName")
@@ -631,4 +727,51 @@
 	)
 
 	(bind colorTransform "healthPercent > 0.8 ? SHIP_HP_TRANSFORM_COLORS.GREEN : healthPercent > 0.3 ? SHIP_HP_TRANSFORM_COLORS.YELLOW : SHIP_HP_TRANSFORM_COLORS.RED")
+)
+
+(def element NewShieldHealthBarValue (entity:gfx)
+	(scope
+		(var shieldComponent:gfx = "entity.shield")
+		(var shieldMaxHealth:number = "shieldComponent ? shieldComponent.shieldMaxHealth : 1" (event "shieldComponent.evShieldMaxHealthChanged"))
+		(var shieldHealth:number = "shieldComponent ? shieldComponent.shieldHealth : 1" (event "shieldComponent.evShieldHealthChanged"))
+		(var shieldPercent:number = "shieldHealth / max(shieldMaxHealth, 1)")
+
+		(var resultWidth:number = "100% * shieldPercent")
+		(var currentWidth:number = "resultWidth" watch=false)
+
+		(controller $Animation
+			(bindcall play
+				delay = "0.1"
+				duration = "0.1"
+				action = "killAll"
+				watch = false
+				easing = "Easing.quad_in"
+				from = "{ currentWidth: currentWidth }"
+				to = "{ currentWidth: resultWidth }"
+				(event "shieldComponent.evShieldHealthChanged")
+				(event "shieldComponent.evShieldMaxHealthChanged")
+			)
+		)
+	)
+
+	(style
+		(position = "absolute")
+		(left = "NEW_BAR_IMAGE_WIDTH_HALF")
+		(top = 1px)
+		(marginLeft = -50%)
+		(backgroundSize = "autosize")
+		(backgroundImage = 'img://gui/battle_hud/own_ship_health/shield_bar.png')
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "NO_COLOR")
+			(bind width "currentWidth")
+		)
+		(isMask = true)
+	)
+
+	(bind colorTransform "SHIP_HP_TRANSFORM_COLORS.SHIELD")
+
 )

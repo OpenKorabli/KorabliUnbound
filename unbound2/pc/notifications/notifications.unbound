@@ -214,7 +214,14 @@
 		(bind isHitTest "true" init=false watch=false (event "evShow"))
 		(bind isHitTest "false" init=false watch=false (event "evStartHide"))
 	)
-	(style (width = "INFOTIP_WIDTH") (bind height "dragInfotip.infotipHeight") (bind hitTest "isHitTest"))
+
+	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(style
+		(width = "INFOTIP_WIDTH")
+		(bind height "dragInfotip.infotipHeight")
+		(bind hitTest "isHitTest")
+	)
+
 	(bindcall externalCall "isPrefGroup ? 'direct.action' : ''" "['option.set', ['ui.notificationsSelectedGroup', activeGroup]]" init=false watch=false (event "evSetActiveGroup"))
 	(dispatch evSetActiveGroup dir="EventDirection.NONE" args="$event" delay=0.01 (event "evGroupClick"))
 
@@ -360,6 +367,8 @@
 
 		(var sessionBattleEfficiency:array = "battleTypeSessionStatsList[selectedBattleTypeIndex].sessionBattleEfficiencyAllTypes ?: []")
 		(var sessionEconomicsEfficiency:array = "battleTypeSessionStatsList[selectedBattleTypeIndex].sessionEconomicsEfficiencyAllTypes ?: []")
+		(var sessionAchievements:array = "battleTypeSessionStatsList[selectedBattleTypeIndex].sessionAchievements ?: []")
+		(var hasAchievements:bool = "sessionAchievements.length > 0")
 		(var isDisabled:bool = "nonzeroBattleTypes.length <= 1")
 	)
 	(bindcall externalCall 'direct.action' "['sessionStatsBattleTypeChosen', [$event.selectedIndex, nonzeroBattleTypes[$event.selectedIndex]]]" init=false watch=false (event "ItemChooser_evBattleTypeSelected"))
@@ -439,11 +448,16 @@
 			(macro TOOLTIP_SYSTEM_PARAMS_CONTAINER)
 
 			(block
-				(style (width = 100%) (paddingTop = "SXS") (paddingLeft = "M") (paddingRight = "M"))
+				(style
+					(width = 100%)
+					(paddingTop = "SXS")
+					(paddingLeft = "M")
+					(paddingRight = "M")
+				)
 				(controller $Repeat renderer='SessionStatsParamsListItem'
-					(bind count "sessionBattleEfficiency.length")
+					(bind items "sessionBattleEfficiency")
 					(args
-						_sessionBattleEfficiency = "sessionBattleEfficiency[$index]"
+						_sessionBattleEfficiency = "$item"
 						_isTotalEnabled = "isTotalEnabled"
 					)
 				)
@@ -472,10 +486,65 @@
 			(macro TOOLTIP_SYSTEM_PARAMS_CONTAINER)
 
 			(block
-				(style (width = 100%) (paddingTop = "SXS") (paddingLeft = "M") (paddingRight = "SXS"))
+				(style
+					(width = 100%)
+					(paddingTop = "SXS")
+					(paddingLeft = "M")
+					(paddingRight = "SXS")
+				)
 				(controller $Repeat renderer='SessionStatsRewardListItem'
-					(bind count "sessionEconomicsEfficiency.length")
-					(args _reward = "sessionEconomicsEfficiency[$index]")
+					(bind items "sessionEconomicsEfficiency")
+					(args
+						_reward = "$item"
+					)
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "hasAchievements")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemSecondaryHeaderText'
+				(bind enabled "hasAchievements")
+				(args
+					_headerText = 'IDS_SESSION_STATS_ACHIEVEMENTS'
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "hasAchievements")
+			)
+		)
+
+		(block
+			(bind visible "hasAchievements")
+			(style (width = 100%))
+			(macro TOOLTIP_SYSTEM_PARAMS_CONTAINER)
+
+			(block
+				(style
+					(flow = "tile_horizontal")
+					(width = 100%)
+					(paddingTop = "SXS")
+					(paddingBottom = "SXS")
+					(paddingLeft = "M")
+					(paddingRight = "M")
+					(gap ="M")
+				)
+				(controller $Repeat renderer='SessionStatsAchievementIcon'
+					(bind items "sessionAchievements")
+					(args
+						_achievement = "$item"
+					)
 				)
 			)
 		)
@@ -502,6 +571,22 @@
 				_methods = "[{ type: 'inputMapping.onAction', name: 'clearSessionStats', args: {}}]"
 			)
 		)
+	)
+)
+
+(def element SessionStatsAchievementIcon (_achievement:dict)
+	(scope
+		(var id:str =						"toString(_achievement.id) ?: ''")
+		(var amount:number =				"_achievement.amount ?: 0")
+		(var achievementEntity:dhEntity =	"getPrimaryEntity(CC.achievement, id)")
+	)
+
+	(element AchievementIcon
+		_id =				"achievementEntity.id"
+		_amount =			"amount"
+		_size =				"TOOLTIP_ACHIEVEMENT_ICON_SIZE"
+		_showMarkerNew =	true
+		_fromSesionStats =	true
 	)
 )
 
@@ -569,27 +654,27 @@
 	(scope
 		(var sessionValueText:str = " _sessionBattleEfficiency.valueUnitSymbol != 'IDS_SHORT_DASH'	? _sessionBattleEfficiency.hasSeparatedDigits	? formatSeparator(_sessionBattleEfficiency.sessionValue)
 																																					: formatFloatingPoint(_sessionBattleEfficiency.sessionValue, 1, false)
-																									: ''")
+																				: ''")
 	)
 	(style (width = 100%) (backgroundColor = "NO_COLOR"))
 
 	(element ParamsModifierItemTooltipSystem
 		_attribute = "{ measuredValue: sessionValueText,
-						measure: _sessionBattleEfficiency.valueUnitSymbol,
-						attributeIDS: _sessionBattleEfficiency.attributeIDS }"
+						measure: $item.valueUnitSymbol,
+						attributeIDS: $item.attributeIDS }"
 	)
 
 	(controller $Tooltip
 		(renderer = 'SessionStatsBattleEfficiencyTooltip')
 		(args
-			_headerText = "_sessionBattleEfficiency.attributeIDS"
-			_descriptionText = "_sessionBattleEfficiency.tooltipDesc"
-			_hasSeparatedDigits = "_sessionBattleEfficiency.hasSeparatedDigits"
-			_valueAllUnitSymbol = "_sessionBattleEfficiency.valueAllUnitSymbol"
-			_allTimeValue = "_sessionBattleEfficiency.allTimeValue"
-			_valueUnitSymbol = "_sessionBattleEfficiency.valueUnitSymbol"
-			_sessionValue = "_sessionBattleEfficiency.sessionValue"
-			_isTotalEnabled = "_isTotalEnabled"
+			_headerText =			"_sessionBattleEfficiency.attributeIDS"
+			_descriptionText =		"_sessionBattleEfficiency.tooltipDesc"
+			_hasSeparatedDigits =	"_sessionBattleEfficiency.hasSeparatedDigits"
+			_valueAllUnitSymbol =	"_sessionBattleEfficiency.valueAllUnitSymbol"
+			_allTimeValue =			"_sessionBattleEfficiency.allTimeValue"
+			_valueUnitSymbol =		"_sessionBattleEfficiency.valueUnitSymbol"
+			_sessionValue =			"_sessionBattleEfficiency.sessionValue"
+			_isTotalEnabled =		"_isTotalEnabled"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -624,17 +709,18 @@
 		
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var sysMessageCoreComponent:gfx = "_messageEntity ? _messageEntity.sysMessageCore : null")
-		(var requestName:str = "sysMessageCoreComponent && sysMessageCoreComponent.eventName ? sysMessageCoreComponent.eventName : ''" (event "sysMessageCoreComponent.evEventNameChanged"))
-		(var requestArgs:dict = "sysMessageCoreComponent && sysMessageCoreComponent.eventArgs ? sysMessageCoreComponent.eventArgs : {}" (event "sysMessageCoreComponent.evEventArgsChanged"))
-		(var isClickableArea:bool = "requestName && requestArgs != null && requestArgs != {}")
+		(var sysMessageCoreComponent:gfx = "_messageEntity.sysMessageCore")
+		(var eventType:str = "sysMessageCoreComponent.eventType ?: ''" (event "sysMessageCoreComponent.evEventNameChanged"))
+		(var eventName:str = "sysMessageCoreComponent.eventName ?: ''" (event "sysMessageCoreComponent.evEventNameChanged"))
+		(var eventArgs:dict = "sysMessageCoreComponent.eventArgs ?: {}" (event "sysMessageCoreComponent.evEventArgsChanged"))
+		(var isClickableArea:bool = "eventName && eventArgs != {}")
 	)
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(dispatch evAddedToStage on='addedToStage')
 	(dispatch evMouseUp on='mouseUp' args="{isDown: false}")
 
 	
-	(bindcall externalCall "isClickableArea ? 'inputMapping.onRequest' : ''" "[requestName, requestArgs]" init=false watch=false on='leftClick')
+	(bindcall externalCall "isClickableArea ? eventType : ''" "[eventName, eventArgs]" init=false watch=false on='leftClick')
 
 	(style
 		(width = 100%)
@@ -971,9 +1057,10 @@
 
 		
 		(macro MOUSE_HANDLER_SCOPE)
-		(var requestName:str = "sysMessageCoreComponent && sysMessageCoreComponent.eventName ? sysMessageCoreComponent.eventName : ''" (event "sysMessageCoreComponent.evEventNameChanged"))
-		(var requestArgs:dict = "sysMessageCoreComponent && sysMessageCoreComponent.eventArgs ? sysMessageCoreComponent.eventArgs : {}" (event "sysMessageCoreComponent.evEventArgsChanged"))
-		(var isClickableArea:bool = "requestName && requestArgs != null && requestArgs != {}")
+		(var eventType:str = "sysMessageCoreComponent.eventType ?: ''" (event "sysMessageCoreComponent.evEventNameChanged"))
+		(var eventName:str = "sysMessageCoreComponent.eventName ?: ''" (event "sysMessageCoreComponent.evEventNameChanged"))
+		(var eventArgs:dict = "sysMessageCoreComponent.eventArgs ?: {}" (event "sysMessageCoreComponent.evEventArgsChanged"))
+		(var isClickableArea:bool = "eventType && eventName && eventArgs != null && eventArgs != {}")
 	)
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(bindcall externalCall "isSystemNotificationVisible && !_isEmergency ? 'direct.action' : ''" "['rollOverNotification', {}]"	watch=false (event "evRollOver"))
@@ -1036,7 +1123,7 @@
 			
 			(bindcall externalCall "isSystemNotificationVisible	? 'direct.action'			: ''" "[_isEmergency  ? 'closeEmergency' : 'closeNotification', {}]" watch=false on='rightClick')
 			(bindcall externalCall "isClickableArea				? 'direct.action'			: ''" "['closeNotification', {}]"	watch=false on='leftClick')
-			(bindcall externalCall "isClickableArea				? 'inputMapping.onRequest'	: ''" "[requestName, requestArgs]"	watch=false on='leftClick')
+			(bindcall externalCall "isClickableArea				? eventType					: ''" "[eventName, eventArgs]"	watch=false on='leftClick')
 		)
 
 		(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER

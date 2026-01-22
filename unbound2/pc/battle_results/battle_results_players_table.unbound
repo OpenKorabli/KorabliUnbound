@@ -201,6 +201,39 @@
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
 	)
+
+	(block 
+		(style
+			(width = "PBS_COLUMN_EMOJI_WIDTH")
+			(height = 100%)
+			(align = "_isReversed ? left : right")
+		)
+
+		(block
+			(style
+				(width = 32px)
+				(height = 100%)
+				(align = "center|middle")
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(block
+				(style
+					(width = 21px)
+					(height = 21px)
+					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_emoji')
+				)
+			)
+
+			(controller $Tooltip
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_text = 'IDS_BY_EMOJIS'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
 )
 
 (def element BattleResultsPlayersTableRow (_data:dict, _gameData:dict, _personal:dict={}, _isReversed:bool = false, _complaintsAvailable:bool=true)
@@ -212,8 +245,8 @@
 		(macro SHIP_DATA_SCOPE "_data.player.shipId")
 		(var subType:str = "shipEntity.ship.subtype")
 
-		(var battleInfoEntity:dhEntity = "getSingleEntity(CC.battleInfo)")
-		(var isReplayPlaying:bool = "battleInfoEntity.battleInfo.isReplayPlaying")
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var isReplayPlaying:bool = "battleInfoComponent.isReplayPlaying")
 
 		(var rankStateEntity:dhEntity = "getSingleEntity(CC.rankState)")
 		(var currentLeague:number = "rankStateEntity.rankState.currentLeague ?: SC.Ranked.RANK_LEAGUE.BRONZE" (event "rankStateEntity.rankState.evCurrentLeagueChanged"))
@@ -229,7 +262,6 @@
 		(var playerEntity:gfx = "$datahub.getPrimaryEntity(CC.accountSimple, _data.player.dbId)")
 		(var pureName:str = "playerEntity.accountName.name" (event "playerEntity.accountName.evChanged"))
 		(var isPlayerDeletedByGDPR:bool = "playerEntity.accountSimple.suspended" (event "playerEntity.accountSimple.evSuspendedChanged")) 
-		(var relation:number = "_data.player.relation")
 		(var divisionSign:number = "_data.divisionSign ?: 0")
 
 
@@ -261,6 +293,19 @@
 		(var ratingSeasonEntity:dhEntity =	"getSingleEntity(CC.ratingBattlesSeason)")
 		(var isRankDisplayed:bool =			"isRankIconVisible && rankSeasonEntity != null")
 		(var isRatingDisplayed:bool =		"isRatingIconVisible && ratingSeasonEntity != null")
+
+		(struct playerComplainPraiseData = PULL_PLAYER_COMPLAIN_PRAISE_DATA(_battleType = "battleType"
+																			_isComplaintsAvailable = "_complaintsAvailable"
+																			_isReplayPlaying = "isReplayPlaying")
+		)
+		(var isEmojiDisabledReason:bool = "toBool(playerComplainPraiseData.reactionsDisabledReason)")
+
+		(var emojiByOwnerCollection:dhCollection = "getCollectionByPath(CC.emoji, 'byOwnerId')")
+		(var emojiByOwnerIdCollection:dhCollection = "emojiByOwnerCollection.child(playerEntity.accountSimple.dbId)")
+		(var firstEmojiComponent:dhComponent = "emojiByOwnerIdCollection.getEntityAtIndex(0).emoji")
+
+		(var emojiPlayerInfoComponent:dhComponent = "getPrimaryEntity(CC.accountSimple, playerEntity.accountSimple.dbId).emojiPlayerInfo")
+		(var emojiTotalCount:number = "emojiPlayerInfoComponent.totalCount ?: 0" (event "emojiPlayerInfoComponent.evTotalCountChanged"))
 	)
 
 	(macro STRUCT_MOUSE_DISPATCHER
@@ -269,7 +314,7 @@
 
 	(style
 		(height = "LINE_HEIGHT")
-		(bind flow "_isReversed ? reverse_horizontal : horizontal")
+		(flow = "_isReversed ? reverse_horizontal : horizontal")
 	)
 
 	(block 
@@ -305,14 +350,10 @@
 			(renderer = 'ContextMenuPlayerPBS')
 			(bind enabled "isContextMenuAvailable")
 			(args
-				_playerEntity =	"playerEntity"
-				_isBot = "_data.isBot"
-				_relation = "_data.player.relation"
-				_isInSameDivisionOnStart = "_data.isInSameDivisionOnStart"
-				_battleType = "battleType"
-				_accountDBID = "_data.player.dbId"
-				_arenaId = "toNumber(_gameData.arena_id)"
-				_complaintsAvailable = "_complaintsAvailable"
+				_playerEntity 	= "playerEntity"
+				_isBot 			= "_data.isBot"
+				_battleType 	= "battleType"
+				_accountDbId 	= "_data.player.dbId"
 			)
 			(macro DEFAULT_MENU_BEHAVIOUR "1")
 			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
@@ -355,7 +396,7 @@
 	(hblock
 		(style
 			(hitTest = false)
-			(bind flow "_isReversed ? reverse_horizontal : horizontal")
+			(flow = "_isReversed ? reverse_horizontal : horizontal")
 			(width = "PBS_COLUMN_NICKNAME_WIDTH")
 			(height = 100%)
 			(align = "middle")
@@ -422,6 +463,8 @@
 			(width = "PBS_COLUMN_SHIP_WIDTH")
 			(height = 100%)
 			(align = "middle")
+			(paddingRight = "_isReversed ? 20px : 0px")
+			(paddingLeft = "_isReversed ? 0px : 20px")
 		)
 
 		(block
@@ -528,6 +571,56 @@
 				(textAlign = "center")
 			)
 			(bind text "formatSeparator(_data.exp)")
+		)
+	)
+
+	
+	(block
+		(style
+			(flow = "_isReversed ? reverse_horizontal : horizontal")
+			(align = "_isReversed ? left|middle : right|middle")
+			(width = "PBS_COLUMN_EMOJI_WIDTH")
+			(height = 100%)
+		)
+
+		
+		(tf
+			(bind visible "emojiTotalCount > 1")
+
+			(class $TextDefaultBold14NM)
+			(style
+				(hitTest = false)
+				(width = 20px)
+				(textAlign = "_isReversed ? left : right")
+				(alpha = "TA")
+			)
+			(bind text "emojiTotalCount")
+		)
+
+		
+		(block
+			(style
+				(width = 32px)
+				(height = 100%)
+				(align = "center|middle")
+			)
+
+			(controller $Instance renderer='EmojiSelector'
+				(bind enabled "!_data.player.is_self && (!isEmojiDisabledReason || (isEmojiDisabledReason && firstEmojiComponent != null))")
+				(args
+					_ownerId 					= "playerEntity.accountSimple.dbId"
+					_reactionsDisabledReason 	= "playerComplainPraiseData.reactionsDisabledReason"
+					_evaluationLimits 			= "playerComplainPraiseData.evaluationLimits"
+					_emojiByOwnerIdCollection 	= "emojiByOwnerIdCollection"
+				)
+			)
+
+			(controller $Instance renderer='EmojiSelfSummaryItem'
+				(bind enabled "_data.player.is_self && firstEmojiComponent != null")
+				(args
+					_emojiByOwnerIdCollection = "emojiByOwnerIdCollection"
+				)
+			)
 		)
 	)
 )

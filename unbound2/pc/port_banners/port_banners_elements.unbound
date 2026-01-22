@@ -6,31 +6,57 @@
 	DISCOUNT: 'discount'
 })
 
-(def constant CT_BANNER_ROLL_OVER { redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
-									redOffset: 20,		greenOffset: 20,	blueOffset: 20,		alphaOffset: 0
+(def constant CT_BANNER_ROLL_OVER {
+	redMultiplier: 1,
+	greenMultiplier: 1,
+	blueMultiplier: 1,
+	alphaMultiplier: 1,
+	redOffset: 20,
+	greenOffset: 20,
+	blueOffset: 20,
+	alphaOffset: 0
 })
 
-(def constant CT_BANNER_DOWN {	redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
-								redOffset: -20,		greenOffset: -20,	blueOffset: -20,	alphaOffset: 0
+(def constant CT_BANNER_DOWN {
+	redMultiplier: 1,
+	greenMultiplier: 1,
+	blueMultiplier: 1,
+	alphaMultiplier: 1,
+	redOffset: -20,
+	greenOffset: -20,
+	blueOffset: -20,
+	alphaOffset: 0
 })
 
-(def element EventBannerBackground (_entityId:number = 0, _rollOver:bool = false, _mouseDown:bool = false, _isWithTitle:bool = true)
+(def constant SCROLL_BUTTON_BG_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.OVER : 0.5,
+	SC.Ui_styles.BUTTON_STATE.UP : 0.7,
+	SC.Ui_styles.BUTTON_STATE.DOWN : 1
+})
+
+(def element EventBannerTileBackground (_entityContentId:number = 0, _rollOver:bool = false, _mouseDown:bool = false, _isWithTitle:bool = true)
 	(scope
-		(struct tileLayout = EVENT_BANNER_TILE(_entityId = "_entityId"))
+		(var tileContentEntity:dhEntity = "getEntity(_entityContentId)")
+		(var tileContent:dhComponent = "tileContentEntity.tileContent")
+		(var contentId:str = "tileContent.contentId" (event "tileContent.evChanged"))
+		(var tileId:str = "tileContent.tileId" (event "tileContent.evChanged"))
 
-		(var hasNoImage:bool = "	!toBool(tileLayout.tileId) ||
-									tileLayout.tileSize == SC.Ui_common.TILE_SIZE.S ||
-									isIn(tileLayout.tileId, [SC.Common.TILE_CONTENT.ACCOUNT_LEVELING, SC.Common.TILE_CONTENT.PROMO_REWARD])")
+		(var tile:dhComponent = "getPrimaryComponent(CC.tile, tileId)")
+		(var tileSize:number = "tile.currentTileSize ?: SC.Ui_common.TILE_SIZE.M" (event "tile.evChanged"))
+
+		(var hasNoImage:bool = "	!toBool(contentId) ||
+									tileSize == SC.Ui_common.TILE_SIZE.S ||
+									isIn(contentId, [SC.Common.TILE_CONTENT.ACCOUNT_LEVELING, SC.Common.TILE_CONTENT.PROMO_REWARD])")
 	)
 	(class $FullsizeAbsolute)
 
-	(controller $Instance renderer='EventBannerBackgroundImage'
+	(controller $Instance renderer='EventBannerTileBackgroundImage'
 		(bind enabled "!hasNoImage")
 		(args
-			_entityId =		"_entityId"
-			_rollOver =		"_rollOver"
-			_mouseDown =	"_mouseDown"
-			_isWithTitle =	"_isWithTitle"
+			_entityContentId = "_entityContentId"
+			_rollOver = "_rollOver"
+			_mouseDown = "_mouseDown"
+			_isWithTitle = "_isWithTitle"
 		)
 	)
 	(controller $Instance renderer='EventBannerBackgroundNoImage'
@@ -42,24 +68,22 @@
 	)
 )
 
-(def element EventBannerBackgroundImage (_entityId:number = 0, _rollOver:bool = false, _mouseDown:bool = false, _isWithTitle:bool = true)
+(def element EventBannerTileBackgroundImage (_entityContentId:number = 0, _rollOver:bool = false, _mouseDown:bool = false, _isWithTitle:bool = true)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 
-		(struct tileLayout = EVENT_BANNER_TILE(_entityId = "_entityId"))
+		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
 
-		(var tileContentEntity:dhEntity = "getPrimaryEntity(CC.tileContent, tileLayout.tileId)")
-		(var tileContent:dhComponent = "tileContentEntity.tileContent")
-		(var externalImageKey:str = "tileLayout.tileSize == SC.Ui_common.TILE_SIZE.M	? tileContent.smallImageUrl
-																						: tileContent.bigImageUrl" (event "tileContent.evChanged"))
+		(var externalImageKey:str = "tileContentInfo.tileSize == SC.Ui_common.TILE_SIZE.M	? tileContentInfo.tileContent.smallImageUrl
+																							: tileContentInfo.tileContent.bigImageUrl" (event "tileContentInfo.tileContent.evChanged"))
 
 		(var externalImageEntity:dhEntity = "getPrimaryEntity(CC.externalImage, externalImageKey)")
 		(var externalImageComponent:dhComponent = "externalImageEntity.externalImage")
 		(var isImageLoaded:bool = "externalImageComponent.isLoaded" (event "externalImageComponent.evIsLoadedChanged"))
 		(var externalImageUrl:str = "isImageLoaded ? 'img://embedded:byteImage?url=' + externalImageComponent.url : ''")
 
-		(var defaultImageUrl:str = "'url:../events/banners/' + tileLayout.tileId + '_' + SC.Ui_common.TILE_SIZE.VALUE_TO_NAME[tileLayout.tileSize] + '.png'")
+		(var defaultImageUrl:str = "'url:../events/banners/' + tileContentInfo.contentId + '_' + SC.Ui_common.TILE_SIZE.VALUE_TO_NAME[tileContentInfo.tileSize] + '.png'")
 
 		(var bgImage:str = "externalImageUrl ?: defaultImageUrl")
 
@@ -142,9 +166,17 @@
 		)
 	)
 
-	(element DockTTXWidgetMenuItemBackground
-		_state = "_bgState"
-		_borderRadius = "S"
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(borderRadius = "S")
+			(alpha = "SSE_CARD_HOVER_THUMB_ALPHA[_bgState]")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "_bgState"
+			_alpha = "SSE_CARD_HOVER_THUMB_ALPHA[_bgState]"
+		)
 	)
 )
 
@@ -156,7 +188,7 @@
 			(multiline = false)
 			(leading = -2)
 			(width = 100%)
-			(bind alpha "_isStateOwn ? 1 : TC")
+			(bind alpha "_isStateOwn ? 1 : TA")
 			(bind textColor "_isStateOwn ? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
 		)
 		(bind text "_description")
@@ -301,7 +333,8 @@
 	)
 )
 
-(def element EventBannerMarkers (	_isActionMarker:bool = false,
+(def element EventBannerMarkers (	_isTimerMarker:bool = false,
+									_isActionMarker:bool = false,
 									_isRewardMarker:bool = false,
 									_isNewMarker:bool = false,
 									_isDiscountMarker:bool = false,
@@ -314,8 +347,9 @@
 		(right = "XS")
 		(bind top "_size == SC.Ui_common.TILE_SIZE.S ? -6px : XS")
 	)
+
 	(block
-		(controller $Instance renderer = 'EventBannerMarker'
+		(controller $Instance renderer='EventBannerMarker'
 			(bind enabled "_isRewardMarker && _size != SC.Ui_common.TILE_SIZE.S")
 			(args
 				_type = "EVENT_MARKER_TYPE.REWARD"
@@ -323,7 +357,7 @@
 		)
 	)
 	(block
-		(controller $Instance renderer = 'EventBannerMarker'
+		(controller $Instance renderer='EventBannerMarker'
 			(bind enabled "_isActionMarker && !_isRewardMarker")
 			(args
 				_type = "EVENT_MARKER_TYPE.ACTION"
@@ -332,7 +366,7 @@
 		)
 	)
 	(block
-		(controller $Instance renderer = 'EventBannerMarker'
+		(controller $Instance renderer='EventBannerMarker'
 			(bind enabled "_isNewMarker && !(_isRewardMarker || _isActionMarker)")
 		)
 	)
@@ -451,6 +485,82 @@
 				_isTextUnderlined = false
 				_achievementEntityId = "achievements[$index]"
 				_achievementsLen = "achievements.length"
+			)
+		)
+	)
+)
+
+(def element BannerScrollButton (	_canScroll:bool,
+									_buttonCarouselName:str,
+									_clickDispatchedEv:str,
+									_clickDispatchedParams:dict = {},
+									_methods:array = [],
+									_direction:number = "ScrollDirection.LEFT")
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var isLeft:bool = "_direction == ScrollDirection.LEFT")
+		(var bgIconPath:str = "	isLeft	? 'url:../events/banners/slider/bg_arrow_left.png'
+										: 'url:../events/banners/slider/bg_arrow_right.png'")
+		(var iconPath:str = "	isLeft	? 'url:../service_kit/buttons/carousel_arrows/arrow_left.png'
+										: 'url:../service_kit/buttons/carousel_arrows/arrow_right.png'")
+		(var iconColorTransform:dict = "!_canScroll 										? CT_CANT_SCROLL :
+										mouseHandler.rollOver && !mouseHandler.mouseDown	? CT_ROLL_OVER :
+										mouseHandler.mouseDown								? CT_DOWN
+																							: CT_SCROLL_IDLE")
+		(var bgState:number = "	mouseHandler.mouseDown || !_canScroll	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								mouseHandler.rollOver					? SC.Ui_styles.BUTTON_STATE.OVER
+																		: SC.Ui_styles.BUTTON_STATE.UP")
+		(var bgAlpha:number = "SCROLL_BUTTON_BG_ALPHA[bgState]")
+	)
+	(name = "_buttonCarouselName")
+
+	(style
+		(width = 32px)
+		(height = 160px)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(bind alpha "bgAlpha")
+			(bind backgroundImage "bgIconPath")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "bgState"
+			_alpha = "bgAlpha"
+		)
+	)
+
+	(block
+		(macro STRUCT_MOUSE_HANDLER
+			_mouseHandler = "mouseHandler"
+			_soundSet = "'button_secondary'"
+			_methods = "_methods"
+		)
+		(dispatch
+			"_clickDispatchedEv"
+			args ="_clickDispatchedParams"
+			dir = "EventDirection.UP"
+			(bind enabled "_canScroll")
+			(event "mouseHandler.evClicked")
+		)
+
+		(class $Fullsize)
+		(style
+			(align = "center|middle")
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(height = 18px)
+				(width = 12px)
+				(backgroundImage = "iconPath")
+			)
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+				_colorTransform = "iconColorTransform"
 			)
 		)
 	)

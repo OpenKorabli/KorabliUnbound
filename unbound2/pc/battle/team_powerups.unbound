@@ -42,55 +42,21 @@
 		(macro STAGE_SIZE)
 		(var powerupMargins:number = "10")
 
-		(event evShowStartAnimations)
 		(event evPlaceReady)
-		(event evPlaceAtFinalPos)
-		(event evShowLevels)
 	)
-
-	(style
-		(bind marginLeft "powerupMargins")
-		(bind marginRight "powerupMargins")
-		(bind pivotX "DROP_ITEMS_SIZE / 2")
-		(bind pivotY "DROP_ITEMS_SIZE / 2")
-	)
-
-	(dispatch evShowStartAnimations on=addedToStage)
 
 	(controller $Animation
 		(bindcall play
-			duration 	= "collection.items.length > 1 ? 0.4 : 0.01"  watch=false
-			killAll		= true
-			easing		= "Easing.cubic_out"
-			from		= {alpha:0, marginLeft:0, marginRight: 0, width: 0}
-			to			= "{alpha:0, marginLeft: powerupMargins, marginRight: powerupMargins, width: DROP_ITEMS_SIZE}"
-			(event "evShowStartAnimations")
+			duration = "collection.items.length > 1 ? 0.4 : 0.01"
+			killAll = true
+			easing = "Easing.cubic_out"
+			to = "{	marginLeft: powerupMargins,
+					marginRight: powerupMargins,
+					width: DROP_ITEMS_SIZE }"
+			watch=false
+			on=addedToStage
 		)
 		(dispatch evPlaceReady on=evAnimEnded)
-	)
-
-	(controller $Animation
-		(bindcall play
-			duration	= 0.25
-			killAll		= true
-			easing		= "Easing.quad_in"
-			from		= {alpha:0, scaleX: 0, scaleY: 0}
-			to			= {alpha:1, scaleX: 1.5, scaleY: 1.5}
-			(event "evPlaceReady")
-		)
-		(dispatch evPlaceAtFinalPos on=evAnimEnded)
-	)
-
-	(controller $Animation
-		(bindcall play
-			duration	= 0.15
-			killAll		= true
-			easing		= "Easing.quad_out"
-			from		= {scaleX: 1.5, scaleY: 1.5}
-			to			= {scaleX: 1, scaleY: 1}
-			(event "evPlaceAtFinalPos")
-		)
-		(dispatch evShowLevels dir="EventDirection.DOWN" on=evAnimEnded)
 	)
 
 	(controller $Tooltip (renderer = 'SimpleStatusTooltip')
@@ -108,34 +74,71 @@
 
 	(block
 		(style
+			(position = "absolute")
 			(backgroundSize = "fill")
 			(width = "DROP_ITEMS_SIZE")
 			(height = "DROP_ITEMS_SIZE")
+			(pivotX = "DROP_ITEMS_SIZE / 2")
+			(pivotY = "DROP_ITEMS_SIZE / 2")
+			(marginLeft = "DROP_ITEMS_SIZE / 2")
+
+			(alpha = 0)
+			(scaleX = 0)
+			(scaleY = 0)
+
 			(bind backgroundImage "'url:../powerups/drops/icon_marker_' + markerName + '.png'")
 		)
-	)
 
-	(block
-		(style
-			(position = "absolute")
-			(top = "DROP_ITEMS_SIZE / 2")
-			(left = "DROP_ITEMS_SIZE  / 2")
-		)
-		
-		(block 
-			(class $FullsizeAbsolute)
-			(controller $Repeat renderer='PickedPowerupsIndicatorBackground'
-				(bind count "maxPowerupLevel" watch=true)
-				(args "maxPowerupLevel")
+		(controller $Animation
+			(controllerEvents evPlaceAtFinalPosBegun evPlaceAtFinalPosCompleted)
+			(bindcall play
+				duration = 0.25
+				easing = "Easing.quad_in"
+				to = {	alpha:1,
+						scaleX: 1.5,
+						scaleY: 1.5 }
+				onEndedEvent = 'evPlaceAtFinalPosBegun'
+				(event "evPlaceReady")
 			)
+			(bindcall play
+				duration = 0.15
+				easing = "Easing.quad_out"
+				to = {	scaleX: 1,
+						scaleY: 1 }
+				onEndedEvent = 'evPlaceAtFinalPosCompleted'
+				on = 'evPlaceAtFinalPosBegun'
+			)
+			(dispatch evShowLevels dir="EventDirection.DOWN" on='evPlaceAtFinalPosCompleted')
 		)
 
-		(controller $Repeat renderer='PickedPowerupsIndicator'
-			(bind count "maxPowerupLevel" watch=true)
-			(args "maxPowerupLevel" "currentPowerupLevel" "_isAlly")
+		(block
+			(style
+				(position = "absolute")
+				(top = "DROP_ITEMS_SIZE / 2")
+				(left = "DROP_ITEMS_SIZE  / 2")
+			)
+			
+			(block 
+				(class $FullsizeAbsolute)
+				(controller $Repeat renderer='PickedPowerupsIndicatorBackground'
+					(bind count "maxPowerupLevel")
+					(args 
+						_maxPowerupLevel = "maxPowerupLevel"
+					)
+				)
+			)
+
+			(controller $Repeat renderer='PickedPowerupsIndicator'
+				(bind count "maxPowerupLevel")
+				(args 
+					_maxPowerupLevel = "maxPowerupLevel"
+					_currentPowerupLevel = "currentPowerupLevel"
+					_isAlly = "_isAlly")
+			)
 		)
 	)
 )
+
 
 (def element PickedPowerupsIndicator (_maxPowerupLevel:number, _currentPowerupLevel:number, _isAlly:bool=false) layout=true
 	(scope
@@ -150,7 +153,7 @@
 		(var gapOffset:number = "PICKED_POWERUPS_INDICATOR_SECTOR_MARGINS / 2")
 		(var offsetDirectionByTeam:number = "(-90 + gapOffset)  + offset")
 
-		(var segmentLengthAnimated:number = "0")
+		(var segmentLengthAnimated:number = 0)
 
 		(var color:gfx = "	!isPicked	? 0xFFA3A4A6 :
 							_isAlly		? C_ALLY
@@ -167,7 +170,6 @@
 				duration 	= 0.15
 				delay	 	= 0.15
 				easing		= "Easing.cubic_in"
-				from		= {segmentLengthAnimated: 0}
 				to			= "{segmentLengthAnimated: length}"
 				(event "evShowLevels")
 			)
@@ -204,10 +206,7 @@
 		(var gapOffset:number = "PICKED_POWERUPS_INDICATOR_SECTOR_MARGINS / 2")
 		(var offsetDirection:number = "(-90 + gapOffset)  + offset")
 
-		(var segmentLengthAnimated:number = "0")
-
-		(var radiusAnimated:number = "INDICATOR_OUTER_RADIUS")
-		(var innerRadiusAnimated:number = "INDICATOR_INNER_RADIUS")
+		(var segmentLengthAnimated:number = 0)
 
 		(event evShowLevels)
 
@@ -215,7 +214,6 @@
 			(bindcall play
 				duration 	= 0.15
 				easing		= "Easing.cubic_in"
-				from		= {segmentLengthAnimated: 0}
 				to			= "{segmentLengthAnimated: length}"
 				(event "evShowLevels")
 			)
@@ -226,7 +224,7 @@
 	(controller $Sector
 		(bind arc "segmentLengthAnimated")
 		(bind offset "offsetDirection")
-		(bind radius "radiusAnimated")
+		(bind radius "INDICATOR_OUTER_RADIUS")
 		(bind innerRadius "INDICATOR_INNER_RADIUS")
 		(bind color "0xFF000000")
 	)

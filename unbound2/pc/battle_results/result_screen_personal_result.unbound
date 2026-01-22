@@ -101,9 +101,12 @@
 		(var playerShipMasteryEntity:dhEntity =	"getPrimaryEntity(CC.shipMastery, personal.player.shipId)")
 		(var killerShipMasteryEntity:dhEntity =	"getPrimaryEntity(CC.shipMastery, personal.killer.shipId)")
 
-		(var causedDamageEntity:dhEntity = "getEntity(battleResultsStructuredComponent.causedDamage[0])")
-		(var causedDamage:number = "causedDamageEntity.battleResultsEntry.values[0].value ?: 0")
-		(var isPositiveBattleEfficiency:bool = "personal.ribbons.length > 0 || causedDamageEntity.battleResultsEntry.values[0].value > 0")
+		(var causedDamageToShipsEntity:dhEntity = "getEntity(battleResultsStructuredComponent.causedDamage[0])")
+		(var causedDamageToShips:number = "causedDamageToShipsEntity.battleResultsEntry.values[0].value ?: 0")
+		(var causedDamageToShieldsEntity:dhEntity = "getEntity(battleResultsStructuredComponent.causedDamage[2])")
+		(var causedDamageToShields:number = "causedDamageToShieldsEntity.battleResultsEntry.values[0].value ?: 0")
+		(var causedDamage:number = "causedDamageToShips + causedDamageToShields")
+		(var isPositiveBattleEfficiency:bool = "personal.ribbons.length > 0 || causedDamage > 0")
 
 		
 		(var bonusTagsTasksList:array = "personal.bonus_tags ?: []")
@@ -127,6 +130,7 @@
 
 		
 		(var achievementDelay:number = 0.7)
+		(var emojisDelay:number = "achievementDelay + personal.achievements.length * 0.15")
 		(var ribbonsDelay:number = "achievementDelay + (personal.achievements.length * 0.15) + 0.2")
 		(var bonusTagDelay:number = "ribbonsDelay + personal.ribbons.length * 0.2")
 		(var campaignTasksDoneDelay:number = "bonusTagDelay + bonusTagsTasksList.length * 0.2")
@@ -156,6 +160,10 @@
 		(var hasResistanceRecognitionReward:bool = "personal.hasResistanceReward > 0")
 
 		(var areTasksShown:bool = "(sseTasksAmount || campaignTasksAmount || bonusTagsTasksAmount || rvrTasksAmount || shipAcesTasksAmount || strategicActionsTasksAmount) && !isReplayPlaying")
+
+		(var selfAccountEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
+		(var emojiByOwnerCollection:dhCollection = "getCollectionByPath(CC.emoji, 'byOwnerId')")
+		(var selfOwnedEmojisCollection:dhCollection = "emojiByOwnerCollection.child(selfAccountEntity.accountSimple.dbId)")
 	)
 
 	(dispatch "hasResistanceRecognitionReward && isAnimatedContentAppear ? 'evUpdateTotalExp' : ''"				dir="EventDirection.NONE"	delay="PBS_ELEMENT_BASE_ANIM_DELAY + 1.95"		on='addedToStage')
@@ -523,12 +531,31 @@
 						(bind marginLeft	"isEconomicallyPunished ? 0 : M")
 					)
 
-					(controller $Repeat renderer='PBSAchievementIcon'
-						(bind count "personal.achievements.length")
+					(controller $Repeat renderer='CommonAchievementIcon'
+						(bind items "personal.achievements")
 						(args
 							_appearAnimationEnabled =	"isAnimatedContentAppear"
-							_achievement =				"personal.achievements[$index]"
+							_achievement =				"$item"
 							_animationDelay =			"achievementDelay"
+						)
+					)
+				)
+				
+
+				
+				(hblock
+					(style
+						(hgap = "XXS")
+						(marginLeft = "M")
+						(bind marginTop "isEconomicallyPunished ? MS : XXS")
+					)
+
+					(controller $Repeat renderer='PBSEmojiSelfOwnedContainerItem'
+						(bind count "selfOwnedEmojisCollection.length")
+						(args
+							_isAppearAnimationEnabled 	= "isAnimatedContentAppear"
+							_emojiComponent 			= "selfOwnedEmojisCollection.getEntityAtIndex($index).emoji"
+							_animationDelay 			= "emojisDelay"
 						)
 					)
 				)
@@ -961,7 +988,7 @@
 	)
 )
 
-(def element PBSAchievementIcon (_appearAnimationEnabled:bool = true, _achievement:dict = {}, _animationDelay:number = 0)
+(def element CommonAchievementIcon (_appearAnimationEnabled:bool = true, _achievement:dict = {}, _animationDelay:number = 0, _size:number = 56px)
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
 		(var id:str =						"toString(_achievement.id) ?: ''")
@@ -977,8 +1004,9 @@
 	(element AchievementIcon
 		_id =			"achievementEntity.id"
 		_amount =		"amount"
-		_size =			56px
+		_size =			"_size"
 		_isPostBattle =	true
+		_showMarkerNew = true
 	)
 )
 
@@ -1708,7 +1736,7 @@
 		(align = "middle")
 	)
 
-	(macro DEFAULT_CONTROL_STATE_ANIMATION_CT	"isClaimed					? CT_NONE :
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_CT	"!isClaimable || isClaimed	? CT_NONE :
 												 mouseHandler.mouseDown		? COLOR_TRANSFORM_MOUSE_DOWN :
 												 mouseHandler.rollOver		? COLOR_TRANSFORM_MOUSE_OVER
 																			: CT_NONE")
@@ -1719,7 +1747,7 @@
 
 	(macro STRUCT_SOUND_HANDLER
 		_mouseHandler =		"mouseHandler"
-		_soundSet =			"isClaimed ? '' : 'button_default'"
+		_soundSet =			"!isClaimable || isClaimed ? '' : 'button_default'"
 	)
 
 	(controller $Tooltip

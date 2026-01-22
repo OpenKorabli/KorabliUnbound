@@ -282,8 +282,6 @@
 		(macro GET_MARKER_ENTITY_COMPONENT 'dissolve')
 		(macro GET_MARKER_ENTITY_COMPONENT 'vehicle')
 
-		(var scenarioTagCollection:dhCollection = "getCollectionByPath(CC.scenarioTag, 'byOwnerId.' + _markerEntity.id)")
-		(var scenarioTagCollectionLen:number = "scenarioTagCollection.length")
 		(var hasKeyTargetMarkerBattle:bool = "_markerEntity.hasComponent(CC.keyTargetMarkerBattle)")
 
 		
@@ -319,6 +317,8 @@
 		(var isSelf:bool = "relationValue == SC.Battle.PLAYER_RELATION.SELF")
 		(var isEnemy:bool = "relationValue == SC.Battle.PLAYER_RELATION.ENEMY")
 		(var isAlive:bool = "healthComponent && healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
+		(var shieldComponent:gfx = "_markerEntity.shield" (event "_markerEntity.evAdded") (event "_markerEntity.evRemoved"))
+		(var shieldMaxHealth:number = "shieldComponent ? shieldComponent.shieldMaxHealth : 0" (event "shieldComponent.evShieldMaxHealthChanged"))
 		(var distanceType:number = "isTactical || (isControllingSquadron && isSelf) ? SC.Battle.DISTANCE_TYPE.TACTICAL :
 									isTargetLocked || isFullAltVisionMode 			? SC.Battle.DISTANCE_TYPE.NEAR
 																					: distanceIndex"
@@ -375,8 +375,10 @@
 
 		(var shipDamageCounter:gfx = "_markerEntity.shipDamageCounter" (event "_markerEntity.evAdded") (event "_markerEntity.evRemoved"))
 
-		(var buffIndicationCollection:dhCollection = "getCollectionByPath(CC.shipModifier, 'byOwner.' + vehicleComponent.id + '.buffIndication')")
-	)
+		(var scenarioTagCollection:dhCollection = "getCollectionByPath(CC.scenarioTag, 'byOwnerId.' + _markerEntity.id)")
+		(var isScenarioTagRepeatContainerVisible:bool = "scenarioTagCollection.length > 0 && !isSelf")
+
+		(var buffIndicationCollection:dhCollection = "getCollectionByPath(CC.shipModifier, 'byOwner.' + vehicleComponent.id + '.buffIndication')")	)
 
 	(dispatch evMarkerShow args="{}" on='addedToStage')
 
@@ -498,33 +500,39 @@
 
 				(element TargetAnimationItem
 					_markerEntity = "_markerEntity"
+					(style (position = "absolute"))
+				)
+			)
+
+			(hblock
+				(block
+					(bind visible "hasKeyTargetMarkerBattle")
+					(controller $Instance renderer='KeyTargetItem'
+						(bind enabled "hasKeyTargetMarkerBattle")
+						(args
+							_markerEntityId = "_markerEntity.id"
+						)
+					)
+				)
+
+				(block
+					(bind visible "isScenarioTagRepeatContainerVisible")
+					(controller $Instance renderer='ScenarioTagRepeatContainer'
+						(bind enabled "isScenarioTagRepeatContainerVisible")
+						(args
+							_markerEntityId = "_markerEntity.id"
+						)
+					)
 				)
 			)
 
 			(element PriorityItem
 				_markerEntity = "_markerEntity"
 			)
-
-			(block
-				(controller $Instance renderer='ScenarioTagRepeatContainer'
-					(bind enabled "scenarioTagCollectionLen > 0 && !isSelf")
-					(args
-						_markerEntityId = "_markerEntity.id"
-					)
-				)
-			)
-
-			(block
-				(controller $Instance renderer='KeyTargetItem'
-					(bind enabled "hasKeyTargetMarkerBattle")
-					(args
-						_markerEntityId = "_markerEntity.id"
-					)
-				)
-			)
 		)
 
 		(block
+			(bind visible "shipNameItemVisibility")
 			(style (paddingTop = "XS"))
 
 			(controller $Instance renderer='SimpleMarkerTextItem'
@@ -643,6 +651,25 @@
 			(bind scaleX "isDistanceTypeFarthest ? 0.8 : 1")
 			(bind scaleY "isDistanceTypeFarthest ? 0.7 : 1")
 		)
+
+		(block
+			(bind visible "healthBarItemVisible && shieldMaxHealth > 0")
+			(style
+				(bind scaleX "isDistanceTypeFarthest ? 0.8 : 1")
+				(bind scaleY "isDistanceTypeFarthest ? 0.7 : 1")
+				(marginTop = -1px)
+			)
+
+			(controller $Instance renderer='MarkerShieldBarItem'
+				(bind enabled "healthBarItemVisible && shieldMaxHealth > 0")
+				(args
+					_markerEntity="_markerEntity"
+					_isMedium="healthBarItemLarge"
+					_isLarge="altVision"
+				)
+			)
+		)
+
 		(block
 			(bind visible "batteryBarItemVisible")
 			(style
@@ -650,6 +677,7 @@
 				(bind scaleY "isDistanceTypeFarthest ? 0.7 : 1")
 				(marginTop = -1px)
 			)
+
 			(controller $Instance renderer='ShipMarkerBatteryBarItem'
 				(bind enabled "hasBattery")
 				(args _markerEntity="_markerEntity" _isLarge="healthBarItemLarge")

@@ -101,11 +101,22 @@
 	(var isSmallResolution:bool = "stageHeight <= 800")
 )
 
-(def struct EVENT_BANNER_TILE (_entityId:number = 0)
+(def struct GET_TILE_INFO (_entityId:number = 0)
 	(var tileEntity:dhEntity = "getEntity(_entityId)")
 	(var component:dhComponent = "tileEntity.tile")
 	(var tileId:str = "component.tileId" (event "component.evChanged"))
 	(var tileSize:number = "component.currentTileSize ?: SC.Ui_common.TILE_SIZE.M" (event "component.evChanged"))
+)
+
+(def struct GET_TILE_CONTENT_INFO(_entityContentId:number = 0)
+	(var tileContentEntity:dhEntity = "getEntity(_entityContentId)")
+	(var tileContent:dhComponent = "tileContentEntity.tileContent")
+	(var contentId:str = "tileContent.contentId" (event "tileContent.evChanged"))
+	(var tileId:str = "tileContent.tileId" (event "tileContent.evChanged"))
+
+	(var tileEntity:dhEntity = "getPrimaryEntity(CC.tile, tileId)")
+	(var tile:dhComponent = "tileEntity.tile")
+	(var tileSize:number = "tile.currentTileSize ?: SC.Ui_common.TILE_SIZE.M" (event "tile.evChanged"))
 )
 
 (def macro DECLARE_SCROLL_TARGET_INDEX (_tipId:expression = 0)
@@ -122,7 +133,7 @@
 		(macro CAROUSEL_HEIGHT_SCOPE)
 		(var dockHeaderHeight:number = 94)
 
-		(var tiles:dhCollection = "getCollection(CC.tile).getChildByPath('visible.sorted')")
+		(var tiles:dhCollection = "getCollectionByPath(CC.tile, 'visible.sorted')")
 
 		(var scrollTargetIndex:number = -1)
 		(bind scrollTargetIndex "$event.value"	init=false watch=false	(event "evSetScrollTargetIndex"))
@@ -137,8 +148,17 @@
 																	_maxStageHeight =	900px
 																	_maxValue =			"dockHeaderHeight + L"
 																	_stageHeight =		"stageSize.height"))
-
-		(var guidingOffsets:dict = "{ top: guidingTopBasicOffset.value, bottom: guidingBottomBasicOffset.value }")
+		(struct guidingRightBasicOffset =	ADAPTIVE_HORIZONTAL_SIZE (	_minStageWidth =	1280px
+																		_minValue =			"SXS"
+																		_maxStageWidth =	1920px
+																		_maxValue =			"L"
+																		_stageWidth =		"stageSize.width"))
+		(var guidingOffsets:dict = "{
+				top: guidingTopBasicOffset.value,
+				bottom: guidingBottomBasicOffset.value,
+				right: guidingRightBasicOffset.value
+			}"
+		)
 
 		(var scrollAreaTopPoint:number = 0)
 		(var scrollAreaHeight:number = 0)
@@ -182,8 +202,7 @@
 				(width = 100%)
 				(gap = "S")
 			)
-
-			(controller $Repeat renderer='EventBanner'
+			(controller $Repeat renderer='EventBannerTileRenderer'
 				(bind count "tiles.length")
 				(args
 					_entityId =				"tiles[$index].id"
@@ -198,15 +217,227 @@
 	)
 )
 
-(def element EventBanner (_entityId:number = 0, _guidingOffsets:dict = {}, _scrollAreaTopPoint:number = 0, _scrollAreaHeight:number = 0)
+(def element EventBannerTileRenderer (_entityId:number = 0, _guidingOffsets:dict = {}, _scrollAreaTopPoint:number = 0, _scrollAreaHeight:number = 0)
+	(scope
+		(struct tile = GET_TILE_INFO(_entityId="_entityId"))
+
+		(var tileContentCollection:dhCollection = "getCollectionByPath(CC.tileContent, 'available.byTileId.' + tile.tileId + '.sorted')")
+		(var tileRenderer:str = "tileContentCollection.length > 1 ? 'EventBannerCarousel' : 'EventBannerSingleItem'")
+	)
+
+	(controller $Instance
+		(bind renderer "tileRenderer")
+		(args
+			_entityId = "_entityId"
+			_guidingOffsets = "_guidingOffsets"
+			_scrollAreaTopPoint = "_scrollAreaTopPoint"
+			_scrollAreaHeight = "_scrollAreaHeight"
+		)
+	)
+)
+
+(def element EventBannerCarousel (_entityId:number = 0, _guidingOffsets:dict = {}, _scrollAreaTopPoint:number = 0, _scrollAreaHeight:number = 0)
+	(scope
+		(event evRadioButtonSelected)
+		(event evScrollAreaValueChanged)
+		(event evCarouselCanScrollChanged)
+		(event evScrollToPrev)
+		(event evScrollToNext)
+		(event evScrollToBegin)
+		(event evScrollToEnd)
+
+		(struct tile = GET_TILE_INFO(_entityId="_entityId"))
+
+		(var tileContentCollection:dhCollection = "getCollectionByPath(CC.tileContent, 'available.byTileId.' + tile.tileId + '.sorted')")
+		(var slidersCount:number = "tileContentCollection.length")
+
+		(var tileSlider:dhComponent = "getPrimaryComponent(CC.tileSlider, tile.tileId)")
+		(var currentContentIndex:number = "tileSlider.currentContentIndex ?: 0" (event "tileSlider.evCurrentContentIndexChanged"))
+
+		(var selectedIndex:number = "currentContentIndex")
+		(bind selectedIndex "$event.index" init=false watch=false (event "evRadioButtonSelected"))
+		(bind selectedIndex "selectedIndex - 1" init=false watch=false (event "evScrollToPrev"))
+		(bind selectedIndex "selectedIndex + 1" init=false watch=false (event "evScrollToNext"))
+	)
+
+	(style
+		(bind width "EVENT_BANNER_SIZE[tile.tileSize].bannerWidth")
+		(bind height "EVENT_BANNER_SIZE[tile.tileSize].bannerHeight")
+	)
+
+	(scrollArea
+		(class $Fullsize)
+
+		(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+			_singleStep = "EVENT_BANNER_SIZE[tile.tileSize].bannerWidth"
+			_maxScrollingAnimatedDistance = "EVENT_BANNER_SIZE[tile.tileSize].bannerWidth"
+			_wheelScrollSpeed = "0"
+			_valueChangedEvent = "'evScrollAreaValueChanged'"
+			_canScrollChangedEvent = "'evCarouselCanScrollChanged'"
+			_isScrollBarVisible = "false"
+			_isDrag = "false"
+		)
+		(repeatController = 'EventBannerCarousel')
+		(scrollPerItem = true)
+
+		(content
+			(style
+				(flow = "horizontal")
+				(width = 100%)
+			)
+
+			(controller $DynamicRepeat renderer='EventBannerSliderItem' name='EventBannerCarousel'
+				(bind count "slidersCount")
+				(args
+					_entityContentId = "tileContentCollection[$index].id"
+					_guidingOffsets = "_guidingOffsets"
+					_scrollAreaTopPoint = "_scrollAreaTopPoint"
+					_scrollAreaHeight = "_scrollAreaHeight"
+				)
+				(bind itemWidth "EVENT_BANNER_SIZE[tile.tileSize].bannerWidth")
+				(bind itemOffset "EVENT_BANNER_SIZE[tile.tileSize].bannerWidth")
+			)
+		)
+
+		(bindcall scrollTo index="$event.index" watch=false (event "evRadioButtonSelected"))
+		(bindcall scrollTo index="currentContentIndex" watch=false (event "tileSlider.evCurrentContentIndexChanged"))
+
+		(bindcall scrollLeft (event "evScrollToPrev"))
+		(bindcall scrollRight (event "evScrollToNext"))
+
+		(bindcall scrollToBegin (event "evScrollToBegin"))
+		(bindcall scrollToEnd (event "evScrollToEnd"))
+	)
+
+	(block
+		(style (position = "absolute"))
+		(element BannerScrollButton
+			_buttonCarouselName = 'buttonBannerCarouselLeft'
+			_direction = "ScrollDirection.LEFT"
+			_canScroll = "currentContentIndex != 0"
+			_clickDispatchedEv = 'evScrollToPrev'
+			_methods = "[
+				{
+					type: 'direct.action',
+					name: 'tileSlider.swipeLeft',
+					args: {tileId: tile.tileId}
+				}
+			]"
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(right = 0px)
+		)
+		(element BannerScrollButton
+			_buttonCarouselName = 'buttonBannerCarouselRight'
+			_direction = "ScrollDirection.RIGHT"
+			_canScroll = "currentContentIndex != slidersCount-1"
+			_clickDispatchedEv = 'evScrollToNext'
+			_methods = "[
+				{
+					type: 'direct.action',
+					name: 'tileSlider.swipeRight',
+					args: {tileId: tile.tileId}
+				}
+			]"
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(left = "XS")
+			(top = "XS")
+			(height = 16px)
+			(borderRadius = "S")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		)
+
+		(hblock
+			(style
+				(gap = "S")
+				(paddingTop = "XS")
+				(paddingLeft = "XS")
+				(paddingRight = "XS")
+			)
+
+			(controller $Repeat renderer='RadioButton'
+				(bind count "slidersCount")
+				(args
+					_size = "SIZE.SMALL"
+					_safetyZone = 8px
+					_isSelected = "selectedIndex == $index"
+					_dispatchedEv = 'evRadioButtonSelected'
+					_dispatchParams = "{ index: $index }"
+					_methods = "[
+						{
+							type: 'direct.action',
+							name: 'tileSlider.swipeToIndex',
+							args:	{
+										tileId: tile.tileId,
+										targetIndex: selectedIndex
+									}
+						}
+					]"
+				)
+			)
+		)
+	)
+)
+
+(def element EventBannerSingleItem (	_entityId:number = 0,
+										_guidingOffsets:dict = {},
+										_scrollAreaTopPoint:number = 0,
+										_scrollAreaHeight:number = 0)
+	(scope
+		(struct tile = GET_TILE_INFO(_entityId="_entityId"))
+		(var tileContentEntity:dhEntity = "getSingleEntity(CC.tileContent, 'available.byTileId.' + tile.tileId)")
+	)
+
+	(element EventBannerContentRenderer
+		_entityContentId = "tileContentEntity.id"
+		_guidingOffsets = "_guidingOffsets"
+		_scrollAreaTopPoint = "_scrollAreaTopPoint"
+		_scrollAreaHeight = "_scrollAreaHeight"
+	)
+)
+
+(def element EventBannerSliderItem (	_entityContentId:number = 0,
+										_guidingOffsets:dict = {},
+										_scrollAreaTopPoint:number = 0,
+										_scrollAreaHeight:number = 0)
+	(scope
+		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
+
+		(struct stageSize = STAGE_SIZE())
+		(var guidingTipOffsetRight:number = "stageSize.width - EVENT_BANNER_SIZE[tileContentInfo.tileSize].bannerWidth - 340px + ACTIVITIES_BANNERS_PIN_OFFSET")
+	)
+
+	(element EventBannerContentRenderer
+		_entityContentId = "_entityContentId"
+		_guidingOffsets = "_guidingOffsets"
+		_scrollAreaTopPoint = "_scrollAreaTopPoint"
+		_scrollAreaHeight = "_scrollAreaHeight"
+		_screenOffsetRight = "guidingTipOffsetRight"
+	)
+)
+
+(def element EventBannerContentRenderer (	_entityContentId:number = 0,
+											_guidingOffsets:dict = {},
+											_scrollAreaTopPoint:number = 0,
+											_scrollAreaHeight:number = 0,
+											_screenOffsetRight:number = 0)
 	(scope
 		(event evDeclareScrollTargetIndex)
 
-		(struct tile = EVENT_BANNER_TILE(_entityId = "_entityId"))
-
-		(var bannerRenderer:str = "	tile.tileId in BANNERS_CONFIG					? 'EventBannerCommon' :
-									tile.tileId == SC.Common.TILE_CONTENT.MOTIVATOR	? 'EventBannerMotivator'
-																					: 'EventBannerCustom'")
+		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
+		(var isMotivator:bool = "tileContentInfo.contentId == SC.Common.TILE_CONTENT.MOTIVATOR")
+		(var bannerRenderer:str = "	tileContentInfo.contentId in BANNERS_CONFIG	? 'EventBannerContentCommon' :
+									isMotivator									? 'EventBannerMotivator'
+																				: 'EventBannerContentCustom'")
 
 		(var bannerBounds:array =		"$globalLayoutBounds" (event "$evLayoutBoundsChanged"))
 		(var bannerTopPoint:number =	"bannerBounds[1]")
@@ -214,39 +445,47 @@
 
 		(var isScrollForGuidingNeeded:bool = "(bannerTopPoint + (bannerHeight / 2)) > (_scrollAreaTopPoint + _scrollAreaHeight)")
 	)
+	(style
+		(bind width "EVENT_BANNER_SIZE[tileContentInfo.tileSize].bannerWidth")
+		(bind height "isMotivator ? auto : EVENT_BANNER_SIZE[tileContentInfo.tileSize].bannerHeight")
+	)
 
-	(dispatch "isScrollForGuidingNeeded ? 'evSetScrollTargetIndex' : ''" args="{ value: $index }" dir="EventDirection.UP" delay=0.5 (event "evDeclareScrollTargetIndex"))
+	(dispatch
+		"isScrollForGuidingNeeded ? 'evSetScrollTargetIndex' : ''"
+		args="{ value: $index }"
+		dir="EventDirection.UP"
+		delay=0.5
+		(event "evDeclareScrollTargetIndex")
+	)
 
-	(bind name "'PortBanner_' + tile.tileId")
+	(bind name "'PortBanner_' + tileContentInfo.contentId")
 
 	(controller $Instance
 		(bind renderer "bannerRenderer")
 		(args
-			_entityId =			"tile.tileEntity.id"
-			_guidingOffsets =	"_guidingOffsets"
+			_entityContentId = "_entityContentId"
+			_guidingOffsets = "_guidingOffsets"
+			_screenOffsetRight = "_screenOffsetRight"
 		)
 	)
 )
 
-(def element EventBannerCommon (_entityId:number = 0, _guidingOffsets:dict = {})
+(def element EventBannerContentCommon (_entityContentId:number = 0, _guidingOffsets:dict = {}, _screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(struct tileLayout = EVENT_BANNER_TILE(_entityId = "_entityId"))
-		(var isSmallBanner:bool = "tileLayout.tileSize == SC.Ui_common.TILE_SIZE.S")
+		(struct tileContent = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
 
-		(var commonBannerRenderer:str = "tileLayout.tileId in BANNERS_CONFIG ? BANNERS_CONFIG[tileLayout.tileId].bannerContent : ''")
-	)
+		(var isSmallBanner:bool = "tileContent.tileSize == SC.Ui_common.TILE_SIZE.S")
 
-	(style
-		(bind width "EVENT_BANNER_SIZE[tileLayout.tileSize].bannerWidth")
-		(bind height "EVENT_BANNER_SIZE[tileLayout.tileSize].bannerHeight")
+		(var commonBannerRenderer:str = "tileContent.contentId in BANNERS_CONFIG ? BANNERS_CONFIG[tileContent.contentId].bannerContent : ''")
 	)
+	(class $Fullsize)
 
 	(macro MOUSE_HANDLER_BANNER)
 
-	(element EventBannerBackground
-		_entityId = "_entityId"
+	(element EventBannerTileBackground
+		_entityContentId = "_entityContentId"
 		_rollOver = "rollOver"
 		_mouseDown = "mouseDown"
 	)
@@ -255,39 +494,35 @@
 		(bind enabled "commonBannerRenderer != ''")
 		(bind renderer "commonBannerRenderer")
 		(args
-			_size =				"tileLayout.tileSize"
-			_guidingOffsets =	"_guidingOffsets"
-			_bannerHeight =		"EVENT_BANNER_SIZE[tileLayout.tileSize].bannerHeight"
+			_size = "tileContent.tileSize"
+			_guidingOffsets = "_guidingOffsets"
+			_screenOffsetRight = "_screenOffsetRight"
+			_bannerHeight = "EVENT_BANNER_SIZE[tileContent.tileSize].bannerHeight"
 		)
 	)
 
 	(controller $Tooltip
-		(bind enabled "toBool(BANNERS_CONFIG[tileLayout.tileId].tooltip) && commonBannerRenderer != ''")
-		(bind renderer "BANNERS_CONFIG[tileLayout.tileId].tooltip")
+		(bind enabled "toBool(BANNERS_CONFIG[tileContent.contentId].tooltip) && commonBannerRenderer != ''")
+		(bind renderer "BANNERS_CONFIG[tileContent.contentId].tooltip")
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )
 
-(def element EventBannerCustom (_entityId:number = 0, _guidingOffsets:dict = {})
+(def element EventBannerContentCustom (_entityContentId:number = 0, _guidingOffsets:dict = {})
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(struct tileLayout = EVENT_BANNER_TILE(_entityId = "_entityId"))
+		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
 
-		(var tileContentEntity:dhEntity = "getPrimaryEntity(CC.tileContent, tileLayout.tileId)")
-		(var tileContent:dhComponent = "tileContentEntity.tileContent")
-		(var route:str = "tileContent.route ?: ''" (event "tileContent.evChanged"))
-		(var url:str = "tileContent.url ?: ''" (event "tileContent.evChanged"))
+		(var route:str = "tileContentInfo.tileContent.route ?: ''" (event "tileContentInfo.tileContent.evChanged"))
+		(var url:str = "tileContentInfo.tileContent.url ?: ''" (event "tileContentInfo.tileContent.evChanged"))
 		(var skipURLTranslation:bool = "!isIn(url, SC.Ui_windows.GUI_URL.ALL)")
-		(var mainText:str = "tileContent.mainText ?: ''" (event "tileContent.evChanged"))
-		(var tooltipText:str = "tileContent.tooltipText ?: ''" (event "tileContent.evChanged"))
-		(var isSmallBanner:bool = "tileLayout.tileSize == SC.Ui_common.TILE_SIZE.S")
-	)
+		(var mainText:str = "tileContentInfo.tileContent.mainText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
+		(var tooltipText:str = "tileContentInfo.tileContent.tooltipText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
 
-	(style
-		(bind width "EVENT_BANNER_SIZE[tileLayout.tileSize].bannerWidth")
-		(bind height "EVENT_BANNER_SIZE[tileLayout.tileSize].bannerHeight")
+		(var isSmallBanner:bool = "tileContentInfo.tileSize == SC.Ui_common.TILE_SIZE.S")
 	)
+	(class $Fullsize)
 
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{
@@ -298,11 +533,11 @@
 		}]"
 	)
 
-	(element EventBannerBackground
-		_entityId =		"_entityId"
-		_rollOver =		"rollOver"
-		_mouseDown =	"mouseDown"
-		_isWithTitle =	"toBool(mainText)"
+	(element EventBannerTileBackground
+		_entityContentId = "_entityContentId"
+		_rollOver = "rollOver"
+		_mouseDown = "mouseDown"
+		_isWithTitle = "toBool(mainText)"
 	)
 
 	(controller $Tooltip
@@ -319,7 +554,7 @@
 
 		(element EventBannerTitle
 			_title = "mainText"
-			_size = "tileLayout.tileSize"
+			_size = "tileContentInfo.tileSize"
 			_hasIcon = "toBool(url)"
 		)
 	)
@@ -339,101 +574,23 @@
 	)
 )
 
-(def element EventBannerMetaShop (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerBattlePass (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+										_guidingOffsets:dict = {},
+										_bannerHeight:number = 0,
+										_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
 		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
 
-		(var metashopBannerStateEntity:dhEntity = "getSingleEntity(CC.metashopBannerState)")
-		(var metashopBannerStateComponent:dhComponent = "metashopBannerStateEntity.metashopBannerState")
-
-		(var hasReward:bool = "metashopBannerStateComponent.isActive" (event "metashopBannerStateComponent.evUpdate"))
-		(var isNewMarkerVisible:bool = "metashopBannerStateComponent.isNew" (event "metashopBannerStateComponent.evUpdate"))
-
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.METASHOP_INTRO,
-																												SC.Context_guiding_tip.TIP_TYPE.METASHOP_INTRO_REPEAT,
-																												SC.Context_guiding_tip.TIP_TYPE.METASHOP ]"))
-
-		(var isIconVisible:bool = "_size == SC.Ui_common.TILE_SIZE.S || hasReward")
-	)
-
-	(macro DECLARE_SCROLL_TARGET_INDEX
-		_tipId = "checkedTipId.value"
-	)
-
-	(class $Fullsize)
-	(style (backgroundColor = "NO_COLOR"))
-
-	(macro MOUSE_HANDLER_BANNER
-		_methods =	"[	{ type: 'inputMapping.onAction',	name: checkedTipId.value ? 'deactivateTipChain' : '',		args: { tip_chain_id: activeTip.chainId } },
-						{ type: 'inputMapping.onAction',	name: 'featureSeen',										args: { featureIndex: SC.Common.ACCOUNT_FEATURE.METASHOP } },
-						{ type: 'inputMapping.onRequest',	name: 'openMetashop',										args: {} },
-						{ type: 'inputMapping.onAction',	name: 'metashopBannerClicked',								args: {} }]"
-	)
-
-	(block
-		(class $EventBanner)
-		(element EventBannerTitle
-			_title = 'IDS_DOCK_BANNER_METASHOP'
-			_size = "_size"
-			_hasIcon = "isIconVisible"
-		)
-	)
-
-	(block
-		(class $EventBannerReward)
-		(controller $Instance renderer = 'EventBannerIcon'
-			(bind enabled "isIconVisible")
-			(args
-				_icon = "hasReward	? 'url:../service_kit/port_banner/icon_banner_arsenal_active.png'
-									: 'url:../service_kit/port_banner/icon_banner_arsenal.png'"
-				_isAnimated = "hasReward"
-				_size = "_size"
-			)
-		)
-	)
-
-	(controller $Instance renderer='EventBannerMarkers'
-		(bind enabled "isNewMarkerVisible || hasReward")
-		(args
-			_isNewMarker = "isNewMarkerVisible"
-			_isRewardMarker = "hasReward"
-			_size = "_size"
-		)
-	)
-
-	(controller $Instance renderer='GuidingTipHub'
-		(bind enabled "checkedTipId.value && routeEventsData.isActive")
-		(args
-			_tipId =				"checkedTipId.value"
-			_tipPositioning =		"TIP_POSITION_RIGHT"
-			_offsetX =				"SXS"
-			_pointerOffset =		"ACTIVITIES_BANNERS_PIN_OFFSET"
-			_isHideOnBounds =		true
-			_keepOnNotFit =			false
-			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
-			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
-			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
-		)
-	)
-)
-
-(def element EventBannerBattlePass (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
-	(scope
-		(macro MOUSE_HANDLER_SCOPE)
-
-		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
-
-		(var unclaimedRewardsCollection:dhCollection = "getCollection(CC.battlePassReward).child('unclaimedRewards')")
+		(var unclaimedRewardsCollection:dhCollection = "getCollectionByPath(CC.battlePassReward, 'unclaimedRewards')")
 		(var hasReward:bool = "unclaimedRewardsCollection.length > 0")
 
 		(var battlePassCurrentLevelEntity:dhEntity = "getSingleEntity(CC.battlePassCurrentLevel)")
 		(var battlePassLevel:dhComponent = "battlePassCurrentLevelEntity.battlePassLevel")
-		(var curLevel:number = 	"battlePassLevel.level" (event "battlePassLevel.evChanged"))
+		(var curLevel:number = "battlePassLevel.level" (event "battlePassLevel.evChanged"))
 
-		(var mainProgressionCollection:dhCollection = "getCollection(CC.battlePassLevel).getChildByPath('mainProgression')")
+		(var mainProgressionCollection:dhCollection = "getCollectionByPath(CC.battlePassLevel, 'mainProgression')")
 		(var mainProgressionLength:number = "mainProgressionCollection.length ?: 0")
 
 		(var battlePassPostProgressionLevelComponent:dhComponent = "battlePassCurrentLevelEntity.battlePassPostProgressionLevel")
@@ -442,10 +599,10 @@
 		(var isPostProgression:bool = "battlePassPostProgressionLevelComponent != null")
 
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_FREE,
-																												SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_PAID,
-																												SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_EVENT_START ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_FREE,
+																											SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_SEASON_FINISH_PAID,
+																											SC.Context_guiding_tip.TIP_TYPE.BATTLEPASS_EVENT_START ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
@@ -525,11 +682,16 @@
 			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
+			_screenOffsetRight =	"_screenOffsetRight"
+			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
 		)
 	)
 )
 
-(def element EventBannerStrategicActions (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerStrategicActions (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+											_guidingOffsets:dict = {},
+											_bannerHeight:number = 0,
+											_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -544,9 +706,9 @@
 
 		(var isAnyRewardClaim:bool = "strategicActionsEventComponent.isAnyRewardClaim" (event "strategicActionsEventComponent.evChanged"))
 
-		(var isActive:bool = 				"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.ACTIVE")
-		(var isCompleted:bool = 			"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.COMPLETED")
-		(var isFinishedWithResults:bool = 	"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.FINISHED_WITH_RESULTS")
+		(var isActive:bool =				"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.ACTIVE")
+		(var isCompleted:bool =				"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.COMPLETED")
+		(var isFinishedWithResults:bool =	"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.FINISHED_WITH_RESULTS")
 
 		(var bannerDescription:str = "isActive && isTerritoryAvailable && !isAnyRewardClaim	? 'IDS_STRATEGIC_ACTIONS_BANNER_TEXT_TERRITORY' : ''")
 
@@ -560,10 +722,10 @@
 		(var isDisableState:bool = "isSmallBanner && (isCompleted && !isAnyRewardClaim || isFinishedWithResults)")
 
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_EVENT,
-																												SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TASK_CHANGED,
-																												SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_COMPLETED ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_EVENT,
+																											SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TASK_CHANGED,
+																											SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_TERRITORY_COMPLETED ]"))
 
 		(var shouldDeactivateStrategicChain:bool = "checkedTipId.value && activeTip.chainId != SC.Context_guiding_tip.TIP_CHAIN_ID.STRATEGIC_ACTIONS_TERRITORY_COMPLETED")
 	)
@@ -606,6 +768,7 @@
 
 	(block
 		(class $EventBanner)
+
 		(element EventBannerTitle
 			_title = 'IDS_STRATEGIC_ACTIONS_COMMON_EVENT_TITLE'
 			_size = "_size"
@@ -648,11 +811,16 @@
 			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
+			_screenOffsetRight =	"_screenOffsetRight"
+			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
 		)
 	)
 )
 
-(def element EventBannerRepairDock (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerRepairDock (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+										_guidingOffsets:dict = {},
+										_bannerHeight:number = 0,
+										_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -673,18 +841,18 @@
 
 		(var exchangeableShips:dhCollection = "getCollectionByPath(CC.exchangeableShip, 'sorted')")
 
-		(var shipComponentCollection:dhCollection = "getCollection(CC.shipComponent).child('sorted')")
+		(var shipComponentCollection:dhCollection = "getCollectionByPath(CC.shipComponent, 'sorted')")
 		(var shipsCount:number = "shipComponentCollection.length")
 
 		(var isInactive:bool = "shipsCount == 0 && !isNewMarkerVisible && exchangeableShips.length == 0")
 		(var isSmallBanner:bool = "_size == SC.Ui_common.TILE_SIZE.S")
 		(var isDisableState:bool = "isSmallBanner && isInactive")
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_MATERIAL,
-																												SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_COMPONENT,
-																												SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FIRST_REPAIR_INTRO,
-																												SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_MATERIALS_EXCHANGE_INTRO ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_MATERIAL,
+																											SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_INTRO_WITH_SHIP_COMPONENT,
+																											SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FIRST_REPAIR_INTRO,
+																											SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_MATERIALS_EXCHANGE_INTRO ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
@@ -748,6 +916,8 @@
 			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
+			_screenOffsetRight =	"_screenOffsetRight"
+			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
 		)
 	)
 )
@@ -755,7 +925,10 @@
 (def constant ARC_EVENT_SIDE_NEUTRAL -1)
 (def constant ARC_EVENT_STATE_FINISHED 4)
 
-(def element EventBannerArcEvent (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerArcEvent (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+									_guidingOffsets:dict = {},
+									_bannerHeight:number = 0,
+									_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -802,9 +975,9 @@
 		(var isProgressBarVisible:bool = "	(isSmallBanner && personalProgressBarValue > 0 || !isSmallBanner) &&
 											!isEventFinished && !isSideNeutral && !hasReceivedAllRewards && isPrimeTimeActive")
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.RVR_AVAILABLE,
-																												SC.Context_guiding_tip.TIP_TYPE.RVR_NEW_STAGE ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.RVR_AVAILABLE,
+																											SC.Context_guiding_tip.TIP_TYPE.RVR_NEW_STAGE ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
@@ -897,6 +1070,8 @@
 			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
+			_screenOffsetRight =	"_screenOffsetRight"
+			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
 		)
 	)
 )
@@ -962,7 +1137,10 @@
 	)
 )
 
-(def element EventBannerSnowflakes (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerSnowflakes (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+										_guidingOffsets:dict = {},
+										_bannerHeight:number = 0,
+										_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -982,9 +1160,9 @@
 		(var isDisableState:bool = "isSmallBanner && !isNewMarkerVisible && isInactive")
 
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_START,
-																												SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_FINISH ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_START,
+																											SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_FINISH ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
@@ -1051,6 +1229,8 @@
 			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
+			_screenOffsetRight =	"_screenOffsetRight"
+			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
 		)
 	)
 )
@@ -1124,7 +1304,10 @@
 	)
 )
 
-(def element EventBannerShipyard (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerShipyard (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+									_guidingOffsets:dict = {},
+									_bannerHeight:number = 0,
+									_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -1133,6 +1316,7 @@
 		(var shipyardBannerStateEntity:dhEntity = "getSingleEntity(CC.shipyardBannerState)")
 		(var shipyardBannerStateComponent:dhComponent = "shipyardBannerStateEntity.shipyardBannerState")
 
+		(var selectedShipId:number = "shipyardBannerStateComponent.selectedShipId" (event "shipyardBannerStateComponent.evUpdate"))
 		(var shipyardProgressbar:dict = "shipyardBannerStateComponent.progressbar" (event "shipyardBannerStateComponent.evUpdate"))
 		(var rewardsAvailable:bool = "shipyardBannerStateComponent.availableRewards > 0" (event "shipyardBannerStateComponent.evUpdate"))
 		(var boosterAvailable:bool = "shipyardBannerStateComponent.boosterAvailable" (event "shipyardBannerStateComponent.evUpdate"))
@@ -1147,13 +1331,18 @@
 		(var shipyardStep:str = "	shipLevel == 0	? 'IDS_SHIPYARD_PREPARE_LEVEL_BANNER'
 													: subst('IDS_SHIPYARD_LEVEL_BANNER', [], { _level: shipLevel })")
 
+		(var shipComponent:dhComponent = "getPrimaryComponent(CC.ship, selectedShipId)")
+		(var bannerTitle:str = "selectedShipId	? subst('IDS_DOCK_BANNER_SHIPYARD_WITH_SHIP', [], { _shipName: toUpper(tr(shipComponent.nameIDS))})
+												: 'IDS_SHIPYARD_COMMON_EVENT_TITLE'")
+
 		(var isSmallBanner:bool = "_size == SC.Ui_common.TILE_SIZE.S")
 		(var isProgressBarVisible:bool = "	isActiveState && !isShipyardMaxProgressReached &&
 											(isSmallBanner && curPoints > 0 || !isSmallBanner)")
+		(var isDescriptionBlockVisible:bool = "isShipyardMaxProgressReached && !isSmallBanner")
 
 
-		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
-		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.SHIPYARD_INTRO ]"))
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.SHIPYARD_INTRO ]"))
 	)
 
 	(macro DECLARE_SCROLL_TARGET_INDEX
@@ -1181,7 +1370,7 @@
 	(block
 		(class $EventBanner)
 		(element EventBannerTitle
-			_title = 'IDS_DOCK_BANNER_SHIPYARD'
+			_title = "bannerTitle"
 			_size = "_size"
 			_hasIcon = "rewardsAvailable"
 		)
@@ -1200,6 +1389,17 @@
 				)
 			)
 		)
+
+		(block
+			(bind visible "isDescriptionBlockVisible")
+			(class $EventMediumBannerProgressBar)
+			(controller $Instance renderer='BannerItemDescription'
+				(bind enabled "isDescriptionBlockVisible")
+				(args
+					_description = 'IDS_SHIPYARD_FINAL_LEVEL_BANNER'
+				)
+			)
+		)
 	)
 
 	(block
@@ -1215,8 +1415,10 @@
 	)
 
 	(controller $Instance renderer='EventBannerMarkers'
-		(bind enabled "boosterAvailable || rewardsAvailable")
+		(bind enabled "!toBool(selectedShipId) || boosterAvailable || rewardsAvailable")
 		(args
+			_isActionMarker = "!toBool(selectedShipId)"
+			_text = 'IDS_CHOOSE_SHIP'
 			_isRewardMarker = "rewardsAvailable"
 			_isDiscountMarker = "boosterAvailable"
 			_size = "_size"
@@ -1235,11 +1437,16 @@
 			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
+			_screenOffsetRight =	"_screenOffsetRight"
+			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
 		)
 	)
 )
 
-(def element EventBannerProspectiveEvent (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerProspectiveEvent (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+											_guidingOffsets:dict = {},
+											_bannerHeight:number = 0,
+											_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -1286,7 +1493,10 @@
 	)
 )
 
-(def element EventBannerCasualCvc (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerCasualCvc (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+									_guidingOffsets:dict = {},
+									_bannerHeight:number = 0,
+									_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -1393,7 +1603,10 @@
 	)
 )
 
-(def element EventBannerTutorial (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerTutorial (	_size:number = "SC.Ui_common.TILE_SIZE.S",
+									_guidingOffsets:dict = {},
+									_bannerHeight:number = 0,
+									_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -1413,8 +1626,17 @@
 	(class $Fullsize)
 	(style (backgroundColor = "NO_COLOR"))
 
-	(bindcall externalCall	"checkedTipId.value ? 'inputMapping.onAction' : ''"	"[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.TUTORIAL_START } ]"		watch=false		on='leftClick')
-	(bindcall externalCall	"isTutorialBannerShown ? '' : 'direct.action'"		"[ 'option.set', { preferenceId: 'ui.tutorialBannerShown', newValue: true } ]"							watch=false		on=addedToStage)
+	(bindcall externalCall
+		"checkedTipId.value ? 'inputMapping.onAction' : ''"
+		"[ 'deactivateTipChain', { tip_chain_id: SC.Context_guiding_tip.TIP_CHAIN_ID.TUTORIAL_START } ]"
+		watch=false
+		on='leftClick')
+	(bindcall externalCall
+		"isTutorialBannerShown ? '' : 'direct.action'"
+		"[ 'option.set', { preferenceId: 'ui.tutorialBannerShown', newValue: true } ]"
+		watch=false
+		on=addedToStage
+	)
 
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[
@@ -1452,6 +1674,8 @@
 			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
 			_screenOffsetTop =		"_guidingOffsets.top - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
+			_screenOffsetRight =	"_screenOffsetRight"
+			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
 		)
 	)
 )
@@ -1720,6 +1944,7 @@
 			(renderer='SimpleStatusTooltip')
 			(args
 				_text = 'IDS_SSE_MOTIVATOR_UNPIN_HINT'
+				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -1979,7 +2204,7 @@
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var promoRewardCollection:dhCollection = "getCollection(CC.accountPromoRewardBanner).getChildByPath('upcoming.sorted')")
+		(var promoRewardCollection:dhCollection = "getCollectionByPath(CC.accountPromoRewardBanner, 'upcoming.sorted')")
 
 		(var promoRewardEntity:dhEntity = "promoRewardCollection.getEntityAtIndex(0)")
 		(var accountPromoRewardBannerComponent:dhComponent = "promoRewardEntity.accountPromoRewardBanner")
@@ -2008,6 +2233,7 @@
 		(class $FullsizeAbsolute)
 		(style
 			(borderRadius = "S")
+			(backgroundSize = "crop")
 			(bind backgroundImage "promoImageUrl")
 		)
 	)

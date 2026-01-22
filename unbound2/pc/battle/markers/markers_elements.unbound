@@ -69,6 +69,12 @@
 	[92, 14] 
 ])
 
+(def constant SHIELD_BAR_SIZE [
+	[46, 4],
+	[92, 4],
+	[92, 14] 
+])
+
 (def constant BATTERY_BAR_SIZE [
 	[46, 4],
 	[92, 4] 
@@ -200,22 +206,19 @@
 		(dispatch evPlay args="{commandName: $event[1], commandDuration: $event[2]}" (event "quickCommandComponent.evPlay"))
 	)
 
-	(style
-		(position = "absolute")
-		(bind backgroundImage "'symbol:' + commandName")
-	)
+	(style (bind backgroundImage "'symbol:' + commandName"))
 
 	(controller $Animation
 		(bindcall play	duration=0.15
-						from={alpha: 0, top: 10}
-						to={alpha: 1, top: 0}
+						from={alpha: 0, visualOffsetY: 10px}
+						to={alpha: 1, visualOffsetY: 0px}
 						action="killAll"
 						(event "evPlay")
 		)
 		(bindcall play	duration=0.15
 						delay="commandDuration"
-						from={alpha: 1, top: 0}
-						to={alpha: 0, top: -10}
+						from={alpha: 1, visualOffsetY: 0px}
+						to={alpha: 0, visualOffsetY: -10px}
 						(event "evPlay")
 		)
 	)
@@ -661,7 +664,7 @@
 			(block
 				(class $FullsizeAbsolute)
 				(style
-					(bind backgroundImage "'url:../battle_hud/markers/bar/bar_hp_suppressed.png'")
+					(backgroundImage = 'url:../battle_hud/markers/bar/bar_hp_suppressed.png')
 					(backgroundSize = "fill")
 					(scale9grid = [2, 1, 42, 2])
 				)
@@ -726,6 +729,145 @@
 									to = "{ scaleX: healthRatio }"
 									(event "healthComponent.evValueChanged")
 									(event "healthComponent.evMaxChanged")
+									(event "evBarTweenStart")
+					)
+					(dispatch onBarTweenStart args="{}" on=evAnimStarted)
+					(dispatch onBarTweenEnd args="{}" on=evAnimEnded)
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "_isLarge")
+			(tf
+				(class $WorldMarkerTextItem)
+				(bind text "textValue")
+			)
+		)
+	)
+)
+
+(def element MarkerShieldBarItem (_markerEntity:gfx, _isMedium:bool, _isLarge:bool, _isSuppressed:bool=false)
+	(scope
+		
+		(event evBarTweenStart)
+		(event onBarTweenStart)
+		(event onBarTweenEnd)
+		(event onDamageTweenEnd)
+
+		(macro GET_MARKER_ENTITY_COMPONENT 'shield')
+		(var shieldHealth:number = "shieldComponent ? shieldComponent.shieldHealth : 0" (event "shieldComponent.evShieldHealthChanged"))
+		(var shieldMaxHealth:number = "shieldComponent ? shieldComponent.shieldMaxHealth : 0" (event "shieldComponent.evShieldMaxHealthChanged"))
+
+		(var shieldRatio:number = "shieldMaxHealth > 0 ? shieldHealth / shieldMaxHealth : -1")
+		(var textValue:str = "toString(formatSeparator(shieldHealth)) + ' / ' + toString(formatSeparator(shieldMaxHealth))")
+
+		(var sizes:array = "SHIELD_BAR_SIZE[_isLarge	? 2 :
+											_isMedium	? 1
+														: 0]")
+
+		(var isDirty:bool = false) 
+		(bind isDirty "true" (event "shieldComponent.evShieldHealthChanged") (event "shieldComponent.evShieldMaxHealthChanged"))
+		(bind isDirty "false" (event "onBarTweenStart"))
+
+		(var isDamageShows:bool = false) 
+		(bind isDamageShows "true" (event "onBarTweenStart"))
+		(bind isDamageShows "false" (event "onDamageTweenEnd"))
+
+		(var targetBarScale:number = 0) 
+		(bind targetBarScale "shieldRatio" watch=false (event "onBarTweenStart"))
+	)
+
+	(dispatch evBarTweenStart args="{}" (event "onDamageTweenEnd") (bind enabled "isDirty")) 
+	(block
+		(class $WorldMarkerItemMargins)
+		(style
+			(bind width "sizes[0]")
+			(bind height "sizes[1]")
+			(align = "center|middle")
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../battle_hud/markers/bar/bar_bg.png')
+				(backgroundSize = "fill")
+				(scale9grid = [1, 1, 44, 2])
+			)
+		)
+
+		
+		(block
+			(bind visible "_isSuppressed")
+			(class $FullsizeAbsolute)
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(bind backgroundImage "'url:../battle_hud/markers/bar/bar_hp_suppressed.png'")
+					(backgroundSize = "fill")
+					(scale9grid = [2, 1, 42, 2])
+				)
+				(bind colorTransform "SHIP_HP_TRANSFORM_COLORS.SHIELD")
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(bind scaleX "shieldRatio")
+				(style (backgroundColor = "NO_COLOR"))
+				(isMask = true)
+			)
+		)
+
+		
+		(block
+			(bind visible "!(_isSuppressed)")
+			(class $FullsizeAbsolute)
+			(style (padding = "HEALTH_BAR_FILL_PADDING"))
+
+			(block
+				(class $FullsizeAbsolute)
+				(scaleX = "shieldRatio")
+
+				(alpha = 1.17)
+				(style
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(backgroundSize = "fill")
+				)
+
+				(controller $Animation
+					(bindcall play  duration = "0.1"
+									delay = "0.1"
+									action="killAll"
+									watch=false
+									easing="Easing.quad_in"
+									to = "{ scaleX: targetBarScale }"
+									(event "onBarTweenEnd")
+					)
+					(dispatch onDamageTweenEnd args="{}" on=evAnimEnded)
+				)
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(scaleX = "shieldRatio")
+
+				(style
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(backgroundSize = "fill")
+				)
+
+				(bind colorTransform "SHIP_HP_TRANSFORM_COLORS.SHIELD")
+
+				(controller $Animation
+					(bind enabled "!(isDamageShows)")
+					(bindcall play	duration = "0.1"
+									action="killAll"
+									watch=false
+									to = "{ scaleX: shieldRatio }"
+									(event "shieldComponent.evShieldHealthChanged")
+									(event "shieldComponent.evShieldMaxHealthChanged")
 									(event "evBarTweenStart")
 					)
 					(dispatch onBarTweenStart args="{}" on=evAnimStarted)
