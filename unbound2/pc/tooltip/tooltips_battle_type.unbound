@@ -7,7 +7,7 @@
 (def constant END_OF_EVENT "'END_OF_EVENT'")
 
 (def macro DIVISION_RESTRICTIONS_SCOPE (_restrictionEntity:expression)
-	(var divisionRestrictions:dhComponent = "_restrictionEntity && !!_restrictionEntity.divisionRestrictions ? _restrictionEntity.divisionRestrictions : null" (event "_restrictionEntity.evAdded") (event "_restrictionEntity.evRemoved"))
+	(var divisionRestrictions:dhComponent = "_restrictionEntity.divisionRestrictions")
 	
 	(var minPlayers:number =	"divisionRestrictions ? divisionRestrictions.shipsCount[0] : 0" (event "divisionRestrictions.evUpdate"))
 	(var maxPlayers:number =	"divisionRestrictions ? divisionRestrictions.shipsCount[1] : 0" (event "divisionRestrictions.evUpdate"))
@@ -34,26 +34,38 @@
 	(var hasRestrictions:bool = "restrictionEntity && restrictionEntity.hasComponent(CC.shipListRestrictions)" (event "restrictionEntity.evAdded") (event "restrictionEntity.evRemoved"))
 )
 
-(def macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE (_battleTypeComponent:expression, _isFromPort:expression = false, _isActivePrimeTime:expression = true, _customMouseInstructionText:expression = '')
+(def macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE (_battleTypeComponent:expression, _isFromPort:expression = false,
+														_isActivePrimeTime:expression = true, _customMouseInstructionText:expression = '')
 	(macro PULL_TRAINING_ROOM_ENTITY)
+	(var isTrainingBattletype:bool = "battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
+	(struct trainingFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.TRAINING_BATTLE"))
+	(var isTrainingAvailable:bool = "trainingFeature.state != 'locked'")
+
 	(var isActiveTrainingBattle:bool = "trainingRoomEntity && battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
 	(var isActiveTournamentBattle:bool = "battleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
 	(var isActiveRoomBattle:bool = "isActiveTrainingBattle || isActiveTournamentBattle")
 
 	(var battleTypeState:number = "_battleTypeComponent ? _battleTypeComponent.status : SC.Common.BATTLE_TYPE_STATE.DISABLED" (event "_battleTypeComponent.evStatusChanged"))
-	(var isSelectableBattleType:bool = "battleTypeState != SC.Common.BATTLE_TYPE_STATE.DISABLED")
+	(var isAvailableInPrimeTime:bool = "battleTypeState != SC.Common.BATTLE_TYPE_STATE.INACTIVE_BY_PRIMETIME")
+
+	(var divisionDataEntity:dhEntity = "getSingleEntity(CC.division)")
+	(var hasDivision:bool = "divisionDataEntity != null")
+	(var isAvailableTrainingRoom:bool = "!isTrainingBattletype || !hasDivision")
+
+	(var isSelectableBattleType:bool = "battleTypeState != SC.Common.BATTLE_TYPE_STATE.DISABLED && isAvailableInPrimeTime && isAvailableTrainingRoom")
 	(var battleTypeDenyReasons:array = "_battleTypeComponent ? _battleTypeComponent.battleTypeReasons : []" (event "_battleTypeComponent.evDisableReasonChanged"))
 	(var reasonText:str = "battleTypeDenyReasons.length ? battleTypeDenyReasons[0] : ''")
 
-	(var mouseInstructionText:str = "_customMouseInstructionText 	? _customMouseInstructionText :
-									_battleTypeComponent			? tr('IDS_CHOOSE_' + toUpper(_battleTypeComponent.type))
+	(var mouseInstructionText:str = "	_customMouseInstructionText	? _customMouseInstructionText :
+										_battleTypeComponent		? tr('IDS_CHOOSE_' + toUpper(_battleTypeComponent.type))
 																	: ''")
 
-	(var mouseInstructionsParams:dict = "	_isFromPort && isActiveRoomBattle 	? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT, 	_text: 'IDS_RETURN_TO_TRAINING_ROOM' } :
-											_isFromPort							? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT, 	_text: 'IDS_CHOOSE_BATTLE_TYPE' } :
-											!isSelectableBattleType				? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING, 		_text: reasonText }
-																				: { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT, 	_text: mouseInstructionText }")
-	(var isFooterVisible:bool = "_isActivePrimeTime ? true : battleTypeDenyReasons.length > 0")
+	(var mouseInstructionsParams:dict = "	_isFromPort && isActiveRoomBattle							? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	_text: 'IDS_RETURN_TO_TRAINING_ROOM' } :
+											_isFromPort													? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	_text: 'IDS_CHOOSE_BATTLE_TYPE' } :
+											!_isActivePrimeTime											? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: 'IDS_TOOLTIP_ACCESS_PRIME_TIME' } :
+											isTrainingBattletype && hasDivision	&&	isTrainingAvailable	? {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: 'IDS_UNABLE_TO_CREATE_TRAINING_WHEN_IN_DIVISION' } :
+											!isSelectableBattleType										? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: reasonText }
+																										: { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	_text: mouseInstructionText }")
 )
 
 (def macro PULL_BATTLE_TYPE_SCOPE(_battleTypeEntityId:expression)
@@ -61,6 +73,7 @@
 	(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
 	(var battleType:str = "battleTypeComponent.type ?: ''")
 	(var isFogOfWar:bool = "battleTypeEntity.battleSeasonInfo.isFogOfWar")
+	(var hasCustomSlotsSettings:bool = "battleTypeComponent.hasCustomSlotsSettings")
 	(var hasBattleModifiers:bool = "battleTypeEntity && battleTypeEntity.battleSeasonInfo.battleItemTreeGpId > 0")
 )
 
@@ -141,33 +154,10 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + battleType + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + battleType + '_tiny.png'"
 			_headerText = "headerText"
-		)
-
-		(element TooltipSystemHorizontalDivider)
-
-		(element TooltipSystemDescriptionText
-			_descriptionText = "descriptionText"
-		)
-
-		(block
-			(style (width = 100%))
-
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTeamSizeInfoVisible"))
-		)
-
-		(block
-			(style (width = 100%))
-
-			(controller $Instance renderer='TooltipSystemDescriptionText'
-				(bind enabled "isTeamSizeInfoVisible")
-				(args
-					_descriptionText="teamSizeInfoText"
-				)
-			)
 		)
 
 		(element TooltipSystemHorizontalDivider)
@@ -182,23 +172,11 @@
 (def element EventBattleTypeTooltip (_battleTypeEntityId:number, _isFromPort:bool = false)
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
-		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
 		(macro PRIME_TIME_DATA_SCOPE "battleTypeEntity")
-
-		(var hasCustomSlotsSettings:bool = "battleTypeComponent ? battleTypeComponent.hasCustomSlotsSettings : false")
-
-		(var shipListRestrictionsComponent:dhComponent = "restrictionEntity.shipListRestrictions")
-		(var shipFilterItemsCollection:dhCollection = "getCollection(CC.shipFilterItem)")
-		(var shipIdsFiltersCollection:dhCollection = "shipFilterItemsCollection.getChildByPath(shipListRestrictionsComponent.id + SC.Ui_common.SHIP_FILTER_TYPE_POSTFIX.IDS)")
-		(var concreteShips:array = "shipIdsFiltersCollection.items ?: []" (event "shipIdsFiltersCollection.evUpdated"))
-		(var isEmptyConcreteShips:bool = "concreteShips.length == 0")
 
 		(var eventBattleStateComponent:dhComponent = "battleTypeEntity.eventBattleState")
 		(var eventBattleName:str = "eventBattleStateComponent.name ?: ''" (event "eventBattleStateComponent.evChanged"))
 
-		
-		(var isTeamSizesVisible:bool = "isIn(eventBattleName, ['PCVE020','PCVE023','PCVE030'])")
-		
 		
 		(var eventMouseInstructionText:str = "eventBattleName ? tr('IDS_CHOOSE_' + toUpper(SC.Common.BATTLE_TYPES.EVENT_BATTLE + '_' + eventBattleName)) : ''")
 		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime" "eventMouseInstructionText")
@@ -227,9 +205,9 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + eventBattleName + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + eventBattleName + '_tiny.png'"
 			_headerText = "'IDS_' + eventBattleName"
 		)
 
@@ -249,94 +227,12 @@
 				(element TooltipSystemStatusLine
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
 					_text = "timeSeasonLeft"
+					_showStatusIcon = "!isPrimeTime || eventStatusLineData._unifiedStatus != SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
 				)
 			)
 		)
 
 		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTeamSizesVisible"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isTeamSizesVisible")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-					_text = "'IDS_FORMAT_EVENTBATTLE_' + toUpper(eventBattleName)"
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasBattleModifiers"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "hasBattleModifiers")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.HAS_BATTLE_MODIFIERS"
-					_text = "'IDS_UNIFIED_BATTLE_OPTION_HAS_BATTLE_MODIFIERS'"
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "hasCustomSlotsSettings")
-			)
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "hasCustomSlotsSettings")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.REPLACED_CONSUMABLES"
-					_text = 'IDS_UNIFIED_BATTLE_CONSUMABLES_CAN_BE_REPLACED'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isFogOfWar"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isFogOfWar")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
-					_text = 'IDS_FOG_OF_WAR_RULES'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasRestrictions && isEmptyConcreteShips"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "hasRestrictions && isEmptyConcreteShips")
-				(args
-					_restrictionsEntityId = "restrictionEntity.id"
-					_isFromTooltip = true
-				)
-			)
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = "eventBattleName ? 'IDS_' + eventBattleName + '_DESCRIPTION' : ''"
-		)
-
-		(block
-			(bind visible "isFooterVisible")
 			(style (width = 100%))
 			(element TooltipSystemHorizontalDivider)
 			(element TooltipSystemStatusLine
@@ -351,8 +247,6 @@
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
 		(macro PRIME_TIME_DATA_SCOPE "battleTypeEntity")
-		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
-		(macro DIVISION_RESTRICTIONS_SCOPE "restrictionEntity")
 		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime")
 
 		(var brawlBattlesSeason:dhComponent = "getSingleComponent(CC.brawlBattlesSeason)")
@@ -379,9 +273,9 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.BRAWL_BATTLE + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.BRAWL_BATTLE + '_tiny.png'"
 			_headerText = "'IDS_' + SC.Common.BATTLE_TYPES.BRAWL_BATTLE"
 		)
 
@@ -406,91 +300,13 @@
 					(args
 						_unifiedStatus = "statusLineUnifiedStatusTop"
 						_text = "statusLineTextTop"
+						_showStatusIcon = "brawlStatusLineData._unifiedStatus != statusLineUnifiedStatusTop"
 					)
 				)
 			)
 		)
 
 		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isActiveBrawl"))
-		)
-		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
-			(bind visible "isActiveBrawl")
-			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
-				(controller $Instance renderer='TooltipSystemStatusLine'
-					(bind enabled "isActiveBrawl")
-					(args
-						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-						_text = "subst('IDS_STATUS_TEAM_AMOUNT', [], { _maxPlayers: toString(minPlayers)})"
-					)
-				)
-			)
-			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
-				(bind visible "isActiveBrawl && maxPlayers > 1")
-				
-				(controller $Instance renderer='TooltipSystemStatusLine'
-					(bind enabled "isActiveBrawl && maxPlayers > 1")
-					(args
-						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-						_text = "subst('IDS_STATUS_TEAM_MAX_SIZE', [], { _divisionSize: toString(maxPlayers) })"
-					)
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isActiveBrawl && hasBattleModifiers"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isActiveBrawl && hasBattleModifiers")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.HAS_BATTLE_MODIFIERS"
-					_text = "'IDS_UNIFIED_BATTLE_OPTION_HAS_BATTLE_MODIFIERS'"
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isActiveBrawl && isFogOfWar"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isActiveBrawl && isFogOfWar")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
-					_text = 'IDS_FOG_OF_WAR_RULES'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isActiveBrawl && hasRestrictions"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "isActiveBrawl && hasRestrictions")
-				(args
-					_restrictionsEntityId = "restrictionEntity.id"
-					_isFromTooltip = true
-				)
-			)
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = "tr(toUpper('IDS_' + SC.Common.BATTLE_TYPES.BRAWL_BATTLE + '_DESCRIPTION'))"
-		)
-
-		(block
-			(bind visible "isFooterVisible")
 			(style (width = 100%))
 			(element TooltipSystemHorizontalDivider)
 			(element TooltipSystemStatusLine
@@ -505,8 +321,6 @@
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
 		(macro PRIME_TIME_DATA_SCOPE "battleTypeEntity")
-		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
-		(macro DIVISION_RESTRICTIONS_SCOPE "restrictionEntity")
 		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime")
 		(macro TIME_OF_BATTLE_EVENT "battleTypeEntity")
 
@@ -528,10 +342,10 @@
 		(var rankPlayerComponent:dhComponent = "rankPlayerEntity.rankPlayer")
 		(var currentRank:number = "rankPlayerComponent ? rankPlayerComponent.rank : 0" (event "rankPlayerComponent.evChanged"))
 		(var currentStars:number = "rankPlayerComponent ? rankPlayerComponent.stars : 0" (event "rankPlayerComponent.evChanged"))
-	
+
 		(var rankInfoEntity:dhEntity = "getPrimaryEntity(CC.rankInfo, toString(currentRank) + '_' + toString(currentLeague))")
 		(var starsToNextRank:number = "rankInfoEntity ? rankInfoEntity.rankInfo.starsToNext : 0")
-	
+
 		(var currentRankSprintEntity:dhEntity = "getPrimaryEntity(CC.rankSprint, currentSprintId)")
 		(var isActiveSprint:bool = "currentSprintId != SC.Ranked.RANK_CONSTANTS.NO_SPRINT")
 		(var rankSprintFinishTime:number = "currentRankSprintEntity ? currentRankSprintEntity.rankSprint.finishTime : 0" (event "battleTypeEntity.rankSeason.evChanged"))
@@ -560,11 +374,11 @@
 																						: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
 		(var statusLineTextTop:str = "subst('IDS_SUBST_RANKED_SEASON_ENDS_IN', [], {_timeLeft: formattedSeasonTimeStamp })")
 		(var sprintStatusLineText:str = "subst('IDS_SUBST_RANKED_SPRINT_ENDS_IN', [], {	_timeLeft: formattedSprintTimeStamp })")
-		
+
 		(var accountRank:dhComponent = "getSingleComponent(CC.accountSelf)")
 		(var playerCurrentRank:number = "accountRank.rank" (event "accountRank.evChanged"))
 		(var playerCurrentLeague:number = "accountRank.league" (event "accountRank.evChanged"))
-		
+
 		(var isCurrentRankVisible:bool = "accountRank && playerCurrentRank > 0 && playerCurrentLeague > 0")
 		(var playerLeagueAndRankText:str = "isCurrentRankVisible ? subst('IDS_YOUR_RANK_IN_LEAGUE_' + playerCurrentLeague, [], {_rankId: toString(playerCurrentRank)}) : ''")
 
@@ -594,15 +408,18 @@
 														:	subst(	'IDS_RANKED_BATTLES_SEASON_LAST_SPRINT',		[], {_seasonId: seasonTitle})")
 
 		(var currentMatchingLeague:number = "rankStateComponent ? rankStateComponent.matchingLeague : null" (event "rankStateComponent.evMatchingLeagueChanged"))
+
+		(var isSprintEndTimeVisible:bool = "isSprintFinishTimeVisible && periodStatus != SPRINT_ANNOUNCEMENT")
+		(var isRepeatedStatusIcon:bool = "!isSprintEndTimeVisible ? rankStatusLineData[periodStatus]._unifiedStatus == statusLineUnifiedStatusTop : SC.Ui_styles.UNIFIED_STATUS.CALENDAR == statusLineUnifiedStatusTop")
 	)
 	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.RANKED_BATTLE + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.RANKED_BATTLE + '_tiny.png'"
 			_headerText = "'IDS_' + toUpper(SC.Common.BATTLE_TYPES.RANKED_BATTLE)"
 		)
 		(block
@@ -619,19 +436,7 @@
 				)
 			)
 		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "playerLeagueAndRankText"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "playerLeagueAndRankText")
-				(args
-					_text = "playerLeagueAndRankText"
-				)
-			)
-		)
+
 		(element TooltipSystemHorizontalDivider)
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
 			
@@ -641,16 +446,18 @@
 					_text = "rankStatusLineData[periodStatus]._text"
 				)
 			)
+
 			
-			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isSprintFinishTimeVisible && periodStatus != SPRINT_ANNOUNCEMENT"
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isSprintEndTimeVisible"
 				(controller $Instance renderer='TooltipSystemStatusLine'
-					(bind enabled "isSprintFinishTimeVisible && isSprintFinishTimeVisible && periodStatus != SPRINT_ANNOUNCEMENT")
+					(bind enabled "isSprintEndTimeVisible")
 					(args
 						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
 						_text = "sprintStatusLineText"
 					)
 				)
 			)
+
 			
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isRankSeasonActive"
 				(controller $Instance renderer='TooltipSystemStatusLine'
@@ -658,62 +465,13 @@
 					(args
 						_unifiedStatus = "statusLineUnifiedStatusTop"
 						_text = "statusLineTextTop"
+						_showStatusIcon = "rankStatusLineData[periodStatus]._unifiedStatus != statusLineUnifiedStatusTop"
 					)
 				)
 			)
 		)
 
 		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRankSeasonActive"))
-		)
-		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
-			(bind visible "isRankSeasonActive")
-			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
-				(element TooltipSystemStatusLine
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-					_text = "subst('IDS_STATUS_TEAM_AMOUNT', [], { _maxPlayers: toString(maxPlayers)})"
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRankSeasonActive && hasBattleModifiers"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isRankSeasonActive && hasBattleModifiers")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.HAS_BATTLE_MODIFIERS"
-					_text = 'IDS_UNIFIED_BATTLE_OPTION_HAS_BATTLE_MODIFIERS'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasRestrictions"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "hasRestrictions")
-				(args
-					_restrictionsEntityId = "restrictionEntity.id"
-					_isFromTooltip = true
-				)
-			)
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = 'IDS_RANKEDBATTLE_DESCRIPTION'
-		)
-
-		(block
-			(bind visible "isFooterVisible")
 			(style (width = 100%))
 			(element TooltipSystemHorizontalDivider)
 			(element TooltipSystemStatusLine
@@ -727,8 +485,6 @@
 (def element ClanBattleTypeTooltip (_battleTypeEntityId:number, _isFromPort:bool = false)
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
-		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
-		(macro DIVISION_RESTRICTIONS_SCOPE "restrictionEntity")
 
 		(var primeTimesChosenCollection:dhCollection = "getCollection(CC.clanBattlePrimeTime).getChildByPath('chosen')")
 		(var chosenPrimeTimeEntity:dhEntity = "primeTimesChosenCollection.items.length ? primeTimesChosenCollection.items[0] : null" (event "primeTimesChosenCollection.evUpdated"))
@@ -753,7 +509,7 @@
 									isUpcoming				? tr(subst('IDS_PRIME_TIME_TILL_SESSION_START',[],{ _value: primeTimeLeftToStart })) :
 									isCurrent				? tr(subst('IDS_PRIME_TIME_TILL_SESSION_END',[],{ _value: primeTimeLeftToFinish }))
 															: 'IDS_CLAN_BATTLES_NO_CHOSEN_PRIMETIME'")
-		
+
 		(var sessionInfoUnifiedStatus:str = "	!isShowPrimeTimeInfo	? SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION :
 												isUpcoming				? SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION :
 												isCurrent				? SC.Ui_styles.UNIFIED_STATUS.DATE
@@ -768,14 +524,14 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.CLAN_BATTLE + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.CLAN_BATTLE + '_tiny.png'"
 			_headerText = "'IDS_' + toUpper(SC.Common.BATTLE_TYPES.CLAN_BATTLE)"
 		)
-		
+
 		(element TooltipSystemHorizontalDivider)
-		
+
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
 				(element TooltipSystemStatusLine
@@ -787,58 +543,8 @@
 				(element TooltipSystemStatusLine
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
 					_text = "battleSeasonEnd"
+					_showStatusIcon = "sessionInfoUnifiedStatus != SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
 				)
-			)
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemStatusLine
-			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-			_text = "subst('IDS_STATUS_TEAM_AMOUNT', [], { _maxPlayers: toString(maxPlayers)})"
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isFogOfWar"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isFogOfWar")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
-					_text = 'IDS_FOG_OF_WAR_RULES'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasRestrictions"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "hasRestrictions")
-				(args
-					_restrictionsEntityId = "restrictionEntity.id"
-					_isFromTooltip = true
-				)
-			)
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = 'IDS_CLANBATTLE_DESCRIPTION'
-		)
-
-		(block
-			(bind visible "isFooterVisible")
-			(style (width = 100%))
-			(element TooltipSystemHorizontalDivider)
-			(element TooltipSystemStatusLine
-				_unifiedStatus = "mouseInstructionsParams._unifiedStatus"
-				_text = "mouseInstructionsParams._text"
 			)
 		)
 	)
@@ -849,13 +555,11 @@
 		(var battleTypeEntity:dhEntity = "getEntity(_battleTypeEntityId)")
 		(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
 		(var operationComponent:dhComponent = "battleTypeEntity.operation")
-		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
 
 		(var battleType:str = "battleTypeComponent.battleType ?: ''")
 		(var operationName:str = "operationComponent.gpName ?: ''")
 		(var customIconName:str = "operationComponent.customIconName ?: ''")
 		(var headerIconName:str = "customIconName ?: SC.Common.BATTLE_TYPES.PVE_BATTLE")
-		(var isFogOfWar:bool = "battleTypeEntity.battleSeasonInfo.isFogOfWar")
 
 		
 		(var pveMouseInstructionText:str = "subst('IDS_MOUSE_INSTRUCTION_CHOOSE', [], {_battleType: tr('IDS_' + operationName + '_NAME')})")
@@ -867,12 +571,12 @@
 	)
 	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-	
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + headerIconName + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + headerIconName + '_tiny.png'"
 			_headerText = "'IDS_' + operationName + '_NAME'"
 		)
 
@@ -884,42 +588,6 @@
 				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
 				_text = "timeSeasonLeft"
 			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isFogOfWar"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isFogOfWar")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
-					_text = 'IDS_FOG_OF_WAR_RULES'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasRestrictions"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "hasRestrictions")
-				(args
-					_restrictionsEntityId = "restrictionEntity.id"
-					_isFromTooltip = true
-					_height = "auto"
-				)
-			)
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = "operationName ? 'IDS_' + toUpper(operationName) + '_PVE_TOOLTIP_GOAL' : ''"
 		)
 
 		(element TooltipSystemHorizontalDivider)
@@ -935,13 +603,11 @@
 		(var battleTypeEntity:dhEntity = "getEntity(_battleTypeEntityId)")
 		(var battleTypeComponent:dhComponent = "battleTypeEntity.battleType")
 		(var trialComponent:dhComponent = "battleTypeEntity.trial")
-		(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
 
 		(var battleType:str = "battleTypeComponent.battleType ?: ''")
 		(var trialName:str = "trialComponent.gpName ?: ''")
 		(var customIconName:str = "trialComponent.customIconName ?: ''")
 		(var headerIconName:str = "customIconName ?: SC.Common.BATTLE_TYPES.TRIAL_BATTLE")
-		(var isFogOfWar:bool = "battleTypeEntity.battleSeasonInfo.isFogOfWar")
 
 		
 		(var pveMouseInstructionText:str = "subst('IDS_MOUSE_INSTRUCTION_CHOOSE', [], {_battleType: 'IDS_' + trialName + '_NAME'})")
@@ -956,9 +622,9 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + headerIconName + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + headerIconName + '_tiny.png'"
 			_headerText = "trialName ? 'IDS_' + trialName + '_NAME' : ''"
 		)
 
@@ -971,49 +637,6 @@
 				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
 				_text = "timeSeasonLeft"
 			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "isFogOfWar")
-			)
-		)
-
-		(block
-			(style (width = 100%))
-
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isFogOfWar")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
-					_text = 'IDS_FOG_OF_WAR_RULES'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "hasRestrictions")
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "hasRestrictions")
-				(args
-					_restrictionsEntityId = "restrictionEntity.id"
-					_isFromTooltip = true
-					_height = "auto"
-				)
-			)
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = "trialName ? 'IDS_' + toUpper(trialName) + '_GOAL' : ''"
 		)
 
 		(element TooltipSystemHorizontalDivider)
@@ -1038,15 +661,10 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.TRIAL_BATTLE + '.png'"
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.TRIAL_BATTLE + '_tiny.png'"
 			_headerText = "'IDS_' + SC.Common.BATTLE_TYPES.TRIAL_BATTLE"
-		)
-
-		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText="'IDS_' + SC.Common.BATTLE_TYPES.TRIAL_BATTLE + '_DESCRIPTION'"
 		)
 
 		(element TooltipSystemHorizontalDivider)
@@ -1066,110 +684,51 @@
 		)
 
 		(var isTimeVisible:bool = "isRatingSeasonActive || isRatingSeasonInactive")
+		(var isPrimeTimeVisible:bool = "isTimeVisible && isRatingSeasonActive && statusLinePrimeData")
 	)
 
 	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageWidth = 80px
-			_imageHeight = 80px
-			_imageUrl = 'url:../service_kit/battle_types/RatingBattle.png'
+			_imageWidth = 20px
+			_imageHeight = 20px
+			_imageUrl = 'url:../service_kit/battle_types/RatingBattle_tiny.png'
 			_headerText = 'IDS_RATINGBATTLE'
 		)
 
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "isTimeVisible")
-			)
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTimeVisible"))
 		)
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="isTimeVisible"
-			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isPrimeTimeVisible"
 				(controller $Instance renderer='TooltipSystemStatusLine'
-					(bind enabled "isTimeVisible && isRatingSeasonActive && statusLinePrimeData")
+					(bind enabled "isPrimeTimeVisible")
 					(args
 						_unifiedStatus =	"statusLinePrimeData.unifiedStatus"
 						_text =				"statusLinePrimeData.text"
 					)
 				)
 			)
-			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
+
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isTimeVisible && statusLineSeasonData"
 				(controller $Instance renderer='TooltipSystemStatusLine'
 					(bind enabled "isTimeVisible && statusLineSeasonData")
 					(args
 						_unifiedStatus =	"statusLineSeasonData.unifiedStatus"
 						_text =				"statusLineSeasonData.text"
+						_showStatusIcon =	"!isPrimeTimeVisible || statusLinePrimeData.unifiedStatus != statusLineSeasonData.unifiedStatus"
 					)
 				)
 			)
 		)
 
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRatingSeasonActive"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemDescriptionText'
-				(bind enabled "isRatingSeasonActive")
-				(args
-					_descriptionText = "subst('IDS_STATUS_TEAM_AMOUNT', [], { _maxPlayers: toString(maxPlayers)})"
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isFogOfWar"))
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isFogOfWar")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.SHIP_NOT_DETECTED"
-					_text = 'IDS_FOG_OF_WAR_RULES'
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "hasRestrictions")
-			)
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='ShipRestrictions'
-				(bind enabled "hasRestrictions")
-				(args
-					_restrictionsEntityId = "restrictionEntity.id"
-					_isFromTooltip = true
-				)
-			)
-		)
-
 		(element TooltipSystemHorizontalDivider)
-		(element TooltipSystemDescriptionText
-			_descriptionText = 'IDS_RATINGBATTLE_DESCRIPTION'
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "isFooterVisible")
-			)
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isFooterVisible")
-				(args
-					_unifiedStatus = "mouseInstructionsParams._unifiedStatus"
-					_text = "mouseInstructionsParams._text"
-				)
-			)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "mouseInstructionsParams._unifiedStatus"
+			_text = "mouseInstructionsParams._text"
 		)
 	)
 )

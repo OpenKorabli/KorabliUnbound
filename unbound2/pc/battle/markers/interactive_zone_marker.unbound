@@ -28,7 +28,7 @@
 )
 
 
-(def element InteractiveResourceZoneIcon (_markerEntity:gfx) layout=true
+(def element InteractiveResourceZoneIcon (_markerEntity:gfx)
 	(scope
 		
 		(var resourceZoneEntity:gfx = "_markerEntity")
@@ -45,11 +45,17 @@
 	)
 )
 
-(def element InteractiveDropZoneIcon (_markerEntity:gfx) layout=true
+(def element InteractiveDropZoneIcon (_markerEntity:gfx, _relationValue:number="SC.Battle.PLAYER_RELATION.SELF")
 	(scope
 		(var dropComponent:gfx = "_markerEntity.drop" (event "_markerEntity.evAdded"))
 		(var isActive:bool = "dropComponent.isActive" (event "dropComponent.evIsActiveChanged"))
 		(var markerName:str = "isActive ? dropComponent.markerNameActive : dropComponent.markerNameInactive")
+	)
+
+	(bind colorTransform "	!isIn(_markerEntity.interactiveZone.type, INTERACTIVE_ZONE_TYPES_FOR_COLOR_TRANSFORM) 	? CT_NONE :
+							isIn(_relationValue, SC.Battle.PLAYER_RELATION.ALLIES) 									? CT_ALLY :
+							_relationValue == SC.Battle.PLAYER_RELATION.ENEMY 										? CT_ENEMY
+																													: CT_NONE"
 	)
 
 	(block
@@ -60,13 +66,35 @@
 	)
 )
 
-(def element WorldInteractiveZoneMarker (_markerEntity:gfx) layout=true
-  	(scope
+(def element InteractiveDropZoneCountDown (_markerEntity:gfx, _timerComponent:dhComponent)
+	(scope
+		(var dropComponent:gfx = "_markerEntity.drop" (event "_markerEntity.evAdded"))
+		(var isActive:bool = "dropComponent.isActive" (event "dropComponent.evIsActiveChanged"))
+
+		(var countDownComponent:gfx = "_markerEntity.countDown" (event "_markerEntity.evAdded"))
+		(var remainTime:number = "countDownComponent ? countDownComponent.endTime - _timerComponent.currentTime : 0" (event "_timerComponent.evFrequent") (event "countDownComponent.evEndTimeChanged"))
+
+		(macro HUMAN_READABLE_COUNTDOWN_SCOPE_MM_SS "max(0, remainTime)")
+	)
+
+	(tf
+		(class $TextDefaultBoldNM)
+		(style (textColor = "C_NEUTRAL"))
+		(bind text "countdownText")
+	)
+)
+
+(def element WorldInteractiveZoneMarker (_markerEntity:gfx)
+	(scope
+	 	(event evShow)
+		(event evHide)
+
 		(macro GET_MARKER_ENTITY_COMPONENT 'worldMarkerScale')
 		(macro GET_MARKER_ENTITY_COMPONENT 'distance')
 		(macro GET_MARKER_ENTITY_COMPONENT 'progress')
 		(macro GET_MARKER_ENTITY_COMPONENT 'interactiveZone')
-		(macro GET_MARKER_ENTITY_COMPONENT 'resourceHolder')		
+		(macro GET_MARKER_ENTITY_COMPONENT 'resourceHolder')
+		(macro GET_MARKER_ENTITY_COMPONENT 'relation')
 
 		
 		(struct altVisionMode = GET_PREF_STR(_option = "'battle.altVision.mode'"))
@@ -88,14 +116,13 @@
 		(var farAdaptiveAltVisionMode:bool = "isAdaptiveAltVisionMode && distanceType <= SC.Battle.DISTANCE_TYPE.FAR")
 		(var distanceItemVisibility:bool = "(!(isIn(distanceType, [SC.Battle.DISTANCE_TYPE.TACTICAL, SC.Battle.DISTANCE_TYPE.FARTHEST])) || isFullAltVisionMode || !worldMarkerScaleComponent)")
 
-
 		(var type:number = "interactiveZoneComponent.type")
 
 		(var progressValue:number = "progressComponent ? progressComponent.value : 0" (event "progressComponent.evChanged"))
 		(var showProgressText:bool = "progressValue > 0 && (progressComponent ? progressComponent.max : 0) > 1")
 		(macro SCOPE_HIGHLIGHT_MARKER_ON_WORLD_MOUSE_OVER)
-	 	(event evShow)
-		(event evHide)
+
+		(var relationValue:number = "relationComponent.value" (event "relationComponent.evChanged"))
 
 		(var timeoutComponent:gfx = "_markerEntity.timeout" (event "_markerEntity.evAdded"))
 
@@ -117,13 +144,13 @@
 	(bind scaleX "markerScale")
 	(bind scaleY "markerScale")
 	(bind alpha "markerScale")
-	
+
 	(style
 		(position = "absolute")
 		(pivotX = 50%)
 		(pivotY = 50%)
 	)
-	
+
 	(block
 		(controller $Animation
 			(bindcall  play
@@ -156,6 +183,20 @@
 			)
 
 			(block
+				(style (marginBottom = "XS"))
+
+				(macro EFFECT_HIGHLIGHT_MARKER_ON_MOUSE_OVER)
+
+				(controller $Instance renderer='InteractiveDropZoneCountDown'
+					(bind enabled "type == SC.Battle.INTERACTIVE_ZONE_TYPES.SUPPORT_BUOY && !isTimeoutActive && distanceItemVisibility")
+					(args
+						_markerEntity = "_markerEntity"
+						_timerComponent = "timerComponent"
+					)
+				)
+			)
+
+			(block
 				(macro EFFECT_HIGHLIGHT_MARKER_ON_MOUSE_OVER)
 				(bind visible "isTimeoutActive && distanceItemVisibility")
 				(style (marginBottom = "XS"))
@@ -181,21 +222,32 @@
 		(block 
 			(macro EFFECT_HIGHLIGHT_MARKER_ON_MOUSE_OVER)
 
-			(controller $Instance (renderer = 'InteractiveResourceZoneIcon')
+			(controller $Instance renderer='InteractiveResourceZoneIcon'
 				(bind enabled "type == SC.Battle.INTERACTIVE_ZONE_TYPES.RESOURCE_ZONE && resourceHolderComponent")
-				(args _markerEntity="_markerEntity")
+				(args
+					_markerEntity = "_markerEntity"
+				)
 			)
 
-			(controller $Instance (renderer = 'InteractiveDropZoneIcon')
-				(bind enabled "type == SC.Battle.INTERACTIVE_ZONE_TYPES.DROP_ZONE")
-				(args _markerEntity="_markerEntity")
+			(controller $Instance renderer='InteractiveDropZoneIcon'
+				(bind enabled "isIn(type, [SC.Battle.INTERACTIVE_ZONE_TYPES.DROP_ZONE, SC.Battle.INTERACTIVE_ZONE_TYPES.SUPPORT_BUOY])")
+				(args
+					_markerEntity 	= "_markerEntity"
+					_relationValue 	= "relationValue"
+				)
 			)
 
 			(block
-				(style 
+				(style
 					(position = "absolute")
 					(left = 50%)
 					(top = 50%)
+				)
+
+				(bind colorTransform "	!isIn(type, INTERACTIVE_ZONE_TYPES_FOR_COLOR_TRANSFORM) ? CT_NONE :
+										isIn(relationValue, SC.Battle.PLAYER_RELATION.ALLIES) 	? CT_ALLY :
+										relationValue == SC.Battle.PLAYER_RELATION.ENEMY 		? CT_ENEMY
+																								: CT_NONE"
 				)
 
 				(controller $Instance renderer='InteractiveZoneTimeoutProgressBar'

@@ -1,5 +1,9 @@
 (def constant MAP_DROP_ZONE_ICON_SIZE 30)
 
+(def constant INTERACTIVE_ZONE_TYPES_FOR_COLOR_TRANSFORM "[
+	SC.Battle.INTERACTIVE_ZONE_TYPES.SUPPORT_BUOY
+]")
+
 (def constant INTERACTIVE_ZONES_SETTINGS "[
 		{color: 0xFFFFFF, alpha: 0},
 		{color: 0xFFFFFF, alpha: 0},
@@ -13,24 +17,24 @@
 ]")
 
 (def constant COLORED_BY_RELATION_INTERACTIVE_ZONES_SETTINGS "[
-		{color: 0x5EDABB, alpha: 0.2},
+		{color: 0xFFFFFF, alpha: 0.2},
 		{color: 0x5EDABB, alpha: 0.2},
 		{color: 0xF25755, alpha: 0.2}
 ]")
 
-(def element MapInteractiveZoneMarker (_markerEntity:gfx, _mapScale:number, _itemScale:number, _scaleRatio:number) layout=true
+(def element MapInteractiveZoneMarker (_markerEntity:gfx, _mapScale:number, _itemScale:number, _scaleRatio:number)
 	(scope
+		(event evShow)
+		(event evHide)
+
 		(var markerScale:number = "_itemScale / _mapScale")
 
 		(var type:number = "_markerEntity.interactiveZone.type")
 		(var visualType:number = "_markerEntity.interactiveZone.visualType")
 		(var isInversed:bool = "visualType == SC.Battle.INTERACTIVE_ZONE_VISUAL_TYPE.INVERSED")
-		(var relation:number = "_markerEntity.relation.value" (event "_markerEntity.relation.evChanged"))
-		(var circleSettings:dict = "visualType == SC.Battle.INTERACTIVE_ZONE_VISUAL_TYPE.FILLED ? COLORED_BY_RELATION_INTERACTIVE_ZONES_SETTINGS[relation] : INTERACTIVE_ZONES_SETTINGS[type]")
+		(var relationValue:number = "_markerEntity.relation.value" (event "_markerEntity.relation.evChanged"))
+		(var circleSettings:dict = "visualType == SC.Battle.INTERACTIVE_ZONE_VISUAL_TYPE.FILLED ? COLORED_BY_RELATION_INTERACTIVE_ZONES_SETTINGS[relationValue] : INTERACTIVE_ZONES_SETTINGS[type]")
 		(var circleRadius:number = "_markerEntity.circle.radius" (event "_markerEntity.circle.evRadiusChanged"))
-
-		(event evShow)
-		(event evHide)
 	)
 
 	(dispatch evShow on=addedToStage)
@@ -75,17 +79,22 @@
 	(block
 		(style (position = "absolute"))
 
-		(controller $Instance (renderer = 'MapInteractiveZoneIndicator') 
+		(controller $Instance renderer='MapInteractiveZoneIndicator'
 			(bind enabled "type == SC.Battle.INTERACTIVE_ZONE_TYPES.RESOURCE_ZONE")
-			(args entity="_markerEntity")
+			(args
+				_markerEntity = "_markerEntity"
+			)
 			(exprs
 				(macro BIND_FAIR_SCALE "markerScale")
 			)
 		)
 
-		(controller $Instance (renderer = 'MapDropZoneIndicator') 
-			(bind enabled "type == SC.Battle.INTERACTIVE_ZONE_TYPES.DROP_ZONE")
-			(args entity="_markerEntity")
+		(controller $Instance renderer='MapDropZoneIndicator'
+			(bind enabled "isIn(type, [SC.Battle.INTERACTIVE_ZONE_TYPES.DROP_ZONE, SC.Battle.INTERACTIVE_ZONE_TYPES.SUPPORT_BUOY])")
+			(args
+				_markerEntity = "_markerEntity"
+				_relationValue = "relationValue"
+			)
 			(exprs
 				(macro BIND_FAIR_SCALE "markerScale")
 			)
@@ -126,9 +135,9 @@
 	
 )
 
-(def element MapInteractiveZoneIndicator (entity:gfx) layout=true
+(def element MapInteractiveZoneIndicator (_markerEntity:gfx)
 	(scope
-		(var resourceHolder:gfx = "entity.resourceHolder" (event "entity.evAdded"))
+		(var resourceHolder:gfx = "_markerEntity.resourceHolder" (event "_markerEntity.evAdded"))
 		(var resourceType:number = "resourceHolder.resourceType")
 		(var loading:bool = "resourceHolder.loading")
 		(var resourceName:str = "resourceHolder ? toLower(resourceHolder.resourceName) + (loading ? '_gathering' : '_unloading') : null")
@@ -150,16 +159,23 @@
 	)
 )
 
-(def element MapDropZoneIndicator (entity:gfx) layout=true
+(def element MapDropZoneIndicator (_markerEntity:gfx, _relationValue:number="SC.Battle.PLAYER_RELATION.SELF")
 	(scope
-		(var dropComponent:gfx = "entity.drop" (event "entity.evAdded"))
+		(var dropComponent:gfx = "_markerEntity.drop" (event "_markerEntity.evAdded"))
 		(var isActive:bool = "dropComponent.isActive" (event "dropComponent.evIsActiveChanged"))
 		(var markerName:str = "isActive ? dropComponent.markerNameActive : dropComponent.markerNameInactive")
-		(macro SCOPE_HIGHLIGHT_MARKER_ON_MAP_MOUSE_OVER "entity")
+		(macro SCOPE_HIGHLIGHT_MARKER_ON_MAP_MOUSE_OVER "_markerEntity")
 	)
 
 	(style
-		(width = "MAP_DROP_ZONE_ICON_SIZE") (height = "MAP_DROP_ZONE_ICON_SIZE")
+		(width = "MAP_DROP_ZONE_ICON_SIZE")
+		(height = "MAP_DROP_ZONE_ICON_SIZE")
+	)
+
+	(bind colorTransform "	!isIn(_markerEntity.interactiveZone.type, INTERACTIVE_ZONE_TYPES_FOR_COLOR_TRANSFORM) 	? CT_NONE :
+							isIn(_relationValue, SC.Battle.PLAYER_RELATION.ALLIES) 									? CT_ALLY :
+							_relationValue == SC.Battle.PLAYER_RELATION.ENEMY 										? CT_ENEMY
+																													: CT_NONE"
 	)
 
 	(block
@@ -180,22 +196,22 @@
 				(position = "absolute")
 			)
 
-			(controller $Instance (renderer = 'MapInteractiveZoneTimeoutIndicator')
+			(controller $Instance renderer='MapInteractiveZoneTimeoutIndicator'
 				
 				(args
-					timeoutEntity="entity"
+					_timeoutEntity = "_markerEntity"
 					
 					
-					_indicatorType="ZONE_TIMEOUT_TYPES.CIRCLE"
+					_indicatorType = "ZONE_TIMEOUT_TYPES.CIRCLE"
 				)
 			)
 		)
 	)
 )
 
-(def element MapInteractiveZoneTimeoutIndicator (timeoutEntity:gfx, _indicatorType:number) layout=true
+(def element MapInteractiveZoneTimeoutIndicator (_timeoutEntity:gfx, _indicatorType:number)
 	(scope
-		(var timeoutComponent:gfx = "timeoutEntity.timeout" (event "timeoutEntity.evAdded"))
+		(var timeoutComponent:gfx = "_timeoutEntity.timeout" (event "_timeoutEntity.evAdded"))
 		(var timeoutTime:number = "timeoutComponent.time" (event "timeoutComponent.evTimeChanged"))
 		(var totalTime:number = "timeoutComponent.total")
 		(var timeoutIsRunning:bool = "timeoutComponent.running" (event "timeoutComponent.evRunningChanged"))

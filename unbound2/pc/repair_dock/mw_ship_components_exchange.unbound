@@ -7,6 +7,7 @@
 (def constant SHIP_COMPONENT_ITEM_WIDTH 200px)
 (def constant SHIP_COMPONENT_ITEM_HEIGHT 200px)
 (def constant SHIP_COMPONENT_SELECT_SIZE 80px)
+(def constant SHIP_COMPONENTS_CONTENT_WIDTH "3 * (SHIP_COMPONENT_ITEM_SIZE.WIDTH + M)")
 
 (def element ModalWindowShipComponentsExchange ()
 	(macro MODAL_WINDOW_INIT)
@@ -22,6 +23,13 @@
 		(var newExchangeableShipsEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.EXCHANGEABLE_SHIP)")
 		(var newExchangeableShipsCount:number = "newExchangeableShipsEntity.newContent.count ?: 0" (event "newExchangeableShipsEntity.newContent.evCountChanged"))
 		(var isNewExchangeableShipsMarker:bool = "newExchangeableShipsCount > 0")
+	)
+
+	(bindcall externalCall
+		"'direct.action'"
+		"['exchangeableShip.selectShipMaterialLevel', {}]"
+		init=false watch=false
+		on='addedToStage'
 	)
 
 	(bindcall externalCall
@@ -53,9 +61,13 @@
 			_backButtonText = 'IDS_RETURN_FROM_MODAL_WINDOW_BUTTON'
 			_paddingRight = "M"
 			_paddingLeft = "M"
-			_methods = "[{	type: 'inputMapping.onRequest',
-							name: 'closeShipComponentsModal',
-							args: {}}]"
+			_methods = "[
+				{
+					type: 'inputMapping.onRequest',
+					name: 'closeShipComponentsModal',
+					args: {}
+				}
+			]"
 		)
 
 		(block
@@ -71,15 +83,17 @@
 
 	(hblock
 		(style
-			(width = 1116px)
 			(height = 100%)
 			(paddingBottom = "LS")
 		)
 
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
-			(class $Fullsize)
-			(style (marginRight = "M"))
+			(style
+				(width = "SHIP_COMPONENTS_CONTENT_WIDTH")
+				(height = 100%)
+				(marginRight = "M")
+			)
 
 			(controller $Instance renderer='ShipComponentsList'
 				(bind enabled "isAnyShipAvailableToExchange")
@@ -107,8 +121,9 @@
 
 (def element ShipComponentsManagement (_isAnyShipAvailableToExchange:bool = true)
 	(scope
-		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
-		(var percentRate:number = "repairDockDataEntity.repairDockData.exchangeProbability" (event "repairDockDataEntity.repairDockData.evExchangeProbabilityChanged"))
+		(var repairDockData:dhComponent = "getSingleComponent(CC.repairDockData)")
+		(var percentRate:number = "repairDockData.exchangeProbability" (event "repairDockData.evExchangeProbabilityChanged"))
+		(var exchangeWarningState:number = "repairDockData.exchangeWarningState ?: 0" (event "repairDockData.evExchangeWarningStateChanged"))
 	)
 
 	(style (width = 420px))
@@ -117,18 +132,9 @@
 		(class $FullsizeAbsolute)
 		(style
 			(hitTest = false)
-			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-			(scale9grid = 2)
-			(alpha = 0.1)
-		)
-	)
-
-	(block
-		(class $FullsizeAbsolute)
-		(style
-			(hitTest = false)
 			(backgroundSize = "cover")
 			(backgroundImage = 'url:../repair_dock/bg_components_exchange.png')
+			(borderRadius = "XS")
 		)
 	)
 
@@ -171,7 +177,7 @@
 				(bind enabled "!_isAnyShipAvailableToExchange")
 				(args
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.ATTENTION"
-					_text = 'IDS_SHIP_COMPONENTS_EXCHANGE_WARNING'
+					_text = "'IDS_SHIP_COMPONENTS_EXCHANGE_WARNING_' + exchangeWarningState"
 					_width = 100%
 				)
 			)
@@ -221,10 +227,10 @@
 	(scope
 		(var exchangeableShipMaterialsSorted:dhCollection = "getCollection(CC.shipMaterial).getChildByPath('exchangeable.sorted')")
 
-		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
-		(var percentRate:number = "repairDockDataEntity.repairDockData.exchangeProbability" (event "repairDockDataEntity.repairDockData.evExchangeProbabilityChanged"))
+		(var repairDockData:dhComponent = "getSingleComponent(CC.repairDockData)")
+		(var percentRate:number = "repairDockData.exchangeProbability" (event "repairDockData.evExchangeProbabilityChanged"))
 
-		(var selectedLevel:number = "repairDockDataEntity.repairDockData.selectedShipMaterialLevel ?: 0" (event "repairDockDataEntity.repairDockData.evSelectedShipMaterialLevelChanged"))
+		(var selectedLevel:number = "repairDockData.selectedShipMaterialLevel ?: 0" (event "repairDockData.evSelectedShipMaterialLevelChanged"))
 		(var isLevelSelected:bool = "toBool(selectedLevel)")
 	)
 	(style (width = 100%))
@@ -267,12 +273,18 @@
 			_enabled = "isLevelSelected"
 			_defaultFocused = true
 			_focusIndex = 1
-			_methods = "[	{	type: 'inputMapping.onAction',
-								name: 'ShipShardsProxyUSS.exchangeShipMaterials',
-								args: {shipLevel: selectedLevel} },
-							{	type: 'inputMapping.onRequest',
-								name: 'closeShipComponentsModal',
-								args: {} }]"
+			_methods = "[
+				{
+					type: 'inputMapping.onAction',
+					name: 'ShipShardsProxyUSS.exchangeShipMaterials',
+					args: {shipLevel: selectedLevel}
+				},
+				{
+					type: 'inputMapping.onRequest',
+					name: 'closeShipComponentsModal',
+					args: {}
+				}
+			]"
 		)
 
 		(block
@@ -331,9 +343,13 @@
 		_width = 155px
 		_focusIndex = 2
 		_label = 'IDS_SHIP_COMPONENTS_LIST_ALL'
-		_methods = "[{	type: 'inputMapping.onRequest',
-						name: 'openShipComponentsList',
-						args: {} }]"
+		_methods = "[
+			{
+				type: 'inputMapping.onRequest',
+				name: 'openShipComponentsList',
+				args: {}
+			}
+		]"
 	)
 )
 
@@ -387,7 +403,13 @@
 
 			(macro STRUCT_CLICK_HANDLER
 				_mouseHandler = "mouseHandler"
-				_methods = "[ { type: 'direct.action', name: 'exchangeableShip.selectShipMaterialLevel', args: { newShipMaterialLevel: shipMaterialInfo.shipLevel } } ]"
+				_methods = "[
+					{
+						type: 'direct.action',
+						name: 'exchangeableShip.selectShipMaterialLevel',
+						args: { newShipMaterialLevel: shipMaterialInfo.shipLevel }
+					}
+				]"
 			)
 		)
 	)

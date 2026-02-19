@@ -260,9 +260,24 @@
 		(bind selectedIndex "selectedIndex + 1" init=false watch=false (event "evScrollToNext"))
 	)
 
+	(bindcall externalCall
+		'direct.action'
+		"['tileSlider.holdIndex', {tileId: tile.tileId}]"
+		init=false watch=false
+		on='rollOver'
+	)
+
+	(bindcall externalCall
+		'direct.action'
+		"['tileSlider.unholdIndex', {tileId: tile.tileId}]"
+		init=false watch=false
+		on='rollOut'
+	)
+
 	(style
 		(bind width "EVENT_BANNER_SIZE[tile.tileSize].bannerWidth")
 		(bind height "EVENT_BANNER_SIZE[tile.tileSize].bannerHeight")
+		(backgroundColor = "NO_COLOR")
 	)
 
 	(scrollArea
@@ -828,7 +843,10 @@
 		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
 
 		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
-		(var hasReadyToRepairShip:bool = "repairDockDataEntity.hasComponent(CC.newItem)")
+		(var isRepairDockDataNew:bool = "repairDockDataEntity.hasComponent(CC.newItem)")
+
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.REPAIR_DOCK"))
+		(var hasReadyToRepairShip:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION")
 
 		(var newShipComponentsEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SHIP_COMPONENTS)")
 		(var newShipComponentsCount:number = "newShipComponentsEntity.newContent.count ?: 0" (event "newShipComponentsEntity.newContent.evCountChanged"))
@@ -838,7 +856,7 @@
 		(var newExchangeableShipsCount:number = "newExchangeableShipsEntity.newContent.count ?: 0" (event "newExchangeableShipsEntity.newContent.evCountChanged"))
 		(var isNewExchangeableShipsMarkerVisible:bool = "newExchangeableShipsCount > 0")
 
-		(var isNewMarkerVisible:bool = "isNewShipsMarkerVisible || isNewExchangeableShipsMarkerVisible")
+		(var isNewMarkerVisible:bool = "isRepairDockDataNew || isNewShipsMarkerVisible || isNewExchangeableShipsMarkerVisible")
 
 		(var exchangeableShips:dhCollection = "getCollectionByPath(CC.exchangeableShip, 'sorted')")
 
@@ -873,12 +891,17 @@
 				type: 'inputMapping.onAction',
 				name: 'navigateTo',
 				args: { route: SC.Ui_windows.ROUTE.REPAIR_DOCK }
+			},
+			{
+				type: isRepairDockDataNew ? 'inputMapping.onAction' : '',
+				name: 'makeSeen',
+				args: { entityId: repairDockDataEntity.id }
 			}
 		]"
 	)
+
 	(hblock
 		(class $EventBanner)
-
 		(element EventBannerTitle
 			_title = 'IDS_DOCK_BANNER_REPAIR_DOCK'
 			_size = "_size"
@@ -1085,7 +1108,7 @@
 		(var initialQualificationBattlesResults:array = "ratingBattlesSeasonProgress.initialQualificationBattlesResults ?: []" (event "ratingBattlesSeasonProgress.evInitialQualificationBattlesResultsChanged"))
 		(var isQualification:bool = "ratingBattlesSeasonProgress != null && initialQualificationBattlesResults.length < SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
 
-		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.RATING"))
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.RATING_PASSED"))
 		(var isCallToActionMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION")
 	)
 	(class $Fullsize)
@@ -1093,19 +1116,12 @@
 
 
 	(macro MOUSE_HANDLER_BANNER
-		_methods = "[
-			{
+		_methods = "[{
 				type: 'inputMapping.onAction',
 				name: 'navigateTo',
 				args: {	route: SC.Ui_windows.ROUTE.RATING,
 						data: { isPortBannerClicked: true }}
-			},
-			{
-				type: 'inputMapping.onAction',
-				name: isCallToActionMarkerVisible ? 'ServerUIDataUSS.setCallToActionMarkerSeen' : '',
-				args: {	markerId: SC.Ui_common.CALL_TO_ACTION_MARKERS.RATING_QUALIFICATION_AVAILABLE }
-			}
-		]"
+					}]"
 	)
 
 	(hblock
@@ -1677,6 +1693,7 @@
 			_screenOffsetBottom =	"_guidingOffsets.bottom - (EVENT_BANNER_HEIGHT.LARGE / 2)"
 			_screenOffsetRight =	"_screenOffsetRight"
 			_screenOffsetLeft =		"_guidingOffsets.right + EVENT_BANNER_SIZE[_size].bannerWidth + ACTIVITIES_BANNERS_PIN_OFFSET"
+			_hasAssistant =			true
 		)
 	)
 )
@@ -1918,7 +1935,8 @@
 			(bind enabled "isClaimButtonVisible")
 			(args
 				_label = 'IDS_SSE_CLAIM_REWARD'
-				_width = 170px
+				_size = "SIZE.SMALL"
+				_width = 140px
 				_focusIndex = 1
 				_methods = "[
 								{	type: 'inputMapping.onRequest',

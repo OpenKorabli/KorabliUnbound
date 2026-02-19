@@ -10,6 +10,10 @@
 	LARGE: 226px,
 })
 
+(def constant SHIP_COMPONENT_ITEM_SIZE {
+	WIDTH: 228px,
+	HEIGHT: 170px
+})
 
 (def element ShipComponentStereotype (_size:number = "SIZE.SMALL", _shipShortName:str = '')
 	(scope
@@ -44,9 +48,9 @@
 	(class $Fullsize)
 	(scrollArea
 		(class $Fullsize)
-		(style (backgroundColor = "NO_COLOR"))
+
 		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
-			_singleStep = "SHIP_COMPONENT_ITEM_HEIGHT"
+			_singleStep = "SHIP_COMPONENT_ITEM_SIZE.WIDTH"
 		)
 		(scrollPerItem = true)
 		(repeatController = 'shipComponentListItem')
@@ -55,7 +59,7 @@
 			(style
 				(width = 100%)
 				(flow = "tile_horizontal")
-				(marginTop = "-L")
+				(gap = "M")
 			)
 
 			(controller $DynamicRepeat renderer='ShipComponentListItem' name='shipComponentListItem'
@@ -63,8 +67,8 @@
 				(args
 					_entityId = "_collection[$index].id"
 				)
-				(itemWidth = "SHIP_COMPONENT_ITEM_WIDTH + MS")
-				(itemHeight = "SHIP_COMPONENT_ITEM_HEIGHT")
+				(itemWidth = "SHIP_COMPONENT_ITEM_SIZE.WIDTH")
+				(itemHeight = "SHIP_COMPONENT_ITEM_SIZE.HEIGHT")
 			)
 		)
 	)
@@ -77,19 +81,51 @@
 		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, exchangeableShipEntity.exchangeableShip.id)")
 		(var shipShortName:str = "shipEntity.ship.shortName ?: ''" (event "shipEntity.ship.evUpdate"))
 		(var shipId:number = "shipEntity.ship.id ?: 0" (event "shipEntity.ship.evUpdate"))
+
+		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, exchangeableShipEntity.exchangeableShip.id)")
+		(var ownShipInfo:dhComponent = "ownShipEntity.ownShip")
+		(var isOwnShip:bool = "ownShipEntity != null")
+		(var timeRent:number = "ownShipInfo.timeRent ?: 0" (event "ownShipInfo.evUpdate"))
+		(var isRentShip:bool = "ownShipInfo.timeRent > 0" (event "ownShipInfo.evUpdateDockState"))
+
+		(var isInRepairDock:bool = "shipEntity.hasComponent(CC.shipComponent)")
+		(var isMarked:bool = "(isOwnShip && !isRentShip) || isInRepairDock")
+		(var colorTransform:dict = "isMarked ? CT_BANNER_DOWN : CT_NONE")
+		(var currentAlpha:number = "isMarked ? 0.4 : 1")
 	)
 	(bind name "'shipComponentListItem_' + shipShortName")
-	(style
-		(width = "SHIP_COMPONENT_ITEM_WIDTH")
-		(height = "SHIP_COMPONENT_ITEM_HEIGHT")
-		(marginLeft = "SXS")
-		(marginRight = "SXS")
-		(backgroundColor = "NO_COLOR")
+
+	(block
+		(style (alpha = "currentAlpha"))
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "currentAlpha"
+			_alpha = "currentAlpha"
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+			"colorTransform"
+		)
+
+		(element RewardShipComponentView
+			_size = "SC.Ui_styles.SIZE.SMALL"
+			_imagePath = "'url:../ships_silhouettes/repair_dock/' + shipShortName + '.png'"
+		)
 	)
-	(element ShipComponentStereotype
-		_shipShortName = "shipShortName"
-		_size = "SIZE.MEDIUM"
+
+	(block
+		(style
+			(position = "absolute")
+			(right = 0)
+		)
+		(controller $Instance renderer='ShipComponentMarker'
+			(bind enabled "isMarked")
+			(args
+				_isInRepairDock = "isInRepairDock"
+			)
+		)
 	)
+
 	(hblock
 		(style
 			(position = "absolute")
@@ -104,6 +140,7 @@
 			_width = '100%'
 		)
 	)
+
 	(block
 		(class $FullsizeAbsolute)
 		(style (backgroundColor = "NO_COLOR"))
@@ -133,14 +170,13 @@
 		(struct shipMaterialInfo = PULL_SHIPMATERIAL_INFO("_shipId"))
 		(var shipMaterialsDelta:number = "SHIP_SHARDS.SHIP_CRAFTING_COST - shipMaterialInfo.count")
 
-		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
-		(var isRepairDockShipLoading:bool = "repairDockDataEntity.repairDockData.isRepairDockShipLoading" (event "repairDockDataEntity.repairDockData.evIsRepairDockShipLoadingChanged"))
-
+		(var repairDockData:dhComponent = "getSingleComponent(CC.repairDockData)")
+		(var isRepairDockShipLoading:bool = "repairDockData.isRepairDockShipLoading" (event "repairDockData.evIsRepairDockShipLoadingChanged"))
 
 		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_SHIP_REPAIR_TTX,
 																												SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_ENOUGH_SHIP_COMPONENTS_TTX,
-																												SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_NOT_ENOUGH_SHIP_COMPONENTS_TTX ]"))
+																												SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_NOT_ENOUGH_SHIP_COMPONENTS_TTX]"))
 
 		(var isAvailableForRepairGuidingTipVisible:bool = "isIn(checkedTipId.value, [ SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_SHIP_REPAIR_TTX, SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_ENOUGH_SHIP_COMPONENTS_TTX ])")
 	)
@@ -212,7 +248,13 @@
 			_width = 100%
 			_focusIndex = 2
 			_label = 'IDS_SHIP_SHARDS_TTX_BUTTON_FEATURES'
-			_methods = "[{ type: 'inputMapping.onRequest',		name: 'showModalShipsBranchesFeatures',		args: { _branchId: shipMaterialInfo.ship.branchId, _shipId: _shipId } }]"
+			_methods = "[
+				{
+					type: 'inputMapping.onRequest',
+					name: 'showModalShipsBranchesFeatures',
+					args: { _branchId: shipMaterialInfo.ship.branchId, _shipId: _shipId }
+				}
+			]"
 		)
 	)
 
@@ -223,7 +265,25 @@
 			_tipPositioning =	"TIP_POSITION_LEFT"
 			_offsetX =			20
 			_noPointer =		true
+			_hasFinishButton =	true
 			_modalWindowName =	"SC.Ui_windows.MODAL.REPAIR_DOCK"
 		)
+	)
+)
+
+(def element ShipComponentMarker (_isInRepairDock:bool = false)
+	(scope
+		(var postfix:str = "_isInRepairDock ? 'IN_REPAIR_DOCK' : 'IN_PORT'")
+	)
+	(style
+		(hitTest = false)
+		(padding = [7px, 6px])
+		(backgroundColor = 0x33FFFFFF)
+		(borderRadius = 6)
+	)
+	(tf
+		(class $TextDefaultBold12NMWithoutShadow)
+		(style (antiAliasType = "ANTI_ALIAS_NAMES.ADVANCED"))
+		(bind text "toUpper(tr('IDS_SHIP_COMPONENT_' + postfix))")
 	)
 )

@@ -25,7 +25,7 @@
 											})
 
 (def constant SYSTEM_MESSAGES_OFFSET 200)
-(def constant INFOTIP_WIDTH 328)
+(def constant NOTIFICATIONS_INFOTIP_MIN_HEIGHT 256)
 
 (def constant SYSTEM_MESSAGE_ITEM_HEIGHT 37)
 (def constant SYSTEM_MESSAGE_ITEM_LABEL_WIDTH 250)
@@ -147,6 +147,10 @@
 )
 
 (def element ButtonNotifications ()
+	(scope
+		(struct stageSize = STAGE_SIZE())
+	)
+
 	(element DefaultButton
 		_type = "SC.Ui_styles.BUTTON_TYPE.ICON"
 		_icon = "SC.Ui_styles.BUTTON_ICON.NOTIFICATION"
@@ -167,7 +171,11 @@
 		(macro DEFAULT_INFOTIP_BEHAVIOUR "1")
 		(align = "top|innerRight")
 		(offsetMap = "{ left:0px, top: 9px, right: 0px, bottom: 0px }")
+		(gripMask = "grip.up")
 
+		(bind resizeLimits "{ minHeight:NOTIFICATIONS_INFOTIP_MIN_HEIGHT, maxHeight:stageSize.height - (DOCK_HEADER_HEIGHT + LM) }")
+
+		(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.infotipDragHeight.notifications', $event.newHeight ]]" on='evSizeChanged')
 		(bindcall externalCall "'direct.action'" "['onNotificationsPanelOpen',	{}]" on='evStartShow')
 		(bindcall externalCall "'direct.action'" "['onClearMessagesQueue',		{}]" on='rightClick')
 		(bindcall externalCall "'direct.action'" "['onNotificationsPanelClose',	{}]" on='evHide')
@@ -183,7 +191,7 @@
 		(event evGroupClick)
 		(event evSetActiveGroup)
 
-		(struct dragInfotip = DRAG_INFOTIP_DATA_SCOPE(_type="SC.Common.DRAG_INFOTIP_TYPE.NOTIFICATIONS"))
+		(struct infotipHeightPref = GET_PREF_NUMBER(_option = "'ui.infotipDragHeight.notifications'"))
 
 		(var systemMessageCollection:gfx = "$datahub.getCollection(CC.sysMessageCore)")
 		(var isVersionUpdatedMessagesEnable:bool = "systemMessageCollection ? systemMessageCollection.getChildByPath('byMessageGroup.' + SC.Ui_common.SYSTEM_MESSAGE_GROUP.VERSION_UPDATERS).items.length > 0
@@ -217,12 +225,12 @@
 
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
 	(style
-		(width = "INFOTIP_WIDTH")
-		(bind height "dragInfotip.infotipHeight")
+		(width = 328px)
+		(bind height "infotipHeightPref.value")
 		(bind hitTest "isHitTest")
 	)
 
-	(bindcall externalCall "isPrefGroup ? 'direct.action' : ''" "['option.set', ['ui.notificationsSelectedGroup', activeGroup]]" init=false watch=false (event "evSetActiveGroup"))
+	(bindcall externalCall "isPrefGroup ? 'direct.action' : ''" "['option.set', ['ui.notificationsSelectedGroup', activeGroup]]" watch=false (event "evSetActiveGroup"))
 	(dispatch evSetActiveGroup dir="EventDirection.NONE" args="$event" delay=0.01 (event "evGroupClick"))
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP _isInfotip="true")
@@ -230,7 +238,7 @@
 		(class $Fullsize)
 		(block
 			(style (width = 100%) (marginBottom = "XXS"))
-			(element DefaultInfotipDragGripper _type="SC.Common.DRAG_INFOTIP_TYPE.NOTIFICATIONS")
+			(element DefaultInfotipDragGripper _type="grip.up")
 		)
 
 		
@@ -242,7 +250,6 @@
 				(args
 					_activeGroup = "activeGroup"
 					_groupList = "groupList"
-					_isInfotipDragging = "dragInfotip.isInfotipDragging"
 				)
 			)
 		)
@@ -311,7 +318,7 @@
 	)
 )
 
-(def element SystemMessagesInfotipTabButtonWrapper (_activeGroup:number, _groupList:array, _isInfotipDragging:bool)
+(def element SystemMessagesInfotipTabButtonWrapper (_activeGroup:number, _groupList:array)
 	(scope
 		(var battleTypeSessionStatsComponent:gfx = "$datahub.getSingleComponent(CC.sessionStats)")
 
@@ -335,7 +342,6 @@
 
 	(element TabButton
 		_isSelected = "_activeGroup == _groupList[$index]"
-		_isDisabled = "_isInfotipDragging"
 		_width = 100%
 		_image = "tabIcons[$index]"
 		_dispatchedEv = "'evGroupClick'"
@@ -371,7 +377,7 @@
 		(var hasAchievements:bool = "sessionAchievements.length > 0")
 		(var isDisabled:bool = "nonzeroBattleTypes.length <= 1")
 	)
-	(bindcall externalCall 'direct.action' "['sessionStatsBattleTypeChosen', [$event.selectedIndex, nonzeroBattleTypes[$event.selectedIndex]]]" init=false watch=false (event "ItemChooser_evBattleTypeSelected"))
+	(bindcall externalCall 'direct.action' "['sessionStatsBattleTypeChosen', [$event.selectedIndex, nonzeroBattleTypes[$event.selectedIndex]]]" watch=false (event "ItemChooser_evBattleTypeSelected"))
 
 	(style (width = 100%))
 
@@ -520,31 +526,16 @@
 
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "hasAchievements")
-			)
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasAchievements"))
 		)
 
 		(block
-			(bind visible "hasAchievements")
 			(style (width = 100%))
-			(macro TOOLTIP_SYSTEM_PARAMS_CONTAINER)
-
-			(block
-				(style
-					(flow = "tile_horizontal")
-					(width = 100%)
-					(paddingTop = "SXS")
-					(paddingBottom = "SXS")
-					(paddingLeft = "M")
-					(paddingRight = "M")
-					(gap ="M")
-				)
-				(controller $Repeat renderer='SessionStatsAchievementIcon'
-					(bind items "sessionAchievements")
-					(args
-						_achievement = "$item"
-					)
+			(controller $Instance renderer='TooltipSystemAchievementsList'
+				(bind enabled "hasAchievements")
+				(args
+					_achievementsIds = "sessionAchievements"
+					_fromSessionStats = true
 				)
 			)
 		)
@@ -552,7 +543,10 @@
 		(element TooltipSystemHorizontalDivider)
 
 		(block
-			(style (width = 100%) (align = "center"))
+			(style
+				(width = 100%)
+				(align = "center")
+			)
 
 			(controller $Tooltip
 				(renderer = 'SimpleStatusTooltip')
@@ -571,22 +565,6 @@
 				_methods = "[{ type: 'inputMapping.onAction', name: 'clearSessionStats', args: {}}]"
 			)
 		)
-	)
-)
-
-(def element SessionStatsAchievementIcon (_achievement:dict)
-	(scope
-		(var id:str =						"toString(_achievement.id) ?: ''")
-		(var amount:number =				"_achievement.amount ?: 0")
-		(var achievementEntity:dhEntity =	"getPrimaryEntity(CC.achievement, id)")
-	)
-
-	(element AchievementIcon
-		_id =				"achievementEntity.id"
-		_amount =			"amount"
-		_size =				"TOOLTIP_ACHIEVEMENT_ICON_SIZE"
-		_showMarkerNew =	true
-		_fromSesionStats =	true
 	)
 )
 
@@ -720,7 +698,7 @@
 	(dispatch evMouseUp on='mouseUp' args="{isDown: false}")
 
 	
-	(bindcall externalCall "isClickableArea ? eventType : ''" "[eventName, eventArgs]" init=false watch=false on='leftClick')
+	(bindcall externalCall "isClickableArea ? eventType : ''" "[eventName, eventArgs]" watch=false on='leftClick')
 
 	(style
 		(width = 100%)
@@ -931,48 +909,21 @@
 )
 
 
-(def element SystemNotificationContainer ()
+(def element SystemNotificationContainer (_systemNotificationOffset:number)
 	(scope
 		(macro USER_PREF_DATA)
-		(macro CAROUSEL_HEIGHT_SCOPE)
 		(macro STAGE_SIZE)
 
 		(var isSmallWindow:bool = "stageHeight < 1000" (event "stageComponent.evStageSizeChanged"))
 		(var systemNotificationCollection:dhCollection = "getCollectionByPath(CC.renderedSysMsg, 'byClassId.' + CC.notificationSysMsgToBeRendered)")
 		(var emergencyAlertsCollection:dhCollection = "getCollectionByPath(CC.renderedSysMsg, 'byClassId.' + CC.emergencySysMsgToBeRendered)")
 		(var emergencyAlertsCollectionLength:number = "emergencyAlertsCollection.length ?: 0")
-
-
-		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
-		(var hasShips:bool = "playerShipsCollection.length > 0")
-
-		(var portElementsVisibility:dhComponent =	"getSingleComponent(CC.portElementsVisibility)")
-		(var isCarouselVisible:bool = "hasShips && portElementsVisibility.carouselVisible" (event "portElementsVisibility.evCarouselVisibleChanged"))
-
-		(struct repairDockRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.REPAIR_DOCK"))
-		(struct bargeRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.LOOTBOXES"))
-
-		(var systemNotificationOffset:number = "isCarouselVisible || repairDockRoute.isActive || bargeRoute.isActive ? carouselAreaHeight : 40px")
-
-		(var verifiedSystemNotificationOffset:number = "systemNotificationOffset" watch=false)
-
-		(controller $Animation
-			(bindcall play
-				delay = 0.1
-				duration = 0.15
-				to = "{ verifiedSystemNotificationOffset: systemNotificationOffset }"
-				easing = "Easing.line"
-				action = "kill"
-				watch = false
-				(bind trigger "systemNotificationOffset")
-			)
-		)
 	)
 	(class $Fullsize)
 	(style
 		(align = "right|bottom")
 		(paddingRight = 28px)
-		(bind paddingBottom "verifiedSystemNotificationOffset")
+		(bind paddingBottom "_systemNotificationOffset")
 	)
 
 	
@@ -995,7 +946,7 @@
 			(style
 				(right = 0)
 				(bind position "isSmallWindow ? absolute : relative")
-				(bind bottom "isSmallWindow ? -verifiedSystemNotificationOffset + 30px : 0")
+				(bind bottom "isSmallWindow ? -_systemNotificationOffset + 30px : 0")
 			)
 			
 

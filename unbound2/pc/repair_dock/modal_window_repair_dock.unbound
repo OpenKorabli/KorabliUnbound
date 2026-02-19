@@ -3,8 +3,8 @@
 	(var ship:dhComponent = "shipEntity.ship")
 	(var shipLevel:number = "ship.level ?: 0")
 
-	(var entity:dhEntity = "getPrimaryEntity(CC.shipMaterial, shipLevel)" )
-	(var count:number = "entity.shipMaterial.count ?: 0" (event "entity.shipMaterial.evChanged"))
+	(var shipMaterial:dhComponent = "getPrimaryComponent(CC.shipMaterial, shipLevel)" )
+	(var count:number = "shipMaterial.count ?: 0" (event "shipMaterial.evChanged"))
 	(var isCraftWithMaterialsAvailable:bool = "count >= SHIP_SHARDS.SHIP_CRAFTING_COST")
 )
 
@@ -16,8 +16,7 @@
 
 (def macro HIDE_REPAIR_DOCK_UI_ANIMATION (_isEnabled:expression)
 	(scope
-		(var dockDataEntity:dhEntity = "getSingleEntity(CC.dockData)")
-		(var dockData:dhComponent = "dockDataEntity.dockData")
+		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
 		(var isDockUIHidden:bool = "dockData.isDockUIHidden" (event "dockData.evIsDockUIHiddenChanged"))
 		(var isRepairDockUIHidden:bool = "isDockUIHidden || _isEnabled")
 	)
@@ -28,8 +27,8 @@
 		(bindcall play
 			to = "{alpha: 0}"
 			easing = "Easing.quad_in"
-			delay= 0.5
-			duration = 0.4
+			delay= 0.3
+			duration = 0.3
 			action = "kill"
 			(bind enabled "isRepairDockUIHidden")
 		)
@@ -37,7 +36,7 @@
 			to = "{alpha: 1}"
 			easing = "Easing.quad_in"
 			delay=0.15
-			duration = 0.25
+			duration = 0.15
 			action = "kill"
 			(bind enabled "!isRepairDockUIHidden")
 		)
@@ -99,15 +98,14 @@
 		(var isCurrencyVisible:bool = "isShipsCarouselVisible && viewedShipId > 0")
 
 		(var repairDockDataEntity:dhEntity = "getSingleEntity(CC.repairDockData)")
-		(var isNewShipAvailableForCrafting:bool = "repairDockDataEntity.hasComponent(CC.newItem)")
 		(var isRepairingInProgress:bool = "	repairDockDataEntity.repairDockData.isRepairingInProgress" (event "repairDockDataEntity.repairDockData.evIsRepairingInProgressChanged"))
 
-		(var newShipComponentsEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.SHIP_COMPONENTS)")
-		(var newShipComponentsCount:number = "newShipComponentsEntity.newContent.count ?: 0" (event "newShipComponentsEntity.newContent.evCountChanged"))
+		(var newShipComponentsContent:dhComponent = "getPrimaryComponent(CC.newContent, SC.Common.CONTENT_CATEGORY.SHIP_COMPONENTS)")
+		(var newShipComponentsCount:number = "newShipComponentsContent.count ?: 0" (event "newShipComponentsContent.evCountChanged"))
 		(var isNewShipsMarker:bool = "newShipComponentsCount > 0")
 
-		(var newExchangeableShipsEntity:dhEntity = "getPrimaryEntity(CC.newContent, SC.Common.CONTENT_CATEGORY.EXCHANGEABLE_SHIP)")
-		(var newExchangeableShipsCount:number = "newExchangeableShipsEntity.newContent.count ?: 0" (event "newExchangeableShipsEntity.newContent.evCountChanged"))
+		(var newExchangeableShipsContent:dhComponent = "getPrimaryComponent(CC.newContent, SC.Common.CONTENT_CATEGORY.EXCHANGEABLE_SHIP)")
+		(var newExchangeableShipsCount:number = "newExchangeableShipsContent.count ?: 0" (event "newExchangeableShipsContent.evCountChanged"))
 		(var isNewExchangeableShipsMarker:bool = "newExchangeableShipsCount > 0")
 
 		(var isShipInfoPanelVisible:bool = "!isShipsCarouselVisible && !isRepairingInProgress")
@@ -118,13 +116,16 @@
 																												SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_FINAL_WITH_SHIP_MATERIAL ]"))
 
 		(var isShipShardsMaterialsExchangeIntroNewTip:bool = "activeTip.tipId == SC.Context_guiding_tip.TIP_TYPE.SHIP_SHARDS_MATERIALS_EXCHANGE_BUTTON")
+
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.REPAIR_DOCK"))
+		(var hasReadyToRepairShip:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION")
 	)
 
 	(bindcall externalCall
-		"isNewShipsMarker || isNewShipAvailableForCrafting ? 'inputMapping.onAction' : ''"
+		"isNewShipsMarker || hasReadyToRepairShip ? 'inputMapping.onAction' : ''"
 		"['makeAllShipsAndComponentsSeen', {}]"
 		init=true watch=false
-		(bind trigger "isNewShipsMarker || isNewShipAvailableForCrafting")
+		(bind trigger "isNewShipsMarker || hasReadyToRepairShip")
 	)
 
 	(macro HIDE_REPAIR_DOCK_UI_ANIMATION
@@ -316,13 +317,11 @@
 		(style
 			(position = "absolute")
 			(left = "{1280: MS, 1920: XL}")
-			(top = 98px)
+			(top = "{720: S, 1080: LM}")
 		)
-		(controller $Instance renderer='ShipInfoBlock'
+
+		(controller $Instance renderer='ShipInfoWidget'
 			(bind enabled "!isShipInfoPanelVisible")
-			(args
-				_shipId = "viewedShipId"
-			)
 		)
 	)
 	(block
@@ -521,31 +520,6 @@
 			)
 			(bind text "'IDS_' + _rewardTitle + '_INFO_DESCRIPTION'")
 		)
-	)
-)
-
-(def element ShipInfoBlock (_shipId:number)
-	(scope
-		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
-		(var shipInfo:dhComponent = "shipEntity.ship")
-		(var complexityLevel:number = "shipInfo.currentComplexityLevel")
-		(var maxComplexityLevel:number = "shipInfo.maxComplexityLevel")
-	)
-
-	(block
-		(style (marginBottom = "M"))
-
-		(element ShipLineItemNM
-			_shipId = "_shipId"
-			_fontClass = '$TextDefaultBold28NM'
-			_iconSize = 40
-		)
-	)
-
-	(element ComplexityLevel
-		_complexityLevel = "complexityLevel"
-		_maxComplexityLevel = "maxComplexityLevel"
-		_size = "SIZE.MEDIUM"
 	)
 )
 

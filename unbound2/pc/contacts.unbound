@@ -6,8 +6,10 @@
 	MOUSE_DOWN: {	redMultiplier: 1,	greenMultiplier: 1,	blueMultiplier: 1,	alphaMultiplier: 1,
 					redOffset: -15,	greenOffset: -15,	blueOffset: -15,	alphaOffset: 0 } }")
 
-(def element ContactsAndChannelsInfotipButton ()
+(def constant CONTACT_INFOTIP_MIN_HEIGHT 256)
+(def constant CONTACT_INFOTIP_MAX_HEIGHT 630)
 
+(def element ContactsAndChannelsInfotipButton ()
 	(element DefaultButton	
 		_type = "SC.Ui_styles.BUTTON_TYPE.ICON"
 		_icon = "SC.Ui_styles.BUTTON_ICON.CHAT"
@@ -24,26 +26,35 @@
 	)
 
 	(controller $Tooltip
-		(renderer='ContactsAndChannelsInfotip')
+		(renderer = 'ContactsAndChannelsInfotip')
 		(args
 			_isFromDockChatBtn = true
 			_playerContext = "{ type: 'startPrivateChat' }"
 			_isResizeInfotip =  true
 		)
+
 		(macro DEFAULT_INFOTIP_BEHAVIOUR "1")
+
 		(align = "top|innerLeft")
 		(offsetMap = "{ left:0px, top: 9px, right: 0px, bottom: 0px }")
+		(gripMask = "grip.up")
+
+		(bind resizeLimits "{ minHeight:CONTACT_INFOTIP_MIN_HEIGHT, maxHeight:CONTACT_INFOTIP_MAX_HEIGHT}")
+		(bindcall externalCall "'direct.action'" "['option.set', [ 'ui.infotipDragHeight.contacts', $event.newHeight ]]" on='evSizeChanged')
 	)
 )
 
 (def element ContactsAndChannelsInfotip (_isFromDockChatBtn:bool, _playerContext:dict, _isResizeInfotip:bool=false)
 	(scope
-		(struct dragInfotip = DRAG_INFOTIP_DATA_SCOPE(_type="SC.Common.DRAG_INFOTIP_TYPE.CONTACTS"))
+		(struct infotipHeightPref = GET_PREF_NUMBER(_option = "'ui.infotipDragHeight.contacts'"))
 		(var chatEntity:gfx = "$datahub.getSingleEntity(CC.chat)")
 		(var isChatServerAvailable:bool = "chatEntity.chat.isConnected" (event "chatEntity.chat.evConnected") (event "chatEntity.chat.evDisConnected"))
 	)
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
-	(style (width = 302px) (bind height "_isResizeInfotip ? dragInfotip.infotipHeight : 400px"))
+	(style
+		(width = 302px)
+		(bind height "_isResizeInfotip ? infotipHeightPref.value : CONTACT_INFOTIP_MIN_HEIGHT")
+	)
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip="true")
 	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER
@@ -51,8 +62,11 @@
 
 		(block
 			(bind visible "_isResizeInfotip")
-			(style (width = 100%) (marginBottom = "-S"))
-			(element DefaultInfotipDragGripper _type="SC.Common.DRAG_INFOTIP_TYPE.CONTACTS")
+			(style
+				(width = 100%)
+				(marginBottom = "-S")
+			)
+			(element DefaultInfotipDragGripper _type="grip.up")
 		)
 
 		(controller $Instance renderer='ContactsAndChannels'
@@ -60,7 +74,6 @@
 			(args
 				_playerContext = "_playerContext"
 				_isFromDockChatBtn = "_isFromDockChatBtn"
-				_isInfotipDragging = "dragInfotip.isInfotipDragging"
 			)
 		)
 
@@ -70,14 +83,13 @@
 	)
 )
 
-(def element ContactsAndChannelsTabButtons (_tabIndex:number, _isInfotipDragging:bool)
+(def element ContactsAndChannelsTabButtons (_tabIndex:number)
 	(style (flow = "horizontal") (width = 100%))
 
 	(element TabButton
 		_label = 'IDS_CONTACTS'
 		_name = 'tab_contacts'
 		_isSelected = "_tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS"
-		_isDisabled = "_isInfotipDragging"
 		_width = 50%
 		_methods = "[{ type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsInset', value: SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS } },
 					 { type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsAndChannelsSearchState', value: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF } }]"
@@ -87,7 +99,6 @@
 		_label = 'IDS_CHANNELS'
 		_name = 'tab_channels'
 		_isSelected = "_tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CHANNELS"
-		_isDisabled = "_isInfotipDragging"
 		_width = 50%
 		_methods = "[{ type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsInset', value: SC.Common.CONTACTS_AND_CHANNELS_INSET.CHANNELS } },
 					 { type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsAndChannelsSearchState', value: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF } }]"
@@ -99,7 +110,7 @@
 	)
 )
 
-(def element ContactsAndChannels (_playerContext:dict, _isInfotipDragging:bool, _isFromDockChatBtn:bool=false)
+(def element ContactsAndChannels (_playerContext:dict, _isFromDockChatBtn:bool=false)
 	(scope
 		(event evTextInputSearchCancelled)
 		(event evSearchChannelsButtonClicked)
@@ -157,7 +168,6 @@
 			(bind enabled "_isFromDockChatBtn")
 			(args
 				_tabIndex = "tabIndex"
-				_isInfotipDragging = "_isInfotipDragging"
 			)
 		)
 	)
@@ -225,7 +235,7 @@
 		(bind isCreatingGroup "false" init=false watch=false (event "evGroupCreationCancelled") (event "chat.evCreateContactsGroupSuccess"))
 		(bind isCreatingGroup "!inputText.empty" init=false watch=false (event "chat.evCreateContactsGroupErrorNameExist"))
 	)
-	(bindcall externalCall "'inputMapping.onAction'" "['addContactsGroup', { name: $event.value }]" init=false watch=false (event "evGroupCreationComplete"))
+	(bindcall externalCall "'inputMapping.onAction'" "['addContactsGroup', { name: $event.value }]" watch=false (event "evGroupCreationComplete"))
 
 	(dispatch evShowWrongMessage (event "chat.evCreateContactsGroupErrorNameExist"))
 	(dispatch evHideWrongMessage (event "evGroupCreationCancelled") (event "addGroupButtonClicked") (event "evContactInputStrChanged"))
@@ -407,7 +417,7 @@
 		(bind isRenaming "false" init=false watch=false (event "evGroupRenameCancelled") (event "chat.evRenameContactsGroupSuccess"))
 		(bind isRenaming "$event.value != ''" init=false watch=false (event "evGroupRenameComplete"))
 	)
-	(bindcall externalCall "isRenaming ? 'inputMapping.onAction' : ''" "['renameContactsGroup', { groupId: _groupEntity.groupOfElements.groupId, newName: $event.value }]" init=false watch=false (event "evGroupRenameComplete"))
+	(bindcall externalCall "isRenaming ? 'inputMapping.onAction' : ''" "['renameContactsGroup', { groupId: _groupEntity.groupOfElements.groupId, newName: $event.value }]" watch=false (event "evGroupRenameComplete"))
 	(style (width = 100%))
 
 	(dispatch evShowWrongMessage (bind enabled "isRenaming") (event "_groupEntity.groupOfElements.evRenameErrorNameExist"))
@@ -1128,8 +1138,8 @@
 									'myChannels': 		{ elements:myChannels, 		elementName:'ChannelElementWithRollover',		title:'IDS_SEARCH_GROUP_IN_MY_CHANNELS',		isExpandedDefault:true	},
 									'channels': 		{ elements:channels, 		elementName:'ChannelElementWithRollover',		title:'IDS_SEARCH_GROUP_NOT_IN_MY_CHANNELS',	isExpandedDefault:true	}}")
 	)
-	(bindcall externalCall "'inputMapping.onAction'" "['searchRequest', { requests: _searchRequests, query: $event.value }]" init=false watch=false (event "evTextInputSearchValueChanged") (event "evTextInputSearchOnEnter"))
-	(bindcall externalCall "'inputMapping.onAction'" "['clearSearchResult', {}]" init=false watch=false on='removedFromStage')
+	(bindcall externalCall "'inputMapping.onAction'" "['searchRequest', { requests: _searchRequests, query: $event.value }]" watch=false (event "evTextInputSearchValueChanged") (event "evTextInputSearchOnEnter"))
+	(bindcall externalCall "'inputMapping.onAction'" "['clearSearchResult', {}]" watch=false on='removedFromStage')
 	(class $Fullsize)
 
 	(block
@@ -1373,7 +1383,7 @@
 		(var isEmptyChannelName:bool = "channelInputName.length == 0")
 		(var isAvailiableChannelName:bool = "channelInputName.length > 2")
 	)
-	(bindcall externalCall "'inputMapping.onAction'" "['createChannel', { name: channelInputName, password: channelInputPassword }]" init=false watch=false (event "evChannelCreationCompleted"))
+	(bindcall externalCall "'inputMapping.onAction'" "['createChannel', { name: channelInputName, password: channelInputPassword }]" watch=false (event "evChannelCreationCompleted"))
 
 	(dispatch evCreateChannelCancelled		dir="EventDirection.UP"		(bind enabled "isEmptyChannelName") (event "evChannelOnEnter"))
 	(dispatch evChannelCreationCompleted	dir="EventDirection.NONE"	(bind enabled "isAvailiableChannelName") (event "evChannelOnEnter"))

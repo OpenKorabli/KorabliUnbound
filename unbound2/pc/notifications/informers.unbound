@@ -6,6 +6,7 @@
 (def constant ACHIEVEMENT_LOG_DELAY_SHOW 0.46)
 (def constant ACHIEVEMENT_LOG_DURATION_SHOW 0.453)
 
+(def constant COMMON_LOG_DURATION_SHOW 0.34)
 
 (def constant CUSTOM_INFORMER_BACKGROUND_LIST {	SC.System_messages.SYS_MESSAGE_TYPE_UI.ACHIEVEMENT_EARNED_INFORMER				: 'AchievementInfotipBg'})
 
@@ -37,6 +38,7 @@
 
 (def element AchievementInfotipBg (_rollOver:bool)
 	(scope
+		(event evBgAnimEnded)
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 	)
 	(style
@@ -60,8 +62,10 @@
 				duration =	"ACHIEVEMENT_LOG_DURATION_SHOW"
 				to =		"{ alpha: 1, ubScaleX: 1}"
 				easing =	"Easing.expo_in_out"
+				action =	"kill"
 				on =		'addedToStage'
 			)
+			(dispatch evBgAnimEnded dir="EventDirection.UP" on=evAnimEnded)
 		)
 
 		(block
@@ -76,6 +80,69 @@
 					duration =	0.1
 					to =		"_rollOver ? { alpha: 1.5 } : { alpha: 1 }"
 					easing =	"Easing.sine_in"
+					watch = false
+					action =	"kill"
+					(bind trigger "_rollOver")
+				)
+			)
+		)
+	)
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(hitTest = false)
+			(width = 560px)
+			(height = 176px)
+			(top = -40px)
+			(backgroundImage = 'url:../animations/spine/rewards/achievement_effect/achievement_effect.skel')
+			(backgroundSize = "fill")
+		)
+
+		(controller $Spine
+			(bindcall play sequence="{ name:'show',		repeatCount:1			}" append=true	on='addedToStage')
+			(bindcall play sequence="{ name:'static',	repeatCount:-1,	mix:0.3	}" append=true	on='addedToStage')
+		)
+	)
+)
+
+(def element CommonInfotipBg (_rollOver:bool)
+	(scope
+		(event evBgAnimEnded)
+		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
+	)
+	(class $FullsizeAbsolute)
+	(style (align = "center"))
+
+	(block
+		(class $Fullsize)
+		(style
+			(pivotX = 50%)
+			(ubScaleX = 0)
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	"COMMON_LOG_DURATION_SHOW"
+				to =		"{ alpha: 1, ubScaleX: 1}"
+				easing =	"Easing.circ_out"
+				action =	"kill"
+				on =		'addedToStage'
+			)
+			(dispatch evBgAnimEnded dir="EventDirection.UP" on=evAnimEnded)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+
+			(controller $Animation
+				(bindcall play
+					duration =	0.1
+					to =		"_rollOver ? { alpha: 1.5 } : { alpha: 1 }"
+					easing =	"Easing.sine_in"
+					watch = false
 					action =	"kill"
 					(bind trigger "_rollOver")
 				)
@@ -84,42 +151,9 @@
 	)
 )
 
-(def element CommonInfotipBgWithCloseIcon (_rollOver:bool)
-	(scope
-		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
-	)
-	(class $Fullsize)
-
-	(block
-		(class $FullsizeAbsolute)
-		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
-		(controller $Animation
-			(bindcall play
-				duration =	0.1
-				to =		"_rollOver ? { alpha: 1.5 } : { alpha: 1 }"
-				easing =	"Easing.sine_in"
-				action =	"kill"
-				(bind trigger "_rollOver")
-			)
-		)
-	)
-
-	(block
-		(style
-			(position = "absolute")
-			(right = "M")
-			(top = "M")
-		)
-		(element CloseButton
-			_name = 'informerCloseButton'
-			_dispatchedEv = 'evHideMessage'
-			_tooltipText = 'IDS_CLOSE_NOTIFICATION'
-		)
-	)
-)
-
 (def element InformerLogNotificationItem (_informerEntity:dhEntity)
 	(scope
+		(event evBgAnimEnded)
 		(event evHideMessage)
 		(macro MOUSE_HANDLER_SCOPE)
 		(var sysMessageCoreComponent:dhComponent = "_informerEntity.sysMessageCore")
@@ -133,11 +167,14 @@
 
 		(var typeId:str = "'typeId' in informerData ? toString(informerData.typeId) : ''")
 		(var bgRenderElement:str = "typeId in CUSTOM_INFORMER_BACKGROUND_LIST	? CUSTOM_INFORMER_BACKGROUND_LIST[typeId]
-																				: 'CommonInfotipBgWithCloseIcon'")
+																				: 'CommonInfotipBg'")
 		(var contentRenderElement:str = "	typeId in COMMON_INFORMER_CONTENT_LIST	? COMMON_INFORMER_CONTENT_LIST[typeId] :
 											typeId in CUSTOM_INFORMER_CONTENT_LIST	? CUSTOM_INFORMER_CONTENT_LIST[typeId]
 																					: ''")
 		(var hasCommonShow:bool = "typeId in COMMON_INFORMER_CONTENT_LIST")
+
+		(var contentShowDuration:number = "typeId == SC.System_messages.SYS_MESSAGE_TYPE_UI.ACHIEVEMENT_EARNED_INFORMER	? ACHIEVEMENT_LOG_DURATION_SHOW + 0.5
+																														: COMMON_LOG_DURATION_SHOW + 0.5")
 
 		
 		(var isInformerVisible:bool = "!timeToLiveComponent.isRemoving" (event "timeToLiveComponent.evRemove"))
@@ -164,11 +201,45 @@
 	)
 
 	(block
+		(style (alpha = 0))
+
+		(controller $Animation
+			(bindcall play
+				delay = 0.1
+				duration = "contentShowDuration"
+				to = "{ alpha: 1 }"
+				easing = "Easing.circ_out"
+				watch = false
+				action = "kill"
+				(event "evBgAnimEnded")
+			)
+			(bindcall play
+				to =		"{ alpha: 0}"
+				easing =	"Easing.quad_out"
+				duration =	0.15
+				action = "kill"
+				(bind enabled "!isInformerVisible")
+			)
+		)
+
 		(controller $Instance
 			(bind enabled "contentRenderElement")
 			(bind renderer "contentRenderElement")
 			(args
 				_data = "informerData"
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(right = "M")
+				(top = "M")
+			)
+			(element CloseButton
+				_name = 'informerCloseButton'
+				_dispatchedEv = 'evHideMessage'
+				_tooltipText = 'IDS_CLOSE_NOTIFICATION'
 			)
 		)
 	)
@@ -185,8 +256,9 @@
 
 		
 		(bindcall play
-			to =		"{ alpha: 0, visualOffsetY: -15px }"
-			easing =	"Easing.quad_out"
+			delay = 0.02
+			to =		"{ alpha: 0, scaleX: 0}"
+			easing =	"Easing.sine_out"
 			duration =	"SC.Ui_common.SYSTEM_MESSAGES_SHOW_CONFIG.LIFE_TIME_AFTER_HIDING"
 			action = "kill"
 			(bind enabled "!isInformerVisible")
@@ -195,7 +267,7 @@
 )
 
 
-(def element CommonInformer(	_iconUrl:str, _textItems:array, _textClass:str='$TextDefaultBold20NM', 
+(def element CommonInformer (	_iconUrl:str, _textItems:array, _textClass:str='$TextDefaultBold20NM',
 								_unifiedStatus:str="SC.Ui_styles.UNIFIED_STATUS.DEFAULT", _isStayOnClick:bool=false, _subtitleText:str=null)
 	(style 
 		(flow = "horizontal")
@@ -512,94 +584,50 @@
 	)
 
 	(block
-		(class $MiddleAlignedAbsolutely)
-		(style
-			(width = 560px)
-			(height = 176px)
-			(top = -40px)
-			(backgroundImage = 'url:../animations/spine/rewards/achievement_effect/achievement_effect.skel')
-			(backgroundSize = "fill")
-		)
-
-		(controller $Spine
-			(bindcall play sequence="{ name:'show',		repeatCount:1			}" append=true	on='addedToStage')
-			(bindcall play sequence="{ name:'static',	repeatCount:-1,	mix:0.3	}" append=true	on='addedToStage')
-		)
-	)
-	(block
 		(class $Fullsize)
+		(style
+			(flow = horizontal)
+			(align = "middle")
+			(paddingTop = "S")
+			(paddingBottom = "S")
+			(paddingLeft = "M")
+			(paddingRight = "L")
+		)
 
-		(style (alpha = 0))
-
-		(controller $Animation
-			(bindcall play
-				delay = "ACHIEVEMENT_LOG_DURATION_SHOW + ACHIEVEMENT_LOG_DELAY_SHOW + 0.15"
-				duration = "ACHIEVEMENT_LOG_DURATION_SHOW + 0.5"
-				to = "{ alpha: 1 }"
-				watch = false
-				easing = "Easing.circ_out"
-				action = "kill"
-				on = 'addedToStage'
+		(block
+			(style (marginRight = "SXS"))
+			(element AchievementBattleIcon
+				_iconName = "achievementName"
+				_size = 80px
 			)
 		)
 
 		(block
 			(class $Fullsize)
 			(style
-				(flow = horizontal)
 				(align = "middle")
-				(paddingTop = "SXS")
-				(paddingBottom = "SXS")
-				(paddingLeft = "MS")
-				(paddingRight = "MS")
+				(vgap="S")
 			)
 
-			(block
-				(style (marginRight = "M"))
-				(element AchievementBattleIcon
-					_iconName = "achievementName"
-					_size = 80px
-				)
-			)
-
-			(block
-				(class $Fullsize)
+			(tf
+				(class $TextDefaultBold18NM)
 				(style
-					(align = "middle")
-					(vgap="S")
+					(width = 100%)
+					(maxHeight = 75px)
+					(elideMode = true)
+					(wordWrap = true)
+					(alpha = "TA")
 				)
-
-				(tf
-					(class $TextDefaultBold18NM)
-					(style
-						(width = 100%)
-						(alpha = "TA")
-					)
-					(bind text "nameIDS")
-				)
-
-				(tf
-					(class $TextDefaultNM)
-					(style
-						(width = 100%)
-						(alpha = "TA")
-					)
-					(bind text "typeIDS")
-				)
-			)
-		)
-
-		(block
-			(style
-				(position = "absolute")
-				(top = "M")
-				(right = "M")
+				(bind text "nameIDS")
 			)
 
-			(element CloseButton
-				_name = 'informerCloseButton'
-				_dispatchedEv = 'evHideMessage'
-				_tooltipText = 'IDS_CLOSE_NOTIFICATION'
+			(tf
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+				(bind text "typeIDS")
 			)
 		)
 	)

@@ -1,0 +1,262 @@
+(def constant ASSISTANT_EMOTIONS_LIST "[
+	SC.Common.ASSISTANT_EMOTION.DEFAULT,
+	SC.Common.ASSISTANT_EMOTION.WINK
+]")
+
+(def constant ASSISTANT_AVAILABLE_BATTLE_TYPES "[
+	SC.Common.BATTLE_TYPES.COOPERATIVE_BATTLE,
+	SC.Common.BATTLE_TYPES.RANDOM_BATTLE
+]")
+
+(def element BattleHUDAssistant (_isFirstBattle:bool)
+	(scope
+		(var voicePrompt:dhComponent =	"getSingleComponent(CC.voicePrompt)")
+		(var promptType:number =		"voicePrompt.promptType ?: SC.Common.PROMPT_TYPE.NONE"		(event "voicePrompt.evPromptTypeChanged"))
+
+		(var isAnyPrompt:bool =			"promptType != SC.Common.PROMPT_TYPE.NONE")
+	)
+
+	(bindcall externalCall 'inputMapping.onAction'	"['assistantInBattleShown', { contextID: _isFirstBattle ? SC.Common.BATTLE_ASSISTANT_CONTEXT.FIRST_BATTLE : SC.Common.BATTLE_ASSISTANT_CONTEXT.ACQUAINTANCE }]"		watch=false		on='addedToStage')
+	(bindcall externalCall 'inputMapping.onAction'	"['ServerUIDataUSS.setUserTaskExecuted', { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_ASSISTANT] }]"															on='addedToStage')
+
+	(visible = false)
+
+	(style
+		(marginLeft = "SXS")
+		(marginTop = "SXS")
+		(width = 200px)
+		(height = 250px)
+		(alpha = "isAnyPrompt ? 1 : 0")
+		(visualOffsetX = "isAnyPrompt ? 0% : -100%")
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration =		0.15
+			from =			{ alpha: 0, visualOffsetX: -100%, visible: false }
+			to =			{ alpha: 1, visualOffsetX: 0%, visible: true }
+			easing =		"Easing.quad_out"
+			action =		"kill"
+			(bind enabled "isAnyPrompt")
+		)
+		(bindcall play
+			delay =			0.5
+			duration =		0.15
+			from =			{ alpha: 1, visualOffsetX: 0%, visible: true }
+			to =			{ alpha: 0, visualOffsetX: -100%, visible: false }
+			easing =		"Easing.quad_out"
+			action =		"kill"
+			(bind enabled "!isAnyPrompt")
+		)
+	)
+
+	(element AssistantPortrait
+		_isInGuidingTip =	false
+		_isFirstBattle =	"_isFirstBattle"
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(height = 46px)
+			(marginTop = "XS")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(borderRadius = "XS")
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+				(alpha = 0.7)
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(style (padding = "M"))
+
+			(tf
+				(class $TextDefaultBold20NM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+
+				(text = "toUpper(tr('IDS_PORT_ASSISTANT_NAME_DEFAULT'))")
+			)
+		)
+	)
+)
+
+(def element AssistantPortrait (_isInGuidingTip:bool = true, _isFirstBattle:bool = false)
+	(scope
+		(event evInitGlitch)
+		(event evGlitchStopped)
+		(event evSwitchEmotion)
+
+		(var emotionCounter:number =	0)
+		(bind emotionCounter			"emotionCounter + 1"	init=false watch=false		(event "evSwitchEmotion"))
+
+		(var glitchDelay:number =		"_isFirstBattle ? 23 : 16.5")
+
+		(var displayedEmotion:number =	"ASSISTANT_EMOTIONS_LIST[emotionCounter]")
+
+		(var isGlitchVisible:bool =		false)
+		(bind isGlitchVisible			"true"		init=false		(event "evInitGlitch"))
+		(bind isGlitchVisible			"false"		init=false		(event "evGlitchStopped"))
+
+		(var portrait:str =				"isGlitchVisible ? '' : 'url:../assistant/default/portrait/4kHD/' + displayedEmotion + '.png'")
+	)
+
+	(dispatch evInitGlitch		dir="EventDirection.NONE"		delay="glitchDelay"		on='addedToStage' (bind enabled "!_isInGuidingTip"))
+	(dispatch evSwitchEmotion	dir="EventDirection.NONE"								(bind enabled "!_isInGuidingTip && !isGlitchVisible") (bind trigger "isGlitchVisible"))
+
+	(style
+		(width = 200px)
+		(height = 200px)
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+		(borderRadius = "XS")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../service_kit/guiding_tip/background.png')
+			(backgroundSize = "fill")
+			(borderRadius = "XS")
+		)
+		(colorTransform = "COLOR_TRANSFORM_ACCENT_BLUE")
+	)
+
+
+	(block
+		(bind visible "!isGlitchVisible")
+
+		(class $FullsizeAbsolute)
+		(style
+			(bind backgroundImage "portrait")
+			(backgroundSize = "contain")
+			(borderRadius = "XS")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='AssistantGlitchFX'
+			(bind enabled "isGlitchVisible")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "contain")
+			(backgroundImage = 'url:../assistant/default/portrait/animation/whitenoise_loop/whitenoise_loop.skel')
+			(borderRadius = "XS")
+		)
+
+		(controller $Spine)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0.2)
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/stroke_one_px_with_br4.png')
+			(scale9grid = 4)
+		)
+	)
+)
+
+(def element AssistantGlitchFX ()
+	(scope
+		(event evGlitchStopped)
+	)
+
+	(class $Fullsize)
+	(style
+		(backgroundSize = "contain")
+		(backgroundImage = 'url:../assistant/default/portrait/animation/glitch_state_switch/glitch_state_switch.skel')
+		(borderRadius = "XS")
+	)
+
+	(controller $Spine
+		(bindcall play sequence = "{ name:'animation', repeatCount:1 }" init=true)
+		(dispatch evGlitchStopped	dir="EventDirection.UP"		on=stopped)
+	)
+)
+
+(def element AssistantFullsize ()
+	(scope
+		(event evUpdatePrev)
+		(event evUpdateCurrent)
+
+		(var voicePrompt:dhComponent =	"getSingleComponent(CC.voicePrompt)")
+		(var emotion:number =			"voicePrompt.assistantEmotion ?: SC.Common.ASSISTANT_EMOTION.NONE"		(event "voicePrompt.evAssistantEmotionChanged"))
+		(var assistantImg:str =			"'url:../assistant/default/fullsize/4kHD/' + emotion + '.png'")
+
+		(var current:str =	"emotion	? assistantImg : 'url:../assistant/default/fullsize/4kHD/0.png'"	watch=false)
+		(bind current		"emotion	? assistantImg : ''"												init=false watch=false	(event "evUpdateCurrent"))
+		(var prev:str =		'')
+		(bind prev			"current"	init=false watch=false	(event "evUpdatePrev"))
+	)
+
+	(dispatch evUpdatePrev		dir="EventDirection.NONE"		(event "voicePrompt.evAssistantEmotionChanged"))
+	(dispatch evUpdateCurrent	dir="EventDirection.NONE"		(bind trigger "prev"))
+
+	(class $Fullsize)
+
+	(block
+		(bind visible "prev")
+
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 1)
+			(bind backgroundImage "prev")
+			(backgroundSize = "contain")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	0.2
+				from =		"{ alpha: 1 }"
+				to =		"{ alpha: 0 }"
+				easing =	"Easing.line"
+				action =	"kill"
+				(bind enabled "toBool(prev)")
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 1)
+			(bind backgroundImage "current")
+			(backgroundSize = "contain")
+		)
+
+		(controller $Animation
+			(bindcall play
+				delay =		0.5
+				duration =	0.2
+				from =		"{ alpha: 1 }"
+				to =		"{ alpha: 0 }"
+				easing =	"Easing.line"
+				action =	"kill"
+				(bind enabled "!toBool(current)")
+			)
+			(bindcall play
+				watch =		false
+				duration =	"0.2"
+				from =		"{ alpha: 0 }"
+				to =		"{ alpha: 1 }"
+				easing =	"Easing.line"
+				action =	"kill"
+				(bind trigger "current")
+				(bind enabled "toBool(current)")
+			)
+		)
+	)
+)

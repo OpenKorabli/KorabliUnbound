@@ -65,280 +65,644 @@
 		'[st_fire]'									:	'url:../battle_hud/markers/scenario_tags/icon_scenario_tag_fire.png'}"
 )
 
-(def element TasksList (_isCompactView:bool = false)
+(def constant PVE_PRIMARY_TASK_FOG_COLORS {
+	SC.Battle.PVE_TASK_STATUS.SUCCESS: {
+		redMultiplier: 0.18,
+		greenMultiplier: 0.8,
+		blueMultiplier: 0.7,
+		alphaMultiplier: 1,
+		redOffset: 0,
+		greenOffset: 0,
+		blueOffset: 0,
+		alphaOffset: 0
+	},
+	SC.Battle.PVE_TASK_STATUS.FAILURE: {
+		redMultiplier: 0.9,
+		greenMultiplier: 0.38,
+		blueMultiplier: 0.4,
+		alphaMultiplier: 1,
+		redOffset: 0,
+		greenOffset: 0,
+		blueOffset: 0,
+		alphaOffset: 0
+	}
+})
+
+(def constant TASK_ANIMATION_TIME
+	{
+		FOR_SHOW: 0.7,
+		FOR_HIDE: 0.55,
+		FOR_BLINK: 0.8,
+		FOR_CONTROL_ALPHA_WHEN_PRIMRY_UPDATE: 0.15,
+		FOR_CONTROL_SCALE_WHEN_PRIMRY_UPDATE: 0.4
+	}
+)
+
+(def struct TASK_ITEM_SCENARIO_INFO (_taskEntityId:number)
+	(var taskEntity:dhEntity = "getEntity(_taskEntityId)")
+
+	(var progressComponent:dhComponent = 	"taskEntity.progress")
+	(var taskComponent:dhComponent = 		"taskEntity.task")
+	(var timeoutComponent:dhComponent = 	"taskEntity.timeout" autoUpdate=false (event "taskEntity.evAdded"))
+
+	(var taskIDS:str = 			"taskComponent.text ?: ''")
+	(var taskType:number = 		"taskComponent.progressType ?: 0")
+	(var taskStatus:number = 	"taskComponent.status ?: SC.Battle.PVE_TASK_STATUS.NOT_STARTED" (event "taskComponent.evStatusChanged"))
+
+	(var hasTimer:bool = "taskType == SC.Battle.PVE_TASK_TYPE.TIMER || taskType == SC.Battle.PVE_TASK_TYPE.REVERSED_TIMER && timeoutComponent != null")
+
+	(var progressValue:number = "progressComponent.value ?: 0" 	(event "progressComponent.evChanged"))
+	(var progressMax:number = 	"progressComponent.max ?: 0" 	(event "progressComponent.evChanged"))
+
+	(var progressText:str = "	taskType == SC.Battle.PVE_TASK_TYPE.DIGIT			? '(' + formatSeparator(progressValue) + '/' + formatSeparator(progressMax) + ')' :
+								taskType == SC.Battle.PVE_TASK_TYPE.DIGIT_SINGLE	? '(' + formatSeparator(progressValue) + ')'
+																					: ''")
+
+	(var isTaskSuccess:bool = "taskStatus == SC.Battle.PVE_TASK_STATUS.SUCCESS")
+	(var isTaskFailure:bool = "taskStatus == SC.Battle.PVE_TASK_STATUS.FAILURE")
+
+	(var taskCategory:str = "_isPrimaryTask ? 'main' : 'secondary'")
+
+	(var taskStatusStr:str = "	isTaskSuccess 	? 'done' :
+								isTaskFailure 	? 'not_done'
+												: 'default'")
+
+	(var statusIcon:str = "taskCategory + '_task_' + taskStatusStr")
+)
+
+(def element TaskListInTab ()
 	(scope
-		
-		
-
-		(var battleDataEntity:dhEntity = "getSingleEntity(CC.battleData)")
-		(var gameModeId:number = "battleDataEntity.battleInfo.gameModeId")
-
-		(var primaryTasksCollection:dhCollection = "getCollection(CC.task).getChildByPath('category.primary')")
-		(var secondaryTasksCollection:dhCollection = "getCollection(CC.task).getChildByPath('category.secondary')")
+		(var primaryTasksInTabCollection:dhCollection = "getCollection(CC.task).getChildByPath('category.primary')")
+		(var secondaryTasksInTabCollection:dhCollection = "getCollection(CC.task).getChildByPath('category.secondary')")
 	)
-
-	(style (bind width "_isCompactView ? 354px : 500px"))
-
-	
+	(style (width = 600px))
 
 	(block
-		(bind visible "primaryTasksCollection.length > 0")
-
 		(style
 			(width = 100%)
-			(marginBottom = "_isCompactView ? XS : M")
+			(marginBottom = "SXS")
+			(gap = "SXS")
+		)
+		(controller $Repeat renderer = 'TaskItemScenarioInTab'
+			(bind count "primaryTasksInTabCollection.length")
+			(args
+				_taskEntityId = "primaryTasksInTabCollection[$index].id"
+				_isPrimaryTask = true
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(gap = "SXS")
+		)
+		(controller $Repeat renderer = 'TaskItemScenarioInTab'
+			(bind count "secondaryTasksInTabCollection.length")
+			(args
+				_taskEntityId = "secondaryTasksInTabCollection[$index].id"
+			)
+		)
+	)
+
+)
+
+(def element TasksList ()
+	(scope
+		(event evShowFog)
+		(event evPrimaryTaskShown)
+		(event evPrimaryTaskStartShow)
+		(event evSecondaryTaskStartShow)
+		(event evSecondaryTaskStartHide)
+		(event evLastSecondaryTaskStartHide)
+		(event evFirstSecondaryTaskStartShow)
+	
+		(var primaryTasksCollection:dhCollection = "getCollection(CC.task).getChildByPath('inProgress.category.primary')")
+		(var secondaryTasksCollection:dhCollection = "getCollection(CC.task).getChildByPath('inProgress.category.secondary')")
+
+		(var primaryTaskEntity:dhEntity = "primaryTasksCollection.length > 0 ? primaryTasksCollection[0] : null")
+
+		(var battleStateComponent:dhComponent = "getSingleEntity(CC.battleData).battleState")
+		(var battleState:number = "battleStateComponent.battleState" (event "battleStateComponent.evBattleStateChanged"))
+		(var isBattleEnded:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
+
+		(var isPrimaryTaskFirstShown:bool = false)
+		(bind isPrimaryTaskFirstShown "true" init=false (event "evPrimaryTaskShown"))
+
+		(var fogColor:dict = "PVE_PRIMARY_TASK_FOG_COLORS[$event.value] ?: CT_NONE" (event "evShowFog"))
+
+		(var countSecodaryTaskWillShown:number = 0)
+		(bind countSecodaryTaskWillShown "countSecodaryTaskWillShown + 1" init=false watch=false (event "evSecondaryTaskStartShow"))
+		(bind countSecodaryTaskWillShown "countSecodaryTaskWillShown - 1" init=false watch=false (event "evSecondaryTaskStartHide"))
+	)
+	(dispatch evLastSecondaryTaskStartHide 	(bind enabled "countSecodaryTaskWillShown == 0") (bind trigger "countSecodaryTaskWillShown == 0"))
+	(dispatch evFirstSecondaryTaskStartShow (bind enabled "countSecodaryTaskWillShown == 1") (bind trigger "countSecodaryTaskWillShown == 1"))
+
+	(style (width = 340px))
+
+	(block 
+		(style
+			(width = 100%)
+			(marginBottom = "XXS")
+		)
+
+		(block 
+			(class $FullsizeAbsolute)
+			(style
+				(borderRadius = "XS")
+				(backgroundColor = "BATTLE_SEMI_TRANSPARENT_BACKGROUNDS.BG_INTENSE")
+				(alpha = 0)
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.44
+					to = "{alpha: 1}"
+					easing = "Easing.quart_in_out"
+					(event "evPrimaryTaskStartShow")
+				)
+			)
+		)
+
+		(block 
+			(class $FullsizeAbsolute)
+			(style
+				(borderRadius = "XS")
+				(backgroundImage = 'url:../pve/operation_animations/operation_tasks.skel')
+				(backgroundSize = "fill")
+			)
+			(bind colorTransform "fogColor")
+
+			(controller $Spine
+				(bindcall pause init=true)
+				(bindcall resume (event "evShowFog"))
+			)
 		)
 
 		(block
 			(style
 				(width = 100%)
-				(marginBottom = "_isCompactView ? SXS : MS")
+				(paddingRight = "SXS")
+				(paddingLeft = "SXS")
 			)
-
-			(controller $Instance renderer='TasksHeader'
-				(args
-					_isCompactView = "_isCompactView"
-					_headerText = 'IDS_PRIMARYHEADER'
-				)
-			)
-		)
-		
-		(block
-			(style (width = 100%))
-
-			(controller $Repeat renderer='TaskItemScenario'
-				(bind count "primaryTasksCollection.length")
-				(args
-					_isCompactView = "_isCompactView"
-					_taskEntityId = "primaryTasksCollection.items[$index].id"
-					_isMainTask = true
-				)
+			(element TaskItemScenario
+				_taskEntityId = "primaryTaskEntity.id"
+				_isPrimaryTask = true
+				_isBattleEnded = "isBattleEnded"
+				_isPrimaryTaskFirstShown = "isPrimaryTaskFirstShown"
 			)
 		)
 	)
 
-	(block
-		(bind visible "secondaryTasksCollection.length > 0")
-
+	(block 
 		(style (width = 100%))
 
+		(block 
+			(class $FullsizeAbsolute)
+			(style
+				(borderRadius = "XS")
+				(backgroundColor = "BATTLE_SEMI_TRANSPARENT_BACKGROUNDS.BG_LIGHT")
+				(alpha = 0)
+			)
+
+			(controller $Animation
+				(bindcall play
+					id = 'bgLightAnimation'
+					duration = 0.44
+					to = "{alpha: 1}"
+					action = "kill"
+					easing = "Easing.quart_in_out"
+					(event "evFirstSecondaryTaskStartShow")
+				)
+				(bindcall play
+					id = 'bgLightAnimation'
+					duration = 0.35
+					delay = "TASK_ANIMATION_TIME.FOR_HIDE * 0.5"
+					to = "{alpha: 0}"
+					action = "kill"
+					easing = "Easing.quart_in_out"
+					(event "evLastSecondaryTaskStartHide")
+				)
+			)
+		)
+
 		(block
 			(style
 				(width = 100%)
-				(marginBottom = "_isCompactView ? SXS : MS")
+				(paddingRight = "SXS")
+				(paddingLeft = "SXS")
 			)
-
-			(controller $Instance renderer='TasksHeader'
-				(args
-					_isCompactView = "_isCompactView"
-					_headerText = 'IDS_SECONDARYHEADER'
-				)
-			)
-		)
-		(block
-			(style (width = 100%))
-
 			(controller $Repeat renderer='TaskItemScenario'
-				(bind count "secondaryTasksCollection.length")
-				
+				(bind enabled "isPrimaryTaskFirstShown")
+				(bind items "secondaryTasksCollection")
 				(args
-					_isCompactView = "_isCompactView"
-					_taskEntityId = "secondaryTasksCollection.items[$index].id"
+					_taskEntityId = "$item.id"
+					_isBattleEnded = "isBattleEnded"
 				)
 			)
 		)
 	)
 )
 
-(def element TasksHeader (_headerText:str, _isCompactView:bool)
+(def element TaskItemScenarioInTab (_taskEntityId:number = 0,
+									_isPrimaryTask:bool = false)
+	(scope
+		(struct taskItemScenarioInfo = TASK_ITEM_SCENARIO_INFO(_taskEntityId = "_taskEntityId"))
+		(var totalTime:number = "taskItemScenarioInfo.timeoutComponent.total" (event "taskItemScenarioInfo.timeoutComponent.evTotalChanged"))
+		(var totalTimeFormat:str = "taskItemScenarioInfo.hasTimer ? formatTime(totalTime, 'mm:ss', '', false) : ''")
+	)
 	(style (width = 100%))
 
-	(tf
-		(bind class "_isCompactView ? '$TextDefaultBoldNM' : '$TextDefaultBold28NM'")
-		(style
-			(width = 100%)
-			(bind alpha "_isCompactView ? 1 : TA")
-		)
-		(bind text "_headerText")
+	(element TaskItemScenarioContent
+		_isTab 			= true
+		_index 			= "$index"
+		_isPrimaryTask	= "_isPrimaryTask"
+		_statusIcon 	= "taskItemScenarioInfo.statusIcon"
+		_isTaskSuccess 	= "taskItemScenarioInfo.isTaskSuccess"
+		_isTaskFailure 	= "taskItemScenarioInfo.isTaskFailure"
+		_taskIds 		= "taskItemScenarioInfo.taskIDS"
+		_progressText 	= "taskItemScenarioInfo.progressText"
+		_countdownText 	= "totalTimeFormat"
 	)
 )
 
-(def element TaskItemScenario (_isCompactView:bool, _taskEntityId:number = 0, _isMainTask:bool=false)
-	
-	
-	
-	
-	
-	
-	
-	
-
-	
-	
-	
-	
-	
-	
-	
-
+(def element TaskItemScenario (	_taskEntityId:number,
+								_isBattleEnded:bool,
+								_isPrimaryTask:bool = false,
+								_isPrimaryTaskFirstShown:bool = false)
 	(scope
-		
-		
-		
+		(event evShowBlink)
+		(event evShowFog)
+		(event evHideTask)
+		(event evRemoveTask)
+		(event evShowTask)
+		(event evUpdatePrimaryTask)
+		(event evCurrentPrimaryTaskShown)
+		(event evSecondaryTaskStartShow)
+		(event evSecondaryTaskHidden)
+		(event evSecondaryTaskShown)
+		(event evSaveData)
+
+		(struct taskItemScenarioInfo = TASK_ITEM_SCENARIO_INFO(_taskEntityId = "_taskEntityId"))
+
+		(var isNeedToHide:bool = "isIn(taskItemScenarioInfo.taskStatus, SC.Battle.PVE_TASK_STATUS.HIDDEN_IN_HUD_AFTER_COMPLETE)")
 
 		
+		(var battleDataComponent:dhComponent = "getSingleComponent(CC.battleTimer)")
+		(var battleTime:number = "battleDataComponent.battleTime" (event "battleDataComponent.evBattleTimeChanged"))
+
+		(var taskTime:number = "taskItemScenarioInfo.hasTimer ? taskItemScenarioInfo.timeoutComponent.time : null" (event "taskItemScenarioInfo.timeoutComponent.evTimeChanged"))
+		(var timerValue:number = "taskItemScenarioInfo.hasTimer ? taskTime - battleTime : 0")
+
+		(var countdownText:str = "taskItemScenarioInfo.hasTimer ? formatTime(timerValue, 'mm:ss', '', false) : ''" watch=false)
+		(bind countdownText "taskItemScenarioInfo.hasTimer ? formatTime(timerValue, 'mm:ss', '', false) : ''" init=false watch=false (bind trigger "isNeedToHide || _isBattleEnded ? null : timerValue"))
+
+		(var timeMaxValueForWarning:number = 9)
+		(var isTimeWarning:bool = "timerValue <= timeMaxValueForWarning")
 		
 
-		(var taskEntity:dhEntity = "getEntity(_taskEntityId)")
-		(var taskIDS:str = "taskEntity.task.text ?: ''")
-		(var taskType:number = "taskEntity.task.progressType ?: 0")
-		(var taskStatus:number = "taskEntity.task.status ?: SC.Battle.PVE_TASK_STATUS.NOT_STARTED" (event "taskEntity.task.evStatusChanged"))
+		
+		(var saveTaskStatus:number = "SC.Battle.PVE_TASK_STATUS.NOT_STARTED")
+		(var saveTaskIds:str = '')
+		(var saveCountdownText:str = '')
+		(var saveProgressText:str = '')
+		(var saveIsTimeWarning:bool = false)
 
-		(var hasTimer:bool = "taskType == SC.Battle.PVE_TASK_TYPE.TIMER || taskType == SC.Battle.PVE_TASK_TYPE.REVERSED_TIMER && taskEntity.timeout")
-		(var taskTime:number = "hasTimer ? taskEntity.timeout.time : null" (event "taskEntity.timeout.evTimeChanged"))
+		(bind saveTaskStatus 	"taskItemScenarioInfo.taskStatus" 		init=false watch=false (event "evSaveData"))
+		(bind saveTaskIds 		"taskItemScenarioInfo.taskIDS" 			init=false watch=false (event "evSaveData"))
+		(bind saveProgressText 	"taskItemScenarioInfo.progressText"		init=false watch=false (event "evSaveData"))
+		(bind saveCountdownText "countdownText" 						init=false watch=false (event "evSaveData"))
+		(bind saveIsTimeWarning "isTimeWarning"							init=false watch=false (event "evSaveData"))
 
-		(var battleDataEntity:dhEntity = "getSingleEntity(CC.battleTimer)")
-		(var battleTime:number = "battleDataEntity.battleTimer.battleTime" (event "battleDataEntity.battleTimer.evBattleTimeChanged"))
-		(var timerValue:number = "taskTime ? taskTime - battleTime : 0")
-		(var countdownText:str = "hasTimer ? '(' + formatTime(timerValue, 'mm:ss', '', false) + ')' : ''")
+		(var isSaveData:bool = false)
+		(bind isSaveData 	"true" 	init=false (bind trigger "saveTaskIds"))
+		(bind isSaveData 	"false" init=false (event "evCurrentPrimaryTaskShown"))
 
-		(var progressComponent:dhComponent = "taskEntity.progress")
-		(var progressValue:number = "progressComponent.value ?: 0" (event "progressComponent.evChanged"))
-		(var progressMax:number = "progressComponent.max ?: 0" (event "progressComponent.evChanged"))
-		(var progressText:str = "	taskType == SC.Battle.PVE_TASK_TYPE.DIGIT			? '(' + progressValue + '/' + progressMax + ')' :
-									taskType == SC.Battle.PVE_TASK_TYPE.DIGIT_SINGLE	? '(' + progressValue + ')'
-																						: ''")
-		(var taskText:str = "tr(taskIDS) + ' ' + ' <h3>' + countdownText + progressText + '</h3>'")
+		(var taskIdsDisplay:str = 			"isSaveData ? saveTaskIds 		: taskItemScenarioInfo.taskIDS")
+		(var taskStatusDisplay:number = 	"isSaveData ? saveTaskStatus 	: taskItemScenarioInfo.taskStatus")
+		(var progressTextDisplay:str = 		"isSaveData ? saveProgressText 	: taskItemScenarioInfo.progressText")
+		(var countdownTextDisplay:str = 	"isSaveData ? saveCountdownText : countdownText")
+		(var isTimeWarningDisplay:bool = 	"isSaveData ? saveIsTimeWarning : isTimeWarning")
 
-		(var taskStatusIcon:str = "	taskStatus == SC.Battle.PVE_TASK_STATUS.SUCCESS		? 'done.png' :
-									taskStatus == SC.Battle.PVE_TASK_STATUS.NOT_STARTED	? 'not_started.png' :
-									taskStatus == SC.Battle.PVE_TASK_STATUS.IN_PROGRESS	? 'not_started.png' 
-																						: 'failed.png'")
+		(var isTaskDisplayedSuccess:bool = "taskStatusDisplay == SC.Battle.PVE_TASK_STATUS.SUCCESS")
+		(var isTaskDisplayedFailure:bool = "taskStatusDisplay == SC.Battle.PVE_TASK_STATUS.FAILURE")
 
-		(var itemMargin:number = "_isCompactView ? M : MS")
+		(var isTaskDisplayedCompleted:bool = "isTaskDisplayedSuccess || isTaskDisplayedFailure")
+
+		(var statusIconDisplay:str = "	isTaskDisplayedSuccess 	? 'main_task_done' :
+										isTaskDisplayedFailure 	? 'main_task_not_done'
+																: 'main_task_default'")
+		
+
+		(var isBlockForUpdatePrimaryTaskEnabled:bool = false)
+		(bind isBlockForUpdatePrimaryTaskEnabled "true" 	init=false (event "evUpdatePrimaryTask"))
+		(bind isBlockForUpdatePrimaryTaskEnabled "false" 	init=false (event "evCurrentPrimaryTaskShown"))
+
+		(var isBlockForUpdatePrimaryOrSecondaryVisible:bool = "_isPrimaryTask && isBlockForUpdatePrimaryTaskEnabled || !_isPrimaryTask")
+
+		(var isUpdatePrimaryTaskEnabled:bool = "_isPrimaryTask && isSaveData && taskItemScenarioInfo.taskIDS != ''")
+		(var isShowFogEnabled:bool = "_isPrimaryTask && _isBattleEnded && isTaskDisplayedCompleted && taskItemScenarioInfo.taskIDS == ''")
+		(var isSaveDataEnabled:bool = "_isPrimaryTask && isNeedToHide && !isSaveData")
+
+		(var isSecondaryTaskShown:bool = "false")
+		(bind isSecondaryTaskShown "true" init=false watch=false (event "evSecondaryTaskShown"))
+
+		(var isHideSecondaryTaskEnabled:bool = "!_isPrimaryTask && isNeedToHide && isSecondaryTaskShown")
 	)
+	
+	
+	(dispatch evShowTask (bind enabled "_isPrimaryTask && !_isPrimaryTaskFirstShown && taskItemScenarioInfo.taskIDS != ''") (bind trigger "taskItemScenarioInfo.taskIDS != ''"))
+	
+	(dispatch evShowTask on='addedToStage' (bind enabled "_isPrimaryTask && taskItemScenarioInfo.taskIDS != ''"))
+	
+	(dispatch evUpdatePrimaryTask delay="TASK_ANIMATION_TIME.FOR_BLINK + 0.2" (bind enabled "isUpdatePrimaryTaskEnabled") (bind trigger "taskItemScenarioInfo.taskIDS"))
+
+	
+	(dispatch evShowFog args="{value: taskStatusDisplay}" dir="EventDirection.UP" (bind enabled "isShowFogEnabled") (bind trigger "_isBattleEnded"))
+	(dispatch evShowFog args="{value: taskStatusDisplay}" dir="EventDirection.UP" (bind enabled "isShowFogEnabled") (bind trigger "taskStatusDisplay"))
+	(dispatch evShowFog args="{value: taskStatusDisplay}" dir="EventDirection.UP" (bind enabled "isShowFogEnabled") (bind trigger "taskItemScenarioInfo.taskIDS"))
+
+	
+	(dispatch evSaveData (bind enabled "isSaveDataEnabled") (bind trigger "isNeedToHide"))
+	(dispatch evSaveData (bind enabled "isSaveDataEnabled") (event "evCurrentPrimaryTaskShown"))
+
+	
+	(dispatch evRemoveTask (bind enabled "_isPrimaryTask && isSaveData") (bind trigger "isSaveData"))
+	
+
+	
+	
+	(dispatch evShowTask on='addedToStage' (bind enabled "!_isPrimaryTask"))
+	
+	(dispatch evHideTask (bind enabled "isHideSecondaryTaskEnabled") (bind trigger "isNeedToHide"))
+	(dispatch evHideTask (bind enabled "isHideSecondaryTaskEnabled") (bind trigger "isSecondaryTaskShown"))
+
+	
+	(dispatch evRemoveTask (bind enabled "!_isPrimaryTask") (event "evSecondaryTaskHidden"))
+	
+
+	
+	
+
+	(dispatch evShowBlink  dir="EventDirection.DOWN" args="{status: 'show'}" delay="TASK_ANIMATION_TIME.FOR_SHOW" (event "evShowTask"))
+	(dispatch evShowBlink  dir="EventDirection.DOWN" args="{status: 'hide'}" (bind enabled "isNeedToHide") (bind trigger "isNeedToHide"))
+	(dispatch evShowBlink  dir="EventDirection.DOWN" (bind enabled "!isBlockForUpdatePrimaryTaskEnabled") (bind trigger "isBlockForUpdatePrimaryTaskEnabled"))
+	
+
+	(bindcall externalCall "'direct.action'" "['removeBattleTask', {entityId: _taskEntityId}]" init=false watch=false (event "evRemoveTask"))
 
 	(style
 		(width = 100%)
-		
-		(flow = "horizontal")
-		(bind marginBottom "itemMargin")
-		(align = "middle")
+		(scaleY = 0)
+		(alpha = 0)
 	)
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-
-	
-
-	(block
-		(style
-			(width = 15px)
-			(height = 11px)
-			(bind backgroundImage "'url:../service_kit/icons/icon_task_' + taskStatusIcon")
-		)
-	)
-
-	(block
-		(style (width = 100%))
-
-		(tf
-			(bind class "_isCompactView ? '$TextDefaultNM' : '$TextDefault20NM'")
-			(style
-				(width = 100%)
-				(bind marginLeft "_isCompactView ? '6px' : S")
-				(leading = -4)
-				(bind alpha "	isIn(taskStatus, SC.Battle.PVE_TASK_STATUS.HIDDEN_IN_HUD_AFTER_COMPLETE) 	? TS :
-								_isCompactView 																? 1
-																											: TC")
-				(styleSheet = "'h3{color: #9CBABA; font-weight:bold}'")
-			)
-			(bindcall substitute imageOffset=5  substitutionMap="SUBS_DATA" sourceText="'<body>' + taskText + '</body>'" postfix='' init=true)
-		)
-	)
-
-	(block
-		(style
-			(position = "absolute")
-			(left = 100%)
-			(bind marginLeft "_isCompactView ? '6px' : S")
-			(align = "middle")
-			(height = 100%)
-		)
-
-		(controller $FxInstance lifetime="5"
-			(bind renderer 'FxTaskItemScenarioStatus')
-			(bind enabled "isIn(taskStatus, SC.Battle.PVE_TASK_STATUS.VISIBLE_STATUS) && _isCompactView")
-			(bindcall create init=false on='addedToStage' (bind trigger "taskStatus"))
-			(args
-				_taskStatus = "taskStatus"
-				_isCompactView = "_isCompactView"
-				_isMainTask = "_isMainTask"
-			)
-		)
-	)
-)
-
-(def element FxTaskItemScenarioStatus (_taskStatus:number, _isCompactView:bool, _isMainTask:bool=false)
-	(scope
-		(var isNeedToHideTask:bool = "isIn(_taskStatus, SC.Battle.PVE_TASK_STATUS.HIDDEN_IN_HUD_AFTER_COMPLETE) && !_isMainTask")
-	)
-
-	(style
-		(pivotY = 50%)
-		(pivotX = 50%)
-	)
-
-
-	
 
 	(controller $Animation
+		(controllerEvents 	evTaskItemScenarioStartShow
+							evTaskItemScenarioShown
+							evTaskItemScenarioStartHide
+							evTaskItemScenarioHidden)
+
 		(bindcall play
-			from={alpha:0, scaleY: 2, visualScaleX: 2, marginTop: 0, marginBottom: 0}
-			to={alpha:1, scaleY: 1, visualScaleX: 1, marginTop: 2, marginBottom: 2}
-			duration=0.2
-			easing="Easing.bounce_in_out"
-			on='addedToStage'
+			id = 'taskItemScenarioTextAnimation'
+			keyframes = "[
+				{percent: 50,	to: { alpha: 0, scaleY: 1 }},
+				{percent: 70,	to: { alpha: 0, scaleY: 1 }},
+				{percent: 100,	to: { alpha: 1, scaleY: 1 }}
+			]"
+			delay = "_isPrimaryTask ? 0 : ($index + 1) * TASK_ANIMATION_TIME.FOR_SHOW"
+			duration = "TASK_ANIMATION_TIME.FOR_SHOW"
+			onStartedEvent = 'evTaskItemScenarioStartShow'
+			onEndedEvent = 'evTaskItemScenarioShown'
+			easing = "Easing.quart_in_out"
+			watch = false
+			(event "evShowTask")
 		)
+
 		(bindcall play
-			delay=4.5
-			from={alpha:1, scaleY: 1, visualScaleX: 1, marginTop: 2, marginBottom: 2}
-			to={alpha:0, scaleY: 0, visualScaleX: 0, marginTop: 0, marginBottom: 0}
-			duration=0.2
-			easing="Easing.bounce_out"
-			on='addedToStage'
+			id = 'taskItemScenarioTextAnimation'
+			keyframes = "[
+				{percent: 36,	to: { alpha: 0, scaleY: 1 }},
+				{percent: 100,	to: { alpha: 0, scaleY: 0 }}
+			]"
+			delay = "TASK_ANIMATION_TIME.FOR_BLINK + 0.9"
+			duration = "TASK_ANIMATION_TIME.FOR_HIDE"
+			onStartedEvent = 'evTaskItemScenarioStartHide'
+			onEndedEvent = 'evTaskItemScenarioHidden'
+			easing = "Easing.quart_in_out"
+			watch = false
+			(event "evHideTask")
+		)
+
+		(dispatch evPrimaryTaskShown 		dir="EventDirection.UP" on='evTaskItemScenarioShown' 		(bind enabled "_isPrimaryTask"))
+		(dispatch evPrimaryTaskStartShow 	dir="EventDirection.UP" on='evTaskItemScenarioStartShow' 	(bind enabled "_isPrimaryTask"))
+		(dispatch evSecondaryTaskShown 		dir="EventDirection.UP" on='evTaskItemScenarioShown' 		(bind enabled "!_isPrimaryTask"))
+		(dispatch evSecondaryTaskStartShow 	dir="EventDirection.UP" on='evTaskItemScenarioStartShow' 	(bind enabled "!_isPrimaryTask"))
+		(dispatch evSecondaryTaskStartHide 	dir="EventDirection.UP" on='evTaskItemScenarioStartHide' 	(bind enabled "!_isPrimaryTask"))
+		(dispatch evSecondaryTaskHidden 	dir="EventDirection.UP" on='evTaskItemScenarioHidden' 		(bind enabled "!_isPrimaryTask"))
+	)
+	
+	(block
+		(bind visible "_isPrimaryTask")
+		(style 
+			(width = 100%)
+			(bind alpha "1" init=false (event "evCurrentPrimaryTaskShown"))
+			(bind scaleY "1" init=false (event "evCurrentPrimaryTaskShown"))
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = "TASK_ANIMATION_TIME.FOR_CONTROL_ALPHA_WHEN_PRIMRY_UPDATE"
+				to = "{alpha: 0}"
+				easing = "Easing.quart_in_out"
+				(event "evUpdatePrimaryTask")
+			)
+
+			(bindcall play
+				duration = "TASK_ANIMATION_TIME.FOR_CONTROL_SCALE_WHEN_PRIMRY_UPDATE"
+				delay = "TASK_ANIMATION_TIME.FOR_CONTROL_ALPHA_WHEN_PRIMRY_UPDATE"
+				to = "{scaleY: 0}"
+				easing = "Easing.quart_in_out"
+				(event "evUpdatePrimaryTask")
+			)
+		)
+
+		(controller $Instance renderer = 'TaskItemScenarioContent'
+			(bind enabled "_isPrimaryTask")
+			(args
+				_isPrimaryTask = true
+				_index = 0
+				_statusIcon 	= "statusIconDisplay"
+				_isTaskSuccess 	= "isTaskDisplayedSuccess"
+				_isTaskFailure 	= "isTaskDisplayedFailure"
+				_taskIds 		= "taskIdsDisplay"
+				_progressText 	= "progressTextDisplay"
+				_countdownText 	= "countdownTextDisplay"
+				_isTimeWarning 	= "isTimeWarningDisplay"
+			)
 		)
 	)
 
-	(tf
-		(bind class "_isCompactView ? '$TextDefaultBoldNM' : '$TextDefaultBold20NM'")
+	
+	(block
+		(bind visible "isBlockForUpdatePrimaryOrSecondaryVisible")
 		(style
-			(bind textColor "	_taskStatus == SC.Battle.PVE_TASK_STATUS.SUCCESS		? C_POSITIVE :
-								_taskStatus == SC.Battle.PVE_TASK_STATUS.NOT_STARTED	? C_POSITIVE :
-								_taskStatus == SC.Battle.PVE_TASK_STATUS.UPDATED		? C_POSITIVE :
-								_taskStatus == SC.Battle.PVE_TASK_STATUS.IN_PROGRESS	? C_POSITIVE :
-								_taskStatus == SC.Battle.PVE_TASK_STATUS.FAILURE		? C_CRITICAL :
-								_taskStatus == SC.Battle.PVE_TASK_STATUS.CANCELED		? C_CRITICAL
-																						: C_NEUTRAL	")
+			(width = 100%)
+			(alpha = "_isPrimaryTask ? 0 : 1")
+			(scaleY = "_isPrimaryTask ? 0 : 1")
+			(bind alpha "0" init=false (event "evCurrentPrimaryTaskShown"))
+			(bind scaleY "0" init=false (event "evCurrentPrimaryTaskShown"))
 		)
-		(bind text "'IDS_PVE_TASK_BATTLE_STATUS_' + SC.Battle.PVE_TASK_STATUS.VALUE_TO_NAME[_taskStatus]")
+
+		(controller $Animation
+			(controllerEvents evSwapAnimationEnded)
+			(bindcall play
+				duration = "TASK_ANIMATION_TIME.FOR_CONTROL_SCALE_WHEN_PRIMRY_UPDATE"
+				delay = "TASK_ANIMATION_TIME.FOR_CONTROL_ALPHA_WHEN_PRIMRY_UPDATE"
+				to = "{scaleY: 1}"
+				easing = "Easing.quart_in_out"
+				(event "evUpdatePrimaryTask")
+			)
+
+			(bindcall play
+				duration = "TASK_ANIMATION_TIME.FOR_CONTROL_ALPHA_WHEN_PRIMRY_UPDATE"
+				delay = "TASK_ANIMATION_TIME.FOR_CONTROL_SCALE_WHEN_PRIMRY_UPDATE + TASK_ANIMATION_TIME.FOR_CONTROL_ALPHA_WHEN_PRIMRY_UPDATE"
+				to = "{alpha: 1}"
+				easing = "Easing.quart_in_out"
+				onEndedEvent = 'evSwapAnimationEnded'
+				(event "evUpdatePrimaryTask")
+			)
+
+			(dispatch evCurrentPrimaryTaskShown on='evSwapAnimationEnded')
+		)
+
+		(controller $Instance renderer = 'TaskItemScenarioContent'
+			(bind enabled "isBlockForUpdatePrimaryOrSecondaryVisible")
+			(args
+				_isPrimaryTask = "_isPrimaryTask"
+				_index 			= "_isPrimaryTask ? 0 : $index"
+				_statusIcon 	= "taskItemScenarioInfo.statusIcon"
+				_isTaskSuccess 	= "taskItemScenarioInfo.isTaskSuccess"
+				_isTaskFailure 	= "taskItemScenarioInfo.isTaskFailure"
+				_taskIds 		= "taskItemScenarioInfo.taskIDS"
+				_progressText 	= "taskItemScenarioInfo.progressText"
+				_countdownText	= "countdownText"
+				_isTimeWarning 	= "isTimeWarning"
+			)
+		)
 	)
 )
 
+(def element TaskItemScenarioContent (	_isPrimaryTask:bool,
+										_statusIcon:str,
+										_index:number,
+										_isTaskSuccess:bool,
+										_isTaskFailure:bool,
+										_taskIds:str,
+										_progressText:str,
+										_countdownText:str,
+										_isTimeWarning:bool = false,
+										_isTab:bool = false)
+	(scope (event evShowBlink))
 
+	(style 
+		(width = 100%)
+		(minHeight = 24px)
+		(flow = "horizontal")
+		(paddingTop = "	_isTab 			? 0px :
+						_isPrimaryTask 	? SXS 
+										: S")
+		(paddingBottom = "	_isTab 			? 0px :
+							_isPrimaryTask	? SXS
+											: S")
+	)
+
+	(block
+		(style
+			(align = "center|middle")
+			(marginRight = "SXS")
+			(width = 24px)
+			(height = 24px)
+			(bind backgroundImage "'swf:../service_kit/icons_svg/icons_svg.swf:' + _statusIcon")
+		)
+
+		(block
+			(bind visible "!_isTab")
+			(style (alpha = 0))
+			(controller $Animation
+				(bindcall play
+					delay = "	_isPrimaryTask 			? 0 :
+								$event.status == 'show' ? ($index + 1) * TASK_ANIMATION_TIME.FOR_SHOW
+														: 0"
+					duration = "TASK_ANIMATION_TIME.FOR_BLINK"
+					keyframes = "[
+						{percent: 40, to: {alpha: 1}},
+						{percent: 60, to: {alpha: 1}},
+						{percent: 100, to: {alpha: 0}}
+					]"
+					watch = false
+					(event "evShowBlink")
+				)
+			)
+
+			(block
+				(style
+					(backgroundSize = "autosize")
+					(backgroundImage = 'url:../service_kit/icons/icon_task_blink.png')
+				)
+				(bind colorTransform "	_isTaskSuccess	? CT_ALLY :
+										_isTaskFailure 	? CT_ENEMY 
+														: {} ")
+			)
+		)
+	)
+
+	(hblock
+		(style
+			(width = 100%)
+			(marginTop = 6px)
+			(paddingBottom = 6px)
+		)
+
+		(tf
+			(class = "	_isTab 			? '$TextDefault20NM' :
+						_isPrimaryTask 	? '$TextDefaultBoldNM'
+										: '$TextDefaultNM'")
+			(style
+				(width = 100%)
+				(leading = -2)
+				(bind alpha "	!_isTab && _isPrimaryTask 	? 1 :
+								!_isTab 					? TA :
+								_isTaskFailure 				? TS
+															: TC")
+			)
+			(bindcall substitute imageOffset=5 substitutionMap="SUBS_DATA" sourceText="_taskIds" postfix='' init=true)
+		)
+
+		(tf
+			(bind visible "_progressText != ''")
+
+			(class = "_isTab ? '$TextDefaultBold20NM' : '$TextDefaultBoldNM'")
+			(style
+				(marginLeft = "SXS")
+				(bind alpha " _isTab && _isTaskFailure ? TS : 1")
+			)
+
+			(bind text "_progressText")
+		)
+
+		(tf
+			(bind visible "_countdownText != ''")
+
+			(class = "_isTab ? '$TextDefaultBold20NM' : '$TextDefaultBoldNM'")
+			(style
+				(width = "_isTab ? auto : 44px")
+				(marginLeft = "SXS")
+				(bind alpha " _isTab && _isTaskFailure ? TS : 1")
+				(bind textColor "_isTimeWarning ? C_WARNING : SC.Ui_styles.SERVICE_COLORS.WHITE")
+			)
+
+			(bind text "_countdownText")
+		)
+	)
+)
