@@ -1,0 +1,337 @@
+(def constant CRITICAL_MISSILE_HEIGHT 2)
+(def constant WARNING_MISSILE_HEIGHT 2.5)
+
+(def constant CRITICAL_MISSILE_FLY_TIME 10)
+(def constant WARNING_MISSILE_FLY_TIME 30)
+
+(def constant WARNING_MISSILE_FLY_RANGE_COEFFICIENT 0.7)
+
+
+(def element BetaMissileFlightHud ()
+	(scope
+		(macro IS_ALIVE)
+
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var isTacticalMap:bool = "cameraComponent.isTactical" (event "cameraComponent.evTacticalStateChanged"))
+
+		(var betaMissileDataComponent:dhComponent = "getSingleComponent(CC.betaMissileData)")
+		(var isSelected:bool = "betaMissileDataComponent.isSelected" (event "betaMissileDataComponent.evIsSelectedChanged"))
+		(var flyRange:number = "betaMissileDataComponent.flyRange * WARNING_MISSILE_FLY_RANGE_COEFFICIENT" (event "betaMissileDataComponent.evIsSelectedChanged"))
+
+		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
+		(var squadronCameraMode:str = "aircarrierComponent.squadronCameraMode" (event "aircarrierComponent.evSquadronCameraModeChanged"))
+		(var isOnNoAvatarCamera:bool = "aircarrierComponent && (squadronCameraMode != SquadronCameraModes.DEFAULT)")
+		(var activeSquadronIndex:number = "aircarrierComponent.activeSquadronIndex" (event "aircarrierComponent.evStateChanged"))
+		(var ownSquadronEntity:dhEntity = "getPrimaryEntity(CC.ownSquadron, activeSquadronIndex)")
+		(var ammoType:number = "ownSquadronEntity ? ownSquadronEntity.plane.ammoType : 0")
+		(var isActive:bool = "ammoType == SC.Common.PLANE_AMMO_TYPES.MISSILE")
+		(var isShowReturnAnimation:bool = "isOnNoAvatarCamera && isSelected")
+
+		(var forsageElementComponent:dhComponent = "ownSquadronEntity.forsageElement")
+		(var isForsageUsing:bool = "forsageElementComponent.isUsing" (event "forsageElementComponent.evForsageStateChanged"))
+
+		(var weaponControllerComponent:dhComponent = "getSingleComponent(CC.weaponController)")
+		(var isSelectedMissiles:bool = "weaponControllerComponent.selectedWeapon == SC.Ships.SHIP_WEAPON_TYPES.MISSILES" (event "weaponControllerComponent.evSelectedWeaponChanged"))
+
+		(var reloadBarsCollection:dhCollection = "getCollection(CC.reloadBar)")
+		(var activeWeaponType:number = "weaponControllerComponent != null ? weaponControllerComponent.selectedWeapon : SC.Ships.SHIP_WEAPON_TYPES.NONE" (event "weaponControllerComponent.evSelectedWeaponChanged") (event "weaponControllerComponent.evSelectedAmmoTypeChanged"))
+		(var hasActiveWeaponBar:bool = "reloadBarsCollection.length != 0 && activeWeaponType != SC.Ships.SHIP_WEAPON_TYPES.NONE && activeWeaponType != SC.Ships.SHIP_WEAPON_TYPES.AIRPLANES")
+
+		(var timerComponent:dhComponent = "isActive ? getSingleComponent(CC.timer) : null")
+		(var selfVehicleEntity:dhEntity = "getSingleEntity(CC.selfVehicle)")
+		(var selfDistanceComponent:dhComponent = "selfVehicleEntity.distance")
+		(var distanceToShip:number = "selfDistanceComponent.distanceToShip ?: 0" (event "timerComponent.evInfrequent"))
+
+		(var isShowWarningDistance:bool = "distanceToShip > flyRange && isActive")
+
+		(var keyboardBindingsApplier:dhComponent = "getSingleComponent(CC.keyboardBindingsApplier)")
+	)
+
+	(class $FullsizeAbsolute)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.08
+				from = {alpha: 1, visible: true}
+				to = {alpha: 0, visible: false}
+				reverse = "!isTacticalMap"
+				action = "kill"
+				(bind trigger "isTacticalMap")
+			)
+		)
+
+		(block
+			(visible = "isShowReturnAnimation")
+
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(align = "center")
+				(bottom = 92px)
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.08
+					delay = 0.08
+					from = {alpha: 0, visible: false, bottom: 87px}
+					to = {alpha: 1, visible: true, bottom: 92px}
+					reverse = "!isShowReturnAnimation"
+					action = "kill"
+					(bind trigger "isShowReturnAnimation")
+				)
+			)
+
+			(element AircraftCarrierPanelReturnInstruction)
+		)
+
+		(block
+			(bind visible "!isActive && !isOnNoAvatarCamera && isSelectedMissiles && isSelected")
+
+			(style
+				(position = "absolute")
+				(width = 100%)
+				(align = "center")
+				(bottom = "hasActiveWeaponBar ? 160px : 120px")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from = {alpha: 0, visualOffsetY: 10px}
+					to = {alpha: 1, visualOffsetY: 0px}
+					reverse = "!isSelected"
+					easing = "Easing.quad_in"
+					action = "kill"
+					(bind trigger "isSelected")
+				)
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					delay = 0.05
+					from = {bottom: 120px}
+					to = {bottom: 160px}
+					reverse = "!hasActiveWeaponBar"
+					action = "kill"
+					(bind trigger "hasActiveWeaponBar")
+				)
+			)
+
+			(tf
+				(class $TextDefaultBold22NM)
+				(style
+					(maxWidth = 590px)
+					(textAlign = "center")
+					(leading = -6)
+				)
+				(bindcall substitute
+					imageOffset = 8
+					sourceText = "tr('IDS_MESSAGE_LAUNCH_BETA_MISSILE')"
+					postfix = 'big_accent'
+					init = true
+					(event "keyboardBindingsApplier.evKeyboardBindingsChanged")
+				)
+			)
+		)
+
+		(block
+			(bind visible "isActive")
+
+			(class $FullsizeAbsolute)
+
+			(element MissileDataPanel
+				_betaMissileDataComponent 	= "betaMissileDataComponent"
+				_isForsageUsing 			= "toBool(isForsageUsing)"
+			)
+		)
+	)
+
+	(block
+		(bind visible "isShowWarningDistance")
+
+		(style
+			(position = "absolute")
+			(align = "center|middle")
+			(top = 228px)
+			(left = 50%)
+			(visualOffsetX = -50%)
+			(width = 268px)
+			(height = 34px)
+			(scale9grid = 1)
+			(backgroundImage = 'url:../battle_hud/crosshair/missiles/notify.png')
+		)
+
+		(tf
+			(class $TextDefaultBold20NM)
+			(style
+				(textAlign = "center")
+				(textColor = "C_ENEMY")
+			)
+			(text = 'IDS_MISSILE_CLOSE_TO_FLY_RADIUS')
+		)
+	)
+
+	(block
+		(bind visible "isActive")
+
+		(class $FullsizeAbsolute)
+
+		(block
+			(style
+				(position = "absolute")
+				(bottom = 28px)
+				(hgap = "PANEL_ITEM_MARGIN")
+				(hcenter = 0px)
+			)
+
+			(element SlotSquadronControl
+				_imagePath 		= 'url:../aircraft/plane_return.png'
+				_commandName 	= 'CMD_LAND'
+				_tooltipText 	= 'IDS_BATTLE_HINT_BETA_MISSILE_LAND'
+				_methodArgs 	= "['aircarrier.landPlane', []]"
+				_isLocked 		= "!isAlive"
+			)
+		)
+	)
+)
+
+
+(def element MissileDataPanel (_betaMissileDataComponent:dhComponent, _isForsageUsing:bool=false)
+	(scope
+		(var missileHeight:number = "_betaMissileDataComponent.height" (event "_betaMissileDataComponent.evHeightChanged"))
+		(var fuelTime:number = "_betaMissileDataComponent.fuelTime" (event "_betaMissileDataComponent.evFuelTimeChanged"))
+	)
+	(style
+		(position = "absolute")
+		(width = 364px)
+		(height = 28px)
+		(left = 50%)
+		(top = 50%)
+		(visualOffsetX = -50%)
+		(visualOffsetY = -50%)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 72px)
+			(height = 28px)
+			(backgroundImage = 'swf:../battle_hud/missiles_svg/missiles_svg.swf:arrow_bg_left')
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(width = 72px)
+			(height = 28px)
+			(align = "middle")
+			(backgroundImage = 'swf:../battle_hud/missiles_svg/missiles_svg.swf:arrow_stroke_left')
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style
+				(position = "absolute")
+				(top = -20px)
+				(left = "XXS")
+			)
+			(text = 'IDS_BETA_MISSILE_HEIGHT_INDICATOR')
+		)
+
+		(hblock
+			(tf
+				(class $TextDefaultBold18NM)
+				(style (marginLeft = "S"))
+
+				(bind text "formatSeparator(missileHeight, 1, true)")
+			)
+
+			(tf
+				(class $TextDefaultBold18NM)
+				(style (marginLeft = "XS"))
+				(text = 'IDS_KILOMETER')
+			)
+		)
+
+		(bind colorTransform "	missileHeight < CRITICAL_MISSILE_HEIGHT	?	CT_HUD_RED_LIGHT :
+								missileHeight < WARNING_MISSILE_HEIGHT	?	CT_HUD_ORANGE
+																		:	CT_NONE")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(left = 292px)
+			(width = 72px)
+			(height = 28px)
+			(backgroundImage = 'swf:../battle_hud/missiles_svg/missiles_svg.swf:arrow_bg_right')
+		)
+	)
+
+	(hblock
+		(style
+			(position = "absolute")
+			(left = 292px)
+			(height = 28px)
+		)
+
+		(block
+			(style
+				(width = 72px)
+				(height = 100%)
+				(align = "middle|right")
+				(backgroundImage = 'swf:../battle_hud/missiles_svg/missiles_svg.swf:arrow_stroke_right')
+			)
+
+			(tf
+				(class $TextDefaultBold18NM)
+				(style
+					(position = "absolute")
+					(top = -20px)
+					(right = "XXS")
+				)
+				(text = 'IDS_BETA_MISSILE_FUEL_INDICATOR')
+			)
+
+			(tf
+				(class $TextDefaultBold18NM)
+				(style (marginRight = "S"))
+
+				(bind text "countdownFormat(fuelTime, 0, true)")
+			)
+
+			(bind colorTransform "	fuelTime < CRITICAL_MISSILE_FLY_TIME	?	CT_HUD_RED_LIGHT :
+									fuelTime < WARNING_MISSILE_FLY_TIME		?	CT_HUD_ORANGE
+																			:	CT_NONE")
+		)
+
+		(block
+			(visible = "_isForsageUsing")
+			(alpha = "_isForsageUsing ? 1 : 0")
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.2
+					from = {alpha: 0, visible: false}
+					to = "{alpha: 1, visible: true}"
+					reverse = "!_isForsageUsing"
+					action = "kill"
+					(bind trigger "_isForsageUsing")
+				)
+			)
+
+			(style
+				(marginLeft = "S")
+				(width = 30px)
+				(height = 28px)
+				(backgroundImage = 'url:../aircraft/forsage_indicator_icon.png')
+			)
+		)
+	)
+)

@@ -5,7 +5,9 @@
 		(var isFirstBattle:bool =			"battleDataEntity.battleInfo.scenario == SC.Common.FIRST_BATTLE_INFO.FIRST_BATTLE")
 		(var battleType:str =				"battleDataEntity.battleInfo.battleType")
 
-		(var battleState:number = "battleDataEntity.battleState.battleState" (event "battleDataEntity.battleState.evBattleStateChanged"))
+		(var battleStateComponent:dhComponent =	"battleDataEntity.battleState")
+
+		(var battleState:number = "battleStateComponent.battleState" (event "battleStateComponent.evBattleStateChanged"))
 		(var isBattleStateStarted:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.STARTED")
 		(var isBattleStateCountdown:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN")
 		(var isEndBattleResultsVisible:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
@@ -20,6 +22,7 @@
 		(var isDreadnoughtCustomization:bool = "(customisedElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.DREADNOUGHT) > 0")
 		(var isShortRibbons:bool = "(customisedElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.SHORT_RIBBONS) > 0")
 		(var isWaffentragerTasksEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.WAFFENTRAGER_TASKS) > 0 && !isBattleStateCountdown")
+		(var isSpaceAprilTaskEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.SPACE_APRIL) > 0")
 
 		
 		(struct isEarsEnabledPref = GET_PREF_BOOL(_option="'battle.ears.enabled'"))
@@ -37,8 +40,13 @@
 		(var selfAvatarId:number = "selfAvatarEntity ? selfAvatarEntity.avatar.id : INVALID_PLAYER_AVATAR_ID")
 		(var killerId:number = "healthComponent.killerId" (event "healthComponent.evKillerIdChanged"))
 
-		(var aircarrierSqudronsCollection:gfx = "$datahub.getCollection(CC.ownSquadron)")
-		(var isAircraftHudVisible:bool = "aircarrierSqudronsCollection.items.length > 0")
+		(var selfAlphaMissileDataComponent:dhComponent = "getSingleComponent(CC.selfAlphaMissileData)")
+
+		(var betaMissileDataComponent:dhComponent = "getSingleComponent(CC.betaMissileData)")
+		(var isBetaMissileSelected:bool = "betaMissileDataComponent.isSelected" (event "betaMissileDataComponent.evIsSelectedChanged"))
+
+		(var aircarrierSqudronsCollection:dhCollection = "getCollection(CC.ownSquadron)")
+		(var isAircraftHudVisible:bool = "aircarrierSqudronsCollection.items.length > 0 && !isBetaMissileSelected")
 
 		(var invitationToDivisionCollection:dhCollection = "getCollection(CC.invitationToDivision)")
 		(var hasInvitation:bool = "invitationToDivisionCollection.length > 0")
@@ -65,13 +73,14 @@
 		(var armorSegmentsCollection:dhCollection = "getCollectionByPath(CC.segmentArmor, 'selfArmor')")
 		(var armorSegmentsLen:number = "armorSegmentsCollection.length")
 
-
 		(var userTaskEntity:dhEntity =		"getSingleEntity(CC.userTask)")
 		(var currentUserTaskFlags:array =	"userTaskEntity.userTask.flags ?: []"		(event "userTaskEntity.userTask.evFlagChanged"))
 		(var hasNotSeenAssistant:bool =		"currentUserTaskFlags[BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_ASSISTANT]] == 0"		watch=false)
 
 		(var isPlayerANewbie:bool =					"toBool(getCollection(CC.newbieQuest).length) || isFirstBattle")
 		(var isBattleAvailableForAssistant:bool =	"isIn(battleType, ASSISTANT_AVAILABLE_BATTLE_TYPES) || isFirstBattle")
+
+		(var missilesControllerEntity:dhEntity = "getSingleEntity(CC.missileActiveAA)")
 	)
 
 	(class $FullsizeAbsolute)
@@ -100,6 +109,18 @@
 
 	(controller $Instance renderer='SmokeIndicatorContainer' $autoPerfTestGroup='danger_indicators'
 		(bind enabled "spectatorEntity == null")
+	)
+
+	(controller $Instance renderer='MissilesActiveAa'
+		(bind enabled "missilesControllerEntity != null")
+	)
+
+	(controller $Instance renderer='BetaMissileFlightHud'
+		(bind enabled "betaMissileDataComponent != null")
+	)
+
+	(controller $Instance renderer='AlphaMissileHud'
+		(bind enabled "selfAlphaMissileDataComponent != null")
 	)
 
 	(block 
@@ -227,6 +248,18 @@
 			(marginLeft = "SXS")
 			(marginTop = "L")
 			(hitTest = false)
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(marginLeft = "SXS")
+			(marginTop = "L")
+		)
+		(controller $Instance renderer='SpaceAprilTasks'
+			(bind enabled "isSpaceAprilTaskEnabled")
 		)
 	)
 
@@ -395,8 +428,14 @@
 			)
 		)
 
-		(element HUDbottomElementsContainer
+		(block
 			(style (marginBottom = "S"))
+
+			(controller $Instance renderer='HUDbottomElementsContent'
+				(bind enabled "isAlive")
+				(bindcall recreate (event "battleStateComponent.evPlayerResurrected"))
+			)
+
 		)
 	)
 
@@ -459,16 +498,6 @@
 
 	(macro DRAW_GUIDE "stageSize.width / 2" "0" "stageSize.width / 2" "stageSize.height")
 	(macro DRAW_GUIDE "0" "stageSize.height / 2" "stageSize.width" "stageSize.height / 2")
-)
-
-(def element HUDbottomElementsContainer ()
-	(scope
-		(macro IS_ALIVE)
-	)
-
-	(controller $Instance renderer='HUDbottomElementsContent'
-		(bind enabled "isAlive")
-	)
 )
 
 (def element HUDbottomElementsContent ()

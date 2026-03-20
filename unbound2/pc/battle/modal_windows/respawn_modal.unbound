@@ -1,0 +1,890 @@
+(def constant RESPAW_MODAL_ANIMATION {
+	SECONDS_BEFORE_DARKENING: 3,
+	DURATION_FOR_HIDE: 0.7,
+	DELAY_FOR_SHOW: 2
+})
+
+
+(def constant SPACE_APRIL_SHIP_ROLE {
+	'PXSC210': 'ca_smoskva',
+	'PXSB210': 'bb_srepublique',
+	'PXSB110': 'bb_skurfurst',
+	'PXSC110': 'ca_sdesmoines',
+	'PXSD110': 'dd_sshimakaze',
+	'PXSD210': 'dd_sgearing'
+})
+
+
+(def element RespawnModal ()
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(event evSelectShipForViewed)
+
+		(var avatarResurrectionComponent:dhComponent = "getSingleComponent(CC.avatarResurrection)")
+		(var playerAvatarComponent:dhComponent = "getSingleComponent(CC.playerAvatar)")
+
+		(var resurrectionShipsCollection:dhCollection = "getCollection(CC.resurrectionShip)")
+		(var resurrectionPointsCollection:dhCollection = "getCollection(CC.resurrectionPoint)")
+
+		(struct highContrast = HIGH_CONTRAST_INFO())
+
+		(var selectedShipId:number = "avatarResurrectionComponent.selectedShipID" 		(event "avatarResurrectionComponent.evSelectedShipIDChanged"))
+		(var selectedPointName:str = "avatarResurrectionComponent.selectedPointName" 	(event "avatarResurrectionComponent.evSelectedPointNameChanged"))
+
+		(var isStartRespawn:bool = false)
+		(bind isStartRespawn "true" 	init=false (event "avatarResurrectionComponent.evSelectionBlocked"))
+		(bind isStartRespawn "false" 	init=false (event "playerAvatarComponent.evIsAliveChanged"))
+
+		(var coinsComponent:dhComponent = "getSingleComponent(CC.coins)")
+		(var coinsCount:number = "coinsComponent.count ?: 0")
+		(bind coinsCount "isStartRespawn ? coinsCount : coinsComponent.count" init=false watch=false (event "coinsComponent.evCountChanged"))
+
+		(var shipViewedId:number = "selectedShipId" watch=false)
+		(bind shipViewedId "selectedShipId" init=false (bind enabled "isStartRespawn"))
+		(bind shipViewedId "$event.shipId" init=false (event "evSelectShipForViewed"))
+
+		(var shipComponent:dhComponent = "getPrimaryComponent(CC.ship, shipViewedId)")
+		(var shipRole:str = "shipComponent.shipRole ?: SPACE_APRIL_SHIP_ROLE[shipComponent.shortName]")
+
+		(var priceOfSelectedShip:number = "getPrimaryEntity(CC.ship, selectedShipId).resurrectionShip.cost ?: 0")
+
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var mapInfoComponent:dhComponent = "getPrimaryComponent(CC.mapInfo, battleInfoComponent.mapId)")
+
+		(var mapSize:number = "stageWidth < 1920 ? 441 : 539")
+		(var mapScale:number = "stageWidth < 1920 ? 2.25 : 2.75")
+
+		(var battleTimerComponent:dhComponent = "getSingleComponent(CC.battleTimer)")
+		(var respawnEndTime:number = "avatarResurrectionComponent.willStartResurrectionAt ?: 0" (event "avatarResurrectionComponent.evWillStartResurrectionAtChanged"))
+		(var currentTime:number = "battleTimerComponent.battleTime ?: 0" (event "battleTimerComponent.evBattleTimeChanged"))
+
+		(var secondsBeforeRespawn:number = "round(respawnEndTime - currentTime)")
+
+		(var isShowBlackBackground:bool = "secondsBeforeRespawn <= RESPAW_MODAL_ANIMATION.SECONDS_BEFORE_DARKENING")
+		(var isTimerWarning:bool = "secondsBeforeRespawn <= 5")
+
+		(var timerText:str = "countdownFormat(max(0, secondsBeforeRespawn), 0, true)")
+	)
+	(style (align = "center"))
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.BLACK")
+			(alpha = 0)
+		)
+		(controller $Animation
+			(bindcall play 	duration = 2.5
+							to = "{ alpha: 1 }"
+							action = "kill"
+							(bind enabled "isShowBlackBackground")
+			)
+			(bindcall play  duration = "RESPAW_MODAL_ANIMATION.DURATION_FOR_HIDE"
+							to = "{ alpha: 0 }"
+							action = "kill"
+							(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0)
+			(backgroundSize = "cover")
+			(backgroundImage = "'url:../events/respawn/' + mapInfoComponent.gpName + '.png'")
+		)
+		(controller $Animation
+			(bindcall play 	duration = 0.5
+							delay = "RESPAW_MODAL_ANIMATION.DELAY_FOR_SHOW"
+							to = "{ alpha: 1 }"
+							action = "kill"
+							(event "startShow")
+			)
+			(bindcall play  duration = "RESPAW_MODAL_ANIMATION.DURATION_FOR_HIDE"
+							delay = 0.01
+							to = "{ alpha: 0 }"
+							action = "kill"
+							(event "startHide")
+			)
+		)
+	)
+
+	(element DeclareBlurLayer)
+
+	(block
+		(style
+			(hitTest = false)
+			(alpha = 0)
+			(width = "{ 1280:1232px, 1920:1376px }")
+		)
+
+		(controller $Animation
+			(bindcall play 	duration = 0.8
+							delay = "RESPAW_MODAL_ANIMATION.DELAY_FOR_SHOW"
+							to = "{ alpha: 1, hitTest: true }"
+							action = "kill"
+							(event "startShow")
+			)
+			(bindcall play  duration = "RESPAW_MODAL_ANIMATION.DURATION_FOR_HIDE"
+							to = "{ alpha: 0 }"
+							action = "kill"
+							(event "startHide")
+			)
+		)
+
+		(hblock
+			(style
+				(width = 100%)
+				(align = "middle")
+				(paddingTop = "{ 720:M, 1080:XLL }")
+				(marginBottom = "{ 720:L, 1080:XLL }")
+			)
+
+			(hblock
+				(style
+					(align = "middle")
+					(width = 100%)
+				)
+
+				(block
+					(style
+						(width = 112px)
+						(height = 112px)
+						(backgroundImage = 'url:../events/respawn/icon_Cosmo2026_respawn.png')
+						(marginRight = "MS")
+					)
+				)
+
+				(tf
+					(class $TextDefaultBold30NM)
+					(style
+						(alpha = "TA")
+						(marginRight = "LS")
+						(leading = 5)
+					)
+					(text = 'IDS_CHOOSING_SHIP_AND_RESPAWN_POINT')
+				)
+
+				
+				(block
+					(style
+						(height = 100%)
+						(paddingTop = "M")
+						(paddingBottom = "M")
+						(marginRight = "LS")
+					)
+					(element VerticalDivider)
+				)
+
+				
+				(block
+					(style (marginRight = "MS"))
+
+					(tf
+						(class $TextDefault18NM)
+						(style
+							(alpha = "TC")
+							(marginBottom = "M")
+						)
+						(text = 'IDS_TIME_BEFORE_RETURN_TO_BATTLE')
+					)
+					(tf
+						(class $TextDefaultBold46NM)
+						(style
+							(alpha = "TA")
+							(bind textColor "isTimerWarning ? C_WARNING : SC.Ui_styles.SERVICE_COLORS.WHITE")
+						)
+						(bind text "timerText")
+					)
+				)
+			)
+
+			
+			(block
+				(style (align = "right"))
+
+				(tf
+					(class $TextDefault18NM)
+					(style
+						(alpha = "TC")
+						(marginBottom = "M")
+					)
+					(text = 'IDS_REBIRTH_POINTS')
+				)
+
+				(hblock
+					(style (align = "middle"))
+
+					(tf
+						(class $TextDefaultBold46NM)
+						(style
+							(alpha = "TA")
+							(marginRight = "S")
+						)
+						(bind text "coinsCount - priceOfSelectedShip")
+					)
+
+					(tf
+						(bind visible "priceOfSelectedShip > 0")
+						(class $TextDefaultBold46NM)
+						(style
+							(marginRight = "S")
+							(textColor = "SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE")
+						)
+						(bind text "'(-' + priceOfSelectedShip + ')'")
+					)
+
+					(block
+						(style
+							(width = 38px)
+							(height = 38px)
+							(backgroundImage = 'swf:../events/respawn/respawn.swf:revival_points_large')
+						)
+					)
+				)
+			)
+		)
+
+		(hblock
+			(style (width = 100%))
+
+			(block
+				(style (width = 100%))
+
+				
+				(htile
+					(style
+						(marginBottom = "{ 720:LS, 1080:XL }")
+						(width = 708px)
+						(gap = "{ 1280:S, 1920:SXS, dimension:HORIZONTAL }")
+					)
+					(controller $Repeat renderer='RespawnShip'
+						(bind count "resurrectionShipsCollection.length")
+						(args
+							_ship = 			"resurrectionShipsCollection.getEntityAtIndex($index).resurrectionShip"
+							_isHighContrast = 	"highContrast.isEnabled"
+							_isStartRespawn = 	"isStartRespawn"
+							_selectedShipId = 	"selectedShipId"
+							_coinsCount = 		"coinsCount"
+							_shipViewedId = 	"shipViewedId"
+						)
+					)
+				)
+
+				
+				(block
+					(style
+						(marginBottom = "M")
+						(align = "middle")
+						(height = 27px)
+					)
+
+					(element ShipLineItemNM
+						_shipId = "shipViewedId"
+						_fontClass = '$TextDefaultBold28NM'
+						_withFlag = true
+					)
+				)
+
+				
+				(block
+					(style (marginBottom = "{ 720:L, 1080:LS }"))
+
+					(element ComplexityLevel
+						_complexityLevel = "shipComponent.currentComplexityLevel"
+						_maxComplexityLevel = "shipComponent.maxComplexityLevel"
+						_complexityType = "COMPLEXITY_TYPE.SHIP"
+						_size = "SIZE.MEDIUM"
+						_alpha = "TA"
+					)
+				)
+
+				
+				(block
+					(style (width = 708px))
+					(element SpaceAprilRole
+						_roleValue = "shipRole"
+					)
+				)
+			)
+
+			
+			(block
+				(style
+					(bind width "mapSize")
+					(bind height "mapSize")
+				)
+
+				
+				(block
+					(class $FullsizeAbsolute)
+					(element MinimapBG
+						_scaleRatio = "mapSize"
+						_mapScale = "mapScale"
+						_mapBorderScale = 1
+						_mapBorderMarginX = 0
+						_mapBorderMarginY = 0
+						_isRespawnScreen = true
+						_isRoundedBorder = true
+					)
+				)
+
+				(element MinimapCoordLabels
+					_scaleRatio = "mapSize"
+					_angleToRotate = 0
+					_mapScale = 1
+				)
+
+				(element MinimapMarkersContainer
+					_mapScale = "mapScale"
+					_itemScale = 1
+					_scaleRatio = "mapSize"
+					_markerSettingsMap = "MINIMAP_MARKERS_SETTINGS"
+					_isLoading = true 
+				)
+
+				
+				(controller $Repeat renderer='RespawnPoint'
+					(bind count "resurrectionPointsCollection.length")
+					(args
+						_pointData = "resurrectionPointsCollection[$index].resurrectionPoint"
+						_mapSize = "mapSize"
+						_isSelected = "selectedPointName == resurrectionPointsCollection[$index].resurrectionPoint.name"
+						_isUserSelectedPoint = "selectedPointName != ''"
+						_isDisabled = "isStartRespawn"
+					)
+				)
+			)
+		)
+	)
+
+	(hblock
+		(bind visible "isStartRespawn")
+
+		(style
+			(position = "absolute")
+			(left = "{ 1280:MS, 1920:LS }")
+			(bottom = "{ 1280:M, 1920:L, dimension:HORIZONTAL }")
+		)
+
+		(macro CHANGE_ALPHA_BY_TRIGGER_ANIM
+			_duration = "0.1"
+			_fromAlpha = 0
+			_toAlpha = 1
+			_triggerExpression = "isStartRespawn"
+		)
+
+		(mc indicator_busy_small)
+
+		(tf
+			(class $TextDefaultBold20NM)
+			(style
+				(marginTop = "XXS")
+				(marginLeft = "SXS")
+				(alpha = "TA")
+			)
+			(text = 'IDS_RESPAWN_LOADING_DATA')
+		)
+	)
+)
+
+(def element RespawnShip (	_ship:dhComponent,
+							_isHighContrast:bool,
+							_isStartRespawn:bool,
+							_selectedShipId:number,
+							_coinsCount:number,
+							_shipViewedId:number
+						)
+	(scope
+		(event evSelectResurrectionShip)
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var isShipForBattle:bool = "_ship.shipID == _selectedShipId")
+		(var isOverPrice:bool = 	"_ship.cost > _coinsCount")
+		(var isViewedInfo:bool = 	"_ship.shipID == _shipViewedId")
+
+		(var mouseState:number = "	isViewedInfo			? SC.Ui_styles.BUTTON_STATE.SELECTED :
+									_isStartRespawn			? SC.Ui_styles.BUTTON_STATE.UP :
+									mouseHandler.mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+									mouseHandler.rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+															: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var alphaForMouseHandler:number = "CAROUSEL_THUMB_STATE_ALPHA.DEFAULT[mouseState]")
+
+		(var backPanelAlpha:number = "isShipForBattle ? 0.38 : 0.15")
+
+		(var slotAlpha:number = "	(isOverPrice || _isStartRespawn) && !isShipForBattle 	? CAROUSEL_SLOT_STATE_ALPHA.DISABLED
+																							: CAROUSEL_SLOT_STATE_ALPHA.DEFAULT")
+		(var shipId:number = "_ship.shipID")
+		(var cost:number = "_ship.cost")
+		(var isFreeShip:bool = "_ship.cost == 0")
+	)
+	(macro STRUCT_MOUSE_DISPATCHER _mouseHandler = "mouseHandler")
+
+	(bindcall externalCall 'direct.action' "['selectResurrectionShip', shipId]" watch=false (event "evSelectResurrectionShip"))
+	(dispatch evSelectResurrectionShip on='leftClick' (bind enabled "!isOverPrice && !_isStartRespawn"))
+	(dispatch evSelectShipForViewed args="{ shipId: shipId }" dir="EventDirection.UP" on='leftClick' (bind enabled "!_isStartRespawn"))
+
+	(macro STRUCT_SOUND_HANDLER
+		_mouseHandler = "mouseHandler"
+		_soundSet = "'cosmoapril_respawn_ship'"
+		_enabled = "!_isStartRespawn"
+	)
+
+	(style
+		(width = 228px)
+		(height = 112px)
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapRoundedPanel'
+			(bind enabled "!_isHighContrast")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (bind alpha "slotAlpha"))
+
+		
+		(block
+			(bind visible "_isHighContrast")
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.CONTRAST_PANEL")
+				(borderRadius = "XS")
+			)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style (alpha = "backPanelAlpha"))
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_trigger = "backPanelAlpha"
+				_alpha = "backPanelAlpha"
+			)
+
+			(block
+				(class $Fullsize)
+				(style
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(borderRadius = "XS")
+				)
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_CT "isShipForBattle ? COLOR_TRANSFORM_BALANCER_THUMB : COLOR_TRANSFORM_DARK_BLUE")
+			)
+		)
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = "alphaForMouseHandler")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(borderRadius = "XS")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "mouseState"
+			_alpha = "alphaForMouseHandler"
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style (bind alpha "slotAlpha"))
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(paddingLeft = "S")
+				(paddingTop = "XXS")
+			)
+
+			(element ShipImage
+				_shipId = "shipId"
+				_size = "SC.Ui_styles.SIZE.MEDIUM"
+			)
+		)
+
+		
+		(block
+			(style
+				(position = "absolute")
+				(bottom = 0px)
+				(width = 100%)
+				(height = 31px)
+				(align = "middle")
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(hitTest = false)
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+					(borderRadiusBottomLeft = "XS")
+					(borderRadiusBottomRight = "XS")
+				)
+
+				(macro DEFAULT_CONTROL_STATE_ANIMATION_CT "isViewedInfo ? CT_CAROUSEL_NAME_PANEL_SELECTED : CT_CAROUSEL_NAME_PANEL_DEFAULT")
+			)
+
+			(block
+				(style
+					(hitTest = false)
+					(width = 100%)
+					(paddingLeft = "S")
+				)
+
+				(element ShipLineItemNM
+					_shipId = "shipId"
+					_withFlag = true
+					_fontClass = '$TextDefaultBoldNM'
+					_width = '100%'
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(bind visible "isFreeShip")
+
+		(style
+			(position = "absolute")
+			(top = "SXS")
+			(right = "SXS")
+
+			(width = 19px)
+			(height = 19px)
+			(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
+
+			(bind alpha "_isStartRespawn && !isShipForBattle ? slotAlpha : 1")
+		)
+	)
+
+	
+	(hblock
+		(bind visible "!isFreeShip")
+
+		(style
+			(position = "absolute")
+			(top = "SXS")
+			(right = "SXS")
+			(bind alpha "_isStartRespawn && !isShipForBattle ? slotAlpha : 1")
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(alpha = "TA")
+				(marginTop = "XXS")
+				(marginRight = "XS")
+			)
+			(text = "cost")
+		)
+
+		(block
+			(style
+				(width = 16px)
+				(height = 16px)
+				(backgroundImage = 'swf:../events/respawn/respawn.swf:revival_points_small')
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'ShipExtendedTooltip')
+		(args
+			_shipId = "shipId"
+			_isCustomShipExpVisible = false
+		)
+		(macro SHIP_TREE_TOOLTIP_BEHAVIOUR)
+		(align = "bottom|center")
+	)
+)
+
+(def element RespawnPoint (_pointData:dhComponent, _mapSize:number, _isSelected:bool, _isUserSelectedPoint:bool, _isDisabled:bool)
+	(scope
+		(event evSelectResurrectionPoint)
+		(event evAddedToStageWithDelay)
+		(event evAnimationSector)
+		(event evAnimationSectorAutoStartFinished)
+		(event evHideAnimationSector)
+		(event evAnimationSectorByAddedtoStage)
+
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var state:number = "	_isSelected 			? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								_isDisabled 			? SC.Ui_styles.BUTTON_STATE.UP :
+								mouseHandler.mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								mouseHandler.rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var isSelected:bool = 	"state == SC.Ui_styles.BUTTON_STATE.SELECTED")
+		(var isMouseDown:bool = "state == SC.Ui_styles.BUTTON_STATE.DOWN")
+		(var isMouseOver:bool = "state == SC.Ui_styles.BUTTON_STATE.OVER")
+		(var isMouseUp:bool = 	"state == SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var topSectorRadius:number = "isSelected ? 12px : 8px" watch=false)
+		(var topSectorColor:number = "!isMouseUp ? SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE : SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var topSectorAlpha:number = 0.8)
+
+		(var centerSectorColor:number = "isMouseDown ? SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE : SC.Ui_styles.SERVICE_COLORS.WHITE")
+		(var centerSectorAlpha:number = "isSelected ? 0 : 0.15")
+
+		(var bottomSectorAlpha:number = "isSelected ? 0.4 : 0" watch=false)
+
+		(var animationSectorRadius1:number = 24)
+		(var animationSectorRadius2:number = 24)
+		(var animationSectorRadius3:number = 24)
+
+		(var animationSectorAlpha1:number = 0)
+		(var animationSectorAlpha2:number = 0)
+		(var animationSectorAlpha3:number = 0)
+
+		(var animationSectorDuraion:number = 4)
+
+		(var isAnimationSectorAutoStart:bool = false)
+		(bind isAnimationSectorAutoStart "true" 	init=false watch=false (event "evAnimationSectorByAddedtoStage"))
+		(bind isAnimationSectorAutoStart "false" 	init=false watch=false (event "evAnimationSectorAutoStartFinished"))
+
+		(var sectorAnimationData:dict = "_isUserSelectedPoint	? {	sectorColor: SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE,
+		 															blinkName: 'blink' }
+		 														: {	sectorColor: SC.Ui_styles.SERVICE_COLORS.WHITE,
+		 															blinkName: 'white_blink' }" watch=false)
+
+		(bind sectorAnimationData "isAnimationSectorAutoStart 	? {	sectorColor: SC.Ui_styles.SERVICE_COLORS.WHITE,
+		 															blinkName: 'white_blink' }
+		 														: {	sectorColor: SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE,
+		 															blinkName: 'blink' }" init=false watch=false (bind enabled "_isUserSelectedPoint"))
+
+		(bind sectorAnimationData "{	sectorColor: SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE,
+		 								blinkName: 'blink' }" init=false (bind enabled "!isAnimationSectorAutoStart"))
+
+		(controller $Animation
+			(bindcall play
+				duration = "isSelected ? 0.35 : 0.25"
+				keyframes = "isSelected	? [	{ percent: 35, 	to: { 	topSectorRadius: 8px,
+																	topSectorAlpha: 1,
+				 													centerSectorAlpha: 0.2,
+				 													bottomSectorAlpha: 0 }},
+
+
+											{ percent: 100, to: { 	topSectorRadius: 12px,
+																	centerSectorAlpha: 0,
+																	bottomSectorAlpha: 0.4 }}]
+
+
+										: [ { percent: 100, to: { 	topSectorRadius: 	isMouseOver ? 12px : 8px,
+																	topSectorAlpha: 	isMouseUp 	? 0.8 : 1,
+
+																	centerSectorAlpha: 	isMouseUp 	? 0.15 :
+																						isMouseDown ? 0.2
+																									: 0,
+
+																	bottomSectorAlpha: 	isMouseUp 	? 0 : 0.2 }}]"
+				watch = false
+				(bind trigger "state")
+			)
+
+			(bindcall play
+				id = 'animationSector'
+				action = "kill"
+				duration = 0.2
+				to = "{ animationSectorAlpha1: 0,
+						animationSectorAlpha2: 0,
+						animationSectorAlpha3: 0 }"
+				watch = false
+				easing = "Easing.quad_in_out"
+				(event "evHideAnimationSector")
+			)
+
+			(bindcall play
+				id = 'animationSector'
+				duration = "animationSectorDuraion"
+				keyframes = "[ 	{ percent: 0, 	to: { animationSectorAlpha1: 0.4, 	animationSectorRadius1: 24px } },
+								{ percent: 30, 	to: { animationSectorAlpha1: 0, 	animationSectorRadius1: 48px } }]"
+				watch = false
+				(event "evAnimationSector")
+			)
+
+			(bindcall play
+				id = 'animationSector'
+				duration = "animationSectorDuraion"
+				keyframes = "[ 	{ percent: 19, 	to: { animationSectorAlpha2: 0, 	animationSectorRadius2: 24px } },
+								{ percent: 20, 	to: { animationSectorAlpha2: 0.4, 	animationSectorRadius2: 24px } },
+								{ percent: 50, 	to: { animationSectorAlpha2: 0, 	animationSectorRadius2: 48px } }]"
+				watch = false
+				(event "evAnimationSector")
+			)
+
+			(bindcall play
+				id = 'animationSector'
+				duration = "animationSectorDuraion"
+				keyframes = "[ 	{ percent: 39, 	to: { animationSectorAlpha3: 0, 	animationSectorRadius3: 24px } },
+								{ percent: 40, 	to: { animationSectorAlpha3: 0.4, 	animationSectorRadius3: 24px } },
+								{ percent: 70, 	to: { animationSectorAlpha3: 0, 	animationSectorRadius3: 48px } }]"
+				watch = false
+				(event "evAnimationSector")
+			)
+		)
+	)
+	(macro STRUCT_MOUSE_DISPATCHER _mouseHandler = "mouseHandler")
+
+	(bindcall externalCall 'direct.action' "['selectResurrectionPoint', _pointData.name]" watch=false (event "evSelectResurrectionPoint"))
+
+	(dispatch evSelectResurrectionPoint on='leftClick' (bind enabled "!_isDisabled"))
+
+	
+	(dispatch evAddedToStageWithDelay on='addedToStage' delay=12)
+	(dispatch evAnimationSectorByAddedtoStage (bind enabled "!_isUserSelectedPoint && !_isDisabled") (event "evAddedToStageWithDelay"))
+
+	(dispatch evAnimationSector (event "evAnimationSectorByAddedtoStage"))
+	(dispatch evAnimationSector delay="isAnimationSectorAutoStart ? 0.45 : 0.25" (bind enabled "isSelected") (bind trigger "isSelected"))
+
+	(dispatch evHideAnimationSector (bind enabled "!isSelected") (bind trigger "isSelected"))
+	(dispatch evHideAnimationSector (bind enabled "isAnimationSectorAutoStart && _isUserSelectedPoint") (bind trigger "_isUserSelectedPoint"))
+
+	(macro STRUCT_SOUND_HANDLER
+		_mouseHandler = "mouseHandler"
+		_soundSet = "'cosmoapril_respawn_point'"
+		_enabled = "!_isDisabled"
+	)
+
+	(style
+		(position = "absolute")
+		(bind left "_pointData.x * _mapSize")
+		(bind top "_pointData.y * _mapSize")
+		(bind alpha "_isDisabled && !_isSelected ? TS : 1")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(pivotX = 50%)
+			(pivotY = 50%)
+			(alpha = 0)
+			(width = 128px)
+			(height = 128px)
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:../events/respawn/' + sectorAnimationData.blinkName + '.png'")
+		)
+
+		(controller $Animation
+			(controllerEvents evAnimationEnded)
+			(bindcall play
+				duration = "animationSectorDuraion"
+				keyframes = "[ 	{ percent: 5, 	to: { alpha: 0 } },
+								{ percent: 20, 	to: { alpha: 1 } },
+								{ percent: 30, 	to: { alpha: 0.6 } },
+								{ percent: 40, 	to: { alpha: 1 } },
+								{ percent: 50, 	to: { alpha: 0.6 } },
+								{ percent: 60, 	to: { alpha: 1 } },
+								{ percent: 70, 	to: { alpha: 0 } } ]"
+				watch = false
+				action = "kill"
+				onEndedEvent = "isAnimationSectorAutoStart && !_isUserSelectedPoint ? 'evAnimationEnded' : ''"
+				(event "evAnimationSector")
+			)
+			(bindcall play
+				duration = 0.2
+				to = "{ alpha: 0 }"
+				watch = false
+				easing = "Easing.quad_in_out"
+				action = "kill"
+				onEndedEvent = "isAnimationSectorAutoStart ? 'evAnimationEnded' : ''"
+				(event "evHideAnimationSector")
+			)
+			(dispatch evAnimationSectorAutoStartFinished on='evAnimationEnded')
+		)
+	)
+
+	(block
+		(controller $Sector
+			(arc = 360)
+			(ratios = "[]")
+			(bind radius "topSectorRadius")
+			(bind colors "[topSectorColor]")
+			(bind alphas "[topSectorAlpha]")
+		)
+	)
+
+	(block
+		(controller $Sector
+			(arc = 360)
+			(ratios = "[]")
+			(radius = 16)
+			(bind colors "[centerSectorColor]")
+			(bind alphas "[centerSectorAlpha]")
+		)
+	)
+
+	(block
+		(controller $Sector
+			(arc = 360)
+			(ratios = "[]")
+			(radius = 24)
+			(bind colors "[SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE]")
+			(bind alphas "[bottomSectorAlpha]")
+		)
+	)
+
+	
+	(block
+		(controller $Sector
+			(arc = 360)
+			(lineThickness = 2)
+			(bind lineColor "sectorAnimationData.sectorColor")
+			(bind radius "animationSectorRadius1")
+			(bind lineAlpha "animationSectorAlpha1")
+		)
+	)
+	(block
+		(controller $Sector
+			(arc = 360)
+			(lineThickness = 2)
+			(bind lineColor "sectorAnimationData.sectorColor")
+			(bind radius "animationSectorRadius2")
+			(bind lineAlpha "animationSectorAlpha2")
+		)
+	)
+	(block
+		(controller $Sector
+			(arc = 360)
+			(lineThickness = 2)
+			(bind lineColor "sectorAnimationData.sectorColor")
+			(bind radius "animationSectorRadius3")
+			(bind lineAlpha "animationSectorAlpha3")
+		)
+	)
+)
+
+(def element SpaceAprilRole (_roleValue:str)
+	(style (width = 100%))
+
+	(tf
+		(class $TextDefaultBold24NM)
+		(style
+			(marginBottom = "M")
+			(alpha = "TA")
+		)
+		(bind text "subst('IDS_PCVE031_SHIP_ROLE', [], { roleValue: tr('IDS_SHIP_ROLE_' + _roleValue) })")
+	)
+
+	(tf
+		(class $TextDefault18NM)
+		(style
+			(width = 100%)
+			(alpha = "TA")
+			(multiline = true)
+			(leading = -1)
+			(styleSheet = '.p_spacing { font-size: 6.5px; }')
+		)
+		(bind htmlText "tr('IDS_SHIP_ROLE_' + _roleValue + '_DESC')")
+	)
+)

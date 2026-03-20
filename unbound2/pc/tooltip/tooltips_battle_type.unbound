@@ -16,10 +16,10 @@
 (def macro PRIME_TIME_DATA_SCOPE (_battleTypeEntity:expression)
 	(var isPrimeTime:bool =					"_battleTypeEntity && !!_battleTypeEntity.primeTime")
 	(var primeTimeComponent:dhComponent =	"_battleTypeEntity.primeTime")
-	(var primeTimeStartTime:number =	"primeTimeComponent.primeTimeStartTime	?: 0" (event "primeTimeComponent.evChanged"))
-	(var primeTimeFinishTime:number =	"primeTimeComponent.primeTimeFinishTime	?: 0" (event "primeTimeComponent.evChanged"))
-	(var daylightshift:number =			"primeTimeComponent.daylightshift		?: 0" (event "primeTimeComponent.evChanged"))
-	(var isActivePrimeTime:bool = "_battleTypeEntity.battleType.status != SC.Common.BATTLE_TYPE_STATE.INACTIVE_BY_PRIMETIME" (event "_battleTypeEntity.battleType.evStatusChanged"))
+	(var primeTimeStartTime:number =		"primeTimeComponent.primeTimeStartTime	?: 0" (event "primeTimeComponent.evChanged"))
+	(var primeTimeFinishTime:number =		"primeTimeComponent.primeTimeFinishTime	?: 0" (event "primeTimeComponent.evChanged"))
+	(var daylightshift:number =				"primeTimeComponent.daylightshift		?: 0" (event "primeTimeComponent.evChanged"))
+	(var isActivePrimeTime:bool =			"primeTimeComponent.isActive" (event "primeTimeComponent.evChanged"))
 )
 
 (def macro TIME_OF_BATTLE_EVENT (_battleTypeEntity:expression)
@@ -34,8 +34,8 @@
 	(var hasRestrictions:bool = "restrictionEntity && restrictionEntity.hasComponent(CC.shipListRestrictions)" (event "restrictionEntity.evAdded") (event "restrictionEntity.evRemoved"))
 )
 
-(def macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE (_battleTypeComponent:expression, _isFromPort:expression = false,
-														_isActivePrimeTime:expression = true, _customMouseInstructionText:expression = '')
+(def macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE (_battleTypeComponent:expression, _battleTypeEntityId:expression, _isFromPort:expression = false, _isActivePrimeTime:expression = true,
+														_isActiveSprint:expression = true, _customMouseInstructionText:expression = '')
 	(macro PULL_TRAINING_ROOM_ENTITY)
 	(var isTrainingBattletype:bool = "battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
 	(struct trainingFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.TRAINING_BATTLE"))
@@ -45,26 +45,31 @@
 	(var isActiveTournamentBattle:bool = "battleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
 	(var isActiveRoomBattle:bool = "isActiveTrainingBattle || isActiveTournamentBattle")
 
-	(var battleTypeState:number = "_battleTypeComponent ? _battleTypeComponent.status : SC.Common.BATTLE_TYPE_STATE.DISABLED" (event "_battleTypeComponent.evStatusChanged"))
-	(var isAvailableInPrimeTime:bool = "battleTypeState != SC.Common.BATTLE_TYPE_STATE.INACTIVE_BY_PRIMETIME")
+	(var battleTypeState:number = "_battleTypeComponent.status" (event "_battleTypeComponent.evStatusChanged"))
 
 	(var divisionDataEntity:dhEntity = "getSingleEntity(CC.division)")
 	(var hasDivision:bool = "divisionDataEntity != null")
 	(var isAvailableTrainingRoom:bool = "!isTrainingBattletype || !hasDivision")
 
-	(var isSelectableBattleType:bool = "battleTypeState != SC.Common.BATTLE_TYPE_STATE.DISABLED && isAvailableInPrimeTime && isAvailableTrainingRoom")
-	(var battleTypeDenyReasons:array = "_battleTypeComponent ? _battleTypeComponent.battleTypeReasons : []" (event "_battleTypeComponent.evDisableReasonChanged"))
-	(var reasonText:str = "battleTypeDenyReasons.length ? battleTypeDenyReasons[0] : ''")
+	(var battleTypeDenyReasons:array = "_battleTypeComponent.battleTypeReasons ?: []" (event "_battleTypeComponent.evDisableReasonChanged"))
+	(var isNotSelectableBattleType:bool = "battleTypeState == SC.Common.BATTLE_TYPE_STATE.DISABLED && battleTypeDenyReasons.length > 0")
 
-	(var mouseInstructionText:str = "	_customMouseInstructionText	? _customMouseInstructionText :
-										_battleTypeComponent		? tr('IDS_CHOOSE_' + toUpper(_battleTypeComponent.type))
-																	: ''")
+	(var mouseInstructionText:str = "	_customMouseInstructionText	? _customMouseInstructionText
+																	: 'IDS_CHOOSE_' + _battleTypeComponent.type")
+
+	
+	(var battleTypeCardComponent:dhComponent = "getPrimaryComponent(CC.battleTypeChooserCard, _battleTypeEntityId)")
+	(var accountLevelComponent:dhComponent = "getSingleComponent(CC.accountLevel)")
+	(var currentAccountLevel:number =	"accountLevelComponent.level" (event "accountLevelComponent.evLevelChanged"))
+	(var battleTypeActivationTier:number = "battleTypeCardComponent.activationTier")
+	(var isLockedByLevel:bool = "currentAccountLevel < battleTypeActivationTier")
 
 	(var mouseInstructionsParams:dict = "	_isFromPort && isActiveRoomBattle							? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	_text: 'IDS_RETURN_TO_TRAINING_ROOM' } :
 											_isFromPort													? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	_text: 'IDS_CHOOSE_BATTLE_TYPE' } :
-											!_isActivePrimeTime											? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: 'IDS_TOOLTIP_ACCESS_PRIME_TIME' } :
-											isTrainingBattletype && hasDivision	&&	isTrainingAvailable	? {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: 'IDS_UNABLE_TO_CREATE_TRAINING_WHEN_IN_DIVISION' } :
-											!isSelectableBattleType										? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: reasonText }
+											isTrainingBattletype && hasDivision	&& isTrainingAvailable	? {	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: 'IDS_UNABLE_TO_CREATE_TRAINING_WHEN_IN_DIVISION' } :
+											isLockedByLevel												? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: subst('IDS_TOOLTIP_UNAVAILABLE_TO_ACCESS_LEVEL', [], {_level: battleTypeActivationTier})} :
+											!_isActivePrimeTime	|| !_isActiveSprint						? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: 'IDS_ACCESS_PRIME_TIME' } :
+											isNotSelectableBattleType									? { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK,		_text: battleTypeDenyReasons[0] }
 																										: { _unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,	_text: mouseInstructionText }")
 )
 
@@ -82,7 +87,7 @@
 	(macro PRIME_TIME_DATA_SCOPE "battleTypeEntity")
 	(macro BATTLE_TYPE_HAS_RESTRICTIONS_SCOPE "battleTypeComponent")
 	(macro DIVISION_RESTRICTIONS_SCOPE "restrictionEntity")
-	(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime")
+	(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort" "isActivePrimeTime || !isPrimeTime")
 	(macro TIME_OF_BATTLE_EVENT "battleTypeEntity")
 
 	(var isRatingSeasonInactive:bool = "serverTime < startTime")
@@ -100,7 +105,7 @@
 	(var unifiedStatusSeason:str = "seasonTimeStamp[seasonStatus] - serverTime < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
 																							: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
 	(var substSeasonIDS:str = "_isFromProfile ? 'IDS_RANKED_SEASON_TIME' : 'IDS_SUBST_RANKED_SEASON_ENDS_IN'")
-	(var statusLineSeasonData:dict = "	seasonStatus == SEASON_ANNOUNCEMENT	? {	unifiedStatus:	unifiedStatusSeason,
+	(var statusLineSeasonData:dict = "	seasonStatus == SEASON_ANNOUNCEMENT	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.CALENDAR, # linter ignore
 																				text:			subst('IDS_SUBST_RATING_SEASON_STARTS_IN', [], { _timeTillStart: _isTooltip ? formattedSeasonTimeStamp : formattedSeasonTimeStampMonthDay })} :
 										seasonStatus == SEASON_ACTIVE		? {	unifiedStatus:	unifiedStatusSeason,
 																				text:			subst(substSeasonIDS, [], { _timeLeft: _isTooltip ? formattedSeasonTimeStamp : formattedSeasonTimeStampMonthDay })}
@@ -118,7 +123,7 @@
 	(var substPrimeIDS:str = "_isFromProfile ? 'IDS_RANKED_PRIME_TIME' : 'IDS_RANKED_PRIME_TIME_ENDS_IN'")
 	(var statusLinePrimeData:dict = "	primeStatus == PRIME_TIME_ACTIVE	? {	unifiedStatus:	unifiedStatusPrime,
 																				text:			subst(substPrimeIDS, [], { _timeLeft: formattedCountDownPrime })} :
-										primeStatus == PRIME_TIME_INACTIVE	? {	unifiedStatus:	unifiedStatusPrime,
+										primeStatus == PRIME_TIME_INACTIVE	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.DATE,
 																				text:			subst('IDS_RANKED_PRIME_TIME_STARTS_IN', [], { _timeLeft: formattedCountDownPrime })}
 																			: null")
 )
@@ -126,7 +131,7 @@
 (def element CommonBattleTypeTooltip (_battleTypeEntityId:number, _isFromPort:bool = false)
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
-		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort")
+		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort")
 		(var headerText:str = "'IDS_' + battleType")
 		(var descriptionText:str = "battleType 	? 'IDS_' + battleType + '_DESCRIPTION'
 												: ''")
@@ -179,7 +184,7 @@
 
 		
 		(var eventMouseInstructionText:str = "eventBattleName ? tr('IDS_CHOOSE_' + toUpper(SC.Common.BATTLE_TYPES.EVENT_BATTLE + '_' + eventBattleName)) : ''")
-		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime" "eventMouseInstructionText")
+		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort" "isActivePrimeTime || !isPrimeTime" "eventMouseInstructionText")
 
 		(var currentEventId:number = "eventBattleStateComponent ? eventBattleStateComponent.eventId : 0" (event "eventBattleStateComponent.evChanged"))
 		(var eventBattleParamsEntity:dhEntity = "getPrimaryEntity(CC.eventBattleParams, currentEventId)")
@@ -196,9 +201,9 @@
 															:	primeTimeStartTime - daylightshift")
 		(macro COUNTDOWN_SCOPE "'formattedCountDown'" "currentTimeStamp" "'HIGHESTDAYS'" "''" "true")
 		(var eventStatusLineData:dict = "!isActivePrimeTime	?	{	_text: tr(subst('IDS_EVENT_BATTLE_PRIME_TIME_STARTS_IN',[],{_timeLeft: formattedCountDown})),
-																	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION }
+																	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE }
 															:	{	_text: tr(subst('IDS_EVENT_BATTLE_PRIME_TIME_ENDS_IN',[],{_timeLeft: formattedCountDown})),
-																	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE }")
+																	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION }")
 	)
 	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
@@ -247,7 +252,7 @@
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
 		(macro PRIME_TIME_DATA_SCOPE "battleTypeEntity")
-		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime")
+		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort" "isActivePrimeTime || !isPrimeTime")
 
 		(var brawlBattlesSeason:dhComponent = "getSingleComponent(CC.brawlBattlesSeason)")
 
@@ -262,12 +267,12 @@
 
 		(var currentTimeStamp:number = "isActivePrimeTime ? primeTimeFinishTime : primeTimeStartTime")
 		(macro COUNTDOWN_SCOPE "'formattedCountDown'" "currentTimeStamp" "'HIGHESTDAYS'" "''" "true")
-		(var brawlStatusLineData:dict = "!isActivePrimeTime	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
+		(var brawlStatusLineData:dict = "!isActivePrimeTime	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE,
 																	_text: tr(subst('IDS_BRAWL_PRIME_TIME_STARTS_IN', [], { _timeLeft: toString(formattedCountDown) }))}
-															:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE,
+															:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
 																	_text: tr(subst('IDS_BRAWL_PRIME_TIME_ENDS_IN', [], { _timeLeft: toString(formattedCountDown) }))}")
-
 	)
+
 	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
@@ -283,6 +288,7 @@
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isActiveBrawl"))
 		)
+
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
 			(bind visible "isActiveBrawl")
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT
@@ -321,7 +327,6 @@
 	(scope
 		(macro PULL_BATTLE_TYPE_SCOPE "_battleTypeEntityId")
 		(macro PRIME_TIME_DATA_SCOPE "battleTypeEntity")
-		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime")
 		(macro TIME_OF_BATTLE_EVENT "battleTypeEntity")
 
 		(var rankSeasonComponent:dhComponent = "battleTypeEntity.rankSeason")
@@ -329,10 +334,11 @@
 		(var rankSeasonStage:number = "rankSeasonComponent ? rankSeasonComponent.stage : 0" (event "rankSeasonComponent.evStageChanged"))
 
 		(var currentSprintId:number = "rankSeasonComponent ? rankSeasonComponent.currentSprintId : 0" (event "rankSeasonComponent.evChanged"))
-		(var nextSprintId:number = "rankSeasonComponent ? rankSeasonComponent.nextSprintId : 0" (event "rankSeasonComponent.evChanged"))	
+		(var nextSprintId:number = "rankSeasonComponent ? rankSeasonComponent.nextSprintId : 0" (event "rankSeasonComponent.evChanged"))
 		(var seasonIdForUi:str =		"rankSeasonComponent ? rankSeasonComponent.title : ''" (event "rankSeasonComponent.evChanged"))
 		(var hasNextSprint:bool = "nextSprintId != SC.Ranked.RANK_CONSTANTS.NO_SPRINT")
 
+		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort" "isActivePrimeTime || !isPrimeTime" "currentSprintId != -1")
 		(macro RANK_SEASON_STAGES_FLAGS_SCOPE "rankSeasonStage")
 
 		(var rankStateComponent:dhComponent = "getSingleComponent(CC.rankState)")
@@ -369,18 +375,8 @@
 		(macro COUNTDOWN_SCOPE "'formattedSprintTimeStamp'" "rankSprintFinishTime" "'HIGHESTDAYS'" "''" "true")
 
 		(var isSprintFinishTimeVisible:bool = "isActiveSprint && hasNextSprint")
-		(var statusLineUnifiedStatusTop:str = "	isSprintFinishTimeVisible				? SC.Ui_styles.UNIFIED_STATUS.NO_ICON :
-												finishTime - serverTime < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
-																						: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
 		(var statusLineTextTop:str = "subst('IDS_SUBST_RANKED_SEASON_ENDS_IN', [], {_timeLeft: formattedSeasonTimeStamp })")
 		(var sprintStatusLineText:str = "subst('IDS_SUBST_RANKED_SPRINT_ENDS_IN', [], {	_timeLeft: formattedSprintTimeStamp })")
-
-		(var accountRank:dhComponent = "getSingleComponent(CC.accountSelf)")
-		(var playerCurrentRank:number = "accountRank.rank" (event "accountRank.evChanged"))
-		(var playerCurrentLeague:number = "accountRank.league" (event "accountRank.evChanged"))
-
-		(var isCurrentRankVisible:bool = "accountRank && playerCurrentRank > 0 && playerCurrentLeague > 0")
-		(var playerLeagueAndRankText:str = "isCurrentRankVisible ? subst('IDS_YOUR_RANK_IN_LEAGUE_' + playerCurrentLeague, [], {_rankId: toString(playerCurrentRank)}) : ''")
 
 		(var rankStatusLineTimeStamp:dict = "{	WAIT_FOR_ANNOUNCEMENT:	0,
 												SEASON_ANNOUNCEMENT:	startTime,
@@ -390,28 +386,35 @@
 
 		(macro COUNTDOWN_SCOPE "'formattedCountDown'" "rankStatusLineTimeStamp[periodStatus]" "'HIGHESTDAYS'" "''")
 
-		(var rankStatusLineData:dict = "{	WAIT_FOR_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
-																		_text: 'IDS_WAIT_FOR_NEXT_RANK_SEASON_ANNOUNCEMENT' },
-											SEASON_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
-																		_text: tr(subst('IDS_SUBST_NTH_RANKED_SEASON_STARTS_IN', [], {	_seasonId: seasonIdForUi, _timeTillStart: formattedCountDown }))},
-											SPRINT_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION,
-																		_text: tr(subst('IDS_RANKED_SPRINT_STARTS_IN', [], {	_nextSprintId: toString(nextSprintId + 1), _timeLeft: formattedCountDown }))},
-											PRIME_TIME_INACTIVE:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
-																		_text: tr(subst('IDS_RANKED_PRIME_TIME_STARTS_IN', [], { _timeLeft: formattedCountDown }))},
-											PRIME_TIME_ACTIVE:		{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE,
-																		_text: tr(subst('IDS_RANKED_PRIME_TIME_ENDS_IN', [], { _timeLeft: formattedCountDown }))},
-											UNDEFINED_PERIOD:		{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
-																		_text: 'IDS_RANKED_STAGE_UNDEFINED' }}")
 		(var rankInfoText:str = "	!isRankSeasonActive	?	'' :
 									!isActiveSprint		?	subst(	'IDS_RANKED_BATTLES_SEASON_NO_ACTIVE_SPRINT',	[], {_seasonId: seasonTitle}) :
 									hasNextSprint		?	subst(	'IDS_RANKED_BATTLES_SEASON_SPRINT',				[], {_seasonId: seasonTitle, _sprintId: toString(currentSprintId + 1) })
 														:	subst(	'IDS_RANKED_BATTLES_SEASON_LAST_SPRINT',		[], {_seasonId: seasonTitle})")
 
-		(var currentMatchingLeague:number = "rankStateComponent ? rankStateComponent.matchingLeague : null" (event "rankStateComponent.evMatchingLeagueChanged"))
+		(var seasonUnifiedStatus:str = "isSprintFinishTimeVisible				? SC.Ui_styles.UNIFIED_STATUS.NO_ICON :
+										finishTime - serverTime < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
+																				: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
+		(var sprintUnifiedStatus:str = "rankSprintFinishTime - serverTime < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
+																						: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
+		(var primeTimeEndsUnifiedStatus:str = "primeTimeFinishTime - serverTime < HOUR_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
+																								: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
+
+		(var rankStatusLineData:dict = "{	WAIT_FOR_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
+																		_text: 'IDS_WAIT_FOR_NEXT_RANK_SEASON_ANNOUNCEMENT' },
+											SEASON_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
+																		_text: tr(subst('IDS_SUBST_NTH_RANKED_SEASON_STARTS_IN',	[], { _seasonId: seasonIdForUi, _timeTillStart: formattedCountDown }))},
+											SPRINT_ANNOUNCEMENT:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION,
+																		_text: tr(subst('IDS_RANKED_SPRINT_STARTS_IN',				[], { _nextSprintId: toString(nextSprintId + 1), _timeLeft: formattedCountDown }))},
+											PRIME_TIME_INACTIVE:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
+																		_text: tr(subst('IDS_RANKED_PRIME_TIME_STARTS_IN',			[], { _timeLeft: formattedCountDown }))},
+											PRIME_TIME_ACTIVE:		{	_unifiedStatus: primeTimeEndsUnifiedStatus,
+																		_text: tr(subst('IDS_RANKED_PRIME_TIME_ENDS_IN',			[], { _timeLeft: formattedCountDown }))},
+											UNDEFINED_PERIOD:		{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
+																		_text: 'IDS_RANKED_STAGE_UNDEFINED' }}")
 
 		(var isSprintEndTimeVisible:bool = "isSprintFinishTimeVisible && periodStatus != SPRINT_ANNOUNCEMENT")
-		(var isRepeatedStatusIcon:bool = "!isSprintEndTimeVisible ? rankStatusLineData[periodStatus]._unifiedStatus == statusLineUnifiedStatusTop : SC.Ui_styles.UNIFIED_STATUS.CALENDAR == statusLineUnifiedStatusTop")
 	)
+
 	(style (width = 320px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
@@ -422,10 +425,12 @@
 			_imageUrl = "'url:../service_kit/battle_types/' + SC.Common.BATTLE_TYPES.RANKED_BATTLE + '_tiny.png'"
 			_headerText = "'IDS_' + toUpper(SC.Common.BATTLE_TYPES.RANKED_BATTLE)"
 		)
+
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isRankSeasonActive"))
 		)
+
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemStatusLine'
@@ -452,7 +457,7 @@
 				(controller $Instance renderer='TooltipSystemStatusLine'
 					(bind enabled "isSprintEndTimeVisible")
 					(args
-						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
+						_unifiedStatus = "sprintUnifiedStatus"
 						_text = "sprintStatusLineText"
 					)
 				)
@@ -463,9 +468,9 @@
 				(controller $Instance renderer='TooltipSystemStatusLine'
 					(bind enabled "isRankSeasonActive")
 					(args
-						_unifiedStatus = "statusLineUnifiedStatusTop"
+						_unifiedStatus = "seasonUnifiedStatus"
 						_text = "statusLineTextTop"
-						_showStatusIcon = "rankStatusLineData[periodStatus]._unifiedStatus != statusLineUnifiedStatusTop"
+						_showStatusIcon = "rankStatusLineData[periodStatus]._unifiedStatus != seasonUnifiedStatus"
 					)
 				)
 			)
@@ -500,7 +505,7 @@
 		(macro COUNTDOWN_SCOPE "'primeTimeLeftToStart'"		"primeTimeStartTime - daylightshift"	"'HIGHESTDAYS'" "''" "true")
 		(macro COUNTDOWN_SCOPE "'primeTimeLeftToFinish'"	"primeTimeFinishTime - daylightshift"	"'HIGHESTDAYS'" "''" "true")
 
-		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "isActivePrimeTime")
+		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort" "isActivePrimeTime || !isPrimeTime")
 
 		(var isCurrent:bool = "(primeTimeStartTime - daylightshift  <= serverTime) && (serverTime <= primeTimeFinishTime - daylightshift)")
 		(var isUpcoming:bool = "serverTime < primeTimeStartTime - daylightshift")
@@ -563,10 +568,12 @@
 
 		
 		(var pveMouseInstructionText:str = "subst('IDS_MOUSE_INSTRUCTION_CHOOSE', [], {_battleType: tr('IDS_' + operationName + '_NAME')})")
-		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "true" "pveMouseInstructionText")
+		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort" "true" "pveMouseInstructionText")
 
 		(macro TIME_OF_BATTLE_EVENT "battleTypeEntity")
 		(macro COUNTDOWN_SCOPE "'formattedSeasonTimeStamp'" "finishTime" "'HIGHESTDAYS'" "''" "true")
+		(var seasonUnifiedStatus:str = "finishTime - serverTime < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
+																				: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
 		(var timeSeasonLeft:str = "subst('IDS_SUBST_EVENT_SEASON_ENDS_IN', [], {_timeLeft: formattedSeasonTimeStamp })")
 	)
 	(style (width = 320px))
@@ -585,7 +592,7 @@
 			(style (width = 100%))
 			(element TooltipSystemHorizontalDivider)
 			(element TooltipSystemStatusLine
-				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
+				_unifiedStatus = "seasonUnifiedStatus"
 				_text = "timeSeasonLeft"
 			)
 		)
@@ -611,10 +618,12 @@
 
 		
 		(var pveMouseInstructionText:str = "subst('IDS_MOUSE_INSTRUCTION_CHOOSE', [], {_battleType: 'IDS_' + trialName + '_NAME'})")
-		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "_isFromPort" "true" "pveMouseInstructionText")
+		(macro BATTLE_TYPE_TOOLTIP_MOUSE_INSTRUCTION_SCOPE "battleTypeComponent" "battleTypeEntity.id" "_isFromPort" "true" "pveMouseInstructionText")
 
 		(macro TIME_OF_BATTLE_EVENT "battleTypeEntity")
 		(macro COUNTDOWN_SCOPE "'formattedSeasonTimeStamp'" "finishTime" "'HIGHESTDAYS'" "''" "true")
+		(var seasonUnifiedStatus:str = "finishTime - serverTime < DAY_IN_SEC	? SC.Ui_styles.UNIFIED_STATUS.CALENDAR_ATTENTION
+																				: SC.Ui_styles.UNIFIED_STATUS.CALENDAR")
 		(var timeSeasonLeft:str = "subst('IDS_SUBST_EVENT_SEASON_ENDS_IN', [], {_timeLeft: formattedSeasonTimeStamp })")
 	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
@@ -634,7 +643,7 @@
 
 			(element TooltipSystemHorizontalDivider)
 			(element TooltipSystemStatusLine
-				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CALENDAR"
+				_unifiedStatus = "seasonUnifiedStatus"
 				_text = "timeSeasonLeft"
 			)
 		)
@@ -701,6 +710,7 @@
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isTimeVisible"))
 		)
+
 		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="isTimeVisible"
 			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isPrimeTimeVisible"
 				(controller $Instance renderer='TooltipSystemStatusLine'

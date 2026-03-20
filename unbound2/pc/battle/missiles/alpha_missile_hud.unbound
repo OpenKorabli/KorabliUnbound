@@ -1,0 +1,253 @@
+(def constant ALPHA_SCAN_FILL_BAR_MAX_WIDTH 178px)
+
+
+(def element AlphaMissileHud ()
+	(scope
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var isTacticalMap:bool = "cameraComponent.isTactical" (event "cameraComponent.evTacticalStateChanged"))
+
+		(var selfAlphaMissileDataComponent:dhComponent = "getSingleComponent(CC.selfAlphaMissileData)")
+		(var isAlphaMissileSelected:bool = "selfAlphaMissileDataComponent.isSelected" (event "selfAlphaMissileDataComponent.evIsSelectedChanged"))
+		(var scannerState:number = "selfAlphaMissileDataComponent.state" (event "selfAlphaMissileDataComponent.evStateChanged"))
+
+		(var weaponControllerComponent:dhComponent = "getSingleComponent(CC.weaponController)")
+		(var isSelectedMissiles:bool = "weaponControllerComponent.selectedWeapon == SC.Ships.SHIP_WEAPON_TYPES.MISSILES" (event "weaponControllerComponent.evSelectedWeaponChanged"))
+		(var isShowScanHint:bool = "isAlphaMissileSelected && isSelectedMissiles && scannerState == SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.NO_TARGET")
+
+		(var reloadBarsCollection:dhCollection = "getCollection(CC.reloadBar)")
+		(var activeWeaponType:number = "weaponControllerComponent != null ? weaponControllerComponent.selectedWeapon : SC.Ships.SHIP_WEAPON_TYPES.NONE" (event "weaponControllerComponent.evSelectedWeaponChanged") (event "weaponControllerComponent.evSelectedAmmoTypeChanged"))
+		(var hasActiveWeaponBar:bool = "reloadBarsCollection.length != 0 && activeWeaponType != SC.Ships.SHIP_WEAPON_TYPES.NONE && activeWeaponType != SC.Ships.SHIP_WEAPON_TYPES.AIRPLANES")
+
+		(var keyboardBindingsApplier:dhComponent = "getSingleComponent(CC.keyboardBindingsApplier)")
+	)
+
+	(class $FullsizeAbsolute)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.08
+			from = {alpha: 1, visible: true}
+			to = {alpha: 0, visible: false}
+			reverse = "!isTacticalMap"
+			action = "kill"
+			(bind trigger "isTacticalMap")
+		)
+	)
+
+	(controller $Instance renderer='MissileGunMarker'
+		(bind enabled "isAlphaMissileSelected && isSelectedMissiles")
+	)
+
+	(block
+		(bind visible "isAlphaMissileSelected && isSelectedMissiles")
+
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(align = "center")
+			(bottom = "hasActiveWeaponBar ? 160px : 120px")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				from = {alpha: 0, visualOffsetY: 10px}
+				to = {alpha: 1, visualOffsetY: 0px}
+				reverse = "!isShowScanHint"
+				easing = "Easing.quad_in"
+				action = "kill"
+				(bind trigger "isShowScanHint")
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				delay = 0.05
+				from = {bottom: 120px}
+				to = {bottom: 160px}
+				reverse = "!hasActiveWeaponBar"
+				action = "kill"
+				(bind trigger "hasActiveWeaponBar")
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold22NM)
+			(style
+				(maxWidth = 590px)
+				(textAlign = "center")
+				(leading = -6)
+			)
+			(bindcall substitute
+				imageOffset = 8
+				sourceText = "tr('IDS_MESSAGE_SCAN_ALPHA_MISSILE')"
+				postfix = 'big_accent'
+				init = true
+				(event "keyboardBindingsApplier.evKeyboardBindingsChanged")
+			)
+		)
+	)
+)
+
+(def element MissileGunMarker ()
+	(scope
+		(var selfAlphaMissileDataComponent:dhComponent = "getSingleComponent(CC.selfAlphaMissileData)")
+		(var progress:number = "selfAlphaMissileDataComponent.scanProgress" (event "selfAlphaMissileDataComponent.evScanProgressChanged"))
+		(var scannerState:number = "selfAlphaMissileDataComponent.state" (event "selfAlphaMissileDataComponent.evStateChanged"))
+		(var canLaunch:bool = "selfAlphaMissileDataComponent.canLaunch" (event "selfAlphaMissileDataComponent.evCanLaunchChanged"))
+	)
+
+	(style
+		(position = "absolute")
+		(top = 50%)
+		(left = 50%)
+		(width = 180px)
+	)
+
+	(element MissileGunCentral
+		_canLaunch = "canLaunch"
+	)
+
+	(element MissileScanProgress
+		_progress = "progress"
+		_scannerState = "scannerState"
+	)
+
+	(element MissileScanStatusLine
+		_scannerState = "scannerState"
+	)
+)
+
+(def element MissileGunCentral (_canLaunch:bool)
+	(style
+		(position = "absolute")
+		(visualOffsetX = -50%)
+		(visualOffsetY = -15px)
+		(width = 32px)
+		(height = 32px)
+		(backgroundImage = 'url:../battle_hud/missiles/missile_gunmarker_bg.png')
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundImage = 'url:../battle_hud/missiles/missile_gunmarker_fill.png'))
+
+		(bind colorTransform "_canLaunch ? CT_HUD_GREEN : CT_HUD_ORANGE")
+
+		(block
+			(style
+				(position = "absolute")
+				(top = 50%)
+				(left = 50%)
+			)
+
+			(isMask = true)
+
+			(controller $Sector
+				(color = 0xFF000000)
+				(offset = -90)
+				(arc = 360)
+				(radius = 16)
+			)
+		)
+	)
+)
+
+(def element MissileScanProgress (_progress:number, _scannerState:number)
+	(scope
+		(var currentWidth:number = "_progress * ALPHA_SCAN_FILL_BAR_MAX_WIDTH")
+	)
+
+	(style
+		(position = "absolute")
+		(alpha = "_scannerState == SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.SCANNING ? 1 : 0")
+		(align = "center|middle")
+		(visualOffsetX = -50%)
+		(top = 58px)
+		(width = 180px)
+		(height = 6px)
+		(backgroundImage = 'url:../battle_hud/missiles/scan_bar_bg.png')
+	)
+
+	(bind visible "_scannerState != SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.NO_TARGET")
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.5
+			from = "{alpha: 0}"
+			to = "{alpha: 1}"
+			easing = "Easing.quad_in_out"
+			(bind enabled "_scannerState == SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.SCANNING")
+		)
+		(bindcall play
+			duration = 0.5
+			from = "{alpha: 1}"
+			to = "{alpha: 0}"
+			easing = "Easing.quad_in_out"
+			(bind enabled "_scannerState == SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.HAS_TARGET")
+		)
+	)
+
+	(block
+		(style
+			(width = 178px)
+			(height = 4px)
+			(backgroundSize = "cover")
+			(backgroundImage = 'url:../battle_hud/missiles/scan_bar_fill.png')
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "NO_COLOR")
+				(bind width "currentWidth")
+			)
+			(isMask = true)
+		)
+
+		(bind colorTransform "_progress >= 1.0 ? CT_HUD_GREEN : CT_HUD_ORANGE")
+	)
+)
+
+(def element MissileScanStatusLine (_scannerState:number)
+	(style
+		(position = "absolute")
+		(align = "center|middle")
+		(visualOffsetX = -50%)
+		(width = 180px)
+		(height = 24px)
+		(top = 68px)
+		(backgroundSize = "cover")
+		(scale9grid = [1, 1, 1, 1])
+		(backgroundImage  = 'url:../battle_hud/crosshair/missiles/notify.png')
+	)
+
+	(bind visible "_scannerState != SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.HAS_TARGET")
+
+	(controller $Animation
+		(bindcall play
+			duration = 1
+			easing = "Easing.quad_in_out"
+			from = "{alpha: 0}"
+			to = "{alpha: 1}"
+			action = "kill"
+			repeatCount = -1
+			(bind enabled "_scannerState == SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.SCANNING")
+		)
+		(bindcall play
+			duration = 0.1
+			easing = "Easing.quad_in_out"
+			from = "{alpha: 0}"
+			to = "{alpha: 1}"
+			action = "kill"
+			(bind enabled "_scannerState != SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.SCANNING")
+		)
+	)
+
+	(tf
+		(class $TextDefault14NM)
+		(style (textColor = "C_ENEMY"))
+		(bind text "_scannerState == SC.Weapons.ALPHA_MISSILE_SCANNER_STATE.NO_TARGET ? 'IDS_ALPHA_MISSILE_NO_TARGET' : 'IDS_ALPHA_MISSILE_IS_SCANNING'")
+	)
+)

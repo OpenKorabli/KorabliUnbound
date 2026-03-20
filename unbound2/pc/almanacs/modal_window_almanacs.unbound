@@ -1,12 +1,163 @@
-(def constant SMALL_DAILY_REWARD_MIN_SIZE			72px)
-(def constant SMALL_DAILY_REWARD_SIZE				84px)
-(def constant GRID_SMALL_DAILY_REWARDS_COLUMNS		6)
-(def constant GRID_SMALL_DAILY_REWARDS_OFFSET		10px)
+(def constant DAILY_CALENDAR "{
+	SMALL_REWARD_MIN_SIZE:	72px,
+	SMALL_REWARD_SIZE:		84px,
+	GRID_COLUMNS:			6,
+	GRID_OFFSET:			10px
+}")
 
-(def element ModalWindowAlmanacs ()
+(def constant ADVENT_CALENDAR "{
+	BLOCK_SIZE:				248px,
+	GRID_WIDTH:				1016px,
+	GRID_COLUMNS:			4,
+	GRID_OFFSET:			S
+}")
+
+(def constant ALMANAC_TAB_CONTENT "[	'AdventAlmanacContent',
+										'CommonAlmanacContent']")
+
+(def constant ADVENT_TILE_SIZE "{
+	SC.Ui_common.ADVENT_TILE_SIZE.S: {width: 120px, height: 120px},
+	SC.Ui_common.ADVENT_TILE_SIZE.MH: {width: 248px, height: 120px},
+	SC.Ui_common.ADVENT_TILE_SIZE.MV: {width: 120px, height: 248px},
+	SC.Ui_common.ADVENT_TILE_SIZE.L: {width: 248px, height: 248px}
+}")
+
+(def constant ADVENT_TILE_BG_SIZE "{
+	SC.Ui_common.ADVENT_TILE_SIZE.S: {width: 200px, height: 200px, top: -40px, left: -40px},
+	SC.Ui_common.ADVENT_TILE_SIZE.MH: {width: 416px, height: 200px, top: -40px, left: -84px},
+	SC.Ui_common.ADVENT_TILE_SIZE.MV: {width: 200px, height: 416px, top: -84px, left: -40px},
+	SC.Ui_common.ADVENT_TILE_SIZE.L: {width: 416px, height: 416px, top: -84px, left: -84px}
+}")
+
+
+(def constant ADVENT_TILE_MARGIN 128px)
+
+(def element ModalWindowAlmanacs (_type:number = null)
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
 
+	(scope
+		(event evTabSelected)
+
+		(var almanacState:dhComponent =	"getSingleComponent(CC.almanacState)")
+		(var adventState:dhComponent =	"getSingleComponent(CC.adventAlmanacState)")
+
+		(var hasAdventAlmanac:bool = "adventState != null")
+		(var hasCommonAlmanac:bool = "almanacState != null")
+		(var hasTabs:bool = "hasAdventAlmanac && hasCommonAlmanac")
+		(var initialTab:number = "	_type != null		? _type : 
+									hasAdventAlmanac	? SC.Ui_common.ALMANAC_TYPE_TAB.ADVENT
+														: SC.Ui_common.ALMANAC_TYPE_TAB.COMMON")
+		(var selectedTab:number = "$event ? $event.index : initialTab" watch=false (event "evTabSelected"))
+		(bind selectedTab "hasAdventAlmanac ? SC.Ui_common.ALMANAC_TYPE_TAB.ADVENT : SC.Ui_common.ALMANAC_TYPE_TAB.COMMON" watch=false	(bind enabled "!hasAdventAlmanac")
+																																		(bind enabled "!hasCommonAlmanac"))
+		(var isAdventAlmanacTab:bool = "selectedTab == SC.Ui_common.ALMANAC_TYPE_TAB.ADVENT")
+
+		(var almanacBg:str =	"almanacState.background ?: 'default'"	(event "almanacState.evChanged"))
+		(var adventBg:str =		"adventState.background ?: 'default'"	(event "adventState.evChanged"))
+		(var background:str =	"isAdventAlmanacTab	? adventBg
+													: almanacBg")
+
+		(struct commonMarkerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.COMMON_ALMANAC_REWARDS"))
+		(struct adventMarkerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.ADVENT_ALMANAC_REWARDS"))
+
+		(var isTinyScreen:bool = "stageHeight < 820")
+	)
+
+	(class $Fullsize)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element ModalWindowAnimatedBackground
+			_selectedCategory = "background"
+			_type = "SC.Ui_styles.ANIMATED_BG.ALMANAC_AND_SNOWFLAKES"
+			_hideTime = 0.15
+			_hideDelay = 0.3
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+		(style
+			(width = 100%)
+			(bind marginBottom "hasTabs ? MS : {720: SXS, 1080: MS}")
+		)
+
+		(element ModalWindowHeaderFullSize
+			_windowName =		'IDS_MODAL_WINDOW_ALMANAC_HEADER'
+			_paddingRight =		"M"
+			_paddingLeft =		"M"
+			_backButtonText =	'IDS_RETURN_FROM_MODAL_WINDOW_BUTTON'
+			_methods =			"[{ type: 'inputMapping.onRequest', name: 'exitDailyRewards', args: {} }]"
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(bind visible "hasTabs")
+		(style
+			(align = "center")
+			(width = 100%)
+			(marginBottom = "MS")
+		)
+
+		(element MAIN_TAB_BUTTONS_BLOCK
+			(block
+				(element MainTabButton
+					_label = 'IDS_ADVENT_ALMANAC_TAB'
+					_width = "MAIN_TAB_BUTTON_WIDTH.TINY"
+					_isSelected = "isAdventAlmanacTab"
+					_dispatchedEv = "'evTabSelected'"
+					_dispatchParams = "{ index: SC.Ui_common.ALMANAC_TYPE_TAB.ADVENT }"
+				)
+				(block
+					(style
+						(position = "absolute")
+						(top = "-SXS")
+						(right = "MS")
+					)
+					(controller $Instance renderer='MarkerReward'
+						(bind enabled "adventMarkerData.isVisible && !isAdventAlmanacTab")
+					)
+				)
+			)
+
+			(block
+				(element MainTabButton
+					_label = 'IDS_COMMON_ALMANAC_TAB'
+					_width = "MAIN_TAB_BUTTON_WIDTH.TINY"
+					_isSelected = "!isAdventAlmanacTab"
+					_dispatchedEv = "'evTabSelected'"
+					_dispatchParams = "{ index: SC.Ui_common.ALMANAC_TYPE_TAB.COMMON }"
+				)
+				(block
+					(style
+						(position = "absolute")
+						(top = "-SXS")
+						(right = "MS")
+					)
+					(controller $Instance renderer='MarkerReward'
+						(bind enabled "commonMarkerData.isVisible && isAdventAlmanacTab")
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance (bind renderer "ALMANAC_TAB_CONTENT[selectedTab]")
+			(args
+				_isTinyScreen = "isTinyScreen"
+				_hasTabs = "hasTabs"
+			)
+		)
+	)
+)
+
+(def element CommonAlmanacContent (_isTinyScreen:bool=false, _hasTabs:bool=true)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
 		(event evChangeStageID)
 
@@ -17,17 +168,14 @@
 		(event evSelectTomorrowReward)
 
 		(macro USER_PREF_DATA)
-		(macro GET_PREF 'showLoginRewardsOnDockEnter' "'ui.showLoginRewardsOnDockEnter'")
+		(struct showLoginRewardsOnDockEnter = GET_PREF_BOOL(_option="'ui.showLoginRewardsOnDockEnter'"))
 
 		(var almanacStagesCollection:dhCollection =	"getCollection(CC.almanacStageState)")
 		(var almanacStagesLength:number = "almanacStagesCollection.length")
 
 		(var almanacStateEntity:dhEntity =	"getSingleEntity(CC.almanacState)")
 		(var almanacState:dhComponent =		"almanacStateEntity.almanacState")
-		(var daysLeft:number =				"almanacState.daysLeft"		(event "almanacState.evChanged"))
 		(var currentStage:number =			"almanacState.currentStage"	(event "almanacState.evChanged"))
-		(var almanacStateBg:str =			"almanacState.background"	(event "almanacState.evChanged"))
-		(var almanacBg:str =				"almanacStateBg ? almanacStateBg : 'default'")
 
 		(var almanacStageStateCurrent:dhComponent =	"getPrimaryComponent(CC.almanacStageState, currentStage)")
 		(var currentStageID:number =				"almanacStageStateCurrent.stageID"		(event "almanacStageStateCurrent.evStageUpdated"))
@@ -51,9 +199,8 @@
 		(var currentUserTaskFlags:array = "userTaskComponent.flags ?: []" (event "userTaskComponent.evFlagChanged"))
 		(var isAlmanacNew:bool = "currentUserTaskFlags[BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_ALMANAC]] == 0 || almanacStateEntity.hasComponent(CC.newItem)")
 
-		(var isTinyScreen:bool = "stageHeight < 820")
-		(var widthGridRewards:number = "isTinyScreen	? GRID_SMALL_DAILY_REWARDS_COLUMNS * (SMALL_DAILY_REWARD_MIN_SIZE + GRID_SMALL_DAILY_REWARDS_OFFSET) - GRID_SMALL_DAILY_REWARDS_OFFSET
-														: GRID_SMALL_DAILY_REWARDS_COLUMNS * (SMALL_DAILY_REWARD_SIZE + GRID_SMALL_DAILY_REWARDS_OFFSET) - GRID_SMALL_DAILY_REWARDS_OFFSET")
+		(var widthGridRewards:number = "_isTinyScreen	? DAILY_CALENDAR.GRID_COLUMNS * (DAILY_CALENDAR.SMALL_REWARD_MIN_SIZE + DAILY_CALENDAR.GRID_OFFSET) - DAILY_CALENDAR.GRID_OFFSET
+														: DAILY_CALENDAR.GRID_COLUMNS * (DAILY_CALENDAR.SMALL_REWARD_SIZE + DAILY_CALENDAR.GRID_OFFSET) - DAILY_CALENDAR.GRID_OFFSET")
 	)
 
 	(bindcall externalCall "isAlmanacNew ? 'inputMapping.onAction' : ''" "['ServerUIDataUSS.setUserTaskExecuted', { taskId: BINARY_SHIFT_MAP[SC.Common.USER_TASKS_FLAGS.KNOWS_ABOUT_ALMANAC] }]" watch=false on='addedToStage')
@@ -65,29 +212,7 @@
 	(dispatch evSelectTomorrowReward	dir="EventDirection.DOWN" delay=0.4		(event "evHideRewardLooted"))
 
 	(class $Fullsize)
-
-	(block
-		(class $FullsizeAbsolute)
-		(element ModalWindowAnimatedBackground
-			_selectedCategory = "almanacBg"
-			_type = "SC.Ui_styles.ANIMATED_BG.ALMANAC_AND_SNOWFLAKES"
-			_hideTime = 0.15
-			_hideDelay = 0.3
-		)
-	)
-
-	(block
-		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-		(style (width = 100%))
-
-		(element ModalWindowHeaderFullSize
-			_windowName =		'IDS_MODAL_WINDOW_ALMANAC_HEADER'
-			_paddingRight =		"M"
-			_paddingLeft =		"M"
-			_backButtonText =	'IDS_RETURN_FROM_MODAL_WINDOW_BUTTON'
-			_methods =			"[{ type: 'inputMapping.onRequest', name: 'exitDailyRewards', args: {} }]"
-		)
-	)
+	(style (align = "center"))
 
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
@@ -95,59 +220,52 @@
 		(class $MiddleAlignedAbsolutely)
 		(style
 			(width = 100%)
-			(top = "{ 720:XL, 1080:140px }")
+			(bind top "_hasTabs ? { 720:113px, 1080:163px } : { 720:XL, 1080:140px }")
 		)
 
 		(element DailyRewardsHintBlock
-			_almanacWindowDescription =	"almanacWindowDescription"
-			_isLooted =					"isCurrentLooted"
-			_isTinyScreen =				"isTinyScreen"
+			_description =		"almanacWindowDescription"
+			_isTinyScreen =		"_isTinyScreen"
 		)
 	)
 
-	(block
+	(hblock
 		(style
-			(align = "center")
-			(width = 100%)
-			(marginTop = "{ 720:104px, 1080:190px }")
+			(marginTop = "{ 720:182px, 1080:268px }")
+			(bind height "_isTinyScreen ? 552px : 600px")
 		)
 
-		(hblock
-			(style (bind height "isTinyScreen ? 552px : 600px"))
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
 
-			(block
-				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
-
-				(style
-					(width = 246px)
-					(height = 100%)
-					(marginRight = "LM")
-				)
-
-				(element BigDailyRewardItem
-					_selectedStageID =		"selectedStageID"
-					_isPostProgressReward =	"isPostProgressReward"
-				)
+			(style
+				(width = 246px)
+				(height = 100%)
+				(marginRight = "LM")
 			)
 
-			(htile
-				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+			(element BigDailyRewardItem
+				_selectedStageID =		"selectedStageID"
+				_isPostProgressReward =	"isPostProgressReward"
+			)
+		)
 
-				(style
-					(height = 100%)
-					(hgap = "GRID_SMALL_DAILY_REWARDS_OFFSET")
-					(vgap = "GRID_SMALL_DAILY_REWARDS_OFFSET")
-					(bind width "widthGridRewards")
-				)
+		(htile
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
 
-				(controller $Repeat renderer='SmallDailyRewardItem'
-					(bind count "almanacStagesLength")
-					(args
-						_stageEntity =			"almanacStagesCollection.getEntityAtIndex($index)"
-						_selectedStageID =		"selectedStageID"
-						_isPostProgressReward =	"$index == almanacStagesLength - 1"
-						_isTinyScreen =			"isTinyScreen"
-					)
+			(style
+				(height = 100%)
+				(gap = "DAILY_CALENDAR.GRID_OFFSET")
+				(bind width "widthGridRewards")
+			)
+
+			(controller $Repeat renderer='SmallDailyRewardItem'
+				(bind count "almanacStagesLength")
+				(args
+					_stageEntity =			"almanacStagesCollection.getEntityAtIndex($index)"
+					_selectedStageID =		"selectedStageID"
+					_isPostProgressReward =	"$index == almanacStagesLength - 1"
+					_isTinyScreen =			"_isTinyScreen"
 				)
 			)
 		)
@@ -165,13 +283,92 @@
 		(element CheckBox
 			_maxTfWidth =	800px
 			_label =		'IDS_CHECKBOX_ALMANAC_DO_NOT_OPEN_UPON_LOGIN'
-			_isChecked =	"showLoginRewardsOnDockEnter"
-			_methods =		"[{ type: 'direct.action', name: 'option.set', args: ['ui.showLoginRewardsOnDockEnter', !showLoginRewardsOnDockEnter] }]"
+			_isChecked =	"showLoginRewardsOnDockEnter.value"
+			_methods =		"[{ type: 'direct.action', name: 'option.set', args: ['ui.showLoginRewardsOnDockEnter', !showLoginRewardsOnDockEnter.value] }]"
 		)
 	)
 )
 
-(def element DailyRewardsHintBlock (_almanacWindowDescription:str, _isLooted:bool, _isTinyScreen:bool=false)
+(def element AdventAlmanacContent (_isTinyScreen:bool=false, _hasTabs:bool=true)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(struct showAdventRewardsOnDockEnter = GET_PREF_BOOL(_option="'ui.showAdventRewardsOnDockEnter'"))
+
+		(var almanacStateEntity:dhEntity =	"getSingleEntity(CC.adventAlmanacState)")
+		(var almanacState:dhComponent =		"almanacStateEntity.adventAlmanacState")
+		(var currentStage:number =			"almanacState.currentStage"		(event "almanacState.evChanged"))
+		(var containersCount:number =		"almanacState.containersCount"	(event "almanacState.evChanged"))
+
+		(var currentStageComponent:dhComponent = "getPrimaryComponent(CC.adventAlmanacStageState, currentStage)")
+		(var scrollToContainerID:number = "currentStageComponent.containerID" (event "currentStageComponent.evStageUpdated"))
+
+		(var isThreeRows:bool = "containersCount / ADVENT_CALENDAR.GRID_COLUMNS > 2")
+	)
+
+	(class $Fullsize)
+	(style (bind align "isThreeRows || _isTinyScreen ? center : center|middle"))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(width = 100%)
+			(bind top "_hasTabs ? { 720:113px, 1080:163px } : { 720:XL, 1080:140px }")
+		)
+
+		(element AdventRewardsHintBlock
+			_description =		'IDS_ADVENT_REWARD_WINDOW_DESCRIPTION'
+			_isTinyScreen =		"_isTinyScreen"
+		)
+	)
+
+	(scrollArea
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+		(style
+			(align = "center")
+			(width = "ADVENT_CALENDAR.GRID_WIDTH")
+			(bind maxHeight "_isTinyScreen ? ADVENT_CALENDAR.BLOCK_SIZE * 2 + ADVENT_CALENDAR.GRID_OFFSET : 100%")
+			(bind marginTop "isThreeRows || _isTinyScreen ? { 720:170px, 1080:240px } : 0px")
+		)
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_wheelScrollAcceleration = "0.8"
+		)
+
+		(repeatController = 'AdventRewardsBlocks')
+		(bindcall scrollTo index="scrollToContainerID - 1" watch=false on='addedToStage')
+
+		(content
+			(style
+				(flow = "tile_horizontal")
+				(width = "ADVENT_CALENDAR.GRID_WIDTH")
+				(gap = "ADVENT_CALENDAR.GRID_OFFSET")
+			)
+			(controller $Repeat renderer='AdventRewardsBlock' name='AdventRewardsBlocks'
+				(bind count "containersCount")
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+
+		(style
+			(position = "absolute")
+			(right = "{ 1280:MS, 1920:LM }")
+			(bottom = "{ 720:M, 1080:36px }")
+		)
+
+		(element CheckBox
+			_maxTfWidth =	800px
+			_label =		'IDS_CHECKBOX_ADVENT_DO_NOT_OPEN_UPON_LOGIN'
+			_isChecked =	"showAdventRewardsOnDockEnter.value"
+			_methods =		"[{ type: 'direct.action', name: 'option.set', args: ['ui.showAdventRewardsOnDockEnter', !showAdventRewardsOnDockEnter.value] }]"
+		)
+	)
+)
+
+(def element DailyRewardsHintBlock (_description:str, _isTinyScreen:bool=false)
 	(scope
 		(var almanacState:dhComponent =	"getSingleComponent(CC.almanacState)")
 		(var daysLeft:number = "almanacState.daysLeft" (event "almanacState.evChanged"))
@@ -198,7 +395,7 @@
 			(alpha = "TA")
 		)
 
-		(bind text "_almanacWindowDescription")
+		(bind text "_description")
 	)
 
 	(block
@@ -216,6 +413,78 @@
 			_unifiedStatus =	"isTimeRunningUp ? SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION : SC.Ui_styles.UNIFIED_STATUS.DATE"
 			_text =				"timeLeftStatus"
 			_textClass =		"_isTinyScreen ? '$TextDefaultNM' : '$TextDefault18NM'"
+		)
+
+		(controller $Animation
+			(play
+				delay = "0.15"
+				duration = "0.15"
+				from = "{ alpha: 0, visualOffsetY: 10px }"
+				to = "{ alpha: 1, visualOffsetY: 0px }"
+				easing = "Easing.quad_out"
+				action = "kill"
+			)
+		)
+	)
+)
+
+(def element AdventRewardsHintBlock (_description:str, _isTinyScreen:bool=false)
+	(scope
+		(struct serverTime = SERVER_TIME())
+
+		(var almanacState:dhComponent =	"getSingleComponent(CC.adventAlmanacState)")
+		(var hasMissedStages:bool = "almanacState.hasMissedStages" (event "almanacState.evChanged"))
+		(var lootingPoints:number = "almanacState.lootingPoints ?: 0" (event "almanacState.evChanged"))
+
+		(var nextLootingPointsIncreaseAt:number = "almanacState.nextLootingPointsIncreaseAt ?: 0" (event "almanacState.evChanged"))
+		(var formattedDate:str = "formatTime(nextLootingPointsIncreaseAt, 'dd.MM.yy', '', true)")
+		(struct formatedTime = COUNTDOWN(_time = "nextLootingPointsIncreaseAt" _serverTime = "serverTime.value" _format = "'HH:mm:ss'"))
+
+		(var isTimeInDays:bool = "toBool(floor((nextLootingPointsIncreaseAt - serverTime.value) / DAY_IN_SEC))")
+
+		(var statusInfo:dict = "toBool(lootingPoints)	? 	{	text: subst('IDS_PL_ADVENT_LOOTING_POINTS_STATUS',			[],	{ days: lootingPoints }, lootingPoints),
+																unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.INFO } :
+								isTimeInDays			?	{	text: subst('IDS_ADVENT_NO_LOOTING_POINTS_STATUS',			[],	{ date: formattedDate }),
+																unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.UPDATE }
+														:	{	text: subst('IDS_ADVENT_NO_LOOTING_POINTS_STATUS_HOURS',	[],	{ _timeLeft: formatedTime.value }),
+																unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.UPDATE } ")
+	)
+
+	(style (width = 100%))
+
+	(name = 'advent_rewards_hint_block')
+
+	(tf
+		(bind class "_isTinyScreen ? '$TextDefault18NM' : '$TextDefault22NM'")
+		(style
+			(width = 100%)
+			(textAlign = "center")
+			(alpha = "TA")
+		)
+
+		(bind text "_description")
+	)
+
+	(block
+		(bind visible "hasMissedStages && (toBool(lootingPoints) || toBool(nextLootingPointsIncreaseAt))")
+
+		(style
+			(align = "center")
+			(width = 100%)
+			(marginTop = "{ 720:SXS, 1080:M }")
+			(visualOffsetY = 10px)
+			(alpha = 0)
+		)
+
+		(block
+			(controller $Instance renderer='StatusLine'
+				(bind enabled "hasMissedStages")
+				(args
+					_text =				"statusInfo.text"
+					_unifiedStatus =	"statusInfo.unifiedStatus"
+					_textClass =		"_isTinyScreen ? '$TextDefaultNM' : '$TextDefault18NM'"
+				)
+			)
 		)
 
 		(controller $Animation
@@ -266,8 +535,6 @@
 		(var isLootAnimation:bool = false)
 		(bind isLootAnimation "true"	init=false	(event "evStartLootAnimation"))
 		(bind isLootAnimation "false"	init=false	(event "evSelectTomorrowReward"))
-
-		(var isCurrentAndActiveReward:bool = "isCurrent && !isLooted")
 	)
 
 	(dispatch evChangeStageID dir="EventDirection.UP" args="{ value: stageID }" on='addedToStage' (bind enabled "(isCurrentStageLooted && isTomorrowStageID) || isCurrent"))
@@ -275,8 +542,8 @@
 	(bindcall externalCall 'sound.playSetSoundDirect' "['reward', 'receive']" (event "evStageChangedToLooted"))
 
 	(style
-		(bind width "_isTinyScreen ? SMALL_DAILY_REWARD_MIN_SIZE : SMALL_DAILY_REWARD_SIZE")
-		(bind height "_isTinyScreen ? SMALL_DAILY_REWARD_MIN_SIZE : SMALL_DAILY_REWARD_SIZE")
+		(bind width "_isTinyScreen ? DAILY_CALENDAR.SMALL_REWARD_MIN_SIZE : DAILY_CALENDAR.SMALL_REWARD_SIZE")
+		(bind height "_isTinyScreen ? DAILY_CALENDAR.SMALL_REWARD_MIN_SIZE : DAILY_CALENDAR.SMALL_REWARD_SIZE")
 	)
 
 	(element ControlBackground
@@ -334,7 +601,7 @@
 
 	(block
 		(class $FullsizeAbsolute)
-		(style (padding = "-GRID_SMALL_DAILY_REWARDS_OFFSET / 2"))
+		(style (padding = "-DAILY_CALENDAR.GRID_OFFSET / 2"))
 
 		(element MOUSE_HANDLER_CONTAINER
 			_enabled = "!isLootAnimation && !isSelected"
@@ -555,7 +822,13 @@
 			_size = "SIZE.MEDIUM"
 			_focusIndex = 0
 			_defaultFocused = true
-			_methods = "isLootButtonVisible ? [{ type: 'inputMapping.onAction', name: 'AlmanacComponentProxy.getReward', args: { stageID: _selectedStageID } }] : []"
+			_methods = "isLootButtonVisible ? [{ 
+												type: 'inputMapping.onAction',
+												name: 'lootCurrentAlmanacStage',
+												args: {	stageID: _selectedStageID, 
+														almanacType: SC.Common.ALMANAC_TYPES.COMMON } 
+												}]
+											: []"
 		)
 
 		(controller $Animation
@@ -712,6 +985,325 @@
 				(args
 					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 					_text =				'IDS_SHOW_REWARD_TOOLTIP_MOUSE_INSTRUCTION'
+				)
+			)
+		)
+	)
+)
+
+(def element AdventRewardsBlock ()
+	(scope
+		(var almanacStagesCollection:dhCollection =	"getCollection(CC.adventAlmanacStageState).getChildByPath('byContainers.' + ($index + 1))")
+	)
+	
+	(style
+		(height = "ADVENT_CALENDAR.BLOCK_SIZE")
+		(width = "ADVENT_CALENDAR.BLOCK_SIZE")
+	)
+
+	(controller $Repeat renderer='AdventTileElement'
+		(bind items "almanacStagesCollection")
+	)
+)
+
+(def element AdventTileElement ()
+	(scope
+		(event evShowLootedCheck)
+		(var adventAlmanacStageState:dhComponent = "$item.adventAlmanacStageState")
+		(var cellType:str = "adventAlmanacStageState.cellType ?: SC.Ui_common.ADVENT_TILE_SIZE.S")
+		(var tileSize:dict = "ADVENT_TILE_SIZE[cellType]")
+		(var posX:number = "adventAlmanacStageState.posX - 1")
+		(var posY:number = "adventAlmanacStageState.posY - 1")
+
+		(var rewardRenderer:str = "cellType == SC.Ui_common.ADVENT_TILE_SIZE.L ? 'RewardBigItem' : 'RewardItem'")
+
+		(var stageID:number = "adventAlmanacStageState.stageID")
+		(var isLocked:bool = "adventAlmanacStageState.isLocked" (event "adventAlmanacStageState.evStageUpdated"))
+		(var isCurrent:bool = "adventAlmanacStageState.isCurrent" (event "adventAlmanacStageState.evStageUpdated"))
+
+		(var isLooted:bool = "adventAlmanacStageState.isLooted" (event "adventAlmanacStageState.evStageUpdated"))
+		(var showLootedCheck:bool = "$event ? true : isLooted" watch=false (event "evShowLootedCheck"))
+
+		(var availableAt:number = "adventAlmanacStageState.availableAt" (event "adventAlmanacStageState.evStageUpdated"))
+		(var isFuture:bool = "availableAt > 0")
+		(var canClaimCurrent:bool = "isCurrent && !isLooted")
+		(var canClaimPrevious:bool = "!isLocked && !isFuture && !isCurrent && !isLooted")
+
+		(var background:str = "adventAlmanacStageState.background" (event "adventAlmanacStageState.evStageUpdated"))
+		(var rewardId:number = "adventAlmanacStageState.rewardEntityID" (event "adventAlmanacStageState.evStageUpdated"))
+		
+		(var currentStateAnimation:str = "isCurrent ? 'url:../animations/spine/advent/' + cellType + '/selected.skel' : ''")
+
+		(var rewardEntity:dhEntity =		"getEntity(rewardId)")
+		(var rewardComponent:dhComponent =	"rewardEntity.rewardComponent")
+
+		(var reward:dict = "{	id:			rewardComponent.id,
+								amount:		rewardComponent.amount,
+								name:		rewardComponent.name,
+								type:		rewardComponent.type,
+								subtype:	rewardComponent.subtype,
+								params:		rewardComponent.params,
+								isPRMP:		true}")
+
+		(var bgSize:dict = "ADVENT_TILE_BG_SIZE[cellType]")
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var backgroundState:number = "	!canClaimPrevious && !canClaimCurrent	? SC.Ui_styles.BUTTON_STATE.DISABLED :
+										mouseHandler.mouseDown					? SC.Ui_styles.BUTTON_STATE.DOWN :
+										mouseHandler.rollOver					? SC.Ui_styles.BUTTON_STATE.OVER
+																				: SC.Ui_styles.BUTTON_STATE.UP")
+	)
+	(macro STRUCT_MOUSE_DISPATCHER _mouseHandler = "mouseHandler")
+	(macro STRUCT_SOUND_HANDLER _mouseHandler = "mouseHandler" _soundSet = "'button_secondary'")
+
+	(bindcall externalCall "isCurrent ? 'inputMapping.onAction' : ''" "['lootCurrentAlmanacStage', { stageID: stageID, almanacType: SC.Common.ALMANAC_TYPES.ADVENT }]" watch=false on='leftClick')
+	(bindcall externalCall "canClaimPrevious ? 'inputMapping.onRequest' : ''" "['lootMissedAdventStage', {subtitle: 'IDS_ADVENT_CONFIRM_LOOTING_PREVIOUS'}]" watch=false on='leftClick')
+
+	(dispatch evShowLootedCheck delay="1" (bind enabled "isLooted") (bind trigger "isLooted"))
+	(bindcall externalCall 'sound.playSetSoundDirect' "['reward', 'receive']" (event "evShowLootedCheck"))
+
+	(class $FullsizeAbsolute)
+	(style
+		(align = "center|middle")
+		(borderRadius = "S")
+		(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+		(bind width "tileSize.width")
+		(bind height "tileSize.height")
+		(bind left "posX * ADVENT_TILE_MARGIN")
+		(bind top "posY * ADVENT_TILE_MARGIN")
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(bind alpha "showLootedCheck ? 0.5 : 1")
+		)
+		(controller $Instance (bind renderer "rewardRenderer")
+			(bind enabled "isLooted")
+			(args
+				_reward = "reward"
+				_isReceived = false
+			)
+		)
+	)
+
+	(block
+		(bind visible "showLootedCheck")
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(align = "center|middle")
+		)
+
+		(block
+			(style
+				(width = 48px)
+				(height = 48px)
+				(pivotX = 50%)
+				(pivotY = 50%)
+				(backgroundImage = 'url:../reward_categories/icon_check.png')
+				(bind alpha "showLootedCheck ? 1 : 0")
+			)
+		)
+	)
+
+	(block
+		(visible = "!isLooted")
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(borderRadius = "S")
+			(alpha = "isLooted ? 0 : 1")
+			(bind backgroundImage "'url:../advent/' + cellType + '/' + background + '.png'")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration=0.3
+				from={alpha:1, visible:true}
+				to={alpha: 0, visible:false}
+				(bind trigger "isLooted")
+			) 
+		)
+	)
+
+	(tf
+		(bind visible "!isLooted")
+		(class $TextDefaultBold60NM)
+		(style (alpha = "TA"))
+		(bind text "stageID")
+	)
+	(block
+		(bind visible "isLocked && !isLooted")
+		(class $FullsizeAbsolute)
+		(style (hitTest = false))
+		(block
+			(class $Fullsize)
+			(style
+				(borderRadius = "S")
+				(backgroundColor = 0x60000000)
+			)
+		)
+
+		(block
+			(style
+				(hitTest = false)
+				(position = "absolute")
+				(top = "S")
+				(right = "S")
+				(width = 19px)
+				(height = 19px)
+				(backgroundImage = 'url:../service_kit/unified_status_icons/icon_lock.png')
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isLooted")
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(backgroundImage = 'url:../service_kit/panel_backgrounds/stroke_one_px_with_br8.png')
+			(scale9grid = 8)
+			(bind alpha "isCurrent ? 0.5 : 0.15")
+		)
+		(colorTransform = "isCurrent ? COLOR_TRANSFORM_ACCENT_BLUE : CT_NONE")
+	)
+
+	(block
+		(bind visible "canClaimCurrent")
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(backgroundSize = "fill")
+			(borderRadius = "S")
+			(bind top "bgSize.top")
+			(bind left "bgSize.left")
+			(bind width "bgSize.width")
+			(bind height "bgSize.height")
+			(bind backgroundImage "currentStateAnimation")
+		)
+		(controller $Spine (bind enabled "canClaimCurrent"))
+	)
+
+	(block
+		(bind visible "canClaimPrevious || canClaimCurrent")
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "S")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = "SELECT_BACKGROUND_STATE_ALPHA[backgroundState]")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger = "backgroundState"
+			_alpha	 = "SELECT_BACKGROUND_STATE_ALPHA[backgroundState]"
+		)
+	)
+
+	
+	
+	(block
+		(bind visible "canClaimCurrent")
+		(class $FullsizeAbsolute)
+		(style
+			(borderRadius = "S")
+			(backgroundColor = "NO_COLOR")
+		)
+		(isMask = true)
+	)
+
+	(controller $Tooltip
+		(renderer = 'AdventStageStatusTooltip')
+		(bind enabled "!isLooted")
+		(args
+			_isLocked = "isLocked"
+			_isCurrent = "isCurrent"
+			_canClaimPrevious = "canClaimPrevious"
+			_availableAt = "availableAt"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(controller $Tooltip
+		(renderer = 'AdventRewardTooltip')
+		(bind enabled "isLooted")
+		(args
+			_reward = "reward"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element AdventRewardTooltip (_reward:dict)
+	(style (width = 350px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_ADVENT_TOOLTIP_HEADER'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element TooltipSystemStatusLine
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.CHECK"
+			_text =				'IDS_TOOLTIP_REWARD_TAKEN'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+		(element RewardContainerTooltipItem
+			_reward = "_reward"
+		)
+	)
+)
+
+(def element AdventStageStatusTooltip (_isLocked:bool, _isCurrent:bool, _canClaimPrevious:bool, _availableAt:number = 0)
+	(scope
+		(var formattedDate:str = "_availableAt ? formatTime(_availableAt, 'dd.MM.yy', '', true) : ''")
+		(var statusInfo:dict = "_isLocked						? {	text: 'IDS_ADVENT_TOOLTIP_REWARD_LOCKED_STATUS',
+																	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK } :
+								_availableAt > 0 && !_isCurrent	? {	text: subst('IDS_ADVENT_TOOLTIP_REWARD_DATE_STATUS', [], { date: formattedDate }),
+																	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK } :
+								_canClaimPrevious				? {	text: 'IDS_ADVENT_TOOLTIP_CLAIM_PREVIOUS_REWARD_STATUS',
+																	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.INFO }
+																: {}")
+		(var showMouseInstructions:bool = "_isCurrent || _canClaimPrevious")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText 
+			_headerText='IDS_ADVENT_TOOLTIP_HEADER'
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "statusInfo"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "statusInfo")
+				(args
+					_unifiedStatus = "statusInfo.unifiedStatus"
+					_text = "statusInfo.text"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "showMouseInstructions"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "showMouseInstructions")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text = 'IDS_ADVENT_TOOLTIP_CLAIM_REWARD_INSTRUCTION'
 				)
 			)
 		)

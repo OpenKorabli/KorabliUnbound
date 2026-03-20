@@ -22,14 +22,12 @@
 		(var divisionDataEntity:dhEntity = "getSingleEntity(CC.division)")
 		(var isDivisionsAvailableInThisBattleType:bool = "!isCustomBattle && (!isRankedBattle || isDivisionAllowedInRanked)")
 
+		(macro PRIME_TIME_DATA_SCOPE "_battleTypeEntity")
 		(var isNewRankedFinishTip:bool =	"_battleTypeStatus == SC.Common.BATTLE_TYPE_STATE.DISABLED && isRankedBattle")
-		(var isRankedBattleInactive:bool =	"_battleTypeStatus == SC.Common.BATTLE_TYPE_STATE.INACTIVE_BY_PRIMETIME && isRankedBattle")
-		(var isRatingBattleInactive:bool =	"_battleTypeStatus == SC.Common.BATTLE_TYPE_STATE.INACTIVE_BY_PRIMETIME && isRatingBattle")
-		(var isSelectableBattleType:bool =	"_battleTypeStatus != SC.Common.BATTLE_TYPE_STATE.DISABLED && (!divisionDataEntity || isDivisionsAvailableInThisBattleType)")
+		(var isSelectableBattleType:bool =	"_battleTypeStatus == SC.Common.BATTLE_TYPE_STATE.AVAILABLE && (!divisionDataEntity || isDivisionsAvailableInThisBattleType)")
+		(var hasFinishButton:bool = "!isActivePrimeTime && isRankedBattle || !isActivePrimeTime && isRatingBattle || !isSelectableBattleType")
 
 		(var chainId:number = "shallDeactivateChain ? _chainId : SC.Context_guiding_tip.TIP_CHAIN_ID.NONE")
-
-		(var hasFinishButton:bool = "isRankedBattleInactive || isRatingBattleInactive || !isSelectableBattleType")
 		(var onDeactivateTipChain:bool = "chainId && !isNewRankedFinishTip")
 
 		(var isGuidingLeftByCard:bool = "isTrainingBattle || isTrialBattletype")
@@ -47,6 +45,7 @@
 															:	_isSmallScreenSize	?	extendedGuidingSmallPadding
 																					:	extendedGuidingPadding")
 	)
+
 	(bindcall externalCall 'inputMapping.onAction' "[onDeactivateTipChain ? 'deactivateTipChain' : '', { tip_chain_id: chainId }]" watch=false (event "evBattleTypeChosen"))
 
 	(dispatch "'evScrollToIndex'" dir="EventDirection.UP" args="{_scrollToIndex: _scrollToIndex}" on='addedToStage')
@@ -56,7 +55,7 @@
 	(element GuidingTipHub
 		_tipId =				"_tipId"
 		_tipPositioning =		"guidingTipPosition"
-		_offsetY =				"BATTLE_TYPE_COMMON_CARD_HEIGHT / 2"
+		_offsetY =				"_isSmallScreenSize ? BATTLE_TYPE_COMMON_CARD_HEIGHT_SMALL / 2 : BATTLE_TYPE_COMMON_CARD_HEIGHT / 2"
 		_offsetX =				"M"
 		_pointerOffset =		"guidingPointerOffset"
 		_hasFinishButton =		"hasFinishButton"
@@ -76,7 +75,7 @@
 	)
 )
 
-(def element BattleTypeCard (_cardHeight:number, _cardWidth:number, _cardEventHeight:number, _size:number, _battleTypeEntity:dhEntity)
+(def element BattleTypeCard (_cardHeight:number, _cardWidth:number, _cardEventHeight:number, _size:number, _battleTypeEntity:dhEntity, _currentAccountLevel:number)
 	(scope
 		(event evBattleTypeSelected)
 
@@ -88,7 +87,11 @@
 		(var battleSeasonInfoComponent:dhComponent = "_battleTypeEntity.battleSeasonInfo")
 		(var battleTypeComponent:dhComponent = "_battleTypeEntity.battleType")
 		(var battleType:str = "battleTypeComponent.type")
-		(var isAccentCard:bool = "battleTypeComponent.isFullSizeIcon" (event "battleTypeComponent.evIsFullSizeIconChanged"))
+		(var battleTypeCardComponent:dhComponent = "getPrimaryComponent(CC.battleTypeChooserCard, _battleTypeEntity.id)")
+
+		
+		(var battleTypeActivationTier:number = "battleTypeCardComponent.activationTier")
+		(var isLockedByLevel:bool = "_currentAccountLevel < battleTypeActivationTier")
 
 		(var battleTypeStatus:number = "battleTypeComponent.status" (event "battleTypeComponent.evStatusChanged"))
 		(var battleTypeGameParamId:number = "battleTypeComponent.battleTypeGameParamId" (event "battleTypeComponent.evStatusChanged") (event "battleTypeComponent.evSelectionChanged"))
@@ -107,26 +110,37 @@
 		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
 
 		
-		(var rankSeasonComponent:dhComponent = "getSingleComponent(CC.rankSeason)")
-		(var isDivisionAllowedInRanked:bool = "rankSeasonComponent.isDivisionAllowed" (event "rankSeasonComponent.evChanged"))
+		(macro PRIME_TIME_DATA_SCOPE "_battleTypeEntity")
+		(var rankSeasonComponent:dhComponent = "_battleTypeEntity.rankSeason")
+		(var currentSprintId:number = "rankSeasonComponent ? rankSeasonComponent.currentSprintId : 0" (event "rankSeasonComponent.evChanged"))
+		(var isDivisionAllowedInRanked:bool = "isInDivision ? rankSeasonComponent.isDivisionAllowed : true" (event "rankSeasonComponent.evChanged"))
+		
+		(var isRankedSprintActive:bool = "currentSprintId != -1")
+		(var isRankedBattleSelectable:bool = "currentSprintId == 0 || (isRankedSprintActive && isDivisionAllowedInRanked)")
 
-		(var isAvailableInPrimeTime:bool = "battleTypeStatus != SC.Common.BATTLE_TYPE_STATE.INACTIVE_BY_PRIMETIME")
-		(var isAvailableTrainingRoom:bool = "!isTrainingBattletype || isDivisionAllowedInRanked || !isInDivision")
-		(var isSelectableBattleType:bool = "battleTypeStatus != SC.Common.BATTLE_TYPE_STATE.DISABLED && isAvailableInPrimeTime && isAvailableTrainingRoom")
+		
+		(var isTrainingBattleSelectable:bool = "!isTrainingBattletype || !isInDivision")
+
+		
+		(var isSelectableBattleType:bool = "battleTypeStatus != SC.Common.BATTLE_TYPE_STATE.DISABLED && (isActivePrimeTime || !isPrimeTime) && isTrainingBattleSelectable && isRankedBattleSelectable")
 
 		
 		(var eventBattleComponent:dhComponent = "_battleTypeEntity.eventBattleState") 
 		(var eventBattleName:str = "eventBattleComponent.name ?: SC.Common.BATTLE_TYPES.EVENT_BATTLE" (event "eventBattleComponent.evChanged")) 
 		(var operationBattleComponent:dhComponent =	"_battleTypeEntity.operation")
-		(var operationIconName:str = "operationBattleComponent.customIconName ?: battleType" (event "operationBattleComponent.evStatusChanged"))
+		(var operationIconName:str = "operationBattleComponent.customIconName ?: SC.Common.BATTLE_TYPES.PVE_BATTLE" (event "operationBattleComponent.evStatusChanged"))
 
-		(var battleName:str = "isEventBattle ? eventBattleName : operationIconName")
+		(var battleName:str = "	isEventBattle	?	eventBattleName :
+								isPVEBattle		?	operationIconName
+												:	battleType")
+
+		(var isSpaceAprilFeatures:bool = "battleName == 'PCVE031'")
+		(var isAccentCard:bool = "isSpaceAprilFeatures || battleTypeCardComponent.isFullSize" (event "battleTypeCardComponent.evIsFullSizeChanged"))
 
 		
 		(var battleHeaderIDS:str = "isEventBattle	?	'IDS_' + eventBattleName:
 									isPVEBattle		?	'IDS_' + operationBattleComponent.gpName + '_NAME'
 													:	'IDS_' + battleType")
-
 		(var battleTypeSubheader:str = "isEventBattle	?	'IDS_' + eventBattleName + '_SUBHEADER' :
 										isPVEBattle		?	'IDS_' + operationIconName + '_SUBHEADER'
 														:	'IDS_' + battleType + '_SUBHEADER'")
@@ -151,13 +165,6 @@
 		
 		(var cardActiveHoverAlpha:number = "BATTLETYPE_CARD_HOVER_ALPHA[backgroundState] ?: 0")
 		(var cardRulesAndRestrictionsAlpha:number = "BATTLETYPE_CARD_RULES_ALPHA[backgroundState]")
-		(var cardBackgroundColorfulAlpha:number = "	!isSelectableBattleType	?	0 :
-													isBattleTypeSelected	?	0.3
-																			:	0.1")
-
-		
-		(var battleTypeDenyReasons:array = "battleTypeComponent.battleTypeReasons" (event "battleTypeComponent.evDisableReasonChanged"))
-		(var reasonText:str = "battleTypeDenyReasons.length ? battleTypeDenyReasons[0] : ''")
 
 		
 		(struct trainingFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.TRAINING_BATTLE"))
@@ -169,11 +176,14 @@
 																:	isNewBattle && isSelectableBattleType")
 
 		
-		(var lockedBattletypeText:str = "	isInBalancer												?	'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER_EVENT_BATTLES' :
-											isTrainingBattletype && trainingFeature.state == 'locked'	?	'IDS_ACCESS_LEVEL_TOO_LOW_TO_PARTICIPATE_IN_BATTLE' :
-											isTrainingBattletype && isInDivision						?	'IDS_UNABLE_TO_CREATE_TRAINING_WHEN_IN_DIVISION' :
-											reasonText													?	reasonText
-																										:	'IDS_TOOLTIP_ACCESS_PRIME_TIME'")
+		(var battleTypeDenyReasons:array = "battleTypeComponent.battleTypeReasons" (event "battleTypeComponent.evDisableReasonChanged"))
+
+		(var lockedBattletypeText:str = "	isInBalancer													?	'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER_EVENT_BATTLES' :
+											isLockedByLevel							?	subst('IDS_TOOLTIP_UNAVAILABLE_TO_ACCESS_LEVEL', [], {_level: battleTypeActivationTier}) :
+											isTrainingBattletype && isInDivision							?	'IDS_UNABLE_TO_CREATE_TRAINING_WHEN_IN_DIVISION' :
+											isPrimeTime && (!isActivePrimeTime || !isRankedSprintActive)	?	'IDS_ACCESS_PRIME_TIME' :
+											battleTypeDenyReasons.length > 0								?	battleTypeDenyReasons[0]
+																											:	''")
 
 		
 		(var colorTransformName:str = "isPVEBattle	?	operationIconName != SC.Common.BATTLE_TYPES.PVE_BATTLE	?	SC.Common.BATTLE_TYPES.EVENT_BATTLE
@@ -264,28 +274,10 @@
 
 	
 	(block
+		(bind visible "isEventBattle && isAccentCard && isIn(battleName, BATTLE_TYPE_EVENT_HAS_IMAGE)")
 		(class $FullsizeAbsolute)
-		(style
-			(alpha = "cardBackgroundColorfulAlpha")
-			(borderRadius = "S")
-			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
-		)
-
-		(bind colorTransform "BATTLE_TYPES_CT[colorTransformName]")
-
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
-			_duration = "0.15"
-			_trigger = "cardBackgroundColorfulAlpha"
-			_alpha = "cardBackgroundColorfulAlpha"
-		)
-	)
-
-	
-	(block
-		(class $FullsizeAbsolute)
-
-		(controller $Instance renderer = 'BattleTypeCardBackgroundImage'
-			(bind enabled "isEventBattle && isAccentCard")
+		(controller $Instance renderer='BattleTypeCardBackgroundImage'
+			(bind enabled "isEventBattle && isAccentCard && isIn(battleName, BATTLE_TYPE_EVENT_HAS_IMAGE)")
 			(args
 				_imageStr = "'url:../service_kit/battle_types/card_backgrounds/' + battleName + '.png'"
 			)
@@ -458,13 +450,10 @@
 		)
 
 		(block
-			(style
-				(width = 100%)
-				(alpha = 0.9)
-			)
+			(style (width = 100%))
 
 			(controller $Instance renderer='StatusLine'
-				(bind enabled "!isSelectableBattleType")
+				(bind enabled "!isSelectableBattleType && toBool(lockedBattletypeText)")
 				(args
 					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.LOCK"
 					_text =				"lockedBattletypeText"
@@ -487,8 +476,6 @@
 					_battleName = "battleName"
 					_isSmallScreenSize = "isSmallScreenSize"
 					_isTrainingBattletype = "isTrainingBattletype"
-					_isTrialBattleType = "isTrialBattletype"
-					_isPVEBattleType = "isPVEBattle"
 				)
 			)
 		)
@@ -561,7 +548,6 @@
 		(var battleType:str = "_battleTypeComponent.type")
 		(var isTrainingBattletype:bool = "battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
 		(var isTrialBattletype:bool = "battleType == SC.Common.BATTLE_TYPES.TRIAL_BATTLE")
-		(var isPVEBattle:bool = "battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
 	)
 	(class $Fullsize)
 	(style
@@ -634,6 +620,8 @@
 		(var isTrainingBattletype:bool = "battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
 		(var isTrialBattleType:bool = "battleType == SC.Common.BATTLE_TYPES.TRIAL_BATTLE")
 		(var isPVEBattleType:bool = "battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+
+		(var isSpaceAprilFeatures:bool = "_battleName == 'PCVE031'")
 	)
 
 	(style (width = 100%))
@@ -765,6 +753,32 @@
 				)
 			)
 		)
+
+		
+		(block
+			(style (bind marginLeft "isSpaceAprilFeatures ? S : 0px"))
+
+			(controller $Instance renderer='BattleModeSpecificsModifierItem'
+				(bind enabled "isSpaceAprilFeatures")
+				(args
+					_type = "BATTLE_SPECIFICS.SPECIAL_SHIP"
+					_size = "_isSmallScreenSize ? SIZE.SMALL : SIZE.MEDIUM"
+				)
+			)
+		)
+
+		
+		(block
+			(style (bind marginLeft "isSpaceAprilFeatures ? S : 0px"))
+
+			(controller $Instance renderer='BattleModeSpecificsModifierItem'
+				(bind enabled "isSpaceAprilFeatures")
+				(args
+					_type = "BATTLE_SPECIFICS.RESPAWN"
+					_size = "_isSmallScreenSize ? SIZE.SMALL : SIZE.MEDIUM"
+				)
+			)
+		)
 	)
 )
 
@@ -778,6 +792,7 @@
 		(var isTrainingBattletype:bool = "battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE")
 		(var isTrialBattleType:bool = "battleType == SC.Common.BATTLE_TYPES.TRIAL_BATTLE")
 		(var isPVEBattleType:bool = "battleType == SC.Common.BATTLE_TYPES.PVE_BATTLE")
+		(var isSpaceAprilFeatures:bool = "_battleName == 'PCVE031'")
 	)
 
 	(style
@@ -920,6 +935,31 @@
 				(bind enabled "_battleSeasonInfoComponent.achievementsUI.length > 0")
 				(args
 					_type = "BATTLE_SPECIFICS.HAS_ACHIEVEMENTS"
+					_size = "_isSmallScreenSize ? SIZE.SMALL : SIZE.MEDIUM"
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='BattleModeSpecificsModifierLineItem'
+				(bind enabled "isSpaceAprilFeatures")
+				(args
+					_type = "BATTLE_SPECIFICS.SPECIAL_SHIP"
+					_size = "_isSmallScreenSize ? SIZE.SMALL : SIZE.MEDIUM"
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='BattleModeSpecificsModifierLineItem'
+				(bind enabled "isSpaceAprilFeatures")
+				(args
+					_type = "BATTLE_SPECIFICS.RESPAWN"
 					_size = "_isSmallScreenSize ? SIZE.SMALL : SIZE.MEDIUM"
 				)
 			)

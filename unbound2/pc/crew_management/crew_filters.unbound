@@ -3,10 +3,20 @@
 	CREW_TYPE:	113px
 })
 
-(def constant CREW_FILTER_TYPES [
-	{ title:	'IDS_NATION',		filterType:	"SC.Common.CREW_FILTER_TYPE.CREW_NATION" },
-	{ title:	'IDS_CREW_TYPE',	filterType:	"SC.Common.CREW_FILTER_TYPE.CREW_TYPE" }
-])
+(def constant CREW_FILTER_TYPES "[
+	{ title: 'IDS_CREW_FILTERS_NATION',		filterType: SC.Common.CREW_FILTER_TYPE.CREW_NATION,		element: 'CrewNationCheckBox' },
+	{ title: 'IDS_CREW_FILTERS_CREW_TYPE',	filterType: SC.Common.CREW_FILTER_TYPE.CREW_TYPE,		element: 'CrewTypeCheckBox' },
+	{ title: 'IDS_CREW_FILTERS_SPECIAL',	children: [
+		{ title: 'IDS_VOICEOVER',			filterType: SC.Common.CREW_FILTER_TYPE.CREW_VOICEOVER,	element: 'CrewVoiceOverCheckBox' }
+	] }
+]")
+
+(def constant APPLIED_CREW_FILTER_RENDERER "{
+	SC.Common.CREW_FILTER_TYPE.CREW_NATION:		'CrewFilterTinyNationFlag',
+	SC.Common.CREW_FILTER_TYPE.CREW_TYPE:		'CrewFilterCrewType',
+	SC.Common.CREW_FILTER_TYPE.CREW_VOICEOVER:	'CrewFilterHasVoiceOver'
+}")
+
 
 (def element CrewFiltersInfotip (_isCrewHasAnyFilters:bool)
 	(scope
@@ -53,15 +63,12 @@
 				(controller $Instance renderer='DefaultButton'
 					(bind enabled "_isCrewHasAnyFilters")
 					(args
-						_width = 120px
-						_label = 'IDS_RESET_ALL_FILTERS'
-						_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
-						_focusIndex = 1
-						_methods = "[{	type: 'direct.action',
-										name: CREW_FILTERS_ACTIONS.RESET_ALL,
-										args: {}
-									}]"
-						_size = "SIZE.SMALL"
+						_width =		120px
+						_label =		'IDS_RESET_ALL_FILTERS'
+						_type =			"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+						_focusIndex =	1
+						_methods =		"[{ type: 'direct.action',	name: CREW_FILTERS_ACTIONS.RESET_ALL,	args: {} }]"
+						_size =			"SIZE.SMALL"
 					)
 				)
 
@@ -82,18 +89,28 @@
 			(controller $Repeat renderer='CrewFilterBlock'
 				(bind count "CREW_FILTER_TYPES.length")
 				(args
-					_title = "CREW_FILTER_TYPES[$index]['title']"
-					_filterType = "CREW_FILTER_TYPES[$index]['filterType']"
+					_title =		"CREW_FILTER_TYPES[$index]['title']"
+					_filterType =	"CREW_FILTER_TYPES[$index]['filterType']"
 				)
 			)
 		)
 	)
 )
 
-(def element CrewFilterBlock (_title:str, _filterType:str)
+(def element CrewFilterBlock (_title:str, _filterType:str, _isFromInfotip:bool = false)
 	(scope
+		(var crewFilterBlockInfo:dict =		"CREW_FILTER_TYPES[$index]")
+		(var crewFilterItemRenderer:str =	"'element' in crewFilterBlockInfo		? crewFilterBlockInfo.element	: ''")
+		(var dynamicFiltersList:array =		"'children' in crewFilterBlockInfo		? crewFilterBlockInfo.children	: []")
+
+
 		(var crewFiltersCollection:dhCollection = "getCollectionByPath(CC.crewFilter, 'byFilterType.' + _filterType)")
+		(var crewFilterVoiceOverCollection:dhCollection = "getCollectionByPath(CC.crew, 'potentiallyVisible.byVoiceOver')")
+
+		(var areDynamicFiltersVisible:bool =	"!_filterType && (crewFilterVoiceOverCollection.length > 0)")
 	)
+
+	(bind visible "_filterType || areDynamicFiltersVisible")
 
 	(style
 		(align = "center")
@@ -117,6 +134,8 @@
 	)
 
 	(vtile
+		(bind visible "crewFiltersCollection")
+
 		(style
 			(align = "center")
 			(height = 208px)
@@ -124,26 +143,56 @@
 		)
 
 		(controller $Repeat renderer='CrewFilterItem'
-			(bind count "crewFiltersCollection.length")
+			(bind items "crewFiltersCollection")
 			(args
-				_filterEntity = "crewFiltersCollection.getEntityAtIndex($index)"
+				_filterEntity =		"$item"
+				_renderer =			"crewFilterItemRenderer"
+			)
+		)
+	)
+
+	(block
+		(bind visible "areDynamicFiltersVisible")
+
+		(style
+			(align = "center")
+			(gap = "S")
+			(bind height		"_isFromInfotip ? auto : 208px")
+			(bind marginBottom	"_isFromInfotip ? M : 0")
+		)
+
+		(controller $Repeat renderer='DynamicCrewFilterItem'
+			(bind enabled "areDynamicFiltersVisible")
+			(bind count "dynamicFiltersList.length")
+			(args
+				_filterData = "crewFilterBlockInfo.children[$index]"
 			)
 		)
 	)
 )
 
-(def element CrewFilterItem (_filterEntity:dhEntity)
-	(scope
-		(var panelEntity:dhEntity = "getSingleEntity(CC.filterPanelComponent)")
-		(var enabledFilters:array = "panelEntity.filterPanelComponent.enabledFilters ?: []" (event "panelEntity.filterPanelComponent.evUpdate"))
-		(var renderItem:str = "_filterEntity.crewFilter.type == CREW_FILTER_TYPES[0]['filterType'] ? 'CrewNationCheckBox' : 'CrewTypeCheckBox'")
-	)
-
+(def element CrewFilterItem (_filterEntity:dhEntity, _renderer:str)
 	(controller $Instance
-		(bind renderer "renderItem")
-		(bind enabled "renderItem")
+		(bind renderer "_renderer")
+		(bind enabled "_renderer")
 		(args
 			_filterEntity = "_filterEntity"
+		)
+	)
+)
+
+(def element DynamicCrewFilterItem (_filterData:dict)
+	(scope
+		(var crewFiltersCollection:dhCollection =	"getCollectionByPath(CC.crewFilter, 'byFilterType.' + _filterData.filterType)")
+		(var crewFilterItemRenderer:str =			"_filterData.element")
+	)
+
+	
+	(controller $Repeat renderer='CrewFilterItem'
+		(bind items "crewFiltersCollection")
+		(args
+			_filterEntity =		"$item"
+			_renderer =			"crewFilterItemRenderer"
 		)
 	)
 )
@@ -169,18 +218,13 @@
 	(bind name "'CrewCheckBox_' + filterType + '_' + filterValue")
 
 	(element ImageRadioButton
-		_enabled = "isEnabled"
-		_selected = "isSelected"
-		_renderElement = 'CheckBoxCrewTypeLabel'
-		_renderArgs = "{ _crewTypeStr: filterValue }"
-		_methods = "isEnabled	?	[{
-										type: 'direct.action',
-										name: CREW_FILTERS_ACTIONS.SET,
-										args: [ _filterEntity.id, !isSelected ]
-									}]
-								:	[]"
-		_size = "SIZE.MEDIUM"
-		_statusTooltipData = "statusTooltipData"
+		_enabled =				"isEnabled"
+		_selected =				"isSelected"
+		_renderElement =		'CheckBoxCrewTypeLabel'
+		_renderArgs =			"{ _crewTypeStr: filterValue }"
+		_methods =				"isEnabled ? [{ type: 'direct.action',	name: CREW_FILTERS_ACTIONS.SET,		args: [ _filterEntity.id, !isSelected ] }]	: []"
+		_size =					"SIZE.MEDIUM"
+		_statusTooltipData =	"statusTooltipData"
 	)
 )
 
@@ -208,21 +252,44 @@
 													:	{	_text:	statusTooltipTextDisabled,
 															_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION }")
 	)
+
 	(bind name "'CrewCheckBox_' + filterType + '_' + filterValue")
 
 	(element ImageRadioButton
-		_enabled = "isEnabled"
-		_selected = "isSelected"
-		_renderElement = 'CheckBoxNationLabel'
-		_renderArgs = "{ _shipCountry: filterValue }"
-		_methods = "isEnabled	?	[{
-										type: 'direct.action',
-										name: CREW_FILTERS_ACTIONS.SET,
-										args: [ _filterEntity.id, !isSelected ]
-									}]
-								:	[]"
-		_size = "SIZE.MEDIUM"
-		_statusTooltipData = "statusTooltipData"
+		_enabled =				"isEnabled"
+		_selected =				"isSelected"
+		_renderElement =		'CheckBoxNationLabel'
+		_renderArgs =			"{ _shipCountry: filterValue }"
+		_methods =				"isEnabled ? [{ type: 'direct.action',	name: CREW_FILTERS_ACTIONS.SET,		args: [ _filterEntity.id, !isSelected ] }]	: []"
+		_size =					"SIZE.MEDIUM"
+		_statusTooltipData =	"statusTooltipData"
+	)
+)
+
+(def element CrewVoiceOverCheckBox (_filterEntity:dhEntity)
+	(scope
+		(var filterComponent:dhComponent = "_filterEntity.crewFilter")
+
+		(var filterType:str =	"filterComponent.type	?: ''")
+		(var filterValue:str =	"filterComponent.value	?: ''")
+		(var isSelected:bool =	"filterComponent.selected"	(event "filterComponent.evSelectedChanged"))
+		(var isEnabled:bool =	"filterComponent.enabled"	(event "filterComponent.evEnabledChanged"))
+
+		(var statusTooltipData:dict = "isEnabled	? {	_text:				'IDS_HINT_CHECKBOX_CREW_FILTER_' + toUpper(filterType) + (isSelected ? '_DISABLE' : ''),
+														_unifiedStatus:		SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }
+													: {	_text:				'IDS_HINT_CHECKBOX_CREW_FILTER_' + toUpper(filterType) + '_NOT_AVAILABLE',
+														_unifiedStatus:		SC.Ui_styles.UNIFIED_STATUS.ATTENTION }")
+	)
+
+	(bind name "'CrewCheckBox_' + filterType + '_' + filterValue")
+
+	(element ImageRadioButton
+		_enabled =				"isEnabled"
+		_selected =				"isSelected"
+		_renderElement =		'CheckBoxCrewHasVoiceOver'
+		_methods =				"isEnabled ? [{ type: 'direct.action',	name: CREW_FILTERS_ACTIONS.SET,		args: [ _filterEntity.id, !isSelected ] }]	: []"
+		_size =					"SIZE.MEDIUM"
+		_statusTooltipData =	"statusTooltipData"
 	)
 )
 
@@ -235,6 +302,13 @@
 	)
 )
 
+(def element CheckBoxCrewHasVoiceOver ()
+	(class $Fullsize)
+	(style (align = "center|middle"))
+
+	(element CrewCustomVoiceMarker)
+)
+
 (def element CrewAppliedFilter (_filterType:str, _hasBlurBackground:bool = false)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -243,7 +317,7 @@
 		(var crewFiltersCollectionLength:number =	"crewFiltersCollection.length")
 		(var isAppliedFiltersVisible:bool = 		"crewFiltersCollectionLength > 0")
 
-		(var itemRenderer:str = "_filterType == SC.Common.CREW_FILTER_TYPE.CREW_TYPE ? 'CrewFilterCrewType' : 'CrewFilterTinyNationFlag'")
+		(var itemRenderer:str = "APPLIED_CREW_FILTER_RENDERER[_filterType]")
 
 		(var isInfotipVisible:bool = false)
 		(var state:number = "	isInfotipVisible	? SC.Ui_styles.BUTTON_STATE.SELECTED :
@@ -288,8 +362,9 @@
 		(controller $Tooltip
 			(renderer = 'SimpleStatusTooltip')
 			(args
-				_text = "'IDS_APPLIED_FILTER_HINT_' + _filterType"
-				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				_text =				"isIn(_filterType, SC.Common.CREW_FILTER_TYPE.STATIC)	? 'IDS_APPLIED_FILTER_HINT_' + toUpper(_filterType)
+																							: 'IDS_APPLIED_FILTER_HINT_SPECIAL'"
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -344,11 +419,8 @@
 				)
 
 				(element CloseButton
-					_methods = "[ {	type: 'direct.action',
-									name: CREW_FILTERS_ACTIONS.RESET_GROUP,
-									args: [_filterType]
-								}]"
-					_tooltipText = 'IDS_HINT_RESET_FILTER'
+					_methods =		"[{ type: 'direct.action',	name: CREW_FILTERS_ACTIONS.RESET_GROUP,		args: [ _filterType ] }]"
+					_tooltipText =	'IDS_HINT_RESET_FILTER'
 				)
 			)
 		)
@@ -358,7 +430,10 @@
 (def element CrewAppliedFilterInfotip (_filterType:str)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
-		(var infotipTitle:str = "SC.Common.CREW_FILTER_TYPE.CREW_NATION == _filterType ? CREW_FILTER_TYPES[0]['title'] : CREW_FILTER_TYPES[1]['title']")
+		(var isStaticFilter:bool = "isIn(_filterType, SC.Common.CREW_FILTER_TYPE.STATIC)")
+		(var infotipTitle:str = "isStaticFilter		? _filterType == SC.Common.CREW_FILTER_TYPE.CREW_NATION		? CREW_FILTER_TYPES[0]['title']
+																												: CREW_FILTER_TYPES[1]['title']
+													: CREW_FILTER_TYPES[2]['title']")
 	)
 
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP "true")
@@ -367,8 +442,9 @@
 
 	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _isAutoSize=true
 		(element CrewFilterBlock
-			_filterType = "_filterType"
-			_title = "infotipTitle"
+			_filterType =		"isStaticFilter ? _filterType : ''"
+			_title =			"infotipTitle"
+			_isFromInfotip =	true
 		)
 	)
 )
@@ -408,4 +484,13 @@
 	(element RarityRibbon
 		_rarity = "SC.Common.UNIFIED_ITEM_RARITY[value]"
 	)
+)
+
+(def element CrewFilterHasVoiceOver (_collection:dhCollection)
+	(style
+		(marginLeft = "XS")
+		(marginTop = 3px)
+	)
+
+	(element CrewCustomVoiceMarker)
 )

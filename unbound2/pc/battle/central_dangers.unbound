@@ -24,17 +24,15 @@
 																	: 'shipDangers'"
 		)
 
-		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
+		(var cameraEntity:dhEntity = "getSingleEntity(CC.camera)")
 		(var cameraMode:number = "cameraEntity.camera.mode" (event "cameraEntity.camera.evModeChanged"))
 
-		(var nearestEnemyIndication:gfx = "$datahub.getSingleComponent(CC.nearestEnemyIndication)")
+		(var nearestEnemyIndication:dhComponent = "getSingleComponent(CC.nearestEnemyIndication)")
 		(var showNearestEnemy:bool = "nearestEnemyIndication ? nearestEnemyIndication.showNearestEnemy : false" (event "nearestEnemyIndication.evShowNearestEnemyChanged"))
 
 		(var isTactical:bool = "cameraEntity.camera.isTactical" (event "cameraEntity.camera.evTacticalStateChanged"))
 		
-		(var collisionDangerWatcher:gfx = "$datahub.getFirstWatcher(CC.collisionDanger)")
-		(var collisionDangerEntity:gfx = "collisionDangerWatcher.entity" (event "collisionDangerWatcher.event"))
-		(var collisionDangerComponent:gfx = "collisionDangerEntity ? collisionDangerEntity.collisionDanger : null")
+		(var collisionDangerComponent:dhComponent = "getSingleComponent(CC.collisionDanger)")
 		(var collisionDangerState:number = "collisionDangerComponent ? collisionDangerComponent.state : 0" (event "collisionDangerComponent.evChanged"))
 		(var isCollision:bool = "collisionDangerState == SC.Battle.COLLISION_DANGER_STATE.COLLISION")
 		
@@ -129,10 +127,10 @@
 
 		(var lastLookSquadronCamera:bool = "squadronCameraMode == SquadronCameraModes.SQUADRON_DEAD || squadronCameraMode == SquadronCameraModes.LAST_SQUADRON_ATTACKED")
 
-		(var nearestEnemyIndication:gfx = "$datahub.getSingleComponent(CC.nearestEnemyIndication)")
+		(var nearestEnemyIndication:dhComponent = "getSingleComponent(CC.nearestEnemyIndication)")
 		(var angle:number = "nearestEnemyIndication.yawToNearestEnemy" (event "nearestEnemyIndication.evYawToNearestEnemyChanged"))
 
-		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
+		(var cameraEntity:dhEntity = "getSingleEntity(CC.camera)")
 		(var cameraAngle:number = "cameraEntity.camera.yaw" (event "evEnterFrame"))
 
 		(var resultAngle:number = "radToGrad(angle - cameraAngle)")
@@ -466,7 +464,7 @@
 
 (def element DangerItemContainer (_collectionPath:str)
 	(scope
-		(var dangersCollection:gfx = "_collectionPath ? $datahub.getCollection(CC.visibleDanger).getChildByPath(_collectionPath) : null")
+		(var dangersCollection:dhCollection = "_collectionPath ? getCollectionByPath(CC.visibleDanger, _collectionPath) : null")
 	)
 	(class $FullsizeAbsolute)
 
@@ -475,30 +473,33 @@
 		(class $FullsizeAbsolute)
 		(controller $FxInstance lifetime="DANGER_HIDE_DURATION"
 			(renderer = 'DangerItem')
-			(args _entityId="$event[0].id" _hideAnim=true) 
+			(args _dangerEntityId="$event[0].id" _hideAnim=true) 
 			(bindcall create (event "dangersCollection.evRemoved"))
 		)
 	)
+
 	(controller $Repeat renderer='DangerItem' layout=false
-		(bind count "dangersCollection.items.length" watch=false (event "dangersCollection.evAdded") (bind trigger "dangersCollection"))
-		(bindcall removeChildAt "$event[1]" (event "dangersCollection.evRemoved"))
-		(args "dangersCollection.items[$index].id")
+		(bind items "dangersCollection")
+		(args
+			_dangerEntityId = "$item.id"
+		)
 	)
 )
 
-(def element DangerItem (_entityId:number, _hideAnim:bool=false)
-	(scope
-		(var dangerEntity:gfx = "$datahub.getEntity(_entityId)")
-		(var visibleDanger:gfx = "dangerEntity ? dangerEntity.visibleDanger : null")
 
-		(var dangerType:number = "visibleDanger ? visibleDanger.type : 0" (event "visibleDanger.evChanged"))
+(def element DangerItem (_dangerEntityId:number, _hideAnim:bool=false)
+	(scope
+		(var dangerEntity:dhEntity = "getEntity(_dangerEntityId)")
+		(var visibleDanger:dhComponent = "dangerEntity.visibleDanger" autoUpdate=false) 
+
+		(var dangerType:number = "visibleDanger.type ?: 0" (event "visibleDanger.evChanged"))
 		(var typeToChild:str = "dangerType == DangerType.COLLISION 	? 'CollisionDangerItem'
 																	: 'SimpleDangerItem'")
 
-		(var dangerAngle:number = "visibleDanger ? visibleDanger.yaw : 0" (event "visibleDanger.evYawUpdated"))
+		(var dangerAngle:number = "visibleDanger.yaw ?: 0" (event "visibleDanger.evYawUpdated"))
 
-		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
-		(var cameraAngle:number = "cameraEntity && cameraEntity.camera ? cameraEntity.camera.yaw : 0" (event "evEnterFrame"))
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var cameraAngle:number = "cameraComponent.yaw ?: 0" (event "evEnterFrame"))
 
 		(var angle:number = "radToGrad(dangerAngle - cameraAngle)")
 	)
@@ -511,7 +512,10 @@
 
 		(controller $Instance
 			(bind renderer "typeToChild")
-			(args _entityId="dangerEntity.id" _hideAnim="_hideAnim")
+			(args
+				_dangerEntity="dangerEntity"
+				_hideAnim="_hideAnim"
+			)
 		)
 	)
 )
@@ -547,17 +551,16 @@
 	)
 )
 
-(def element CollisionDangerItem (_entityId:number, _hideAnim:bool=false)
+(def element CollisionDangerItem (_dangerEntity:dhEntity, _hideAnim:bool=false)
 	(scope
-		(var dangerEntity:gfx = "$datahub.getEntity(_entityId)")
-		(var visibleDanger:gfx = "dangerEntity ? dangerEntity.visibleDanger : null")
+		(var visibleDanger:dhComponent = "_dangerEntity.visibleDanger" autoUpdate=false) 
 
-		(var state:number = "dangerEntity && dangerEntity.collisionDanger ? dangerEntity.collisionDanger.state : 0" (event "dangerEntity.collisionDanger.evChanged"))
-		(var dangerAngle:number = "visibleDanger ? visibleDanger.yaw : 0" (event "visibleDanger.evYawUpdated"))
+		(var state:number = "_dangerEntity.collisionDanger.state ?: 0" (event "_dangerEntity.collisionDanger.evChanged"))
+		(var dangerAngle:number = "visibleDanger.yaw ?: 0" (event "visibleDanger.evYawUpdated"))
 		(var isVisible:bool = "state >= 3")
 
-		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
-		(var cameraAngle:number = "cameraEntity ? cameraEntity.camera.yaw : 0" (event "evEnterFrame"))
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var cameraAngle:number = "cameraComponent.yaw ?: 0" (event "evEnterFrame"))
 
 		(var reverseAngle:number = "radToGrad(cameraAngle - dangerAngle)")
 	)
@@ -594,22 +597,21 @@
 	)
 )
 
-(def element SimpleDangerItem (_entityId:number, _hideAnim:bool=false)
+(def element SimpleDangerItem (_dangerEntity:dhEntity, _hideAnim:bool=false)
 	(scope
 		(event evAddedToStage)
 
-		(var dangerEntity:gfx = "$datahub.getEntity(_entityId)")
-
-		(var visibleDanger:gfx = "dangerEntity.visibleDanger")
+		(var visibleDanger:dhComponent = "_dangerEntity.visibleDanger" autoUpdate=false) 
 		(var dangerType:number = "visibleDanger.type" (event "visibleDanger.evChanged"))
 
-		(var simpleDanger:gfx = "dangerEntity.simpleDanger" (event "dangerEntity.evAdded"))
+		(var simpleDanger:dhComponent = "_dangerEntity.simpleDanger")
 		(var dist:str = "simpleDanger.dist" (event "simpleDanger.evChanged"))
 
-		(var shipSubtype:str =  "dangerEntity.avatar && dangerEntity.avatar.ship.ref ? dangerEntity.avatar.ship.ref.ship.subtype : ''" (event "dangerEntity.avatar.evShipRefChanged"))
+		(var shipSubtype:str =  "_dangerEntity.avatar && _dangerEntity.avatar.ship.ref ? _dangerEntity.avatar.ship.ref.ship.subtype : ''" (event "_dangerEntity.avatar.evShipRefChanged"))
 		(var planePostfix:str = "dangerType == DangerType.AIRSUPPORT_DEPTH_CHARGES ? '_depthcharge' : ''")
 
 		(var iconType:str = " 	dangerType == DangerType.TORPEDO			? 'torpedo' :
+								dangerType == DangerType.MISSILES			? 'missiles' :
 								dangerType == DangerType.DEPTH_CHARGE		? 'depth_charge' :
 								dangerType == DangerType.SHIP				? toLower(shipSubtype)
 																			: ('plane' + planePostfix)")

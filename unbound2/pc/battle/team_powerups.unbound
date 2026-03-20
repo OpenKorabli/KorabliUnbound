@@ -6,34 +6,33 @@
 
 (def element CapturedDropsCount(_isAlly:bool)
 	(scope
-		(var selfAvatarEntity:gfx =  "$datahub.getSingleEntity(CC.playerAvatar)")
-		(var selfTeamId:number = "selfAvatarEntity.avatar.teamId" (event "selfAvatarEntity.avatar.evTeamIdChanged"))
+		(var relation:str = "_isAlly ? SC.Battle.PLAYER_RELATION.NAMES.ALLY : SC.Battle.PLAYER_RELATION.NAMES.ENEMY")
 
-		(var relation:str = "_isAlly ? 'ally' : 'enemy'")
-
-		(var collection:gfx = "$datahub.getCollection(CC.capturedDropInfo)")
-		(var collectionByTeam:gfx = "collection ? collection.getChildByPath('capturedDropByTeamId.' + relation + '.sorted') : null" (event "collection.evUpdated") (event "collection.evChildAdded") (event "collection.evChildRemoved"))
-		(var collectionLength:number = "collectionByTeam ? collectionByTeam.items.length : 0")
-
+		(var collectionByTeam:dhCollection = "getCollection(CC.capturedDropInfo).getChildByPath('capturedDropByTeamId.' + relation + '.sorted')")
 		(macro STAGE_SIZE)
 	)
+
 	(hblock
 		(style
 			(bind height "INDICATOR_OUTER_RADIUS * 2")
 			(align = "middle")
 		)
 		(controller $Repeat renderer='DropItems'
-			(bind count "collectionLength")
-			(bindcall removeChildAt "$event[1]" (event "collectionByTeam.evRemoved"))
-			(bindcall addChildAt "$event[1]" (event "collectionByTeam.evAdded"))
-			(args "collectionByTeam" "_isAlly")
+			(bind items "collectionByTeam")
+			(args
+				_dropItemEntity = "$item"
+				_isAlly = "_isAlly"
+				_collectionLength = "collectionByTeam.length"
+			)
 		)
 	)
 )
 
-(def element DropItems(collection:gfx , _isAlly:bool)
+(def element DropItems(_dropItemEntity:dhEntity, _isAlly:bool, _collectionLength:number=0)
 	(scope
-		(var capturedDropInfo:gfx = "collection.items[$index].capturedDropInfo" watch=false)
+		(event evPlaceReady)
+
+		(var capturedDropInfo:dhComponent = "_dropItemEntity.capturedDropInfo" watch=false)
 		(var markerName:str = "capturedDropInfo.markerNameActive")
 		(var markerNameDescription:str = "tr(toUpper('IDS_' + markerName + '_DESC'))")
 		(var currentPowerupLevel:number = "capturedDropInfo.count" (event "capturedDropInfo.evCountChanged"))
@@ -41,13 +40,11 @@
 
 		(macro STAGE_SIZE)
 		(var powerupMargins:number = "10")
-
-		(event evPlaceReady)
 	)
 
 	(controller $Animation
 		(bindcall play
-			duration = "collection.items.length > 1 ? 0.4 : 0.01"
+			duration = "_collectionLength > 1 ? 0.4 : 0.01"
 			killAll = true
 			easing = "Easing.cubic_out"
 			to = "{	marginLeft: powerupMargins,
@@ -140,7 +137,7 @@
 )
 
 
-(def element PickedPowerupsIndicator (_maxPowerupLevel:number, _currentPowerupLevel:number, _isAlly:bool=false) layout=true
+(def element PickedPowerupsIndicator (_maxPowerupLevel:number, _currentPowerupLevel:number, _isAlly:bool=false)
 	(scope
 		(var isPicked:bool = "($index + 1) <= _currentPowerupLevel")
 
@@ -155,9 +152,9 @@
 
 		(var segmentLengthAnimated:number = 0)
 
-		(var color:gfx = "	!isPicked	? 0xFFA3A4A6 :
-							_isAlly		? C_ALLY
-										: C_ENEMY")
+		(var color:number = "	!isPicked	? C_WARNING :
+								_isAlly		? C_ALLY
+											: C_ENEMY")
 
 		(var radiusAnimated:number = "INDICATOR_OUTER_RADIUS")
 		(var radiusAnimatedAccent:number = "INDICATOR_OUTER_RADIUS_ACCENT")
@@ -199,7 +196,7 @@
 	)
 )
 
-(def element PickedPowerupsIndicatorBackground (_maxPowerupLevel:number) layout=true
+(def element PickedPowerupsIndicatorBackground (_maxPowerupLevel:number)
 	(scope
 		(var length:number = "_maxPowerupLevel == 1 ? 360 : (360 - _maxPowerupLevel * PICKED_POWERUPS_INDICATOR_SECTOR_MARGINS) / _maxPowerupLevel")
 		(var offset:number = "(length + PICKED_POWERUPS_INDICATOR_SECTOR_MARGINS) * $index")

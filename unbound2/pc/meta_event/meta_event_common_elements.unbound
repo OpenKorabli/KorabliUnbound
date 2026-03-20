@@ -1,0 +1,315 @@
+(def element MetaEventRewardsCarouselItem (	_metaEventProgressEntity:dhEntity,
+											_isProgressCompleted:bool = false,
+											_isAchievement:bool = false,
+											_withTooltip:bool = false,
+											_text:str = '')
+	(scope
+		(var metaEventThresholdComponent:dhComponent = "_metaEventProgressEntity.metaEventThreshold")
+		(struct metaEventThreshold = PULL_META_EVENT_THRESHOLD(_component = "metaEventThresholdComponent"))
+
+		(var thresholdAlpha:number = "	metaEventThreshold.isCurrent	? TA :
+										metaEventThreshold.isPassed		? TS
+																		: TC")
+	)
+	(dispatch evShowIconCheck dir="EventDirection.DOWN" (event "metaEventThresholdComponent.evChanged"))
+
+	(style (align = "center"))
+
+	(block
+		(style (height = 17px))
+		(tf
+			(bind class "_isAchievement ? '$TextDefault14NM' : '$TextDefaultBold14NM'")
+			(style (bind alpha "thresholdAlpha"))
+			(bind text "_text ?: metaEventThreshold.thresholdId +1")
+		)
+	)
+
+	(element DefaultProgressBar
+		_progress = "metaEventThreshold.progressRatio"
+	)
+
+	(block
+		(style (marginTop = "XXS"))
+
+		(controller $Tooltip
+			(bind enabled "_isAchievement && !metaEventThreshold.isPassed")
+			(renderer='MetaEventProgressInfoTemplateTooltip')
+			(args
+				_headerText = 'IDS_ACHIEVEMENT_TYPE_COMMON'
+				_descriptionText = 'IDS_META_EVENT_POST_PROGRESS_TOOLTIP_TEXT'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element MetaEventRewardRenderer
+			_isProgressCompleted = "_isProgressCompleted"
+			_rewards = "metaEventThreshold.rewards"
+			_rewardsState = "metaEventThreshold.rewardsState"
+			_thresholdId = "metaEventThreshold.thresholdId"
+			_isComplex = "metaEventThreshold.isComplex"
+			_isPassed = "metaEventThreshold.isPassed"
+			_isProgressCompleted = "_isProgressCompleted"
+			_withTooltip = "_withTooltip ?: metaEventThreshold.isPassed"
+		)
+	)
+)
+
+
+(def element MetaEventRewardRenderer (	_rewards:array = [],
+										_rewardsState:array = [],
+										_withTooltip:bool = true,
+										_isComplex:bool = false,
+										_isProgressCompleted:bool = false,
+										_thresholdId:number = 0,
+										_isPassed:bool = false)
+	(scope
+		(event evShowIconCheck)
+
+		(var isClaimed:bool = "isIn(SC.Common.META_EVENT_REWARD_STATE.CLAIMED, _rewardsState)")
+	)
+	(style (align = "center"))
+
+	(block
+		(style
+			(width = "META_EVENT_REWARD_SIZE")
+			(height = "META_EVENT_REWARD_SIZE")
+			(align = "center|middle")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = 0x3DFFFFFF))
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(scale9grid = 2)
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
+				(bind alpha "isClaimed ? 0 : 0.24")
+			)
+		)
+
+		(block
+			(bind class "_isComplex ? '$Fullsize' : null")
+			(style (align = "center|middle"))
+			(controller $Repeat renderer='MetaEventRewardItemAdapter'
+				(bind enabled "!_isComplex")
+				(bind count "_rewards.length")
+				(args
+					_rewards = "_rewards"
+					_isReceived = "isClaimed"
+					_withTooltip = "_withTooltip"
+				)
+			)
+			(controller $Instance renderer='MetaEventRewardChoiceItemAdapter'
+				(bind enabled "_isComplex")
+				(args
+					_rewards = "_rewards"
+					_rewardsState = "_rewardsState"
+					_thresholdId = "_thresholdId"
+					_isPassed = "_isPassed"
+					_isProgressCompleted = "_isProgressCompleted"
+				)
+			)
+		)
+
+		(block
+			(bind visible "isClaimed")
+			(class $FullsizeAbsolute)
+			(style
+				(hitTest = false)
+				(align = "center|middle")
+			)
+
+			(block
+				(style
+					(width = 48px)
+					(height = 48px)
+					(pivotX = 50%)
+					(pivotY = 50%)
+					(backgroundImage = 'url:../reward_categories/icon_check.png')
+				)
+				(controller $Animation
+					(bindcall play
+						duration = 0.5
+						from = "{ visualScaleX: 2, visualScaleY: 2, alpha: 0 }"
+						to = "{ visualScaleX: 1, visualScaleY: 1, alpha: 1 }"
+						(event "evShowIconCheck")
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element MetaEventRewardChoiceItemAdapter (	_rewards:array = [],
+												_rewardsState:array = [],
+												_thresholdId:number = 0,
+												_isPassed:bool = false,
+												_isProgressCompleted:bool = false)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var isClaimed:bool = "isIn(SC.Common.META_EVENT_REWARD_STATE.CLAIMED, _rewardsState)")
+		(var hasRewardAnimation:bool = "_isPassed && !isClaimed")
+		(var isChoiceButtonVisible:bool = "hasRewardAnimation && !_isProgressCompleted")
+		(var colorTransform:dict = "isChoiceButtonVisible ? COLOR_TRANSFORM_WHITE_TO_YELLOW : CT_NONE")
+	)
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+
+	(class $Fullsize)
+	(style
+		(align = "center|middle")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer = 'MetaEventRewardsContainerTooltip')
+		(args
+			_rewards = "_rewards"
+			_rewardsState = "_rewardsState"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(bind visible "hasRewardAnimation")
+		(class $MiddleVHAbsolutely)
+		(style
+			(hitTest = false)
+			(width = 175px)
+			(height = 175px)
+			(backgroundSize = "cover")
+			(bind backgroundImage "hasRewardAnimation ? 'url:../animations/spine/rewards/reward_states/available.skel' : ''")
+		)
+		(controller $Spine (bind enabled "hasRewardAnimation"))
+	)
+
+	(block
+		(style
+			(width = 50px)
+			(height = 64px)
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
+				(borderRadius = "XS")
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+				(scale9grid = 5)
+				(bind alpha "isClaimed ? 0.5 : 0.9")
+			)
+			(bind colorTransform "colorTransform")
+		)
+
+		(block
+			(style
+				(width = 48px)
+				(height = 48px)
+				(marginTop = "XS")
+				(marginLeft = 1px)
+				(bind backgroundImage "'url:../reward_categories/choice' + (isChoiceButtonVisible ? '_claim' : '') + '.png'")
+				(bind alpha "isClaimed ? 0.5 : 1")
+				(filters
+					(colorMatrix
+						(bind matrix "isClaimed ? [ 0, -50, 0, -15 ] : [0, 0, 0, 0]")
+					)
+				)
+			)
+
+			(block
+				(style
+					(width = 16px)
+					(height = 2px)
+					(marginLeft = 16px)
+					(marginTop = 48px)
+					(backgroundColor = 0xE6FFFFFF)
+				)
+				(bind colorTransform "colorTransform")
+			)
+		)
+	)
+
+	(block
+		(visible = false)
+		(class $FullsizeAbsolute)
+		(style
+			(align = "center|middle")
+			(visualOffsetY = 10px)
+			(alpha = 0)
+		)
+
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "isChoiceButtonVisible")
+			(args
+				_width = 96px
+				_label = 'IDS_TOOLTIP_REWARDS_TITLE'
+				_methods = "[{	type: 'inputMapping.onRequest',
+								name: 'chooseReward',
+								args: {_thresholdId: _thresholdId} }]"
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.2
+				from = "{ alpha: 0, visualOffsetY: 10px, visible: false }"
+				to = "{ alpha: 1, visualOffsetY: 0px, visible: true }"
+				action = "kill"
+				reverse = "!mouseHandler.rollOver"
+				(bind trigger "mouseHandler.rollOver")
+			)
+		)
+	)
+)
+
+(def element MetaEventRewardItemAdapter (	_rewards:array = [],
+											_isUnavailable:bool = false,
+											_isReceived:bool = false,
+											_isReceivedStatic:bool = false,
+											_withTooltip:bool = false)
+	(scope
+		(var rewardEntity:dhEntity = "getEntity(_rewards[$index])")
+		(var reward:dict = "{	id:			rewardEntity.rewardComponent.id,
+								amount:		rewardEntity.rewardComponent.amount,
+								name:		rewardEntity.rewardComponent.name,
+								type:		rewardEntity.rewardComponent.type,
+								subtype:	rewardEntity.rewardComponent.subtype,
+								params:		rewardEntity.rewardComponent.params,
+								isPRMP:		rewardEntity.rewardComponent.isPRMP }")
+	)
+	(element RewardItem
+		_isBattlePassSmallIconView = true
+		_reward = "reward"
+		_isUnavailable = "_isUnavailable || _isReceived"
+		_isReceived = "_isReceivedStatic"
+		_withTooltip = "_withTooltip"
+	)
+)
+
+(def element MetaEventProgressInfoTemplateTooltip (_headerText:str, _descriptionText:str)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "_headerText"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemHtmlDescriptionText
+			_descriptionText = "_descriptionText"
+		)
+	)
+)

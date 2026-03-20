@@ -1,0 +1,361 @@
+(def element SpaceAprilBattleStatsBarsContainer ()
+	(scope	
+		(struct bossScoresTeam0 = PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.STORAGE_SUMMON_BOSS_TEAM0"))
+		(struct bossScoresTeam1 = PULL_STORAGE_INFO (_primaryKey = "SC.Battle.STORAGE_WT_HUD_TYPE.STORAGE_SUMMON_BOSS_TEAM1"))
+
+		(var selfAvatarEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var selfTeamId:number = "selfAvatarEntity.avatar.teamId" (event "selfAvatarEntity.avatar.evTeamIdChanged"))
+		(var bossScoresByTeamArr:array = "selfTeamId == 0 ? [bossScoresTeam0.value, bossScoresTeam1.value] : [bossScoresTeam1.value, bossScoresTeam0.value]")
+	)
+	(style
+		(align = "center")
+		(marginLeft = "SXS")
+		(marginRight = "SXS")
+		(flow = "horizontal")
+		(gap = "MS")
+	)
+
+	(controller $Repeat renderer='SpaceAprilBattleStatsBarsItem'
+		(bind count "bossScoresByTeamArr.length")
+		(args
+			_bossScores="bossScoresByTeamArr[$index]"
+			_isReversed = "toBool($index)"
+		)
+	)
+)
+
+(def element SpaceAprilBattleStatsBarsItem (_bossScores:number, _isReversed:bool=false)
+	(scope
+		(event evProgressBarHidden)
+		(event evBlinkAnimationShowEnded)
+
+		(var selfAvatarEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var selfTeamId:number = "selfAvatarEntity.avatar.teamId" (event "selfAvatarEntity.avatar.evTeamIdChanged"))
+		(var enemyTeamId:number = "1 - selfTeamId")
+
+		(var allyBossEntity:dhEntity = "getPrimaryEntity(CC.keyObject, 'IDS_SPACE_BOSS_TEAM' + selfTeamId)")
+		(var enemyBossEntity:dhEntity = "getPrimaryEntity(CC.keyObject, 'IDS_SPACE_BOSS_TEAM' + enemyTeamId)")
+
+		(var keyObjectEntity:dhEntity = "$index == 0 ? allyBossEntity : enemyBossEntity")
+
+
+		(var isAlive:bool = "keyObjectEntity.health ? keyObjectEntity.health.isAlive : false" (event "keyObjectEntity.health.evIsAliveChanged"))
+		(var isBossActive:bool = "toBool(keyObjectEntity.keyObject) && isAlive")
+		(var maxHealth:number = "isBossActive ? ceil(keyObjectEntity.keyObject.maxValue) : 0" (event "keyObjectEntity.keyObject.evMaxChanged"))
+		(var healthValue:number = "isBossActive && isAlive ? ceil(keyObjectEntity.keyObject.value) : 0" (event "keyObjectEntity.keyObject.evValueChanged"))
+
+		(var relation:number = "keyObjectEntity.relation ? keyObjectEntity.relation.value : 0")
+		(var relationStr:str = "$index == 0 ? 'ally' : 'enemy'")
+		(var isAlly:bool = "relation == SC.Battle.PLAYER_RELATION.ALLY")
+
+
+		(var buildingsCollection:dhCollection = "getCollection(CC.building)")
+		(var buildingsEntity:dhEntity = "	$index == 0 ? buildingsCollection[0].relation.value == SC.Battle.PLAYER_RELATION.ALLY	? buildingsCollection[0] : buildingsCollection[1]
+														: buildingsCollection[0].relation.value == SC.Battle.PLAYER_RELATION.ENEMY	? buildingsCollection[0] : buildingsCollection[1]")
+
+		(var isAllyBuilding:bool = "buildingsEntity.relation.value == SC.Battle.PLAYER_RELATION.ALLY")
+
+		(var buildingShieldHealthValue:number = 	"buildingsEntity.shield.shieldHealth" 		(event "buildingsEntity.shield.evShieldHealthChanged"))
+		(var buildingShieldMaxHealthValue:number = 	"buildingsEntity.shield.shieldMaxHealth" 	(event "buildingsEntity.healshieldth.evShieldMaxHealthChanged"))
+
+		(var buildingHPCT:dict = "isAllyBuilding ? CT_ALLY : CT_ENEMY")
+
+		(var healthBarCT:dict = "!isBossActive	? CT_NONE :
+								 isAlly			? CT_ALLY
+								 				: CT_ENEMY" watch=false)
+
+		(bind healthBarCT "CT_NONE" init=false (bind enabled "!isBossActive"))
+		(bind healthBarCT "isAlly ? CT_ALLY : CT_ENEMY" init=false watch=false (event "evProgressBarHidden"))
+
+		(var isBlinkAnimationShow:bool = false)
+		(bind isBlinkAnimationShow "true" 	init=false (event "evProgressBarHidden"))
+		(bind isBlinkAnimationShow "false" 	init=false (event "evBlinkAnimationShowEnded"))
+
+		
+
+		(var shipsCollection:gfx = "$datahub.getCollection(CC.avatar)")
+		(var allyCollection:gfx = "shipsCollection.getChildByPath('team.ally.sortedLeftTeam')")
+		(var enemyCollection:gfx = "shipsCollection.getChildByPath('team.enemy.byTeams')")
+	)
+	(dispatch evBossActive dir="EventDirection.DOWN" (bind enabled "isBossActive") (bind trigger "isBossActive"))
+
+	(style (align = "_isReversed ? right : left"))
+
+	(hblock 
+		(style
+			(flow = "_isReversed ? reverse_horizontal : horizontal")
+			(marginBottom = 9px) 
+		)
+
+		(block
+			(controller $Instance renderer='SpaceAprilProgressBar'
+				(args
+					_maxProgress = "buildingShieldMaxHealthValue"
+					_valueProgress = "buildingShieldHealthValue"
+					_colorTransform = "buildingHPCT"
+					_isBuilding = "true"
+					_relationStr = "relationStr"
+					_isAlly = "isAllyBuilding"
+				)
+			)
+		)
+		(block
+			(style
+				(width = 44px)
+				(marginLeft = -6px)
+				(marginRight = -6px)
+			)
+			(block
+				(style
+					(position = "absolute")
+					(width = 44px)
+					(height = 44px)
+					(top = "-S")
+					(bind backgroundImage "'swf:../battle_hud/battle_stats/space_event/space_event.swf:icon_base_tower_' + relationStr")
+				)
+			)
+		)
+	)
+
+	(hblock 
+		(style (bind flow "_isReversed ? reverse_horizontal : horizontal"))
+
+		(block
+			(controller $Instance renderer='SpaceAprilProgressBar'
+				(args
+					_maxProgress = "isBossActive ? maxHealth : 1000"
+					_valueProgress = "isBossActive ? healthValue : _bossScores"
+					_colorTransform = "healthBarCT"
+					_relationStr = "relationStr"
+					_isAlly = "isAllyBuilding"
+					_isBlinkAnimationShow = "isBlinkAnimationShow"
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 44px)
+				(marginLeft = -6px)
+				(marginRight = -6px)
+			)
+			(block
+				(style
+					(position = "absolute")
+					(width = 44px)
+					(height = 44px)
+					(top = -10px)
+					(bind backgroundImage "'swf:../battle_hud/battle_stats/space_event/space_event.swf:icon_boss_ship_' + relationStr")
+				)
+			)
+			(block
+				(style
+					(position = "absolute")
+					(backgroundSize = "fill")
+					(width = 71px)
+					(height = 71px)
+					(top = -23px)
+					(left = -13px)
+					(alpha = 0.6)
+					(bind backgroundImage "'url:../battle_hud/battle_stats/space_event/icon_boss_ship_' + relationStr + '_blink.png'")
+				)
+
+				(controller $Animation
+					(bindcall play
+						keyframes = "[	{ time: 0.61, to: { alpha: 0 } },
+										{ time: 0.62, to: { alpha: 0.6 } }]"
+						(bind enabled "!isBlinkAnimationShow")
+					)
+				)
+
+				(block
+					(class $FullsizeAbsolute)
+					(style
+						(backgroundColor = "NO_COLOR")
+						(ubScaleY = 0)
+						(bottom = 0)
+					)
+					(isMask = true)
+					(controller $Animation
+						(bindcall play
+							to = "{ ubScaleY: isBlinkAnimationShow ? 1 : 0 }"
+							watch = false
+							duration = 0.8
+							easing = "Easing.quad_out"
+							(bind trigger "isBlinkAnimationShow")
+						)
+					)
+				)
+			)
+		)
+	)
+
+	(block
+		(style
+			(marginLeft = -5px)
+			(marginRight = -5px)
+			(marginTop = "S")
+		)
+		(controller $Instance renderer='HeaderShipListAlly'
+			(bind enabled "!_isReversed")
+			(args
+				_allyLeftPadding=0
+				_allyCollection="allyCollection"
+			)
+		)
+		(controller $Instance renderer='HeaderShipListAlly'
+			(bind enabled "_isReversed")
+			(args
+				_allyLeftPadding=0
+				_allyCollection="enemyCollection.child(0)"
+			)
+		)
+	)
+)
+
+(def element SpaceAprilProgressBar (_maxProgress:number,
+									_valueProgress:number,
+									_colorTransform:dict,
+									_relationStr:str,
+									_isAlly:bool,
+									_isBlinkAnimationShow:bool,
+									_isBuilding:bool=false)
+	(scope
+		(event evBossActive)
+		(event evBossActiveWhenNotIsBuilding)
+		(event evProgressBarHidden)
+
+		(var barImgName:str = "_isBuilding ? 'HP_base_tower_' : 'HP_boss_ship_'")
+
+		(var isHideProgressBarAnimation:bool = false)
+		(bind isHideProgressBarAnimation "true" 	init=false (event "evBossActiveWhenNotIsBuilding"))
+		(bind isHideProgressBarAnimation "false" 	init=false (event "evProgressBarHidden"))
+
+		(var barScale:number = "_valueProgress <= _maxProgress && !isHideProgressBarAnimation ? _valueProgress / _maxProgress : 1")
+		(var durationHideProgressBar:number = 0.45)
+	)
+	(dispatch evBossActiveWhenNotIsBuilding (bind enabled "!_isBuilding") (event "evBossActive"))
+
+	(block
+		(style
+			(alpha = 0.5)
+			(backgroundSize = "autosize")
+			(bind backgroundImage "'url:../battle_hud/battle_stats/space_event/' + barImgName + _relationStr + '.png'")
+		)
+		(colorTransform = "{ redOffset: -247, greenOffset: -237,	blueOffset: -218 }")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(alpha = 1)
+
+			(backgroundSize = "autosize")
+			(bind backgroundImage "'url:../battle_hud/battle_stats/space_event/' + barImgName + _relationStr + '.png'")
+
+			(bind alpha "1" init=false (event "evProgressBarHidden"))
+			(bind align "_isBuilding || (!_isBuilding && !isHideProgressBarAnimation) 	? (_isAlly ? right : left)
+																						: (_isAlly ? left : right)")
+		)
+		(bind colorTransform "_colorTransform")
+
+		(controller $Animation
+			(controllerEvents evAnimationEnded)
+			(bindcall play
+				to = "{ alpha: 0 }"
+				duration = "durationHideProgressBar"
+				onEndedEvent = 'evAnimationEnded'
+				(event "evBossActiveWhenNotIsBuilding")
+			)
+			(dispatch evProgressBarHidden dir="EventDirection.UP" on='evAnimationEnded')
+		)
+
+		(block
+			(class $Fullsize)
+			(style
+				(backgroundColor = "NO_COLOR")
+				(ubScaleX = "barScale")
+			)
+			(isMask = true)
+			(controller $Animation
+				(bindcall play
+					keyframes = "isHideProgressBarAnimation	? [	{ percent: 5,	to: { ubScaleX: 1 }},
+															  	{ percent: 100,	to: { ubScaleX: 0 }}]
+															: [ { percent: 100,	to: { ubScaleX: barScale }}]"
+					watch = false
+					duration = "isHideProgressBarAnimation ? durationHideProgressBar : 0.15"
+					action="kill"
+					(bind trigger "barScale")
+					(event "evBossActiveWhenNotIsBuilding")
+				)
+				(bindcall play
+					to = "{ ubScaleX: barScale }"
+					watch = false
+					duration = 0.45
+					action="kill"
+					(event "evProgressBarHidden")
+				)
+			)
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = 50%)
+			(marginTop = -50%)
+			(right = -17px)
+		)
+		(controller $FxInstance renderer='FxSpaceProgressBarBlinkAnim' lifetime="2"
+			(bindcall create (event "evBossActiveWhenNotIsBuilding"))
+			(args
+				_barImgName="barImgName"
+				_relationStr="_relationStr"
+				_isAlly="_isAlly"
+				_isBlinkAnimationShow="_isBlinkAnimationShow"
+				_barScale="barScale"
+			)
+		)
+	)
+)
+
+
+(def element FxSpaceProgressBarBlinkAnim (_barImgName:str, _relationStr:str, _isAlly:bool, _isBlinkAnimationShow:bool, _barScale:number)
+	(block
+		(style
+			(backgroundImage = "'url:../battle_hud/battle_stats/space_event/' + _barImgName + _relationStr + '_blink' + '.png'")
+			(backgroundSize = "autosize")
+			(alpha = 0.6)
+
+			(bind align "_isAlly ? right : left")
+		)
+		(colorTransform = "_isAlly ? CT_ALLY : CT_ENEMY")
+
+		(controller $Animation
+			(bindcall play
+				keyframes = "[	{ time: 0.61, to: { alpha: 0 } },
+								{ time: 0.62, to: { alpha: 0.6 } }]"
+				on='addedToStage'
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(style
+				(backgroundColor = "NO_COLOR")
+				(ubScaleX = 0)
+			)
+			(isMask = true)
+			(controller $Animation
+				(bindcall play
+					to = "{ ubScaleX: _isBlinkAnimationShow ? _barScale : 0 }"
+					watch = false
+					duration = 0.61
+					easing = "Easing.quad_out"
+					(bind trigger "_isBlinkAnimationShow")
+				)
+				(dispatch evBlinkAnimationShowEnded dir="EventDirection.UP" on=evAnimEnded)
+			)
+		)
+	)
+)

@@ -23,6 +23,13 @@
 	SC.Ui_styles.BUTTON_STATE.UP:		0
 })
 
+(def constant NQ_SIMPLE_CARD_HOVER_THUMB_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.SELECTED:	0.1,
+	SC.Ui_styles.BUTTON_STATE.DOWN:		0.05,
+	SC.Ui_styles.BUTTON_STATE.OVER:		0.1,
+	SC.Ui_styles.BUTTON_STATE.UP:		0.05
+})
+
 (def constant SSE_CARD_ATTENTION_BORDER_LINE_ALPHA {
 	SC.Ui_styles.BUTTON_STATE.SELECTED:	1,
 	SC.Ui_styles.BUTTON_STATE.DOWN:		0.4,
@@ -72,6 +79,9 @@
 (def element SseCommonChild (_isEmptyCategory:bool, _itemsByCategory:dhCollection, _parentLength:number, _entityDetailedId:number, _isEpic:bool, _epicTasks:dhCollection, _isChain:bool, _chainTasks:dhCollection, _activeTaskIndex:number)
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
+		(struct featureSse = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
+		(var isFeatureSseLocked:bool = "featureSse.state == 'locked'")
+
 		(event evBroadcastSelectedItemUpwards)
 		(event evBroadcastSelectedItemDownwards)
 		(event evBroadcastSelectedCategoryDownwards)
@@ -241,7 +251,7 @@
 		(bind visible "_isEmptyCategory")
 		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 3)
 		(class $FullsizeAbsolute)
-		(style (paddingLeft = "{ 1280:-224px, 1920:-312px }"))
+		(style (bind paddingLeft "isFeatureSseLocked ? 0 : { 1280:-224px, 1920:-312px }"))
 
 		(controller $Animation
 			(bindcall play
@@ -623,7 +633,6 @@
 	(scope
 		(var newbieQuestsExpireTimerEntity:dhEntity = "getSingleEntity(CC.newbieQuestsExpireTimer)")
 		(var newbieQuestsExpireTimer:number = "newbieQuestsExpireTimerEntity.newbieQuestsExpireTimer.expire ?: 0")
-
 		(macro SERVER_TIME_SCOPE)
 		(var timeLeft:number = "newbieQuestsExpireTimer - serverTime")
 
@@ -631,15 +640,29 @@
 
 		(var daysUntilNQFinish:number = "floor(timeLeft / DAY_IN_SEC)")
 
-		(var statusText:str = "daysUntilNQFinish ? 'IDS_SUBST_PL_NEWBIE_QUESTS_TIME_LEFT_DAYS' : 'IDS_SUBST_NEWBIE_QUESTS_TIME_LEFT_LAST_DAY'")
+		(var statusTextTimeLeft:str = "daysUntilNQFinish	? 'IDS_SUBST_PL_NEWBIE_QUESTS_TIME_LEFT_DAYS'
+															: 'IDS_SUBST_NEWBIE_QUESTS_TIME_LEFT_LAST_DAY'")
 		(var actualTimeLeft:str = "daysUntilNQFinish ? toString(daysUntilNQFinish) : NQFormattedLastDayLeft")
-	
-		(var statusTextTimeLeft:str = "subst( statusText, [], { timeLeft: actualTimeLeft }, daysUntilNQFinish)")
+
+		(var statusText:str = "	newbieQuestsExpireTimer		? subst( statusTextTimeLeft, [], { timeLeft: actualTimeLeft }, daysUntilNQFinish)
+															: 'IDS_SUBST_NEWBIE_QUESTS_AVAILABLE_NOT_FINISHED'")
 	)
 
 	(element StatusLine
-		_text = "statusTextTimeLeft"
+		_text = "statusText"
 		_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.DATE"
+	)
+)
+
+(def element PinnedTasksCountStatus ()
+	(scope
+		(struct pinnedTasks = GET_PINNED_TASKS())
+	)
+
+	(element StatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PIN"
+			_text = "subst('IDS_SSE_MOTIVATOR_PINNED_TASKS_COUNTER_COLUMN', [],
+							{_pinnedTasks: pinnedTasks.collection.length, _totalTasks: SC.Sse.SSE_MOTIVATION_BANNER.MAX_PINNED_TASKS})"
 	)
 )
 
@@ -797,15 +820,21 @@
 	)
 )
 
-(def element SseTypeIcon (_sseEntityId:number, _isBig:bool = false, _isPostBattle:bool = false)
+(def element SseTypeIcon (_sseEntityId:number = 0, _nqEntityId:number = 0, _isBig:bool = false, _isPostBattle:bool = false, _isPinned:bool = false)
 	(scope
 		(struct sseType = GET_SSE_TYPE_ICON(_sseEntityId = "_sseEntityId"))
+		(struct nqType = GET_NQ_TYPE_ICON(_nqEntityId = "_nqEntityId"))
+		(var isNewbieQuest:bool = "toBool(_nqEntityId)")
+
+		(var backgroundPathSuffix:str = "(_isBig ? '_32' : '_24') + (_isPinned ? '_pinned' : '') + '.png'")
+		(var backgroundPath:str = "isNewbieQuest	? 'url:../sse/type_icons/nq_type_' + nqType.iconType + backgroundPathSuffix
+													: 'url:../sse/type_icons/sse_type_' + sseType.type + backgroundPathSuffix")
 	)
 
 	(style
 		(bind width "_isBig ? 32px : 24px")
 		(bind height "_isBig ? 32px : 24px")
-		(bind backgroundImage "'url:../sse/type_icons/sse_type_' + sseType.type + (_isBig ? '_32' : '_24') + '.png'")
+		(bind backgroundImage "backgroundPath")
 	)
 
 	(controller $Tooltip
@@ -859,7 +888,9 @@
 	)
 )
 
-(def element SseTypeIconWithPin (	_sseEntityId:number,
+(def element SseTypeIconWithPin (	_sseEntityId:number = 0,
+									_nqEntityId:number = 0,
+									_isBig:bool = true,
 									_isPinned:bool = false,
 									_isPinShown:bool = false,
 									_hasMouseInstruction:bool = false)
@@ -867,14 +898,22 @@
 		(event evSseTypeIconAnimStart)
 
 		(struct sseInfo = GET_SSE_TYPE_ICON(_sseEntityId = "_sseEntityId"))
+		(struct nqInfo = GET_NQ_TYPE_ICON(_nqEntityId = "_nqEntityId"))
+		(var isNewbieQuest:bool = "toBool(_nqEntityId)")
 
 		(var isCurrentPin:bool = "_isPinned" watch=false)
 		(bind isCurrentPin "_isPinned" init=false watch=false (event "evSseTypeIconAnimStart"))
 		(bind isCurrentPin "_isPinned" init=false (bind enabled "!_isPinned"))
+
+		(var size:number = "_isBig ? 32px : 24px")
+		(var backgroundPath:str = "isNewbieQuest	? 'url:../sse/type_icons/nq_type_' + nqInfo.iconType + (_isBig ? '_32' : '_24') + (isCurrentPin ? '_pinned' : '') + '.png'
+													: 'url:../sse/type_icons/sse_type_' + sseInfo.type + '_32' + (isCurrentPin ? '_pinned' : '') + '.png'")
 	)
 	(style (backgroundColor = "NO_COLOR"))
 
+
 	(controller $Tooltip
+		(bind enabled "!isNewbieQuest")
 		(renderer = 'SseTypeIconTooltip')
 		(args
 			_hasMouseInstruction = "_hasMouseInstruction"
@@ -884,11 +923,21 @@
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 
+	(controller $Tooltip
+		(bind enabled "isNewbieQuest")
+		(renderer = 'NewbieQuestTypeIconTooltip')
+		(args
+			_type = "nqInfo.iconType"
+			_isPinned = "_isPinned"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
 	(block
 		(style
-			(width = 32px)
-			(height = 32px)
-			(bind backgroundImage "'url:../sse/type_icons/sse_type_' + sseInfo.type + '_32' + (isCurrentPin ? '_pinned' : '') + '.png'")
+			(width = "size")
+			(height = "size")
+			(bind backgroundImage "backgroundPath")
 		)
 
 		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
@@ -907,19 +956,23 @@
 			_alpha = "_isPinned ? 1 : 0"
 		)
 		(element SsePinnedTaskIcon
-			_sseId = "sseInfo.sseCoreComponent.id"
 			_isPinned = "_isPinned"
 			_isPinShown = "_isPinShown"
+			_isBig = "_isBig"
 		)
 	)
 )
 
 (def element SsePinnedTaskIcon (	_isPinned:bool = false,
 									_isFromMotivator:bool = false,
-									_isPinShown:bool = false)
+									_isPinShown:bool = false,
+									_isBig:bool = true)
+	(scope
+		(var size:number = "_isBig ? 32px : 24px" watch=false)
+	)
 	(style
-		(width = 32px)
-		(height = 32px)
+		(width = "size")
+		(height = "size")
 		(align = "center|middle")
 	)
 
@@ -935,6 +988,7 @@
 		(element SseIconPin
 			_isPinned = "_isPinned"
 			_isFromMotivator = "_isFromMotivator"
+			_isBig = "_isBig"
 		)
 	)
 
@@ -952,15 +1006,17 @@
 	)
 )
 
-(def element SseIconPin (_isPinned:bool = false, _isFromMotivator:bool = false)
+(def element SseIconPin (_isPinned:bool = false, _isFromMotivator:bool = false, _isBig:bool = true)
 	(scope
 		(event evPinAnimEnded)
+		(var size:number = "_isBig || _isFromMotivator ? 32px : 24px")
 	)
 	(dispatch evSseTypeIconAnimStart dir="EventDirection.UP" (event "evPinAnimEnded"))
 	(style
-		(width = 32px)
-		(height = 32px)
-		(bind backgroundImage "_isFromMotivator ? 'url:../sse/motivator/banner_task_pin.png' : 'url:../sse/motivator/sse_type_pin.png'")
+		(width = "size")
+		(height = "size")
+		(bind backgroundImage "_isFromMotivator ? 'url:../sse/motivator/banner_task_pin.png'
+												: 'url:../sse/motivator/sse_type_pin_' + size + '.png'")
 	)
 
 	(controller $Animation
@@ -1130,7 +1186,7 @@
 			(bind enabled "isThirdLevelOrNotHeaderDetails && achievements && !_isPostBattle")
 			(bind count "achievements.length")
 			(args
-				_achievementId =	"toString(achievements[$index])"
+				_achievementId =	"achievements[$index]"
 				_achievementsLen =	"achievements.length"
 				_textClass =		"_isShipMasteryTask ? '$TextDefaultNM' : '$TextDefault18NM'"
 			)
@@ -1208,7 +1264,7 @@
 	)
 )
 
-(def element AchievementItem (	_achievementId:str,
+(def element AchievementItem (	_achievementId:number,
 								_achievementsLen:number,
 								_isPostBattle:bool = false,
 								_isTextUnderlined:bool = true,
@@ -1715,11 +1771,16 @@
 
 (def element SseCardInteractiveBackground (	_state:number = "SC.Ui_styles.BUTTON_STATE.DISABLED",
 											_pinState:number = "SC.Ui_styles.BUTTON_STATE.DISABLED",
-											_isAttention:bool = false)
+											_isAttention:bool = false,
+											_isNewbieSimpleCard:bool = false)
+	(scope
+		(var hoverThumbAlpha:dict = "_isNewbieSimpleCard ? NQ_SIMPLE_CARD_HOVER_THUMB_ALPHA : SSE_CARD_HOVER_THUMB_ALPHA")
+	)
 	(class $Fullsize)
 
 	(block
 		(class $FullsizeAbsolute)
+		(bind visible "!_isNewbieSimpleCard")
 		(style
 			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
 			(borderRadius = "XS")
@@ -1733,11 +1794,11 @@
 			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
 			(borderRadius = "XS")
 		)
-		(bind alpha "SSE_CARD_HOVER_THUMB_ALPHA[_state]" watch=false on='addedToStage')
+		(bind alpha "hoverThumbAlpha[_state]" watch=false on='addedToStage')
 
 		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
 			_trigger = "_state"
-			_alpha = "SSE_CARD_HOVER_THUMB_ALPHA[_state]"
+			_alpha = "hoverThumbAlpha[_state]"
 			_duration = "0.12"
 		)
 	)

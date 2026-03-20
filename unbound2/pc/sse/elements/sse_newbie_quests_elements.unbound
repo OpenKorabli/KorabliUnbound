@@ -1,169 +1,565 @@
-(def constant NEWBIE_QUEST_ENTRY_BATTLE_TASK 'PCON001')
-(def constant NEWBIE_QUEST_SHIP_LEVEL {
-	'PCON001': 2,
-	'PCON022': 2,
-	'PCON017': 3,
-	'PCON023': 3,
-	'PCON024': 3,
-	'PCON025': 4,
-	'PCON026': 4,
-	'PCON018': 4,
-	'PCON027': 5,
-	'PCON028': 5,
-	'PCON019': 5,
-	'PCON020': 6,
-	'PCON029': 6,
-	'PCON030': 6,
-	'PCON021': 7,
-	'PCON031': 7,
-	'PCON032': 7
+(def constant TOTAL_NEWBIE_QUESTS_TO_DISPLAY 4)
+
+(def constant NEWBIE_QUEST_TYPE_ICON "{
+	PREPARATION: 'preparation',
+	BATTLE: 'battle'
+}")
+
+(def constant NEWBIE_QUEST_SHIP_REWARD_SIZE {
+	SC.Ui_styles.SIZE.SMALL:	356px,
+	SC.Ui_styles.SIZE.MEDIUM:	556px,
+	SC.Ui_styles.SIZE.LARGE:	750px,
 })
 
 (def element SseNewbieQuestsChild ()
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
-		(event evSelectNewbieQuestUpwards)
-
-		(var routeEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS)")
-		(var pageData:dict = "routeEntity.dataComponent.data" (event "routeEntity.dataComponent.evDataChanged"))
-
-		(macro USER_PREF_DATA)
-
-		(var sortedNewbieQuestsCollection:dhCollection = "getCollection(CC.newbieQuest).getChildByPath('sorted')")
-		(var sortedNewbieQuestsLen:number = "sortedNewbieQuestsCollection.length ?: 0")
-
-		(var isNQInformerClicked:bool = "userPrefs.isNQInformerClicked ?: false")
-		
-		
-		(var questAvailableEntity:dhEntity = "getEntity(userPrefs.selectedNewbieQuestId)")
-		(var isQuestAvailable:bool = "questAvailableEntity && questAvailableEntity.hasComponent(CC.newbieQuest)")
-
-		(var selectedNewbieQuestId:number = "	pageData.questId && isNQInformerClicked		? pageData.questId :
-												isQuestAvailable							? userPrefs.selectedNewbieQuestId
-																							: sortedNewbieQuestsCollection[0].id")
-
-		(macro STAGE_SIZE)
+		(struct progression = GET_NQ_PROGRESSION_COMPLETION_INFO())
 	)
 	(class $Fullsize)
 	(style (flow = "horizontal"))
 
+	(controller $Instance
+		(bind renderer "progression.isCompleted ? 'NewbieQuestsDoneContent' : 'NewbieQuestsTasksContent'")
+	)
+)
+
+(def element NewbieQuestsTasksContent ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var notDoneNewbieQuestsCollection:dhCollection = "getCollectionByPath(CC.newbieQuest, 'notDone.sorted')")
+		(var notDoneNewbieQuestsLen:number = "notDoneNewbieQuestsCollection.length ?: 0")
+
+		(var shownNewbieQuestsLen:number = "min(notDoneNewbieQuestsLen, TOTAL_NEWBIE_QUESTS_TO_DISPLAY)")
+
+		(var accountLevelEntity:dhEntity = "getSingleEntity(CC.accountLevel)")
+		(var curAccountLevel:number = "accountLevelEntity.accountLevel.level" (event "accountLevelEntity.accountLevel.evLevelChanged"))
+		(var maxAccountLevel:number = "accountLevelEntity.accountLevelPoints.maxLevelEnabled" (event "accountLevelEntity.accountLevelPoints.evMaxLevelEnabledChanged"))
+		(var isMaxLevel:bool = "curAccountLevel == maxAccountLevel")
+	)
+
+	(class $Fullsize)
 	(element DeclareBlurLayer)
-
+	(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 1)
 	(block
-		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 3)
-		(style (height = 100%) (width = "{ 1280:328px, 1920:448px }"))
-
-		(scrollArea
-			(class $Fullsize)
-			(style (backgroundColor = "NO_COLOR"))
-
-			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
-				_singleStep = "100px"
-				_wheelScrollAcceleration = "0.8"
-				_maxScrollingAnimatedDistance = "280px"
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 1)
+		(style (width = {1280: 464px, 1920: 610px}))
+		(tf
+			(class $TextDefaultBold36NM)
+			(style
+				(marginBottom = "{ 720:M, 1080:MS }")
+				(width = 100%)
+				(alpha = "TA")
 			)
+			(text = 'IDS_NEWBIE_QUESTS_HEADER')
+		)
 
-			(repeatController = 'NewbieQuestCardSimpleContainer')
-			(scrollPerItem = true)
-
-			(content
-				(style (width = 100%) (paddingRight = "S"))
-
-				(controller $DynamicRepeat renderer='NewbieQuestCardSimple' name='NewbieQuestCardSimpleContainer'
-					(bind count "sortedNewbieQuestsLen")
-					(args
-						_newbieQuests = "sortedNewbieQuestsCollection"
-						_selectedNewbieQuestId = "selectedNewbieQuestId"
-						_isNQInformerClicked = "isNQInformerClicked"
-					)
-					(itemHeight = 62px)
-					(itemOffset = 124px)
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(marginBottom = "{ 720:MS, 1080:L }")
+				(alpha = "TC")
+			)
+			(text = 'IDS_NEWBIE_QUESTS_DESC')
+		)
+	)
+ 
+	(block
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 1.5)
+		(style
+			(flow = "tile_horizontal")
+			(maxWidth = 864px)
+			(gap = "{ 1280:S, 1920:SXS, dimension:HORIZONTAL }")
+		)
+		(controller $Repeat renderer='NewbieQuestCardSimple' name='NewbieQuestCardSimpleContainer'
+			(bind count "shownNewbieQuestsLen")
+			(args
+				_questEntity = "notDoneNewbieQuestsCollection[$index]"
+			)
+		)
+		(block 
+			(controller $Instance renderer='NewbieQuestToBeUnlockedCard'
+				(bind enabled "!isMaxLevel && shownNewbieQuestsLen < TOTAL_NEWBIE_QUESTS_TO_DISPLAY")
+				(args
+					_curAccountLevel = "curAccountLevel"
 				)
 			)
 		)
 	)
 
 	(block
-		(class $Fullsize)
-		(style (paddingLeft = "{ 1280:M, 1920:L }"))
-		
-		(block
-			(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 4)
-			(class $Fullsize)
-			(style (paddingRight = "S"))
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 2)
+		(style (marginTop = "{ 720:S, 1080:M }"))
 
-			(controller $Animation
-				(bindcall play
-					keyframes = "[
-						{ time:0,		to:{ alpha:0, visualOffsetY: 10px }},
-						{ time:0.2,		to:{ alpha:0, visualOffsetY: 10px }},
-						{ time:0.35,	to:{ alpha:1, visualOffsetY: 0px }, easing:Easing.quad_out}
-					]"
-					action = "kill"
-					(event "evSelectNewbieQuestUpwards")
-				)
+		(element DefaultButton
+			_width = 135px
+			_focusIndex = 1
+			_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+			_label = 'IDS_NEWBIE_QUESTS_FULL_LIST'
+			_methods =	"[{	type: 'inputMapping.onAction',
+							name: 'navigateTo',
+							args: { route: SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS_FULL_LIST }
+						}]"
+		)
+	)
+	(block
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 2.5)
+		(style
+			(position = "absolute")
+			(align = "bottom")
+			(bottom = 0px)
+			(width = 100%)
+		)
+		(element NewbieQuestsThresholdsHolder)
+	)
+)
+
+(def element NewbieQuestsDoneContent ()
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var newbieQuestsThresholdCollection:dhCollection = "getCollectionByPath(CC.newbieQuestsThreshold, 'sorted')")
+	)
+	(class $Fullsize)
+	(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 1)
+
+	(block
+		(style (width = {1280: 464px, 1920: 610px}))
+		(tf
+			(class $TextDefaultBold36NM)
+			(style
+				(marginBottom = "{ 720:M, 1080:MS }")
+				(width = 100%)
+				(alpha = "TA")
 			)
+			(text = 'IDS_NEWBIE_QUESTS_DONE_HEADER')
+		)
 
-			(scrollArea
-				(class $Fullsize)
-				(style (backgroundColor = "NO_COLOR"))
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginBottom = "{ 720:MS, 1080:L }")
+				(width = 100%)
+				(alpha = "TC")
+			)
+			(text = 'IDS_NEWBIE_QUESTS_DONE_DESC')
+		)
+	)
 
-				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
-					_wheelScrollAcceleration = "0.8"
-				)
+	(element DefaultButton
+		_width = 135px
+		_focusIndex = 1
+		_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+		_label = 'IDS_NEWBIE_QUESTS_FULL_LIST'
+		_methods = "[{ type: 'inputMapping.onAction', name: 'navigateTo', args: {route: SC.Ui_windows.ROUTE.SSE_NEWBIE_QUESTS_FULL_LIST}}]"
+	)
 
-				(content
-					(style (width = 100%))
-
-					(controller $Instance renderer='NewbieQuestCardDetailed'
-						(bind enabled "selectedNewbieQuestId")
-						(args
-							_questId = "selectedNewbieQuestId"
-						)
-					)
-				)
+	(block
+		(class $FullsizeAbsolute)
+		(style (align = "center|middle"))
+		(controller $Instance renderer='NewbieQuestsShipReward'
+			(args
+				_thresholdEntity = "newbieQuestsThresholdCollection.getEntityAtIndex(newbieQuestsThresholdCollection.length-1)"
+				_isDoneScreen = true
 			)
 		)
 	)
 )
 
-(def element NewbieQuestCardSimple (_newbieQuests:dhCollection, _selectedNewbieQuestId:number, _isNQInformerClicked:bool)
+(def element NewbieQuestsThresholdsHolder ()
 	(scope
-		(event evSelectNewbieQuestUpwards)
-
-		(macro MOUSE_HANDLER_SCOPE)
-		(macro HIGH_CONTRAST_DATA_SCOPE)
-
-		(var questEntity:dhEntity = "_newbieQuests[$index]")
-		(var questId:number = "questEntity.id")
-		(var isDone:bool = "questEntity.newbieQuest.isDone" (event "questEntity.newbieQuest.evChanged"))
-		(var questIndex:str = "questEntity.newbieQuest.index ?: ''" (event "questEntity.newbieQuest.evChanged"))
-
-		(var isSelected:bool = "_selectedNewbieQuestId == questId")
-		(var isNewMarkerVisible:bool = "questEntity.hasComponent(CC.newItem)")
-
-		(var backgroundState:number = "	isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
-										mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
-										rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
-													: SC.Ui_styles.BUTTON_STATE.UP")
+		(struct thresholsInfo = GET_NQ_THRESHOLDS_INFO())
 	)
-	(macro MOUSE_EVENTS_DISPATCHER)
-	(macro SOUND_HANDLER "isSelected ? '' : 'quest_item'")
-
-	(dispatch evSelectNewbieQuestUpwards dir="EventDirection.UP" on='leftClick' (bind enabled "!isSelected"))
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'selectedNewbieQuestId', value: questId }]" watch=false (event "evSelectNewbieQuestUpwards"))
-	(bindcall externalCall "_isNQInformerClicked ? 'inputMapping.onAction' : ''" "['setUserPref', { name: 'isNQInformerClicked', value: false }]" (event "evSelectNewbieQuestUpwards"))
-	(bindcall externalCall "isNewMarkerVisible ? 'inputMapping.onAction' : ''" "['makeSeen', {entityId: questId}]" init=false watch=false on='rollOver')
-
 	(style
 		(flow = "horizontal")
+		(align = "bottom")
 		(width = 100%)
-		(marginBottom = 6px)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "S")
+		)
+		(hblock
+			(style 
+				(marginBottom = "M") 
+				(align = "middle")
+			)
+			(tf
+				(class $TextDefaultBoldNM)
+				(style (alpha = "TA"))
+				(text ='IDS_NEWBIE_QUEST_PROGRESSION_HEADER')
+			)
+
+			(block
+				(style
+					(width = 19px)
+					(height = 19px)
+					(marginLeft = "S")
+					(backgroundSize = "fill")
+					(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
+				)
+
+				(controller $Tooltip
+					(renderer='NewbieQuestsProgressionTooltip')
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+		)
+		(hblock
+			(style
+				(hgap = "M")
+				(marginBottom = "M")
+			)
+			(hblock
+				(element StatusLine
+					_text = ''
+					_leading = -3
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NQ_CURRENT_THRESHOLD"
+					_width = auto
+					_maxWidth = 270
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style (alpha = "TC"))
+					(text = 'IDS_NEWBIE_QUEST_CURRENT_THRESHOLD')
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginLeft = "XS")
+						(marginRight = "XXS")
+						(alpha = "TA")
+					)
+					(bind text "thresholsInfo.completedThresholds + 1")
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style (alpha = "TC"))
+					(bind text "'/' + thresholsInfo.thresholdCollectionLen")
+				)
+			)
+			(hblock
+				(element StatusLine
+					_text = ''
+					_leading = -3
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.NQ_COMPLETED_TASKS_COUNT"
+					_width = auto
+					_maxWidth = 270
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style (alpha = "TC"))
+					(text = 'IDS_NEWBIE_QUEST_DONE_TASKS_COUNT')
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style
+						(marginLeft = "XS")
+						(marginRight = "XXS")
+						(alpha = "TA")
+					)
+					(bind text "thresholsInfo.currentValue")
+				)
+				(tf
+					(class $TextDefaultNM)
+					(style (alpha = "TC"))
+					(bind text "'/' + thresholsInfo.maxValue")
+				)
+			)
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(height = 115px)
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+				_singleStep = "50"
+				_maxScrollingAnimatedDistance = "100"
+				_wheelScrollAcceleration = "0.8"
+				_isScrollBarVisible = "true"
+			)
+
+			(repeatController = 'NewbieQuestsThresholds')
+			(bindcall scrollTo init=false watch=false on='addedToStage' index="thresholsInfo.completedThresholds")
+
+			(content
+				(class $Fullsize)
+				(style
+					(flow = "horizontal")
+					(paddingBottom = "M")
+				)
+
+				(controller $Repeat renderer='NewbieQuestsThresholdWrapper' name='NewbieQuestsThresholds'
+					(bind count "thresholsInfo.thresholdCollectionLen")
+					(args
+						_thresholdEntity = "thresholsInfo.newbieQuestsThresholdCollection[$index]"
+						_isFirst = "$index == 0"
+						_isLast = "$index == thresholsInfo.thresholdCollectionLen - 1"
+					)
+				)
+			)
+		)
+	)
+	(element NewbieQuestsShipReward
+		_thresholdEntity = "thresholsInfo.newbieQuestsThresholdCollection[thresholsInfo.thresholdCollectionLen-1]"
+	)
+)
+
+(def element NewbieQuestsProgressionTooltip ()
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText 
+			_headerText = 'IDS_NEWBIE_QUEST_PROGRESSION_TOOLTIP_HEADER'
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = 'IDS_NEWBIE_QUEST_PROGRESSION_TOOLTIP_DESC'
+		)
+	)
+)
+
+(def element NewbieQuestsShipReward (_thresholdEntity:dhEntity, _isDoneScreen:bool = false)
+	(scope
+		(var rewardId:number = "_thresholdEntity.newbieQuestsThreshold.rewards[0]")
+		(var isClaimed:bool = "_thresholdEntity.newbieQuestsThreshold.isClaimed" (event "_thresholdEntity.newbieQuestsThreshold.evChanged"))
+		(var rewardEntity:dhEntity = "getEntity(rewardId)")
+		(var shipId:number = "rewardEntity.rewardComponent.id")
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
+		(var shipInfo:dhComponent = "shipEntity.ship")
+		(var shipName:str = "shipInfo.shortName" (event "shipInfo.evCurrentSkinChanged") (event "shipInfo.evUpdate"))
+
+		(struct stageSize = STAGE_SIZE())
+		(var isSmallScreen:bool = "stageSize.width < 1440px")
+		(var size:number = "_isDoneScreen	? isSmallScreen	? SC.Ui_styles.SIZE.MEDIUM
+															: SC.Ui_styles.SIZE.LARGE
+											: isSmallScreen	? SC.Ui_styles.SIZE.SMALL
+															: SC.Ui_styles.SIZE.MEDIUM")
+	)
+	(style
+		(align = "center|bottom")
+		(marginRight = { 1280:30px, 1920:76px })
+		(bind width "NEWBIE_QUEST_SHIP_REWARD_SIZE[size]")
+		(bind height "NEWBIE_QUEST_SHIP_REWARD_SIZE[size]")
+	)
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundSize = "fill")
+			(bind backgroundImage "'url:../sse/newbie_quest/' + shipName + '_' + toLower(SC.Ui_styles.SIZE.VALUE_TO_NAME[size]) + '.png'")
+		)
+	)
+
+	(block
+		(style (align = "center"))
+		(controller $Tooltip
+			(renderer = 'ShipExtendedTooltip')
+			(args
+				_shipId = "shipId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(element ShipLineItemNM
+			_shipId =		"shipId"
+			_withFlag =		true
+			_fontClass =	'$TextDefaultBold24NM'
+		)
+
+		(block
+			(style
+				(marginTop = "M")
+				(marginBottom = "M")
+			)
+			(element ShipClassLineItemNM
+				_shipId = "shipId"
+				_fontClass = '$TextDefault18NM'
+			)
+		)
+	)
+	(block
+		(bind visible "!isClaimed")
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "!isClaimed && !_isDoneScreen")
+			(args
+				_width = 126px
+				_label = 'IDS_NEWBIE_QUEST_SHIP_PREVIEW'
+				_type = "SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+				_enabled = true
+				_focusIndex = 1
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'navigateTo',
+									args: { route: SC.Ui_windows.ROUTE.SHIP_PREVIEW }},
+								{	type: 'inputMapping.onAction',
+									name: 'selectShip',
+									args: { shipId: shipId }}
+							]"
+			)
+		)
+		(controller $Instance renderer='DefaultButton'
+			(bind enabled "!isClaimed && _isDoneScreen")
+			(args
+				_width = 186px
+				_size = "SIZE.LARGE"
+				_label = 'IDS_NEWBIE_QUEST_CLAIM_SHIP'
+				_enabled = true
+				_focusIndex = 1
+				_defaultFocused = true
+				_methods = "[	{	type: 'inputMapping.onAction',
+									name: 'claimFinalReward',
+									args: {}}
+							]"
+			)
+		)
+	)
+	(block
+		(style (marginTop = "M"))
+		(controller $Instance renderer='StatusLine'
+			(bind enabled "isClaimed")
+			(args
+				_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.CHECK"
+				_text =				'IDS_NEWBIE_QUESTS_FINAL_REWARD_CLAIMED'
+				_textClass =		'$TextDefault18NM'
+			)
+		)
+	)
+)
+
+(def element NewbieQuestToBeUnlockedCard (_curAccountLevel:number)
+	(scope
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+		(var nextLevel:number = "_curAccountLevel + 1")
+	)
+
+	(style
+		(align = "center|middle")
+		(height = "{ 720:104px, 1080:112px }")
+		(width = "{ 1280:360px, 1920:424px }")
 	)
 
 	(block
 		(class $FullsizeAbsolute)
-		(controller $Instance renderer='BlurMap'
+		(controller $Instance renderer='BlurMapRoundedPanel'
+			(bind enabled "!isHighContrast")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(borderRadius = "XS")
+			(alpha = "NQ_SIMPLE_CARD_HOVER_THUMB_ALPHA[SC.Ui_styles.BUTTON_STATE.UP]")
+		)
+	)
+
+	(hblock
+		(style
+			(width = 70%)
+			(align = "center|middle")
+		)
+		(block
+			(style
+				(width = 48px)
+				(height = 48px)
+				(marginRight = "M")
+				(backgroundImage = 'url:../service_kit/icons/icon_lock.png')
+			)
+		)
+		(tf
+			(class = '$TextDefault18NM')
+			(style
+				(width = 100%)
+				(alpha = "TA")
+			)
+			(bind text "subst('IDS_NEWBIE_QUEST_NEW_TASK_ON_LEVEL', [], { level: nextLevel })")
+		)
+	)
+)
+
+(def element NewbieQuestCardSimple (_questEntity:dhEntity)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE "'icon_pinned_'")
+		(macro MOUSE_HANDLER_SCOPE "'hint_button_'")
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+
+		(event evTimeOfTheFirstShowIsOver)
+		(event evTimeOfTheFirstShowChanged)
+
+		(struct pinnedTasks = GET_PINNED_TASKS())
+
+		(var questId:number = "_questEntity.id")
+		(var questComponent:dhComponent = "_questEntity.newbieQuest")
+		(var sseCoreComponent:dhComponent = "_questEntity.sseCore")
+		(var isPinnedTask:bool = "toBool(sseCoreComponent.pinnedAt)" (event "sseCoreComponent.evChanged"))
+
+		(var isSingleBattle:bool = "questComponent.isSingleBattle")
+		(var progressMax:number = "_questEntity.progress.max" (event "_questEntity.progress.evChanged"))
+
+		(var hasHint:bool = "toBool(questComponent.guidingTipId)" (event "questComponent.evChanged"))
+		(var isProgressBarVisible:bool = "!hasHint && !isSingleBattle && progressMax > 1")
+
+		(var isNewMarkerVisible:bool = "_questEntity.hasComponent(CC.newItem)")
+
+		(struct nqCard = SSE_INTERACTIVE_BACKGROUND(
+				_isInactiveBackground="false"
+				_isPinnedTask="isPinnedTask"
+				_mouseDown="mouseDown"
+				_rollOver="rollOver"
+			)
+		)
+
+		(var isTimeOfTheFirstShow:bool = true)
+		(bind isTimeOfTheFirstShow "false" init=false (event "evTimeOfTheFirstShowIsOver"))
+		(bind isTimeOfTheFirstShow "true" init=false (event "evTimeOfTheFirstShowChanged"))
+
+		(var isPinShown:bool = "!isTimeOfTheFirstShow && rollOver")
+	)
+	(dispatch evTimeOfTheFirstShowIsOver (bind enabled "isPinnedTask") (event "evRollOver"))
+	(dispatch evTimeOfTheFirstShowChanged (bind enabled "!isPinnedTask") (bind trigger "isPinnedTask"))
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro MOUSE_EVENTS_DISPATCHER "'icon_pinned_'")
+	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT
+		_methods = "hint_button_rollOver	?	[]
+											:	[
+													{
+														type: !isPinnedTask && !pinnedTasks.isMaxReached ? 'inputMapping.onAction' : '',
+														name: 'SSEProxyCommonUSS.pinSSEElement',
+														args: { sseID: sseCoreComponent.id }
+													},
+													{
+														type: isPinnedTask ? 'inputMapping.onAction' : '',
+														name: 'SSEProxyCommonUSS.unpinSSEElement',
+														args: { sseID: sseCoreComponent.id }
+													},
+													{
+														type: !isPinnedTask && pinnedTasks.isMaxReached ? 'inputMapping.onRequest' : '',
+														name: 'showMotivatorWindow',
+														args: { sseID: sseCoreComponent.id }
+													}
+												]"
+	)
+	(bindcall externalCall "isNewMarkerVisible ? 'inputMapping.onAction' : ''" "['makeSeen', {entityId: questId}]" init=false watch=false on='rollOver')
+
+	(style
+		(flow = "horizontal")
+		(height = "{ 720:104px, 1080:112px }")
+		(width = "{ 1280:368px, 1920:424px }")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMapRoundedPanel'
 			(bind enabled "!isHighContrast")
 		)
 	)
@@ -171,77 +567,72 @@
 	(block
 		(class $FullsizeAbsolute)
 		(element SseCardInteractiveBackground
-			_state = "backgroundState"
+			_state = "nqCard.backgroundState"
+			_pinState = "nqCard.pinState"
+			_isNewbieSimpleCard = true
 		)
 	)
 
 	(block 
-		(style 
-			(width = 24px)
-			(height = 24px)
-			(marginLeft = "SXS")
-			(marginTop = "SXS")
-			(backgroundImage ='url:../sse/newbie_quest/task_icon_common.png')
-			(bind alpha "isDone ? 0.5 : 1")
+		(style
+			(marginLeft = "M")
+			(marginTop = "M")
 		)
 
-		(controller $Tooltip
-			(renderer = 'SimpleStatusTooltip')
-			(args
-				_text = 'IDS_NEWBIE_QUESTS_COMMON_ICON_HINT'
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		(element SseTypeIconWithPin
+			_nqEntityId = "questId"
+			_isPinned = "isPinnedTask"
+			_isPinShown = "isPinShown"
+			_isBig = false
 		)
 	)
 
-	(hblock 
+	(hblock
 		(style
 			(width = 100%)
-			(paddingTop = "M")
-			(paddingLeft = "M")
-			(paddingBottom = "M")
-			(paddingRight = "XLM")
-			(bind alpha "isDone ? 0.5 : 1")
+			(padding = "M")
 		)
 
 		(block
-			(style
-				(width = 100%)
-				(minHeight = 48px)
+			(style (width = 100%))
+			(tf
+				(class $TextDefaultBold18NM)
+				(style
+					(width = 100%)
+					(elideMode = true)
+					(alpha = "TA")
+					(bind maxHeight "hasHint || isProgressBarVisible ? 50px : 80px")
+				)
+				(bind text "questComponent.title")
+			)
+			(block
+				(macro MOUSE_EVENTS_DISPATCHER "'hint_button_'")
+				(style
+					(width = 100%)
+					(bind marginTop "hasHint ? M : 0px")
+				)
+				(controller $Instance renderer='ShowHintButton'
+					(bind enabled "hasHint")
+					(args
+						_questId = "questId"
+					)
+				)
 			)
 			(block
 				(style
-					(marginRight = "S")
 					(width = 100%)
-				)
-
-				(element NewbieQuestDescription
-					_questId = "questId"
-					_isHeader = true
-				)
-			)
-			(block
-				(style
-					(width = 100%)
-					(bind marginTop "!isDone ? SXS : 0px")
+					(bind marginTop "isProgressBarVisible ? SXS : 0px")
 				)
 				(controller $Instance renderer='NewbieQuestProgress'
-					(bind enabled "!isDone")
+					(bind enabled "isProgressBarVisible")
 					(args
 						_questId = "questId"
 					)
 				)
 			)
 		)
-	)
 
-	(block 
-		(style
-			(position = "absolute")
-			(right = "SXS")
-			(top = "SXS")
-		)
-		(element NewbieQuestRewards
+		(element SingleNewbieQuestReward
 			_questId = "questId"
 		)
 	)
@@ -259,7 +650,186 @@
 	)
 )
 
-(def element NewbieQuestCardDetailed (_questId:number)
+(def element NewbieQuestCardFull (_questEntity:dhEntity)
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+		(macro MOUSE_HANDLER_SCOPE "'icon_pinned_'")
+		(macro MOUSE_HANDLER_SCOPE "'hint_button_'")
+		(macro HIGH_CONTRAST_DATA_SCOPE)
+
+		(event evTimeOfTheFirstShowChanged)
+		(event evTimeOfTheFirstShowIsOver)
+
+		(struct pinnedTasks = GET_PINNED_TASKS())
+
+		(var questId:number = "_questEntity.id")
+		(var questComponent:dhComponent = "_questEntity.newbieQuest")
+		(var sseCoreComponent:dhComponent = "_questEntity.sseCore")
+		(var isDone:bool = "questComponent.isDone" (event "questComponent.evChanged"))
+		(var isPinnedTask:bool = "toBool(sseCoreComponent.pinnedAt)" (event "sseCoreComponent.evChanged"))
+
+		(var isSingleBattle:bool = "questComponent.isSingleBattle")
+		(var progressMax:number = "_questEntity.progress.max" (event "_questEntity.progress.evChanged"))
+
+		(var isProgressBarVisible:bool = "!isSingleBattle && progressMax > 1")
+
+		(var isNewMarkerVisible:bool = "_questEntity.hasComponent(CC.newItem)")
+
+		(struct nqCard = SSE_INTERACTIVE_BACKGROUND(
+				_isInactiveBackground="isDone"
+				_isPinnedTask="isPinnedTask"
+				_mouseDown="mouseDown"
+				_rollOver="rollOver"
+			)
+		)
+
+		(var isTimeOfTheFirstShow:bool = true)
+		(bind isTimeOfTheFirstShow "false" init=false (event "evTimeOfTheFirstShowIsOver"))
+		(bind isTimeOfTheFirstShow "true" init=false (event "evTimeOfTheFirstShowChanged"))
+
+		(var isPinShown:bool = "!isTimeOfTheFirstShow && rollOver")
+	)
+	(dispatch evTimeOfTheFirstShowIsOver (bind enabled "isPinnedTask") (event "evRollOver"))
+	(dispatch evTimeOfTheFirstShowChanged (bind enabled "!isPinnedTask") (bind trigger "isPinnedTask"))
+
+	(macro MOUSE_EVENTS_DISPATCHER)
+	(macro MOUSE_EVENTS_DISPATCHER "'icon_pinned_'")
+	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT
+		_methods = "hint_button_rollOver || isDone	?	[]
+													:	[
+															{
+																type: !isPinnedTask && !pinnedTasks.isMaxReached ? 'inputMapping.onAction' : '',
+																name: 'SSEProxyCommonUSS.pinSSEElement',
+																args: { sseID: sseCoreComponent.id }
+															},
+															{
+																type: isPinnedTask ? 'inputMapping.onAction' : '',
+																name: 'SSEProxyCommonUSS.unpinSSEElement',
+																args: { sseID: sseCoreComponent.id }
+															},
+															{
+																type: !isPinnedTask && pinnedTasks.isMaxReached ? 'inputMapping.onRequest' : '',
+																name: 'showMotivatorWindow',
+																args: { sseID: sseCoreComponent.id }
+															}
+														]"
+	)
+	(bindcall externalCall "isNewMarkerVisible ? 'inputMapping.onAction' : ''" "['makeSeen', {entityId: questId}]" init=false watch=false on='rollOver')
+
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+		(minHeight = 139px)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(controller $Instance renderer='BlurMap'
+			(bind enabled "!isHighContrast")
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(element SseCardInteractiveBackground
+			_state = "nqCard.backgroundState"
+			_pinState = "nqCard.pinState"
+		)
+	)
+
+	
+	(hblock
+		(style
+			(width = 100%)
+			(padding = "M")
+			(bind alpha "isDone ? 0.5 : 1")
+		)
+		(block 
+			(style
+				(marginRight = 14px)
+				(marginTop = "-S")
+			)
+			(element SseTypeIconWithPin
+				_nqEntityId = "questId"
+				_isPinned = "isPinnedTask"
+				_isPinShown = "isPinShown"
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(minHeight = 48px)
+			)
+
+			(tf
+				(class $TextDefault18NM)
+				(style
+					(width = 100%)
+					(marginRight = "S")
+					(marginBottom = "M")
+					(alpha = "TA")
+				)
+				(bind text "questComponent.title")
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(bind marginBottom "isProgressBarVisible && !isDone ? SXS : 0")
+				)
+				(controller $Instance renderer='NewbieQuestProgress'
+					(bind enabled "isProgressBarVisible && !isDone")
+					(args
+						_questId = "questId"
+					)
+				)
+			)
+
+			(block
+				(macro MOUSE_EVENTS_DISPATCHER "'hint_button_'")
+				(element ShowHintButton
+					_questId = "questId"
+				)
+			)
+		)
+		(block
+			(style
+				(width = 1px)
+				(height = 100%)
+				(marginLeft = "M")
+				(marginRight = "M")
+				(paddingTop = "-M")
+				(paddingBottom = "-M")
+			)
+			(element VerticalDivider)
+		)
+		
+		(block
+			(style
+				(width = 340px)
+				(align = "middle")
+			)
+			(element NewbieQuestRewards
+				_questId = "questId"
+			)
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNewMarkerVisible")
+		(style
+			(position = "absolute")
+			(top = "S")
+			(right = "LM")
+		)
+
+		(element MarkerNew)
+	)
+)
+
+(def element ShowHintButton (_questId:number)
 	(scope
 		(macro PULL_SHIP_ID)
 		(var shipOwnEntity:dhEntity = "getPrimaryEntity(CC.ownShip, playerShipId)")
@@ -268,18 +838,12 @@
 
 		(var questEntity:dhEntity = "getEntity(_questId)")
 		(var isDone:bool = "questEntity.newbieQuest.isDone" (event "questEntity.newbieQuest.evChanged"))
-		(var newTipChainId:number = "questEntity.newbieQuest.tier" (event "questEntity.newbieQuest.evChanged"))
-		(var questIndex:str = "questEntity.newbieQuest.index ?: ''" (event "questEntity.newbieQuest.evChanged"))
-		(var newTipChainIdName:str = "SC.Context_guiding_tip.TIP_CHAIN_ID.VALUE_TO_NAME[newTipChainId]")
-		(var chainIdForButton:number = "!isDone ? newTipChainId : SC.Context_guiding_tip.TIP_CHAIN_ID[newTipChainIdName + '_REPEAT']")
-		(var isBattleNewbieQuest:bool = "questEntity.newbieQuest.isBattleNewbieQuest" (event "questEntity.newbieQuest.evChanged"))
+		(var guidingTipId:number = "questEntity.newbieQuest.guidingTipId" (event "questEntity.newbieQuest.evChanged"))
+		(var newTipChainIdName:str = "SC.Context_guiding_tip.TIP_CHAIN_ID.VALUE_TO_NAME[guidingTipId]")
+		(var chainIdForButton:number = "!isDone ? guidingTipId : SC.Context_guiding_tip.TIP_CHAIN_ID[newTipChainIdName + '_REPEAT']")
 
-		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
-		(var hasShips:bool = "toBool(playerShipsCollection.length)")
+		(var hasShips:bool = "toBool(getCollection(CC.ownShip).length)")
 
-		(var isBattleTaskContent:bool = "isBattleNewbieQuest && questIndex in NEWBIE_QUEST_SHIP_LEVEL || questIndex == NEWBIE_QUEST_ENTRY_BATTLE_TASK")
-		(var isCampaignChain:bool = "newTipChainId == SC.Context_guiding_tip.TIP_CHAIN_ID.CAMPAIGN || newTipChainId == SC.Context_guiding_tip.TIP_CHAIN_ID.CAMPAIGN_REPEAT")
-		
 		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
 
 		(var buttonShowTutorTooltipStatus:dict = "	isInBalancer 			? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,
@@ -291,175 +855,61 @@
 																			: null")
 	)
 
-	(style (width = 640px))
-
-	(block
-		(style
-			(width = 640px)
-			(height = 320px)
-			(backgroundSize = "fill")
-			(bind backgroundImage "'url:../sse/newbie_quest/' + newTipChainId + '.jpg'")
+	(controller $Tooltip
+		(bind enabled "buttonShowTutorTooltipStatus")
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text =				"buttonShowTutorTooltipStatus.text"
+			_unifiedStatus =	"buttonShowTutorTooltipStatus.unifiedStatus"
 		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
 
-		(block
-			(bind visible "isBattleTaskContent")
-
-			(style
-				(position = "absolute")
-				(left = "L")
-				(bottom = "L")
-			)
-
-			(tf
-				(class $TextDefaultBold100NM)
-				(style (alpha = "TA"))
-				(bind text "shipLevelsToRoman([NEWBIE_QUEST_SHIP_LEVEL[questIndex] ?: 0])")
-			)
+	(controller $Instance renderer='DefaultButton'
+		(bind enabled "toBool(guidingTipId)")
+		(args
+			_width =				168px
+			_enabled =				"buttonShowTutorTooltipStatus == null"
+			_isTransactionBtn =		false
+			_label =				'IDS_NEWBIE_QUESTS_START_TIP_CHAIN_BUTTON'
+			_size =					"SIZE.SMALL"
+			_methods =				"[	{ type: 'inputMapping.onAction', name: 'activateTipChain', args: { tip_chain_id : chainIdForButton }},
+										{ type: 'inputMapping.onRequest', name: 'closeNewbieQuestsFullList', args: { }}]"
 		)
 	)
 
-	(block
-		(bind visible "isBattleTaskContent")
-		(style
-			(position = "absolute")
-			(width = 640px)
-			(height = 320px)
-			(backgroundImage = 'url:../sse/newbie_quest/fog_1.png')
-		)
-	)
-
-	(block
-		(bind visible "isBattleTaskContent")
-
-		(style
-			(position = "absolute")
-			(width = 640px)
-			(height = 320px)
-			(backgroundImage = 'url:../sse/newbie_quest/fog_2.png')
-		)
-	)
-
-	(block
-		(style
-			(width = 100%)
-			(marginLeft = "XXS")
-		)
-
-		(block
-			(style
-				(width = 100%)
-				(marginTop = "M")
-			)
-
-			(element NewbieQuestDescription
-				_questId = "_questId"
-				_isDetailedHeader = true
-			)
-		)
-
-		(block
-			(style
-				(width = 100%)
-				(marginTop = "M")
-			)
-
-			(block
-				(style (width = 100%))
-
-				(element NewbieQuestDescription
-					_questId = "_questId"
-					_isDetails = true
-				)
-			)
-
-			(block
-				(style
-					(width = 100%)
-					(marginTop = "SXS")
-				)
-
-				(controller $Instance renderer='NewbieQuestProgress'
-					(bind enabled "!isDone")
-					(args
-						_questId = "_questId"
-					)
-				)
-			)
-		)
-		
-		(block
-			(style
-				(width = 100%)
-				(marginTop = "LS")
-			)
-
-			(block
-				(style
-					(width = 200px)
-					(height = 30px)
-				)
-
-				(controller $Tooltip
-					(bind enabled "buttonShowTutorTooltipStatus")
-					(renderer = 'SimpleStatusTooltip')
-					(args
-						_text =				"buttonShowTutorTooltipStatus.text"
-						_unifiedStatus =	"buttonShowTutorTooltipStatus.unifiedStatus"
-					)
-					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-				)
-
-				(controller $Instance renderer='DefaultButton'
-					(bind enabled "!isBattleNewbieQuest")
-					(args
-						_width =				200px
-						_enabled =				"buttonShowTutorTooltipStatus == null"
-						_isTransactionBtn =		false
-						_label =				'IDS_NEWBIE_QUESTS_START_TIP_CHAIN_BUTTON'
-						_methods =				"[ { type: 'inputMapping.onAction', name: 'activateTipChain', args: { tip_chain_id : chainIdForButton } }]"
-					)
-				)
-
-				(controller $Instance renderer='GuidingTipHub'
-					(bind enabled "!isBattleNewbieQuest")
-					(args
-						_tipId =				"SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_FINAL"
-						_tipPositioning =		"TIP_POSITION_LEFT"
-						_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
-						_offsetX =				"XS"
-						_offsetY =				15px
-						_alongPointerOffset =	-15px
-						_pointerOffset =		108px
-						_hasAssistant =			true
-					)
-				)
-			)
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "toBool(guidingTipId)")
+		(args
+			_tipId =				"SC.Context_guiding_tip.TIP_TYPE.NEWBIE_QUESTS_FINAL"
+			_tipPositioning =		"TIP_POSITION_BOTTOM"
+			_modalWindowName =		"SC.Ui_windows.WINDOWS.DOCK"
+			_offsetY =				"S"
+			_offsetX =				84px
+			_pointerOffset =		"-MS"
+			_alongPointerOffset =	-170px
 		)
 	)
 )
 
-(def element NewbieQuestDescription (_questId:number, _isDetails:bool = false, _isHeader:bool = false, _isDetailedHeader:bool = false)
-	(scope
-		(var questEntity:dhEntity = "getEntity(_questId)")
-		(var newbieQuest:dhComponent = "questEntity.newbieQuest")
-		(var isDone:bool = "newbieQuest.isDone" (event "newbieQuest.evChanged"))
-		(var questIndex:str = "newbieQuest.index ?: ''" (event "newbieQuest.evChanged"))
-		(var textToDisplay:str  = "'IDS_NEWBIE_QUESTS_' + questIndex + (_isDetails ? '_DESCRIPTION' : '_NAME')")
-	)
-	(style (width = 100%))
+(def element NewbieQuestTypeIconTooltip (_type:str = '', _isPinned:bool = false)
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
 
-	(tf
-		(bind class "_isHeader 			? '$TextDefaultBold18NM' :
-					_isDetailedHeader	? '$TextDefaultBold22NM' 
-										: '$TextDefault18NM'")
-		(style
-			(width = 100%)
-			(maxWidth = 640px)
-			(bind alpha "!_isDetails ? TA : TC")
-			(bind textColor "isDone && !_isDetails	? SC.Ui_styles.SERVICE_COLORS.YELLOW
-													: SC.Ui_styles.SERVICE_COLORS.WHITE")
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemStatusLine
+			_text = "'IDS_NEWBIE_QUEST_ICON_HINT_' + _type + '_DESC'"
+			_width = auto
+			_maxWidth = 270
 		)
-		(bind text "textToDisplay")
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text = "'IDS_NEWBIE_QUEST_' + _type + (_isPinned ? '_MOTIVATOR_UNPIN_HINT' : '_MOTIVATOR_PIN_HINT')"
+		)
 	)
 )
 
@@ -473,10 +923,13 @@
 		(var progressValue:number = "progressMax ? progressCurrent / progressMax : 0")
 		(var isProgressBarVisible:bool = "!isSingleBattle && progressMax > 1")
 	)
-	(style (width = 100%))
 	(bind visible "progressMax > 1")
+	(style (width = 100%))
 	(block
-		(style (marginTop = 6px) (width = 100%))
+		(style
+			(width = 100%)
+			(marginTop = 6px)
+		)
 
 		(controller $Instance renderer='DoubleProgressBar'
 			(bind enabled "isProgressBarVisible")
@@ -502,28 +955,28 @@
 	)
 )
 
-(def element NewbieQuestRewards (_questId:number)
+(def element SingleNewbieQuestReward (_questId:number)
 	(scope
 		(var questEntity:dhEntity = "getEntity(_questId)")
-		(var rewardCategory:str= "questEntity.newbieQuest.rewardCategory" (event "questEntity.newbieQuest.evChanged"))
-		(var isDone:bool = "questEntity.newbieQuest.isDone" (event "questEntity.newbieQuest.evChanged"))
+		(var firstRewardId:number= "questEntity.newbieQuest.rewards[0]")
+		(var hasMultipleRewards:bool= "questEntity.newbieQuest.rewards.length > 1")
 	)
 
 	(controller $Tooltip
-		(bind enabled "rewardCategory")
 		(renderer = 'NewbieQuestRewardsTooltip')
+		(bind enabled "hasMultipleRewards")
 		(args
 			_questId = "_questId"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 
-	(controller $Instance renderer='RewardCategory'
-		(bind enabled "rewardCategory")
-		(args
-			_rewardCategory = "rewardCategory"
-			_isReceived = "isDone"
-			_isRewardActive = false
+	(block
+		(element RewardItemAdapter
+			_entityId = "firstRewardId"
+			_iconTopMargin = 0px
+			_iconRightMargin = 0px
+			_withTooltip = "!hasMultipleRewards"
 		)
 	)
 )
@@ -533,9 +986,9 @@
 		(var questEntity:dhEntity = "getEntity(_questId)")
 		(var rewards:array = "questEntity.newbieQuest.rewards ?: []" (event "questEntity.newbieQuest.evChanged"))
 		(var isDone:bool = "questEntity.newbieQuest.isDone" (event "questEntity.newbieQuest.evChanged"))
-	
+
 		(var tooltipStatus:dict = "isDone	?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
-													text: 'IDS_NEWBIE_QUESTS_RECEIVED_TOOLTIP_COLON' } 
+													text: 'IDS_NEWBIE_QUESTS_RECEIVED_TOOLTIP_COLON' }
 												: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT,
 													text: 'IDS_NEWBIE_QUESTS_REWARD_TOOLTIP_COLON' }")
 	)
@@ -554,6 +1007,120 @@
 
 		(element TooltipSystemDHRewards
 			_rewards = "rewards"
+		)
+	)
+)
+
+(def element NewbieQuestRewards (_questId:number)
+	(scope
+		(var questEntity:dhEntity = "getEntity(_questId)")
+		(var rewards:array = "questEntity.newbieQuest.rewards ?: []" (event "questEntity.newbieQuest.evChanged"))
+		(var isDone:bool = "questEntity.newbieQuest.isDone" (event "questEntity.newbieQuest.evChanged"))
+	)
+	(bind name "'newbie_quests_reward_' + _questId")
+	(style (width = 100%))
+	(tf
+		(class $TextDefaultNM)
+		(style (alpha = "TC"))
+
+		(bind text "isDone	? 'IDS_NEWBIE_QUESTS_RECEIVED_COLON'
+							: 'IDS_NEWBIE_QUESTS_REWARD_COLON'")
+	)
+
+	(block
+		(style 
+			(flow = "tile_horizontal")
+			(width = 100%)
+			(marginTop = "M")
+		)
+
+		(controller $Repeat renderer='NewbieQuestsRewardsClaimWrapper'
+			(bind count "rewards.length")
+			(args
+				_rewardId = "rewards[$index]"
+				_isDone = "isDone"
+			)
+		)
+	)
+)
+
+(def element NewbieQuestsRewardsClaimWrapper (_rewardId:number, _isDone:bool=false, _withTooltip:bool=true)
+	(style
+		(align = "center|middle")
+		(height = 100px)
+		(minWidth = 100px)
+	)
+
+	(block
+		(element RewardItemAdapter
+			_entityId = "_rewardId"
+			_isReceived = "_isDone"
+			_isClickDisabled = "true"
+			_iconTopMargin = 0px
+			_iconRightMargin = 0px
+			_withTooltip = "_withTooltip"
+		)
+	)
+)
+
+
+(def element NewbieQuestsThresholdWrapper (_thresholdEntity:dhEntity, _isLast:bool=false)
+	(scope
+		(var firstThresholdRewardId:number = "_thresholdEntity.newbieQuestsThreshold.rewards[0]")
+		(var isClaimed:bool = "_thresholdEntity.newbieQuestsThreshold.isClaimed" (event "_thresholdEntity.newbieQuestsThreshold.evChanged"))
+		(var currentValue:number = "_thresholdEntity.newbieQuestsThreshold.currentValue" (event "_thresholdEntity.newbieQuestsThreshold.evChanged"))
+		(var maxValue:number = "_thresholdEntity.newbieQuestsThreshold.maxValue")
+	)
+	(style
+		(flow = "horizontal")
+		(align = "center|middle")
+		(height = 100%)
+		(minWidth = 96px)
+	)
+
+	(block
+		(style
+			(width = 96px)
+			(height = 100%)
+			(align = "middle")
+		)
+
+		(element DefaultProgressBar
+			_progress =	"currentValue / maxValue"
+			_size =		"SIZE.LARGE"
+			_color =	"SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE"
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(align = "center")
+				(width = 100%)
+				(bottom = 0px)
+			)
+			(tf
+				(class $TextDefault14NM)
+				(style (alpha = "TA"))
+				(text = "$index + 1")
+			)
+		)
+	)
+
+	(block
+		(bind visible "!_isLast")
+		(style
+			(align = "center")
+			(height = 100%)
+		)
+		(controller $Instance renderer='RewardItemAdapter'
+			(bind enabled "!_isLast")
+			(args
+				_entityId = "firstThresholdRewardId"
+				_isReceived = "isClaimed"
+				_isClickDisabled = "true"
+				_iconTopMargin = 0px
+				_iconRightMargin = 0px
+			)
 		)
 	)
 )

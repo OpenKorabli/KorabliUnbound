@@ -1,0 +1,419 @@
+(def constant SPACE_APRIL_TASKS_COLOR {
+	GREEN:	{	redMultiplier:		0,
+				greenMultiplier:	0.75,
+				blueMultiplier:		0.7,
+				alphaMultiplier:	1,
+				redOffset:			-80,
+				greenOffset:		0,
+				blueOffset:			-80,
+				alphaOffset:		0 },
+
+	RED:	{	redMultiplier:		1,
+				greenMultiplier:	0.12,
+				blueMultiplier:		0.05,
+				alphaMultiplier:	1,
+				redOffset:			0,
+				greenOffset:		-30,
+				blueOffset:			-20,
+				alphaOffset:		0 }
+	}
+)
+
+(def element SpaceAprilTasks ()
+	(scope
+		(event evShowStats)
+		(event evTaskBossSummonHidden)
+		(event evTaskFriendlyBossProtectHidden)
+		(event evTaskEnemyBossAttackHidden)
+
+		(var selfAvatarEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var selfTeamId:number = "selfAvatarEntity.avatar.teamId" (event "selfAvatarEntity.avatar.evTeamIdChanged"))
+		(var enemyTeamId:number = "1 - selfTeamId")
+
+		
+		(var allyBoss:dhEntity = 	"getPrimaryEntity(CC.keyObject, 'IDS_SPACE_BOSS_TEAM' + selfTeamId)")
+		(var enemyBoss:dhEntity = 	"getPrimaryEntity(CC.keyObject, 'IDS_SPACE_BOSS_TEAM' + enemyTeamId)")
+
+		(var isBossFriendlySpawned:bool = "allyBoss != null")
+		(var isBossEnemySpawned:bool = "enemyBoss != null")
+
+		(var isTaskFriendlyBossSummon:bool = "!isBossFriendlySpawned" watch=false)
+		(bind isTaskFriendlyBossSummon "!isBossFriendlySpawned" init=false watch=false (event "evTaskFriendlyBossProtectHidden") (event "evTaskBossSummonHidden"))
+
+		(var isTaskEnemyBossAttack:bool = "isBossEnemySpawned" watch=false)
+		(bind isTaskEnemyBossAttack "true" 	init=false watch=false (bind enabled "isBossEnemySpawned"))
+		(bind isTaskEnemyBossAttack "false" init=false watch=false (event "evTaskEnemyBossAttackHidden"))
+
+		(var customElementsVisibilityComponent:dhComponent = "getSingleComponent(CC.customElementsVisibility)")
+		(var enabledElements:number = "customElementsVisibilityComponent.enabledElements" (event "customElementsVisibilityComponent.evChanged"))
+
+		(var battleStateComponent:dhComponent =	"getSingleComponent(CC.battleState)")
+		(var battleState:number = "battleStateComponent.battleState" (event "battleStateComponent.evBattleStateChanged"))
+		(var isNotBattleStateCountdown:bool = "battleState != SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN")
+		(var isCustomCountdownEnabled:bool = "(enabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.CUSTOM_COUNTDOWN) > 0")
+
+		(var isVisibleContent:bool = false)
+		(bind isVisibleContent "true" init=false (event "evShowStats"))
+	)
+	(dispatch evShowStats dir="EventDirection.NONE" on='addedToStage' delay = 1.8 (bind enabled "isNotBattleStateCountdown && isCustomCountdownEnabled"))
+	(dispatch evShowStats dir="EventDirection.NONE" delay = 1.8 (bind enabled "isNotBattleStateCountdown && isCustomCountdownEnabled") (bind trigger "isNotBattleStateCountdown"))
+
+	(style (width = 340px))
+
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "XXS")
+		)
+
+		(controller $Instance renderer='SpaceAprilTaskBossSummon'
+			(bind enabled "isTaskFriendlyBossSummon && isVisibleContent")
+			(args
+				_isVisible = "!isBossFriendlySpawned"
+				_teamId = "selfTeamId"
+			)
+		)
+
+		(controller $Instance renderer='SpaceAprilTaskBossAttackOrProtect'
+			(bind enabled "!isTaskFriendlyBossSummon && isVisibleContent")
+			(args
+				_isBossFriendly = true
+				_isVisible = "isBossFriendlySpawned"
+			)
+		)
+	)
+
+	(block
+		(style (width = 100%))
+		(controller $Instance renderer='SpaceAprilTaskBossAttackOrProtect'
+			(bind enabled "isTaskEnemyBossAttack && isVisibleContent")
+			(args
+				_isBossFriendly = false
+				_isVisible = "isBossEnemySpawned"
+			)
+		)
+	)
+)
+
+(def element SpaceAprilTaskBossSummon (_isVisible:bool, _teamId:number)
+	(scope
+		
+		(var scoreRules:array = "[	[	'IDS_EVENT_SPACE_BATTLE_TASK_TEXT_BOSS_SUMMON_RULE_1',
+										subst('IDS_EVENT_SPACE_BATTLE_TASK_POINT_IN_SEC', [], { count: 5 })],
+									[	'IDS_EVENT_SPACE_BATTLE_TASK_TEXT_BOSS_SUMMON_RULE_2',
+										subst('IDS_EVENT_SPACE_BATTLE_TASK_NUMBER_OF_POINT', [], { count: 200 })]]")
+
+		(var scoreForSummonBoss:number = 1000)
+		
+
+		(struct bossScores = PULL_STORAGE_INFO (_primaryKey = "_teamId == SC.Common.TRAINING_ROOM_TEAMS_IDS.SELF_TEAM 	? SC.Battle.STORAGE_WT_HUD_TYPE.STORAGE_SUMMON_BOSS_TEAM0
+																														: SC.Battle.STORAGE_WT_HUD_TYPE.STORAGE_SUMMON_BOSS_TEAM1"))
+		(var score:number = "bossScores.value" watch=false)
+		(bind score "bossScores.value > 0 ? bossScores.value : score" init=false watch=false (bind trigger "bossScores.value"))
+	)
+	(dispatch evTaskBossSummonHidden delay=0.4 dir="EventDirection.UP" (bind enabled "!_isVisible") (bind trigger "_isVisible"))
+
+	(style (width = 100%))
+
+	
+	(block
+		(style
+			(width = 100%)
+			(marginBottom = "XXS")
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(borderRadius = "XS")
+				(backgroundColor = "BATTLE_SEMI_TRANSPARENT_BACKGROUNDS.BG_INTENSE")
+				(alpha = 0)
+			)
+
+			(controller $Animation
+				(bindcall play
+					keyframes = "_isVisible ? [ { percent: 100, 	to: { alpha: 1 }} ]
+											: [ { percent: 30,		to: { alpha: 1 }},
+												{ percent: 100,		to: { alpha: 0 }} ]"
+					watch = false
+					delay = "_isVisible ? 0 : 0.2"
+					duration = "_isVisible ? 0.12 : 0.2"
+					on = 'addedToStage'
+					(bind trigger "_isVisible")
+				)
+			)
+		)
+
+		
+		(block
+			(style
+				(width = 100%)
+				(alpha = 0)
+				(scaleY = 0)
+			)
+
+			(controller $Animation
+				(bindcall play
+					keyframes = "_isVisible ? [ { percent: 70,		to: { alpha: 0, scaleY: 1 }},
+												{ percent: 100,		to: { alpha: 1 }} ]
+											: [ { percent: 30,		to: { alpha: 0, scaleY: 1 }},
+												{ percent: 100,		to: { scaleY: 0 }} ]"
+					watch = false
+					delay = "_isVisible ? 0 : 0.2"
+					duration = "_isVisible ? 0.4 : 0.2"
+					on = 'addedToStage'
+					(bind trigger "_isVisible")
+				)
+			)
+
+			(hblock
+				(style 
+					(width = 100%)
+					(padding = "SXS")
+				)
+
+				(block
+					(style
+						(marginRight = "SXS")
+						(width = 24px)
+						(height = 24px)
+						(backgroundImage = 'swf:../battle_hud/battle_stats/space_event/space_event.swf:scenario_marker_ally_boss')
+					)
+				)
+
+				(tf
+					(class $TextDefaultBoldNM)
+					(style
+						(width = 100%)
+						(marginTop = 6px)
+						(marginBottom = 6px)
+					)
+
+					(text = 'IDS_EVENT_SPACE_BATTLE_TASK_TEXT_BOSS_SUMMON')
+				)
+
+				(tf
+					(class $TextDefaultBoldNM)
+					(style
+						(textAlign = "right")
+						(width = 80px)
+						(marginTop = 6px)
+						(marginLeft = "M")
+					)
+					(bind text "min(score, scoreForSummonBoss) + ' / ' + scoreForSummonBoss")
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style (width = 100%))
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(borderRadius = "XS")
+				(backgroundColor = "BATTLE_SEMI_TRANSPARENT_BACKGROUNDS.BG_LIGHT")
+				(alpha = 0)
+			)
+
+			(controller $Animation
+				(bindcall play
+					keyframes = "_isVisible ? [ { percent: 100, 	to: { alpha: 1 }} ]
+											: [ { percent: 30,		to: { alpha: 1 }},
+												{ percent: 100,		to: { alpha: 0 }} ]"
+					watch = false
+					duration = 	"_isVisible ? 0.12 : 0.2"
+					delay = "_isVisible ? 0.4 : 0"
+					on = 'addedToStage'
+					(bind trigger "_isVisible")
+				)
+			)
+		)
+		
+		
+		(block
+			(style 
+				(width = 100%)
+				(alpha = 0)
+				(scaleY = 0)
+			)
+
+			(controller $Animation
+				(bindcall play
+					keyframes = "_isVisible ? [ { percent: 70,		to: { alpha: 0, scaleY: 1 }},
+												{ percent: 100,		to: { alpha: 1 }} ]
+											: [ { percent: 30,		to: { alpha: 0, scaleY: 1 }},
+												{ percent: 100,		to: { scaleY: 0 }} ]"
+					watch = false
+					duration = "_isVisible ? 0.4 : 0.2"
+					delay = "_isVisible ? 0.4 : 0"
+					on = 'addedToStage'
+					(bind trigger "_isVisible")
+				)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(vgap = "M")
+					(paddingTop = "M")
+					(paddingBottom = "M")
+					(paddingLeft = "SXS")
+					(paddingRight = "SXS")
+				)
+
+				(controller $Repeat renderer='SpaceAprilRulesForSummonBoss'
+					(bind count "scoreRules.length")
+					(args
+						_scoreRule = "scoreRules[$index]"
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element SpaceAprilRulesForSummonBoss (_scoreRule:array)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(width = 100%)
+			(alpha = "TA")
+		)
+		(bind text "_scoreRule[0]")
+	)
+
+	(tf
+		(class $TextDefaultBoldNM)
+		(style (marginLeft = "M"))
+		(bind text "_scoreRule[1]")
+	)
+)
+
+(def element SpaceAprilTaskBossAttackOrProtect (_isBossFriendly:bool, _isVisible:bool)
+	(scope
+		(event evSpacePrepared)
+
+		(var iconName:str = "_isBossFriendly ? 'scenario_marker_ally_boss' : 'scenario_marker_enemy_boss'")
+		(var backgroundName:str = "_isBossFriendly ? 'friendly' : 'enemy'")
+	)
+
+	(dispatch evTaskFriendlyBossProtectHidden 	delay=0.32 dir="EventDirection.UP" (bind enabled "!_isVisible && _isBossFriendly") 	(bind trigger "_isVisible"))
+	(dispatch evTaskEnemyBossAttackHidden 		delay=0.32 dir="EventDirection.UP" (bind enabled "!_isVisible && !_isBossFriendly") (bind trigger "_isVisible"))
+
+	(style (width = 100%))
+
+	
+	(block
+		(style (width = 100%))
+
+		(block
+			(style
+				(width = 100%)
+				(scaleY = 0)
+				(alpha = 0)
+			)
+
+			(controller $Animation
+				(controllerEvents evScaleAnimationEnded)
+				(bindcall play
+					to = { scaleY: 1 }
+					duration = 0.1
+					onEndedEvent = 'evScaleAnimationEnded'
+					on = 'addedToStage'
+				)
+				(bindcall play
+					to = { alpha: 1 }
+					delay = 0.05
+					duration = 0.2
+					(event "evSpacePrepared")
+				)
+				(bindcall play
+					keyframes = [ 	{ percent: 50,	to: { alpha: 0, scaleY: 1 }},
+									{ percent: 100,	to: { scaleY: 0 }} ]
+					duration = 0.32
+					(bind enabled "!_isVisible")
+				)
+				(dispatch evSpacePrepared on='evScaleAnimationEnded')
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(scale9grid = 3)
+					(backgroundImage = "'url:../battle_hud/battle_stats/space_event/space_april_task_boss_background_' + backgroundName + '.png'")
+				)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(flow = "horizontal")
+					(align = "middle")
+					(padding = "SXS")
+				)
+
+
+				(block
+					(style
+						(marginRight = "SXS")
+						(width = 24px)
+						(height = 24px)
+						(backgroundImage = "'swf:../battle_hud/battle_stats/space_event/space_event.swf:' + iconName")
+					)
+				)
+
+				(tf
+					(class $TextDefaultBoldNM)
+					(text = "_isBossFriendly ? 'IDS_EVENT_SPACE_BATTLE_TASK_TEXT_BOSS_PROTECT' : 'IDS_EVENT_SPACE_BATTLE_TASK_TEXT_BOSS_ATTACK'")
+				)
+			)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "NO_COLOR")
+				(scaleY = 0)
+			)
+			(isMask = true)
+
+			(controller $Animation
+				(bindcall play
+					id = 'animationShowHide'
+					to = "{ scaleY: 1 }"
+					delay = 0.05
+					duration = 0.2
+					(event "evSpacePrepared")
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(width = 340px)
+			(height = 48px)
+			(backgroundImage = 'url:../animations/spine/space_event/noise_boss.skel')
+		)
+		(controller $Spine
+			(bindcall play sequence="[{ name: 'animation', repeatCount: 1 }]" (event "evSpacePrepared"))
+			(bindcall pause init=true) 
+		)
+		(colorTransform = "_isBossFriendly 	? SPACE_APRIL_TASKS_COLOR.GREEN
+											: SPACE_APRIL_TASKS_COLOR.RED")
+	)
+)

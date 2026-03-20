@@ -1,4 +1,5 @@
-(def element CrewStereotypeWithName (_crewId:number, _shipClass:str, _size:number="SIZE.SMALL", _isRentIconHidden:bool=false, _hideSkillPoints:bool=false, _isCenterAligned:bool = false, _isAutoSized:bool=false)
+(def element CrewStereotypeWithName (	_crewId:number, _shipClass:str, _size:number = "SIZE.SMALL", _isRentIconHidden:bool = false, _hideSkillPoints:bool = false, _isCenterAligned:bool = false, _isAutoSized:bool = false,
+										_hasVoiceMarker:bool = false)
 	(style
 		(bind align "_isCenterAligned ? center : left")
 		(bind width "_isAutoSized ? 'auto' : 100%")
@@ -12,6 +13,7 @@
 			_shipClass =		"_shipClass"
 			_hideSkillPoints =	"_hideSkillPoints"
 			_size =				"_size"
+			_hasVoiceMarker =	"_hasVoiceMarker"
 		)
 	)
 
@@ -25,8 +27,10 @@
 )
 
 (def element CrewStereotype (	_crewId:number=null, _crewHistoryId:number=null, _shipClass:str='', _size:number="SIZE.SMALL", _customSize:dict = null, _showRentIcon:bool=false, _showPeculiarityInfo:bool=true,
-								_hideSkillPoints:bool=false, _isAnimated:bool=true, _showFreeSkillPointsCounter:bool=true)
+								_hideSkillPoints:bool=false, _isAnimated:bool=true, _showFreeSkillPointsCounter:bool=true, _hasVoiceMarker:bool = false, _isReward:bool = false)
 	(scope
+		(event evUpdateVoicePreviewBlockShown)
+
 		(struct crewReal =		PULL_CREW(_crewId = "_crewId"))
 		(struct crewHistory =	PULL_CREW_HISTORY_INFO(_crewHistoryId = "_crewHistoryId"))
 
@@ -67,31 +71,52 @@
 		(var portraitBorderSize:number = "isSmallItem			? XXS :
 										 _size == SIZE.MEDIUM	? 3px
 																: XS")
+
+		(var isVoiceMarkerVisible:bool =	"_hasVoiceMarker"	watch=false)
+		(bind isVoiceMarkerVisible			"_hasVoiceMarker"	init=false watch=false		(bind trigger "_crewId"))
+		(bind isVoiceMarkerVisible			"!$event.value"		init=false watch=false		(event "evUpdateVoicePreviewBlockShown"))
 	)
 
 	(block
 		(style (backgroundColor = "NO_COLOR"))
 
 		(element CrewPortraitWithBGR
-			_baseUrl = "baseUrl"
-			_overlayUrl = "overlayUrl"
-			_rarity = "rarity"
-			_portraitWidth = "portraitWidth"
-			_portraitHeight = "portraitHeight"
-			_borderSize = "portraitBorderSize"
-			_isAnimated = "_isAnimated"
-			_isSpineAnimation = "isSpineAnimation"
+			_baseUrl =				"baseUrl"
+			_overlayUrl =			"overlayUrl"
+			_rarity =				"rarity"
+			_portraitWidth =		"portraitWidth"
+			_portraitHeight =		"portraitHeight"
+			_borderSize =			"portraitBorderSize"
+			_isAnimated =			"_isAnimated"
+			_isSpineAnimation =		"isSpineAnimation"
+			_hasVoiceMarker =		"isVoiceMarkerVisible"
 		)
 
 		(controller $Tooltip
 			(bind enabled "_crewId || _crewHistoryId")
 			(renderer='CrewTooltip')
 			(args
-				_crewId = "_crewId"
-				_crewHistoryId = "_crewHistoryId"
-				_noMouseInstruction = "true"
+				_crewId =				"_crewId"
+				_crewHistoryId =		"_crewHistoryId"
+				_noMouseInstruction =	true
+				_hasVoiceMarker =		"_hasVoiceMarker"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block
+		(bind visible "_hasVoiceMarker && !_isReward")
+
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='CrewVoiceAssetPreviewBlock'
+			(bind enabled "_hasVoiceMarker && !_isReward")
+			(args
+				_crewId =				"_crewId"
+				_portraitSize =			"_size"
+				_portraitBorderSize =	"portraitBorderSize"
+			)
 		)
 	)
 
@@ -577,5 +602,173 @@
 		_unifiedStatus = "rentStatusLineData._unifiedStatus"
 		_text = "rentStatusLineData._text"
 		_width = 100%
+	)
+)
+
+(def element CrewVoiceAssetPreviewBlock (_crewId:number, _portraitSize:number, _portraitBorderSize:number)
+	(scope
+		(event evUpdateVoicePreviewBlockShown)
+
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var isPortraitSizeMedium:bool =	"_portraitSize == SIZE.MEDIUM")
+		(var sidePadding:number =			"isPortraitSizeMedium ? S : SXS")
+
+		(var isVoicePreviewBlockShown:bool =	"rollOver"			watch=false)
+		(bind isVoicePreviewBlockShown			"$event.value"		init=false watch=false		(event "evUpdateVoicePreviewBlockShown"))
+
+		(var voiceOverComponent:dhComponent =	"getSingleComponent(CC.crewVoiceoverState)")
+		(var isVoiceOverPlaying:bool =			"voiceOverComponent.isPlaying"		(event "voiceOverComponent.evChanged"))
+	)
+
+	(dispatch evUpdateVoicePreviewBlockShown	dir="EventDirection.UP"		args="{ value: rollOver }"	delay="0.05" reset=true		(bind trigger "rollOver"))
+
+	(class $Fullsize)
+	(style
+		(align = "bottom")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(controller $Tooltip
+		(renderer='CrewTooltip')
+		(args
+			_crewId =				"_crewId"
+			_noMouseInstruction =	true
+			_hasVoiceMarker =		true
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(style
+			(hitTest = false)
+			(bind padding "_portraitBorderSize")
+		)
+
+		(block
+			(visible = "isVoicePreviewBlockShown")
+
+			(class $FullsizeAbsolute)
+			(style
+				(bottom = 0px)
+				(backgroundImage = 'url:../service_kit/panel_backgrounds/fadeout_gradient.png')
+				(backgroundSize = "cover")
+				(alpha = "isVoicePreviewBlockShown ? 1 : 0")
+				(ubScaleY = "isVoicePreviewBlockShown ? 1 : 0")
+			)
+
+			(controller $Animation
+				(bindcall play
+					watch =		false
+					delay =		0.1
+					action =	"kill"
+					duration =	0.15
+					from =		"{ alpha: 0,	ubScaleY: 0,	visible: false }"
+					to =		"{ alpha: 1,	ubScaleY: 1,	visible: true }"
+					easing =	"Easing.line"
+					reverse =	"!isVoicePreviewBlockShown"
+					(bind trigger "isVoicePreviewBlockShown")
+				)
+			)
+		)
+	)
+
+	(block
+		(macro MOUSE_EVENTS_DISPATCHER)
+
+		(class $Fullsize)
+
+		(style
+			(align = "bottom")
+			(bind paddingLeft "sidePadding")
+			(bind paddingRight "sidePadding")
+			(bind paddingBottom "sidePadding")
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(block
+			(visible = "isVoicePreviewBlockShown")
+
+			(style
+				(width = 100%)
+				(alpha = "isVoicePreviewBlockShown ? 1 : 0")
+				(scaleY = "isVoicePreviewBlockShown ? 1 : 0")
+			)
+
+			(controller $Instance renderer='DefaultButton'
+				(bind enabled "!isVoiceOverPlaying")
+				(args
+					_width =		100%
+					_type =			"SC.Ui_styles.BUTTON_TYPE.SECONDARY"
+					_size =			"isPortraitSizeMedium ? SIZE.SMALL : SIZE.MEDIUM"
+					_label =		"'IDS_VOICE_PREVIEW'"
+					_methods =		"[{ type: 'direct.action',	name: 'playCrewVOSample',	args: { crewId: _crewId } }]"
+				)
+			)
+
+			(block
+				(bind visible "isVoiceOverPlaying")
+
+				(class $Fullsize)
+				(style
+					(hitTest = false)
+					(bind height "isPortraitSizeMedium ? 24px : 32px")
+					(backgroundImage = "'url:../service_kit/buttons/backgrounds/' + SC.Ui_styles.BUTTON_TYPE.SECONDARY + '.png'")
+					(scale9grid = 10)
+				)
+			)
+
+			(block
+				(bind visible "isVoiceOverPlaying")
+
+				(style
+					(hitTest = false)
+					(position = "absolute")
+				)
+
+				(block
+					(style
+						(position = "absolute")
+						(bind top	"isPortraitSizeMedium ? 0px : XS")
+						(bind left	"isPortraitSizeMedium ? -23px : 0px")
+						(alpha = 1.6)
+						(backgroundImage = 'url:../animations/spine/strategic_actions/wave.skel')
+					)
+
+					(controller $Spine
+						(bindcall play sequence='animation_stop'	init=true	(bind enabled "!isVoiceOverPlaying"))
+						(bindcall play sequence='animation_play'				(bind enabled "isVoiceOverPlaying"))
+					)
+				)
+
+				(block
+					(style
+						(position = "absolute")
+						(bind top		"isPortraitSizeMedium ? XXS : XS")
+						(bind left		"isPortraitSizeMedium ? 11px : 37px")
+						(bind height	"isPortraitSizeMedium ? 20px : 24px")
+						(bind width "70px")
+						(backgroundColor = 0xFFFFFFFF)
+					)
+					(isMask = true)
+				)
+			)
+
+			(controller $Animation
+				(bindcall play
+					watch =		false
+					delay =		0.1
+					action =	"kill"
+					duration =	0.15
+					from =		"{ alpha: 0,	scaleY: 0,	visible: false }"
+					to =		"{ alpha: 1,	scaleY: 1,	visible: true }"
+					easing =	"Easing.line"
+					reverse =	"!isVoicePreviewBlockShown"
+					(bind trigger "isVoicePreviewBlockShown")
+				)
+			)
+		)
 	)
 )

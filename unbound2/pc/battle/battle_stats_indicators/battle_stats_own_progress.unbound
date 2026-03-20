@@ -1,16 +1,12 @@
-(def element ZonesCapturingIndicatorContainer () layout = true
+(def element ZonesCapturingIndicatorContainer ()
 	(scope 
-		(var selfInvadingCapturePoints:gfx = "$datahub.getCollection(CC.capturePoint).getChildByPath('selfInvading')")
-		(var capturePointsList:gfx = "selfInvadingCapturePoints.items" (event "selfInvadingCapturePoints.evAdded") (event "selfInvadingCapturePoints.evRemoved") (event "selfInvadingCapturePoints.evUpdated"))
+		(var selfInvadingCapturePoints:dhCollection = "getCollectionByPath(CC.capturePoint, 'selfInvading')")
 
-		(var dropZonesCollection:gfx = "$datahub.getCollection(CC.interactiveZone).getChildByPath('playerInside.dropZones')")
-		(var dropZonesList:gfx = "dropZonesCollection.items" (event "dropZonesCollection.evAdded") (event "dropZonesCollection.evRemoved"))
+		(var selfInvadingDropZones:dhCollection = "getCollectionByPath(CC.interactiveZone, 'playerInside.dropZones')")
 
-		(var airshipZonesCollection:gfx = "$datahub.getCollection(CC.payload).getChildByPath('byRelation.hasSelfPlayerInZone')")
-		(var airshipZonesList:gfx = "airshipZonesCollection ? airshipZonesCollection.items : null" (event "airshipZonesCollection.evAdded") (event "airshipZonesCollection.evRemoved"))
-		(var hasAirshipZones:bool = "!airshipZonesList.empty")
-	
-		(var isAnimated:bool = "capturePointsList.length || dropZonesList.length || airshipZonesList.length")
+		(var selfInvadingAirshipZones:dhCollection = "getCollectionByPath(CC.payload, 'byRelation.hasSelfPlayerInZone')")
+
+		(var isAnimated:bool = "selfInvadingCapturePoints.length || selfInvadingDropZones.length || selfInvadingAirshipZones.length")
 	)
 
 	(style
@@ -19,52 +15,50 @@
 		(alpha = "isAnimated ? 1 : 0")
 	)
 
+	(controller $Animation
+		(bindcall play to={alpha:1} from={alpha:0} duration=0.3 easing="Easing.quint_in" (bind enabled "isAnimated"))
+	)
+
 	(hblock
 		(controller $Repeat renderer='CapturePointCapturingIndicator'
-			(bind count "capturePointsList.length")
+			(bind items "selfInvadingCapturePoints")
 			(args 
-				_pointCapturedByMe = "capturePointsList[$index]"
+				_capturePointEntity = "$item"
 			)
 		)
 	)
 
 	(hblock
 		(controller $Repeat renderer='DropZoneCapturingIndicator'
-			(bind count "dropZonesList.length")
+			(bind items "selfInvadingDropZones")
 			(args 
-				_dropZoneCapturedByMe = "dropZonesList[$index]"
+				_dropZoneCapturedByMe = "$item"
 			)
 		)
 	)
 
 	(hblock
-		(bind visible "hasAirshipZones")
 		(controller $Repeat renderer='AirshipZoneCapturingIndicator'
-			(bind count "airshipZonesCollection ? airshipZonesCollection.items.length : 0")
-			(bindcall removeChildAt "$event[1]" (event "airshipZonesCollection.evRemoved"))
-			(bindcall addChildAt "$event[1]" (event "airshipZonesCollection.evAdded"))
-			(args "airshipZonesCollection")
+			(bind items "selfInvadingAirshipZones")
+			(args
+				_airshipZoneEntity= "$item"
+			)
 		)
 	)
 
 	(element IndividualProgressContainer) 
-
-	(controller $Animation
-		(bindcall play to={alpha:1} from={alpha:0} duration=0.3 easing="Easing.quint_in" (bind enabled "isAnimated"))
-	)
 )
 
-(def element AirshipZoneCapturingIndicator(_airshipZoneCollection:gfx) layout = true
+(def element AirshipZoneCapturingIndicator(_airshipZoneEntity:dhEntity)
 	(scope 
-		(var airshipZone:gfx = "_airshipZoneCollection.items[$index]" watch=false)
-		(var relation:number = "airshipZone.relation ? airshipZone.relation.value : 0" (event "airshipZone.payload.evStateChanged"))
+		(var relation:number = "_airshipZoneEntity.relation.value ?: SC.Battle.PLAYER_RELATION.SELF" (event "_airshipZoneEntity.payload.evStateChanged"))
 		(var relationName:str = "toLower(SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relation])")
-		(var countOfMovers:number = 	"airshipZone.payload.movers" 	(event "airshipZone.payload.evPlayersChanged"))
-		(var countOfBlockers:number = 	"airshipZone.payload.blockers" (event "airshipZone.payload.evPlayersChanged"))
+		(var countOfMovers:number = 	"_airshipZoneEntity.payload.movers" 	(event "_airshipZoneEntity.payload.evPlayersChanged"))
+		(var countOfBlockers:number = 	"_airshipZoneEntity.payload.blockers" (event "_airshipZoneEntity.payload.evPlayersChanged"))
 		(var countOfAllies:number = "relation == SC.Battle.PLAYER_RELATION.ALLY ? countOfMovers - 1 : countOfBlockers - 1")
 
 		(var speedStatus:str = "relation == SC.Battle.PLAYER_RELATION.ALLY && countOfBlockers < 1 ? 'fast' : 'slow'")
-		(var timeToLiveComponent:gfx = "airshipZone.timeToLive" (event "airshipZone.evAdded") (event "airshipZone.evRemoved"))
+		(var timeToLiveComponent:dhComponent = "_airshipZoneEntity.timeToLive")
 	)
 
 	(style
@@ -113,20 +107,20 @@
 	)
 )
 
-(def element CapturePointCapturingIndicator (_pointCapturedByMe:gfx=null) layout = true
+(def element CapturePointCapturingIndicator (_capturePointEntity:dhEntity)
     (name = 'base_capture_own')
 	(scope 
 		(var BAR_WIDTH:number = 160)
 
-		(var capturePoint:gfx = "_pointCapturedByMe ? _pointCapturedByMe.capturePoint : null" (event "_pointCapturedByMe.evAdded") (event "_pointCapturedByMe.evRemoved"))	
+		(var capturePoint:dhComponent = "_capturePointEntity.capturePoint")	
 		(var isBothInside:bool = "capturePoint.bothInside" (event "capturePoint.evBothInsideChanged") )
 		(var invaderRelation:number = "capturePoint.invaderRelation" (event "capturePoint.evInvaderChanged") )
 		(var timeToCaptureLeft:number = "capturePoint.timeLeft" (event "capturePoint.evTimeLeftChanged"))
 
-		(var progressComponent:gfx = "_pointCapturedByMe ? _pointCapturedByMe.progress : null" (event "_pointCapturedByMe.evAdded") (event "_pointCapturedByMe.evRemoved"))
+		(var progressComponent:dhComponent = "_capturePointEntity.progress")
 		(var progress:number = "progressComponent ? progressComponent.value: 0" (event "progressComponent.evChanged"))
 
-		(var relationValue:number = "_pointCapturedByMe.relation ? _pointCapturedByMe.relation.value : SC.Battle.PLAYER_RELATION.SELF" (event "_pointCapturedByMe.relation.evChanged"))
+		(var relationValue:number = "_capturePointEntity.relation.value ?: SC.Battle.PLAYER_RELATION.SELF" (event "_capturePointEntity.relation.evChanged"))
 		(var isEnemy:bool = "relationValue == SC.Battle.PLAYER_RELATION.ENEMY")
 		(var isInvaderEnemy:bool = "invaderRelation == SC.Battle.PLAYER_RELATION.ENEMY")
 	)
@@ -194,13 +188,13 @@
 	)
 )
 
-(def element DropZoneCapturingIndicator (_dropZoneCapturedByMe:gfx)
+(def element DropZoneCapturingIndicator (_dropZoneCapturedByMe:dhEntity)
 	(scope 
-		(var drop:gfx = "_dropZoneCapturedByMe.drop" (event "_dropZoneCapturedByMe.evAdded") (event "_dropZoneCapturedByMe.evRemoved"))
-		(var timeout:gfx = "_dropZoneCapturedByMe.timeout" (event "_dropZoneCapturedByMe.evAdded") (event "_dropZoneCapturedByMe.evRemoved"))
+		(var drop:dhComponent= "_dropZoneCapturedByMe.drop")
+		(var timeout:dhComponent = "_dropZoneCapturedByMe.timeout")
 		(var timeoutTime:number = "timeout.time ?: 0" (event "timeout.evTimeChanged"))
 
-		(var timerComponent:gfx = "$datahub.getSingleComponent(CC.timer)")
+		(var timerComponent:dhComponent = "getSingleComponent(CC.timer)")
 		(var timeToDropLeft:number = "timeout && timerComponent ? max(ceil(timeoutTime - timerComponent.currentServerTime), 0) : 0" (event "timerComponent.evFrequent"))
 
 		(var isBothInside:bool = "drop ? _dropZoneCapturedByMe.drop.isContested : false" (event "_dropZoneCapturedByMe.drop.evIsContestedChanged"))

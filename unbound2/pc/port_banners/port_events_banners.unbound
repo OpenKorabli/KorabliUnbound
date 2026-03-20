@@ -57,72 +57,6 @@
 	(bottom = 0px)
 )
 
-(def macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM (_triggerExpression:expression)
-	(alpha = "_triggerExpression ? 0.5 : 1")
-	(controller $Animation
-		(bindcall play	duration="0.15"
-						to="{alpha: 0.5}"
-						action="kill"
-						easing="Easing.line"
-						(bind enabled "_triggerExpression")
-		)
-		(bindcall play	duration="0.15"
-						to="{alpha: 1}"
-						action="kill"
-						easing="Easing.line"
-						(bind enabled "!_triggerExpression")
-		)
-	)
-)
-
-(def macro BANNER_PROGRESS_BAR_BLOCK_POSITION (_size:expression = "SC.Ui_common.TILE_SIZE.S")
-	(bind class "_size == SC.Ui_common.TILE_SIZE.S	? '$EventSmallBannerProgressBar'
-													: '$EventMediumBannerProgressBar'")
-)
-
-(def macro BANNER_MOTIVATOR_BORDER_RADIUS ()
-	(bind borderRadiusBottomLeft "!toBool($index) ? S : 0")
-	(bind borderRadiusTopLeft "!toBool($index) ? S : 0")
-	(bind borderRadiusBottomRight "toBool($index) ? S : 0")
-	(bind borderRadiusTopRight "toBool($index) ? S : 0")
-)
-
-(def macro MOUSE_HANDLER_BANNER (_methods:expression=[])
-	(macro MOUSE_EVENTS_DISPATCHER)
-	(macro SOUND_HANDLER "'button_banner'")
-	(macro MOUSE_LMB_EXTERNAL_CALL_REPEAT
-		_methods = "_methods"
-	)
-)
-
-(def macro MOTIVATOR_STAGE_SIZES ()
-	(macro STAGE_SIZE)
-	(var isMediumResolution:bool = "stageHeight < 1080")
-	(var isSmallResolution:bool = "stageHeight <= 800")
-)
-
-(def struct GET_TILE_INFO (_entityId:number = 0)
-	(var tileEntity:dhEntity = "getEntity(_entityId)")
-	(var component:dhComponent = "tileEntity.tile")
-	(var tileId:str = "component.tileId" (event "component.evChanged"))
-	(var tileSize:number = "component.currentTileSize ?: SC.Ui_common.TILE_SIZE.M" (event "component.evChanged"))
-)
-
-(def struct GET_TILE_CONTENT_INFO(_entityContentId:number = 0)
-	(var tileContentEntity:dhEntity = "getEntity(_entityContentId)")
-	(var tileContent:dhComponent = "tileContentEntity.tileContent")
-	(var contentId:str = "tileContent.contentId" (event "tileContent.evChanged"))
-	(var tileId:str = "tileContent.tileId" (event "tileContent.evChanged"))
-
-	(var tileEntity:dhEntity = "getPrimaryEntity(CC.tile, tileId)")
-	(var tile:dhComponent = "tileEntity.tile")
-	(var tileSize:number = "tile.currentTileSize ?: SC.Ui_common.TILE_SIZE.M" (event "tile.evChanged"))
-)
-
-(def macro DECLARE_SCROLL_TARGET_INDEX (_tipId:expression = 0)
-	(dispatch 'evDeclareScrollTargetIndex' dir="EventDirection.UP" on='addedToStage' (bind enabled "_tipId"))
-)
-
 
 (def element EventsDockMainInset ()
 	(scope
@@ -182,14 +116,14 @@
 		(style
 			(width = 100%)
 			(maxHeight = 100%)
-			(backgroundColor = "NO_COLOR")
 		)
 
 		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
 			_singleStep =				"EVENT_BANNER_HEIGHT.LARGE"
 			_wheelScrollAcceleration =	"0.8"
-			_isContrastScrollBar =		"true"
 			_canScrollChangedEvent =	"'evCanScrollChanged'"
+			_isContrastScrollBar =		"true"
+			_isDrag =					"false"
 		)
 
 		(bind scrollAreaTopPoint	"round($globalLayoutBounds[1])"	(event "$evLayoutBoundsChanged"))
@@ -221,8 +155,8 @@
 	(scope
 		(struct tile = GET_TILE_INFO(_entityId="_entityId"))
 
-		(var tileContentCollection:dhCollection = "getCollectionByPath(CC.tileContent, 'available.byTileId.' + tile.tileId + '.sorted')")
-		(var tileRenderer:str = "tileContentCollection.length > 1 ? 'EventBannerCarousel' : 'EventBannerSingleItem'")
+		(struct tileContentView = DEFINE_TILE_CONTENT_VIEW(_tileId = "tile.tileId"))
+		(var tileRenderer:str = "tileContentView.isSlider ? 'EventBannerCarousel' : 'EventBannerSingleItem'")
 	)
 
 	(controller $Instance
@@ -248,8 +182,8 @@
 
 		(struct tile = GET_TILE_INFO(_entityId="_entityId"))
 
-		(var tileContentCollection:dhCollection = "getCollectionByPath(CC.tileContent, 'available.byTileId.' + tile.tileId + '.sorted')")
-		(var slidersCount:number = "tileContentCollection.length")
+		(struct tileContentView = DEFINE_TILE_CONTENT_VIEW(_tileId = "tile.tileId"))
+		(var slidersCount:number = "tileContentView.collection.length")
 
 		(var tileSlider:dhComponent = "getPrimaryComponent(CC.tileSlider, tile.tileId)")
 		(var currentContentIndex:number = "tileSlider.currentContentIndex ?: 0" (event "tileSlider.evCurrentContentIndexChanged"))
@@ -305,7 +239,7 @@
 			(controller $DynamicRepeat renderer='EventBannerSliderItem' name='EventBannerCarousel'
 				(bind count "slidersCount")
 				(args
-					_entityContentId = "tileContentCollection[$index].id"
+					_entityContentId = "tileContentView.collection[$index].id"
 					_guidingOffsets = "_guidingOffsets"
 					_scrollAreaTopPoint = "_scrollAreaTopPoint"
 					_scrollAreaHeight = "_scrollAreaHeight"
@@ -323,6 +257,15 @@
 
 		(bindcall scrollToBegin (event "evScrollToBegin"))
 		(bindcall scrollToEnd (event "evScrollToEnd"))
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "NO_COLOR")
+			(borderRadius = "S")
+		)
+		(isMask = true)
 	)
 
 	(block
@@ -531,10 +474,14 @@
 		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
 
 		(var route:str = "tileContentInfo.tileContent.route ?: ''" (event "tileContentInfo.tileContent.evChanged"))
+		(var tagId:str = "tileContentInfo.tileContent.tagId ?: ''" (event "tileContentInfo.tileContent.evChanged"))
+		(var sseRoute:str = "tagId ? 'sse_' + tagId : ''")
+		(var sseDynamicRouteEntity:dhEntity = "getPrimaryEntity(CC.route, sseRoute)")
 		(var url:str = "tileContentInfo.tileContent.url ?: ''" (event "tileContentInfo.tileContent.evChanged"))
 		(var skipURLTranslation:bool = "!isIn(url, SC.Ui_windows.GUI_URL.ALL)")
 		(var mainText:str = "tileContentInfo.tileContent.mainText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
 		(var tooltipText:str = "tileContentInfo.tileContent.tooltipText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
+		(var isNew:bool = "tileContentInfo.tileContentEntity.hasComponent(CC.newItem)")
 
 		(var isSmallBanner:bool = "tileContentInfo.tileSize == SC.Ui_common.TILE_SIZE.S")
 	)
@@ -542,11 +489,22 @@
 
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{
-			type: 'inputMapping.onAction',
-			name: 'navigateTo',
-			args: {	route: route,
-					data: url ? { url: url, skipURLTranslation: skipURLTranslation} : null}
-		}]"
+						type:	tagId ? 'inputMapping.onAction' : '',
+						name:	'SSEProxyCommonUSS.selectTag',
+						args:	{	tagId: tagId,
+									skipDone: false }
+					},
+					{
+						type:	'inputMapping.onAction',
+						name:	'navigateTo',
+						args:	{	route: sseDynamicRouteEntity ? sseRoute : route,
+									data: url ? { url: url, skipURLTranslation: skipURLTranslation} : null }
+					},
+					{
+						type:	'inputMapping.onAction',
+						name:	isNew ? 'makeSeen' : '',
+						args:	{ entityId: _entityContentId }
+					}]"
 	)
 
 	(element EventBannerTileBackground
@@ -586,6 +544,14 @@
 			(backgroundImage = 'url:../events/banners/icons/link.png')
 			(borderRadiusBottomRight = "S")
 			(bind borderRadiusTopRight "isSmallBanner ? S : 0px")
+		)
+	)
+
+	(controller $Instance renderer='EventBannerMarkers'
+		(bind enabled "isNew")
+		(args
+			_isNewMarker = "isNew"
+			_size = "tileContentInfo.tileSize"
 		)
 	)
 )
@@ -1773,6 +1739,7 @@
 
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro MOUSE_HANDLER_SCOPE "'button_'")
+		(macro MOUSE_HANDLER_SCOPE "'hint_button_'")
 		(macro MOUSE_HANDLER_SCOPE "'icon_pinned_'")
 
 		(var sseEntity:dhEntity = "getEntity(_sseId)")
@@ -1786,6 +1753,8 @@
 		(var isClaimed:bool = "sseCore.isClaimed" (event "sseCore.evChanged"))
 		(var isActive:bool = "isIn(SC.Sse.SSE_STATUSES.ACTIVE, statusesCore)")
 
+		(var isNewbieQuest:bool = "sseEntity.newbieQuest != null")
+		
 		(var isManualRewardClaim:bool = "	sseEntity.sseChain.claimRewards ||
 											sseEntity.sseEpic.claimRewards ||
 											sseEntity.sseTask.claimRewards")
@@ -1795,17 +1764,22 @@
 											isManualRewardClaim && isClaimed ||
 											isIn(SC.Sse.SSE_STATUSES.LOCKED_BY_TIME, statusesCore) ||
 											isIn(SC.Sse.SSE_STATUSES.LOCKED_BECAUSE_NOT_PRIME_TIME, statusesCore)")
-		(var elementName:str = "isTaskCompletedBlock ? 'SseMotivatorTaskCompleted' : 'SseMotivatorTaskActive'")
+		(var elementName:str = "isNewbieQuest			? 'NewbieQuestMotivatorTask' :
+								isTaskCompletedBlock	? 'SseMotivatorTaskCompleted'
+														: 'SseMotivatorTaskActive'")
+
 		(var isAnimationEnabled:bool = "isTaskHighlighted && !isTaskCompletedBlock")
 
 		(var isPinnedTask:bool = "toBool(sseCore.pinnedAt)" (event "sseCore.evChanged"))
+		(struct nqInfo = GET_NQ_TYPE_ICON(_nqEntityId = "_sseId"))
+		(var pinHintPrefix:str = "isNewbieQuest ? 'IDS_NEWBIE_QUEST_' + nqInfo.iconType : 'IDS_SSE'")
 
 		(var bgState:number = " mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
 								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
 											: SC.Ui_styles.BUTTON_STATE.UP")
 
 		(var isSseOpenEnded:bool =	"sseEntity.hasComponent(CC.sseOpenEnded)")
-		(var route:str = "isSseOpenEnded ? SC.Ui_windows.ROUTE.SSE_OPEN_ENDED : 'sse_' + sseCategoryId ")
+		(var route:str = "isSseOpenEnded ? SC.Ui_windows.ROUTE.SSE_OPEN_ENDED : 'sse_' + sseCategoryId")
 		(struct activeTip =	PULL_ACTIVE_GUIDING_TIP())
 	)
 
@@ -1829,7 +1803,7 @@
 	)
 
 	(macro MOUSE_HANDLER_BANNER
-		_methods = "icon_pinned_rollOver || button_rollOver	? []
+		_methods = "icon_pinned_rollOver || button_rollOver || hint_button_rollOver	? []
 															: [
 																{
 																	type: 'inputMapping.onAction',
@@ -1901,8 +1875,17 @@
 		(style (backgroundColor = "NO_COLOR"))
 
 		(controller $Tooltip
+			(renderer = 'NewbieQuestMotivatorBannerTooltip')
+			(bind enabled "isNewbieQuest")
+			(args
+				_questId = "_sseId"
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+
+		(controller $Tooltip
 			(renderer = 'SseMotivatorBannerTooltip')
-			(bind enabled "!isTaskCompletedBlock")
+			(bind enabled "!isNewbieQuest && !isTaskCompletedBlock")
 			(args
 				_sseId = "_sseId"
 				_isRewardChoice = "isManualRewardClaim"
@@ -1912,7 +1895,7 @@
 
 		(controller $Tooltip
 			(renderer = 'SseMotivatorCompletedTaskBannerTooltip')
-			(bind enabled "isTaskCompletedBlock")
+			(bind enabled "!isNewbieQuest && isTaskCompletedBlock")
 			(args
 				_sseId = "_sseId"
 				_isMotivatorDoneStateView = "_isMotivatorDoneStateView"
@@ -1923,8 +1906,8 @@
 	)
 
 	(block
+		(bind visible "isClaimButtonVisible")
 		(macro MOUSE_EVENTS_DISPATCHER "'button_'")
-
 		(style
 			(position = "absolute")
 			(bottom = "S")
@@ -1948,6 +1931,23 @@
 		)
 	)
 
+	(block
+		(bind visible "isNewbieQuest")
+		(macro MOUSE_EVENTS_DISPATCHER "'hint_button_'")
+		(style
+			(position = "absolute")
+			(bottom = "M")
+			(left = "M")
+		)
+
+		(controller $Instance renderer='ShowHintButton'
+			(bind enabled "isNewbieQuest")
+			(args
+				_questId = "_sseId"
+			)
+		)
+	)
+
 	
 	(block
 		(macro MOUSE_EVENTS_DISPATCHER "'icon_pinned_'")
@@ -1962,7 +1962,7 @@
 		(controller $Tooltip
 			(renderer='SimpleStatusTooltip')
 			(args
-				_text = 'IDS_SSE_MOTIVATOR_UNPIN_HINT'
+				_text = "pinHintPrefix + '_MOTIVATOR_UNPIN_HINT'"
 				_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
@@ -2144,6 +2144,70 @@
 	)
 )
 
+(def element NewbieQuestMotivatorTask (	_sseId:number = 0,
+										_isMotivatorView:bool = true)
+	(scope
+		(struct newbieMotivator = GET_MOTIVATOR_NQ_INFO(_questId = "_sseId"))
+		(struct thresholsInfo = GET_NQ_THRESHOLDS_INFO())
+	)
+
+	(class $Fullsize)
+	(style (backgroundColor = "NO_COLOR"))
+
+	(hblock
+		(style
+			(width = 100%)
+			(marginBottom = "M")
+			(bind paddingRight "newbieMotivator.isPinnedTask ? XS : 0px")
+		)
+
+		(tf
+			(class $TextDefaultBoldNM)
+			(style (alpha = "TA"))
+			(bind text "subst('IDS_NEWBIE_QUEST_N_THRESHOLD', [], { level: thresholsInfo.completedThresholds + 1 })")
+		)
+		(tf
+			(class $TextDefaultBoldNM)
+			(style
+				(marginLeft = "XS")
+				(marginRight = "XXS")
+				(alpha = "TA")
+			)
+			(bind text "thresholsInfo.currentValue")
+		)
+		(tf
+			(class $TextDefaultNM)
+			(style (alpha = "TC"))
+			(bind text "'/' + thresholsInfo.maxValue")
+		)
+	)
+
+	(hblock
+		(class $Fullsize)
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(elideMode = true)
+				(alpha = "TC")
+				(bind maxHeight "_isMotivatorView ? 75px : 115px")
+			)
+			(bind text "newbieMotivator.text")
+		)
+		(block
+			(style
+				(hitTest = false)
+				(marginRight = -6px)
+				(align = "center|middle")
+			)
+
+			(element SingleNewbieQuestReward
+				_questId = "_sseId"
+			)
+		)
+	)
+)
+
 (def element SseMotivatorTaskCompleted (	_sseId:number = 0,
 											_bannerHeight:number = 0,
 											_isMotivatorDoneStateView:bool = false,
@@ -2286,6 +2350,78 @@
 			(class $TextDefaultBoldNM)
 			(style (alpha = "TA"))
 			(bind text "subst('IDS_BATTLES_TO_NEXT_STEP', [], { battles: battlesToPromoReward }, battlesToPromoReward)")
+		)
+	)
+)
+
+(def element EventBannerMetaEvent (_size:number = "SC.Ui_common.TILE_SIZE.M")
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(var metaEventEntity:dhEntity = "getSingleEntity(CC.metaEvent)")
+		(struct metaEventProgression = PULL_META_EVENT_PROGRESSION(_component="metaEventEntity.metaEvent"))
+
+		(var currentThreshold:number = "metaEventProgression.currentThreshold")
+		(var maxThresholds:number = "metaEventProgression.mainProgression.length")
+
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.META_EVENT"))
+		(var isRewardMarker:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.REWARD")
+	)
+	(class $Fullsize)
+	(style (backgroundColor = "NO_COLOR"))
+
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[
+			{	type: 'inputMapping.onAction',
+				name: 'navigateTo',
+				args: { route: SC.Ui_windows.ROUTE.META_EVENT }
+			},
+			{
+				type: 'inputMapping.onAction',
+				name: markerData.isVisible ? 'makeSeen' : '',
+				args: { entityId: metaEventEntity.id }
+			}
+		]"
+	)
+
+	(hblock
+		(class $EventBanner)
+		(element EventBannerTitle
+			_title = 'IDS_META_EVENT_TITLE'
+			_size = "_size"
+			_hasIcon = "isRewardMarker"
+		)
+
+		(block
+			(controller $Instance renderer='EventBannerDividedCounter'
+				(bind enabled "!isRewardMarker && currentThreshold < maxThresholds")
+				(args
+					_textClass = '$TextDefaultBold22NM'
+					_currentValue = "currentThreshold"
+					_maxValue = "maxThresholds"
+				)
+			)
+		)
+	)
+
+	(block
+		(class $EventBannerReward)
+		(controller $Instance renderer = 'EventBannerIcon'
+			(bind enabled "isRewardMarker")
+			(args
+				_icon = 'url:../service_kit/port_banner/icon_banner_reward.png'
+				_isAnimated = "isRewardMarker"
+				_size = "_size"
+			)
+		)
+	)
+
+	(controller $Instance renderer='EventBannerMarkers'
+		(bind enabled "markerData.isVisible")
+		(args
+			_isNewMarker = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW"
+			_isRewardMarker = "isRewardMarker"
+			_size = "_size"
 		)
 	)
 )

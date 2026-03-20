@@ -30,11 +30,11 @@
 
 		(var isCommonSse:bool = "!sseShipAcesRoute.isActive && !sseOpenEndedRoute.isActive && !sseNewbieQuestsRoute.isActive && !campaignsRoute.isActive")
 
-		(var backgroundSelectedCategory:str = "	sseShipAcesRoute.isActive										? 'ship_aces'	:
-												campaignsRoute.isActive											? 'campaign'	:
-												sseOpenEndedRoute.isActive || sseNewbieQuestsRoute.isActive		? 'default'		:
-												sseEpicBackground												? sseEpicBackground
-																												: 'default'")
+		(var backgroundSelectedCategory:str = "	sseShipAcesRoute.isActive	? 'ship_aces'	:
+												campaignsRoute.isActive		? 'campaign'	:
+												sseOpenEndedRoute.isActive	? 'default'		:
+												sseEpicBackground			? sseEpicBackground
+																			: 'default'")
 
 		(var battlePassEntity:dhEntity = "getSingleEntity(CC.battlePass)")
 		(var bpFinishTime:number = "battlePassEntity.battlePass.finishTime ?: 0" (event "battlePassEntity.battlePass.evChanged"))
@@ -42,6 +42,8 @@
 
 		(var newbieQuestsExpireTimerEntity:dhEntity = "getSingleEntity(CC.newbieQuestsExpireTimer)")
 		(var newbieQuestsExpireTimer:number = "newbieQuestsExpireTimerEntity.newbieQuestsExpireTimer.expire")
+
+		(struct newbieQuestsProgression = GET_NQ_PROGRESSION_COMPLETION_INFO())
 
 		(var renderStatusItem:str = "sseNewbieQuestsRoute.isActive 												? 'NewbieQuestsCategoryStatus' :
 									isCommonSse || sseShipAcesRoute.isActive || sseOpenEndedRoute.isActive		? 'SseCategoryStatus'
@@ -55,8 +57,6 @@
 		(var activeDoneTasksCollection:dhCollection = "getCollection(CC.campaignTaskPlayer).getChildByPath('active.taskStateDone')")
 		(var activeDoneTasksLen:number = "activeDoneTasksCollection.length")
 		(var hasActiveUnfinishedTasks:bool = "activeTasksLen - activeDoneTasksLen > 0")
-
-		(struct pinnedTasks = GET_PINNED_TASKS())
 	)
 
 	(macro SOUND_DOCK_INSET_HANDLER "SC.Ui_windows.ROUTE.SSE")
@@ -65,13 +65,30 @@
 
 	(block
 		(class $DockInsetPageHeaderOffset)
+		(bind visible "!sseNewbieQuestsRoute.isActive")
 		(macro DEFAULT_CACHED_SHOW_ANIMATION_BG
 			_isSkip = "skipBGAnimationData.isSkip"
 		)
 
-		(element AnimatedBackground
-			_selectedCategory = "backgroundSelectedCategory"
-			_type = "SC.Ui_styles.ANIMATED_BG.SSE"
+		(controller $Instance renderer='AnimatedBackground'
+		(bind enabled "!sseNewbieQuestsRoute.isActive")
+			(args
+				_selectedCategory = "backgroundSelectedCategory"
+				_type = "SC.Ui_styles.ANIMATED_BG.SSE"
+			)
+		)
+	)
+
+	(block
+		(class $DockInsetPageHeaderOffset)
+		(bind visible "sseNewbieQuestsRoute.isActive")
+
+		(block
+			(class $FullsizeAbsolute)
+			(style 
+				(backgroundImage = 'url:../bg/newbie_quests.png')
+				(backgroundSize = "cover")
+			)
 		)
 	)
 
@@ -101,15 +118,10 @@
 
 
 			(block
-				(controller $Instance renderer='StatusLine'
+				(controller $Instance renderer='PinnedTasksCountStatus'
 					(bind enabled "	!campaignsRoute.isActive &&
 									!sseShipAcesRoute.isActive &&
-									!sseNewbieQuestsRoute.isActive")
-					(args
-						_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PIN"
-						_text = "subst('IDS_SSE_MOTIVATOR_PINNED_TASKS_COUNTER_COLUMN', [],
-										{_pinnedTasks: pinnedTasks.collection.length, _totalTasks: SC.Sse.SSE_MOTIVATION_BANNER.MAX_PINNED_TASKS})"
-					)
+									!(sseNewbieQuestsRoute.isActive && newbieQuestsProgression.isCompleted)")
 				)
 			)
 
@@ -118,7 +130,7 @@
 								isBattlePassCategory && (activeTasks || serverTime <= bpFinishTime) ||
 								sseShipAcesRoute.isActive ||
 								sseOpenEndedRoute.isActive ||
-								sseNewbieQuestsRoute.isActive && newbieQuestsExpireTimer >= 0")
+								sseNewbieQuestsRoute.isActive")
 				(block
 					(controller $Instance
 						(bind enabled "renderStatusItem && !((isCommonTaskCategory && isCommonSse))")
@@ -155,6 +167,9 @@
 	(scope
 		(event evBroadcastSelectedCategoryUpwards)
 		(event evBroadcastSelectedCategoryDownwards)
+
+		(struct featureSse = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
+		(var isFeatureSseLocked:bool = "featureSse.state == 'locked'")
 
 		(var routeEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.SSE)")
 		(var activeChild:str= "routeEntity.route.activeChild" (event "routeEntity.route.evActiveChildChanged"))
@@ -207,15 +222,19 @@
 	(dispatch evBroadcastSelectedCategoryDownwards dir="EventDirection.DOWN" (event "evBroadcastSelectedCategoryUpwards"))
 
 	(class $Fullsize)
-	(style (flow = "horizontal") (bind align "isRightAligned ? right : left"))
+	(style
+		(flow = "horizontal")
+		(bind marginLeft "isFeatureSseLocked ? 20px : 0px")
+		(bind align "isRightAligned ? right : left")
+	)
 
 	(block 
 		(macro DEFAULT_CACHED_SHOW_ANIMATION 2)
+		(bind visible "!isFeatureSseLocked")
 		(style
 			(width = "{ 1280:250px, 1920:320px }")
 			(height = 100%)
 			(marginRight = "{ 1280:M, 1920:L }")
-			(marginLeft = "{ 1280:0px, 1920:20px}")
 			(paddingBottom = "MS")
 		)
 
@@ -238,8 +257,11 @@
 		(block
 			(style
 				(height = 100%)
-				(bind width "isSmallStageWidth		? 100%	: SSE_DEFAULT_CONTENT_WIDTH")
-				(bind marginLeft "isSmallStageWidth	? 0		: centeredIndent")
+				(bind width "isFeatureSseLocked || isSmallStageWidth ? 100% : SSE_DEFAULT_CONTENT_WIDTH")
+				(bind marginLeft "isSmallStageWidth || isFeatureSseLocked ? 0 : centeredIndent")
+				(bind paddingLeft "	sseNewbieQuestsRoute.isActive	? isFeatureSseLocked	? isSmallStageWidth ? S		: 40px
+																							: isSmallStageWidth	? 0px	: -70px
+																	: 0px")
 			)
 			(controller $Instance
 				(bind enabled "renderChild")

@@ -56,28 +56,26 @@
 	(var isCrit:bool = "state == SC.Weapons.GUN_STATE.CRITICAL || state == SC.Weapons.GUN_STATE.SWITCHING_CRITICAL")
 )
 
-(def element CompassContainer (_isVisible:bool=true)
+(def element CompassContainer ()
 	(scope
 		(macro IS_ALIVE)
-		(macro IS_SPECTATOR_MODE)
-
-		(var cameraComponent:gfx = "$datahub.getSingleComponent(CC.camera)")
-		(var observedAvatarId:number = "cameraComponent ? cameraComponent.observedPlayerId : INVALID_OBSERVED_AVATAR_ID" (event "cameraComponent.evObservedPlayerIdChanged"))
-
-		(var playerAvatarComponent:gfx = "selfAvatarEntity.avatar")
-		(var playerAvatarId:number = "playerAvatarComponent ? playerAvatarComponent.id : INVALID_PLAYER_AVATAR_ID")
-		(var isSelfObserved:bool = "playerAvatarId == observedAvatarId")
 
 		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
 		(var isDreadnoughtCustomization:bool = "(customisedElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.DREADNOUGHT) > 0")
+
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var observedAvatarId:number = "cameraComponent ? cameraComponent.observedPlayerId
+														: INVALID_OBSERVED_AVATAR_ID" (event "cameraComponent.evObservedPlayerIdChanged"))
+
+		(var playerAvatarComponent:dhComponent = "getSingleEntity(CC.playerAvatar).avatar")
+		(var playerAvatarId:number = "playerAvatarComponent ? playerAvatarComponent.id : INVALID_PLAYER_AVATAR_ID")
+		(var isSelfObserved:bool = "playerAvatarId == observedAvatarId")
 	)
 
 	(class $FullsizeAbsolute)
 	(style
 		(align = "bottom|left")
 	)
-
-	(bind visible "_isVisible")
 
 	(block
 		(style
@@ -86,12 +84,15 @@
 			(left = 20px)
 		)
 		(controller $Instance renderer='CompassContainerInstance'
-			(bind enabled "(isAlive || isPreSpectator || isSelfObserved) && !isDreadnoughtCustomization")
+			(bind enabled "(isAlive || isSelfObserved) && !isDreadnoughtCustomization")
+			(args
+				_isSelfObserved = "isSelfObserved"
+			)
 		)
 	)
 
 	(hblock
-		(bind visible "isSelfObserved && isAlive")
+		(bind visible "isAlive")
 		(style
 			(position = "absolute")
 			(align = "middle")
@@ -123,9 +124,11 @@
 	)
 )
 
-(def element CompassContainerInstance ()
+(def element CompassContainerInstance (_isSelfObserved:bool)
 	(scope
 		(macro IS_ALIVE)
+
+		(var selfVehicleEntity:dhEntity = "getSingleEntity(CC.selfVehicle)")
 
 		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
 		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
@@ -133,7 +136,7 @@
 		(var airDefensiveFireAura:gfx = "$datahub.getSingleComponent(CC.airDefensiveFireAura)")
 		(var hasAA:bool = "airDefensiveFireAura.near || airDefensiveFireAura.middle || airDefensiveFireAura.far")
 
-		(var isVisible:bool = "controlledSquadronId != DEFAULT_SQUADRON_ID || isAlive")
+		(var isShipDollVisible:bool = "controlledSquadronId != DEFAULT_SQUADRON_ID || isAlive || _isSelfObserved")
 	)
 	(style
 		(position = "absolute")
@@ -147,27 +150,28 @@
 		(bind enabled "hasAA || !isAlive")
 	)
 
-	(element ShipDoll
+	(block
 		(style
 			(position = "absolute")
 			(top = 100px)
 			(left = 100px)
 		)
-		(bind visible "isVisible")
+		(controller $Instance renderer='ShipDoll'
+			(bind enabled "isShipDollVisible")
+		)
 	)
 
 	(element Frustum
 		(style (position = "absolute"))
-		(bind visible "isVisible || !isAlive")
 	)
 
 	(element GunsRotator
 		(style (position = "absolute"))
-		(bind visible "isVisible && controlledSquadronId == DEFAULT_SQUADRON_ID")
+		(bind visible "isAlive && controlledSquadronId == DEFAULT_SQUADRON_ID")
 	)
 
 	(element CrosshairRotatorLock
-		(bind visible "isVisible && controlledSquadronId == DEFAULT_SQUADRON_ID")
+		(bind visible "isAlive && controlledSquadronId == DEFAULT_SQUADRON_ID")
 	)
 )
 
@@ -273,9 +277,10 @@
 
 (def element ShipDoll ()
 	(scope
-		(var compassEntity:gfx = "$datahub.getSingleEntity(CC.compass)")
-		(var shipDollRotation:number = "compassEntity.compass.shipDollRotation" (event "compassEntity.compass.evShipDollRotationChanged"))
-		(var weapons:gfx = "$datahub.getCollection(CC.weapon)")
+		(var compassComponent:dhComponent = "getSingleComponent(CC.compass)")
+		(var shipDollRotation:number = "compassComponent.shipDollRotation" (event "compassComponent.evShipDollRotationChanged"))
+		(var weapons:dhCollection = "getCollection(CC.weapon)")
+		(var weaponsLength:number = "weapons.length ?: 0")
 
 		(macro SELF_AVATAR_ID)
 		(var shipType:str = "selfAvatarEntity.avatar.ship.ref.ship.subtype ?: ''" (event "selfAvatarEntity.avatar.evShipRefChanged"))
@@ -289,6 +294,8 @@
 
 		(var ownSquadronEntity:gfx = "$datahub.getPrimaryEntity(CC.ownSquadron, activeSquadronIndex)")
 		(var subColName:str = "'bySquadron.' + (ownSquadronEntity ? ownSquadronEntity.squadron.id : -1)" (event "aircarrierComponent.evStateChanged"))
+		(var ammoType:number = "ownSquadronEntity ? ownSquadronEntity.plane.ammoType : 0")
+		(var isMissile:bool = "ammoType == SC.Common.PLANE_AMMO_TYPES.MISSILE")
 
 		(var aircraftCol:gfx = "$datahub.getCollection(CC.aircraft)")
 		(var hpCollection:gfx = "aircraftCol.getChildByPath(subColName)" (event "aircraftCol.evAdded") (event "aircraftCol.evRemoved"))
@@ -297,7 +304,8 @@
 		(var numAttackers:number = "attackerSize ? ceil(hpCount/attackerSize) : 1")
 
 		
-		(var dollIcon:str = "	controlledSquadronId != DEFAULT_SQUADRON_ID && hpCount > 0 	? subst('symbol:mc_compass_planes_doll_%d', [numAttackers]) :
+		(var dollIcon:str = "	isMissile													? 'url:../battle_hud/missiles/compass_silhouette.png' :
+								controlledSquadronId != DEFAULT_SQUADRON_ID && hpCount > 0	? subst('symbol:mc_compass_planes_doll_%d', [numAttackers]) :
 								isAircarrier												? 'symbol:compass_aircraftcarrier_doll' :
 								isSubmarine													? 'symbol:compass_submarine_doll'
 																							: 'symbol:compass_default_doll'"
@@ -310,6 +318,12 @@
 	(style
 		(bind backgroundImage "dollIcon")
 		(bind rotation "shipDollRotation")
+		(bind width "isMissile ? 64px : 0")
+		(bind height "isMissile ? 107px : 0")
+		(bind pivotX "isMissile ? 50% : 0")
+		(bind pivotY "isMissile ? 50% : 0")
+		(bind visualOffsetX "isMissile ? -50% : 0px")
+		(bind visualOffsetY "isMissile ? -50% : 0px")
 	)
 
 	(bind visible "lastLookSquadronCamera == false")
@@ -317,25 +331,26 @@
 	(block
 		(style (position = "absolute"))
 
+		
 		(controller $Repeat renderer='ShipDollGunsList'
-			(bind count "weapons.items.length")
-			(args
-				collection = "weapons"
-			)
 			(bind enabled "controlledSquadronId == DEFAULT_SQUADRON_ID")
+			(bind count "weaponsLength")
+			(args
+				_weaponEntity = "weapons[$index]"
+			)
 		)
 	)
 )
 
-(def element ShipDollGunsList (collection:gfx)
+(def element ShipDollGunsList (_weaponEntity:dhEntity)
 	(scope
 		
-		(var selfVehicleEntity:gfx = "$datahub.getSingleEntity(CC.selfVehicle)")
+		(var selfVehicleEntity:dhEntity = "getSingleEntity(CC.selfVehicle)")
 		(var isSubmarine:bool = "selfVehicleEntity.hasComponent(CC.submarine)")
 
-		(var weaponEntity:gfx = "collection.items[$index]")
-		(var weaponType:number = "weaponEntity ? weaponEntity.weapon.type : SC.Ships.SHIP_WEAPON_TYPES.NONE")
-		(var gunGroupsCount:number = "weaponEntity.weapon.groupsCount")
+		(var weaponComponent:dhComponent = "_weaponEntity.weapon")
+		(var weaponType:number = "weaponComponent ? weaponComponent.type : SC.Ships.SHIP_WEAPON_TYPES.NONE")
+		(var gunGroupsCount:number = "weaponComponent.groupsCount")
 		(var isGrouped:bool = "gunGroupsCount > 0 && isSubmarine")
 
 		(var gunEntities:gfx = "$datahub.getCollection(CC.gun).child('byWeaponType').child(weaponType)")
@@ -343,16 +358,16 @@
 	)
 
 	(controller $Repeat renderer='GunsGroupShipDollItems' layout=false
-		(bind enabled "isGrouped")
+		(bind enabled "selfVehicleEntity && weaponComponent && isGrouped")
 		(bind count "gunGroupsCount")
 		(args "weaponType" "$index")
 	)
 
 	(block
 		(controller $Repeat renderer='ShipDollGun' layout=false
-			(bind enabled "!isGrouped")
+			(bind enabled "selfVehicleEntity && weaponComponent && !isGrouped")
 			(bind count "isEnabled ? gunEntities.items.length : 0")
-			(args "weaponEntity.id" "gunEntities.items[$index].id")
+			(args "_weaponEntity.id" "gunEntities.items[$index].id")
 		)
 	)
 )
@@ -375,7 +390,7 @@
 		(var selfVehicleWatcher:gfx = "$datahub.getFirstWatcher(CC.selfVehicle)")
 		(var selfVehicle:gfx = "selfVehicleWatcher.entity" (event "selfVehicleWatcher.event"))
 		(var controller:gfx = "selfVehicle ? selfVehicle.weaponController : null" (event "selfVehicle.evAdded") (event "selfVehicle.evRemoved"))
-		(var compassEntity:gfx = "$datahub.getSingleEntity(CC.compass)")
+		(var compassComponent:dhComponent = "getSingleComponent(CC.compass)")
 		(var weaponEntity:gfx = "$datahub.getEntity(weaponEntityId)")
 		(var gunEntity:gfx = "$datahub.getEntity(gunEntityId)")
 		(var timerEntity:gfx = "$datahub.getSingleEntity(CC.timer)")
@@ -391,8 +406,8 @@
 		(var gunX:number = "GUN_DOLL_WIDTH / (GUN_DOLL_COLS - 1) * (GUN_DOLL_COLS - 1 - gunEntity.gun.y) - 13")
 		(var gunY:number = "GUN_DOLL_HEIGHT / (GUN_DOLL_ROWS - 1) * gunEntity.gun.x - 34")
 		(var gunYaw:number = "gunEntity.gun.yaw" (event "gunEntity.gun.evYawChanged"))
-		(var shipDollRotation:number = "compassEntity.compass.shipDollRotation ?: 0" (event "compassEntity.compass.evShipDollRotationChanged"))
-		(var compassRotation:number = "compassEntity.compass.compassRotation" (event "compassEntity.compass.evCompassRotationChanged"))
+		(var shipDollRotation:number = "compassComponent.shipDollRotation ?: 0" (event "compassComponent.evShipDollRotationChanged"))
+		(var compassRotation:number = "compassComponent.compassRotation ?: 0" (event "compassComponent.evCompassRotationChanged"))
 
 		
 		(var azimuth:number = "gunEntity.gunTarget.azimuth" (event "gunEntity.gunTarget.evAzimuthChanged"))
@@ -515,12 +530,13 @@
 
 (def element CrosshairRotatorLock ()
 	(scope
-		(var cross:gfx = "$datahub.getSingleEntity(CC.crosshair)")
-		(var isAlive:bool = "cross.health.isAlive" (event "cross.health.evKilled"))
-		(var lockRelativeShipYaw:number = "radToGrad(cross.aimLock.lockRelativeShipYaw)" (event "cross.aimLock.evLockRelativeShipYawChanged"))
-		(var angleLock:bool = "cross.aimLock.angleLock" (event "cross.aimLock.evAngleLockChanged"))
-		(var sectorLock:bool = "cross.aimLock.sectorLock" (event "cross.aimLock.evSectorLockChanged"))
-		(var observeLock:bool = "cross.aimLock.observeLock" (event "cross.aimLock.evObserveLockChanged"))
+		(var crosshairEntity:dhEntity = "getSingleEntity(CC.crosshair)")
+		(var aimLockComponent:dhComponent = "crosshairEntity.aimLock")
+		(var isAlive:bool = "crosshairEntity.health.isAlive" (event "crosshairEntity.health.evKilled"))
+		(var lockRelativeShipYaw:number = "aimLockComponent ? radToGrad(aimLockComponent.lockRelativeShipYaw) : 0" (event "aimLockComponent.evLockRelativeShipYawChanged"))
+		(var angleLock:bool = "aimLockComponent.angleLock" (event "aimLockComponent.evAngleLockChanged"))
+		(var sectorLock:bool = "aimLockComponent.sectorLock" (event "aimLockComponent.evSectorLockChanged"))
+		(var observeLock:bool = "aimLockComponent.observeLock" (event "aimLockComponent.evObserveLockChanged"))
 		(var compassEntity:gfx = "$datahub.getSingleEntity(CC.compass)")
 		(var shipDollRotation:number = "compassEntity.compass.shipDollRotation" (event "compassEntity.compass.evShipDollRotationChanged"))
 		(var compassRotation:number = "compassEntity.compass.compassRotation" (event "compassEntity.compass.evCompassRotationChanged"))
