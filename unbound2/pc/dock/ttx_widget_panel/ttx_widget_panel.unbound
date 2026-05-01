@@ -100,6 +100,10 @@
 		(var repairDockDataEntity:dhEntity =	"getSingleEntity(CC.repairDockData)")
 		(var isRepairingInProgress:bool =		"repairDockDataEntity.repairDockData.isRepairingInProgress" (event "repairDockDataEntity.repairDockData.evIsRepairingInProgressChanged"))
 
+		(var webShipManagementWidget:dhComponent =	"getPrimaryComponent(CC.browserPreviewWidget, SC.Ui_common.WEB_PREVIEW_SHIP_WIDGET_TYPE.PURCHASE)")
+		(var webShipManagementWidgetHeight:number =	"webShipManagementWidget.height ?: 0" (event "webShipManagementWidget.evHeightChanged"))
+		(var isWebShipManagementWidgetVisible:bool = "webShipManagementWidgetHeight > 0")
+
 		(var portElementsVisibility:dhComponent =	"getSingleComponent(CC.portElementsVisibility)")
 
 		(var isShipTitleWidgetVisible:bool =		"portElementsVisibility.shipTitleVisible"			(event "portElementsVisibility.evShipTitleVisibleChanged"))
@@ -113,19 +117,34 @@
 		(var isShipShardsWidgetVisible:bool =		"portElementsVisibility.shipShardsVisible"			(event "portElementsVisibility.evShipShardsVisibleChanged"))
 		(var isMaintenanceWidgetVisible:bool =		"portElementsVisibility.maintenanceVisible"			(event "portElementsVisibility.evMaintenanceVisibleChanged"))
 		(var isEventBuffWidgetVisible:bool =		"portElementsVisibility.eventBuffWidgetVisible"		(event "portElementsVisibility.evEventBuffWidgetVisibleChanged"))
-		(var isTestShipLabelVisible:bool =			"portElementsVisibility.testShipLabelVisible"		(event "portElementsVisibility.evTestShipLabelVisibleChanged"))
+		(var isWebPreviewModalVisible:bool =		"portElementsVisibility.webModalVisible"			(event "portElementsVisibility.evWebModalVisibleChanged"))
 
+		(struct routeOverview = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.OVERVIEW"))
 		(struct routeUpgrades = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.UPGRADES"))
 		(struct routeRepairDock = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.REPAIR_DOCK"))
+
+		(struct browserOverviewRoute =	PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_OVERVIEW"))
+		(struct browserUpgradesRoute =	PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_UPGRADES"))
+
+		(var windowManagerComponent:dhComponent = "getSingleComponent(CC.windowManager)")
+		(var windowsQueue:array = "windowManagerComponent.windowQueue ?: []" (event "windowManagerComponent.evWindowQueueChanged"))
+		(var isInBrowser:bool =		"isIn(SC.Ui_windows.MODAL.BROWSER_CONTAINER, windowsQueue)")
+
+		(struct browserShipPreviewRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_SHIP_PREVIEW"))
+		(var isWidgetsForceVisible:bool = "!isInBrowser || (browserShipPreviewRoute.isActive && !isWebPreviewModalVisible)")
 
 		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
 		(var isCarouselVisible:bool = "playerShipsCollection.length > 0 && portElementsVisibility.carouselVisible" (event "portElementsVisibility.evCarouselVisibleChanged"))
 
-		(var signalWidgetOffset:number = 160)
-		(var shipTTXPanelMinimalPaddingBottom:number = 80)
+		(var widgetPaddingBottom:number = "	routeRepairDock.isActive											? 242px :
+											browserOverviewRoute.isActive || browserUpgradesRoute.isActive		? XL + 147px :
+											(routeOverview.isActive || routeUpgrades.isActive)					? carouselAreaHeightPref.value + 147px :
+											isCarouselVisible													? carouselAreaHeightPref.value
+																												: XL")
 	)
 
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
+	(bind visible "isWidgetsForceVisible")
 
 	(element DeclareBlurLayer)
 
@@ -133,90 +152,126 @@
 		(class $Fullsize)
 		(style
 			(align = "top|right")
-			(paddingRight = "{ 1280: S, 1920: L }")
+			(paddingRight = "{ 1280: S, 1920: MS }")
 			(bind paddingTop "routeRepairDock.isActive	? { 720: 76px, 1080: 125px }
-														: DOCK_HEADER_HEIGHT + SECONDARY_DOCK_TAB_HEIGHT")
-			(bind paddingBottom "	routeUpgrades.isActive && stageWidth < 1660		? carouselAreaHeightPref.value + signalWidgetOffset :
-									routeRepairDock.isActive						? 242px :
-									isCarouselVisible								? carouselAreaHeightPref.value
-																					: shipTTXPanelMinimalPaddingBottom")
+														: DOCK_HEADER_HEIGHT + SXS")
+			(paddingBottom = "widgetPaddingBottom")
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.15
+				to = "{ paddingBottom: widgetPaddingBottom }"
+				action = "kill"
+				watch = false
+				(bind trigger "widgetPaddingBottom")
+			)			
 		)
 
 		(block
 			(style
-				(width = 340px)
+				(width = 350px)
 				(height = 100%)
 			)
 
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipTitleWidgetVisible"
-				(element TTXShipUpperTitleWidget
-					_shipId = "verifiedShipId"
-				)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isCrewWidgetVisible" _isMask=false
-				(element DockCrewWidget
-					_shipId = "verifiedShipId"
-					_crewId = "crewId"
-				)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isArmorWidgetVisible"
-				(element ArmorWidget
-					_isShown = "isArmorWidgetVisible"
-				)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isEventBuffWidgetVisible"
-				(element BuffWidget)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isModernizationsWidgetVisible"
-				(element ModernizationsWidget)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isSignalsWidgetVisible"
-				(element SignalsWidget)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isEcoBoostWidgetVisible"
-				(element EcoboostsWidget
-					_shipId = "verifiedShipId"
-				)
-			)
-
-			(element DockTTXWidget
-				_isTTXWidgetVisible = "isTTXWidgetVisible"
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipShardsWidgetVisible"
-				(element ShipShardsWidget
-					_shipId = "verifiedShipId"
-				)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipManagementWidgetVisible"
-				(element ShipManagementWidget
-					_shipId = "verifiedShipId"
-				)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isMaintenanceWidgetVisible"
-				(element MaintenanceWidget
-					_shipId = "verifiedShipId"
-				)
-			)
-
-			(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isTestShipLabelVisible"
+			(block
 				(style
 					(width = 100%)
-					(height = 50px)
-					(align = "center|middle")
+					(paddingRight = 10px)
 				)
 
-				(element IssuedStamp
-					_text = 'IDS_TEST_SAMPLE'
-					_angleRotation = 0
+				
+				(block
+					(bind visible "isWebShipManagementWidgetVisible")
+					(class $TTXWidgetContainer)
+
+					(block
+						(style
+							(width = 100%)
+							(bind height "webShipManagementWidgetHeight")
+						)
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isMaintenanceWidgetVisible"
+					(element MaintenanceWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipManagementWidgetVisible"
+					(element ShipManagementWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+
+				(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipShardsWidgetVisible"
+					(element ShipShardsWidget
+						_shipId = "verifiedShipId"
+					)
+				)
+			)
+
+			(scrollArea
+				(style
+					(width = 100%)
+					(maxHeight = 100%)
+				)
+
+				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+					_singleStep = "150"
+					_wheelScrollAcceleration = "0.8"
+					_isContrastScrollBar = "true"
+				)
+
+				(content
+					(style
+						(width = 100%)
+						(paddingRight = 10px)
+					)
+
+					(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isShipTitleWidgetVisible"
+						(element TTXShipUpperTitleWidget
+							_shipId = "verifiedShipId"
+							_bottomGuidingTipOffset = "widgetPaddingBottom"
+						)
+					)
+
+					(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="!isShipTitleWidgetVisible && isCrewWidgetVisible"
+						(block (style (height = 25px)))
+					)
+
+					(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isCrewWidgetVisible" _isMask=false
+						(element DockCrewWidget
+							_shipId = "verifiedShipId"
+							_crewId = "crewId"
+						)
+					)
+
+					(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isArmorWidgetVisible"
+						(element ArmorWidget
+							_isShown = "isArmorWidgetVisible"
+						)
+					)
+
+					(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isEventBuffWidgetVisible"
+						(element BuffWidget
+							_bottomGuidingTipOffset = "widgetPaddingBottom"
+						)
+					)
+
+					(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isModernizationsWidgetVisible || isSignalsWidgetVisible || isEcoBoostWidgetVisible"
+						(element UpgradablesWidget
+							_shipId = "verifiedShipId"
+							_isModernizationsWidgetVisible = "isModernizationsWidgetVisible"
+							_isSignalsWidgetVisible = "isSignalsWidgetVisible"
+							_isEcoBoostWidgetVisible = "isEcoBoostWidgetVisible"
+						)
+					)
+
+					(element TTX_WIDGET_EXPAND_CONTAINER _isExpanded="isTTXWidgetVisible"
+						(element DockTTXWidget)
+					)
 				)
 			)
 		)
@@ -226,7 +281,7 @@
 		(class $FullsizeAbsolute)
 		(style
 			(align = "center|bottom")
-			(bind paddingBottom "carouselAreaHeightPref.value")
+			(bind paddingBottom "isCarouselVisible ? carouselAreaHeightPref.value : XL")
 		)
 
 		(element InstructionHintBlock
@@ -270,20 +325,26 @@
 		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
 		(var isExcursionActive:bool = "dockData.excursionVisible" (event "dockData.evExcursionVisibleChanged"))
 
-		(struct shipPreviewRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SHIP_PREVIEW"))
-		(struct browserPreviewRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_PREVIEW"))
+		(struct shipOverviewRoute =			PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.OVERVIEW"))
+		(struct browserShipOverviewRoute =	PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_OVERVIEW"))
+		(struct shipPreviewRoute =			PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SHIP_INFO"))
+		(struct browserPreviewRoute =		PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_SHIP_INFO"))
 
+		(var isShipOverview:bool = "shipOverviewRoute.isActive || browserShipOverviewRoute.isActive")
 		(var isShipPreviewActive:bool = "(shipPreviewRoute.isActive || browserPreviewRoute.isActive) && _isTTXWidgetVisible")
 
-		(var isInstructionVisible:bool = "isExcursionActive || isShipPreviewActive")
+		(var isInstructionVisible:bool = "isShipOverview	?	isExcursionActive && _isTTXWidgetVisible
+															:	isExcursionActive || isShipPreviewActive")
 
 		
 		(var instructionText:str = "isExcursionActive	?	'IDS_INSTRUCTION_CAMERA_EXCURSION_RESET'
 														:	'IDS_INSTRUCTION_HIDE_INTERFACE'" watch=false (event "evInstructionShow"))
 	)
-	(dispatch evInstructionShow on='addedToStage' (bind enabled "isInstructionVisible"))
-	(dispatch evInstructionShow (bind enabled "isInstructionVisible") (bind trigger "isExcursionActive"))
-	(dispatch evInstructionShow (bind enabled "isInstructionVisible") (bind trigger "isShipPreviewActive"))
+	(dispatch evInstructionShow delay=0.3 reset=true on='addedToStage' (bind enabled "isInstructionVisible"))
+	
+	(dispatch evInstructionShow delay="isShipPreviewActive ? 0 : 0.3" reset=true (bind enabled "isInstructionVisible") (bind trigger "isExcursionActive"))
+	
+	(dispatch evInstructionShow delay=0.3 reset=true (bind enabled "isInstructionVisible") (bind trigger "isShipPreviewActive"))
 
 	(hblock
 		(style
@@ -297,9 +358,10 @@
 			(bindcall play
 				id = 'InstructionShowAnim'
 				duration = 0.15
+				from = "{ alpha: 0, visualOffsetY: 10px }"
 				to = "{ alpha: 1, visualOffsetY: 0px }"
 				easing = "Easing.quad_in"
-				action = "killAll"
+				action = "kill"
 				(event "evInstructionShow")
 			)
 			(dispatch evInstructionHide delay=30 reset=true on='evAnimEnded'	(bind enabled "isInstructionVisible")	(bind trigger "isInstructionVisible"))
@@ -322,7 +384,10 @@
 		)
 		(tf
 			(class $TextDefaultBold18NM)
-			(style (alpha = "TA") (marginTop = -1px))
+			(style
+				(alpha = "TA")
+				(marginTop = -1px)
+			)
 			(bind text "instructionText")
 		)
 	)

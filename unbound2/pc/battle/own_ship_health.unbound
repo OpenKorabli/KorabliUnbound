@@ -11,6 +11,7 @@
 (def constant NEW_BAR_IMAGE_WIDTH 316px)
 (def constant NEW_BAR_IMAGE_WIDTH_HALF 158px)
 (def constant NEW_BAR_IMAGE_HEIGHT 14px)
+(def constant NEW_BAR_IMAGE_BORDER_WIDTH 1px)
 
 (def constant FIRE_FLOOD_ICON_SIZE 18px)
 
@@ -26,6 +27,7 @@
 	MAX_REGEN: 		{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:50, greenOffset:50, blueOffset:50, alphaOffset:-200 },
 	SHIELD: 		{ redMultiplier:1, greenMultiplier:1, blueMultiplier:1, alphaMultiplier:1, redOffset:-110, greenOffset:-52, blueOffset:-14, alphaOffset:0 }
 })
+
 
 (def css $TextHealth ()
 	(fontFamily = '$DefaultFont')
@@ -46,9 +48,10 @@
 	(var healthComponent:gfx = "entity.health")
 	(var maxHealth:number = "healthComponent ? healthComponent.max : 1" (event "healthComponent.evMaxChanged"))
 	(var healthValue:number = "healthComponent ? healthComponent.value : 1" (event "healthComponent.evValueChanged"))
-	(var healthPercent:number = "healthValue / max(maxHealth, 1)")
+	(var healthPercent:number = "min(healthValue / max(maxHealth, 1), 1)")
 	(var isAlive:bool = "healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
 )
+
 
 (def element OwnShipHealth (_isVisible:bool=true)
 	(scope
@@ -137,12 +140,17 @@
 		(width = 100%)
 	)
 
+	
 	(block
-		(element HealthBarShipMarkerIconSimple
-			_entityId = "_entityId"
-			_shipType = "shipType"
+		(bind name "shipType")
+
+		(style
+			(width = 28px)
+			(height = 27px)
+			(bind backgroundImage "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:' + shipType")
 		)
 	)
+
 	(block
 		(style (align = "middle"))
 		(controller $Instance renderer='LevelIconNM'
@@ -250,60 +258,80 @@
 	)
 )
 
-(def element ShipStatesBar (entityId:number)
+(def element ShipStatesBar (_healthComponent:gfx)
 	(scope
+		(var healthDelta:number = "_healthComponent.delta" (event "_healthComponent.evDeltaChanged"))
+
 		(var firesFloodInfoComponent:dhComponent = "getSingleComponent(CC.firesFloodInfo)")
 
 		
-		(var fireMaskWidth:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.fireMaskWidth / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
-		(var fireMaskOffset:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.fireMaskOffset / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
-		(var fireCount:number = "firesFloodInfoComponent.fireCount ?: 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var fireMaskWidth:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.fireMaskWidth / 100) : 0" (event "firesFloodInfoComponent.evFireMaskWidthChanged"))
+		(var fireCount:number = "firesFloodInfoComponent.fireCount ?: 0" (event "firesFloodInfoComponent.evFireCountChanged"))
 		(var isFireVisible:bool = "fireCount > 0")
 
 		
-		(var floodMaskWidth:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.floodMaskWidth / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
-		(var floodMaskOffset:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.floodMaskOffset / 100) : 0" (event "firesFloodInfoComponent.evDataChanged"))
-		(var floodCount:number = "firesFloodInfoComponent.floodCount ?: 0" (event "firesFloodInfoComponent.evDataChanged"))
+		(var floodMaskWidth:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.floodMaskWidth / 100) : 0" (event "firesFloodInfoComponent.evFloodMaskWidthChanged"))
+		(var floodCount:number = "firesFloodInfoComponent.floodCount ?: 0" (event "firesFloodInfoComponent.evFloodCountChanged"))
 		(var isFloodVisible:bool = "floodCount > 0")
+
+		(var maskOffset:number = "firesFloodInfoComponent ? ceil(NEW_BAR_IMAGE_WIDTH * firesFloodInfoComponent.maskOffset / 100) : 0" (event "firesFloodInfoComponent.evMaskOffsetChanged"))
 
 		
 		(var realFloodMaskWidth:number = "floodMaskWidth - fireMaskWidth")
-		(var iconsOffset:number = "max(fireMaskOffset + (fireMaskWidth + realFloodMaskWidth) / 2, (floodCount + fireCount) * FIRE_FLOOD_ICON_SIZE / 2)")
+		(var iconsOffset:number = "max(maskOffset + (fireMaskWidth + realFloodMaskWidth) / 2, (floodCount + fireCount) * FIRE_FLOOD_ICON_SIZE / 2)")
 	)
 
 	(class $FullsizeAbsolute)
-	(style (top = 1px))
 
 	(element FireFloodStateIcons
-		_iconsOffset="iconsOffset"
-		_firesCount="fireCount"
-		_floodCount="floodCount"
-		_isVisible="isFloodVisible || isFireVisible"
+		_firesFloodInfoComponent 	= "firesFloodInfoComponent"
+		_iconsOffset 				= "iconsOffset"
+		_firesCount 				= "fireCount"
+		_floodCount 				= "floodCount"
+		_isVisible 					= "isFloodVisible || isFireVisible"
+		_healthComponent 			= "_healthComponent"
+		_healthDelta 				= "healthDelta"
 	)
 
-	(element FireFloodBarFX
-		_maskWidth="floodMaskWidth"
-		_maskOffset="floodMaskOffset"
-		_isVisible="isFloodVisible"
-		_isFire=false
-	)
+	(block
+		(class $FullsizeAbsolute)
+		(style (padding = "NEW_BAR_IMAGE_BORDER_WIDTH"))
 
-	(element FireFloodBarFX
-		_maskWidth="fireMaskWidth"
-		_maskOffset="fireMaskOffset"
-		_isVisible="isFireVisible"
-		_isFire=true
+		(element FireFloodBarFX
+			_firesFloodInfoComponent 	= "firesFloodInfoComponent"
+			_maskWidth 					= "floodMaskWidth"
+			_maskOffset 				= "maskOffset"
+			_isVisible 					= "isFloodVisible"
+			_isFire 					= false
+			_healthComponent 			= "_healthComponent"
+			_healthDelta 				= "healthDelta"
+		)
+
+		(element FireFloodBarFX
+			_firesFloodInfoComponent 	= "firesFloodInfoComponent"
+			_maskWidth 					= "fireMaskWidth"
+			_maskOffset 				= "maskOffset"
+			_isVisible 					= "isFireVisible"
+			_isFire 					= true
+			_healthComponent 			= "_healthComponent"
+			_healthDelta 				= "healthDelta"
+		)
 	)
 )
 
-(def element FireFloodBarFX (_maskWidth:number, _maskOffset:number, _isVisible:bool, _isFire:bool)
+(def element FireFloodBarFX (	_firesFloodInfoComponent:dhComponent,
+								_maskWidth:number,
+								_maskOffset:number,
+								_isVisible:bool,
+								_isFire:bool,
+								_healthComponent:gfx,
+								_healthDelta:number)
 	(bind visible "_isVisible")
 
 	(class $FullsizeAbsolute)
 
 	(style
-		(height = "NEW_BAR_IMAGE_HEIGHT")
-		(backgroundSize = "autosize")
+		(backgroundSize = "fill")
 		(backgroundImage = "_isFire ? 'img://gui/battle_hud/own_ship_health/burn_bar.png' : 'img://gui/battle_hud/own_ship_health/flood_bar.png'")
 	)
 
@@ -311,45 +339,97 @@
 		(class $FullsizeAbsolute)
 		(style
 			(backgroundColor = "NO_COLOR")
-			(bind width "_maskWidth")
-			(bind left "_maskOffset")
+			(width = "_maskWidth")
+			(left = "_maskOffset")
+
+			(bind width "_maskWidth" init=false watch=false (event "_firesFloodInfoComponent.evFireCountChanged") (event "_firesFloodInfoComponent.evFloodCountChanged"))
+			(bind left "_maskOffset" init=false watch=false (event "_firesFloodInfoComponent.evFireCountChanged") (event "_firesFloodInfoComponent.evFloodCountChanged"))
 		)
+
+		(controller $Animation
+			(bindcall play
+				id = 'firesFloodMaskWidth'
+				delay = "_healthDelta >= 0 ? HEALTH_ANI_DELAY : 0"
+				duration = "_healthDelta >= 0 ? HEALTH_ANI_MAX : HEALTH_ANI_MIN"
+				action = "kill"
+				easing = "Easing.quad_in"
+				to = "{width: _maskWidth}"
+				watch = false
+				(bind trigger "_maskWidth")
+			)
+			(bindcall play
+				id = 'firesFloodMaskOffset'
+				delay = "_healthDelta >= 0 ? HEALTH_ANI_DELAY : 0"
+				duration = "_healthDelta >= 0 ? HEALTH_ANI_MAX : HEALTH_ANI_MIN"
+				action = "kill"
+				easing = "Easing.quad_in"
+				to = "{left: _maskOffset}"
+				watch = false
+				(bind trigger "_maskOffset")
+				(event "_healthComponent.evChanged")
+				(event "_healthComponent.evMaxChanged")
+			)
+			(bindcall stop
+				(event "_firesFloodInfoComponent.evFireCountChanged")
+				(event "_firesFloodInfoComponent.evFloodCountChanged")
+			)
+		)
+
 		(isMask = true)
 	)
 )
 
-(def element FireFloodStateIcons (_iconsOffset:number, _firesCount:number, _floodCount:number, _isVisible:bool)
+(def element FireFloodStateIcons (	_firesFloodInfoComponent:dhComponent,
+									_iconsOffset:number,
+									_firesCount:number,
+									_floodCount:number,
+									_isVisible:bool,
+									_healthComponent:gfx,
+									_healthDelta:number)
 	(bind visible "_isVisible")
 
 	(style
 		(position = "absolute")
-		(align = "center|middle")
 		(flow = "horizontal")
 		(pivotX = 50%)
 		(top = -20px)
-		(height = "FIRE_FLOOD_ICON_SIZE")
-		(bind width "(_firesCount + _floodCount) * FIRE_FLOOD_ICON_SIZE")
-		(bind left "_iconsOffset")
+		(left = "_iconsOffset")
+
+		(bind left "_iconsOffset" init=false watch=false (event "_firesFloodInfoComponent.evFireCountChanged") (event "_firesFloodInfoComponent.evFloodCountChanged"))
 	)
 
-	(block
-		(style (flow = "horizontal"))
-		(block
-			(style (flow = "horizontal"))
-			(controller $Repeat renderer='FireFloodStateIcon'
-				(bind count "_firesCount")
-				(args
-					_isFire=true
-				)
+	(controller $Animation
+		(bindcall play
+			delay = "_healthDelta >= 0 ? HEALTH_ANI_DELAY : 0"
+			duration = "_healthDelta >= 0 ? HEALTH_ANI_MAX : HEALTH_ANI_MIN"
+			action = "kill"
+			easing = "Easing.quad_in"
+			to = "{left: _iconsOffset}"
+			watch = false
+			(bind trigger "_iconsOffset")
+			(event "_healthComponent.evChanged")
+			(event "_healthComponent.evMaxChanged")
+		)
+		(bindcall stop
+			(event "_firesFloodInfoComponent.evFireCountChanged")
+			(event "_firesFloodInfoComponent.evFloodCountChanged")
+		)
+	)
+
+	(hblock
+		(controller $Repeat renderer='FireFloodStateIcon'
+			(bind count "_firesCount")
+			(args
+				_isFire = true
 			)
 		)
-		(block
-			(style (flow = "horizontal"))
-			(controller $Repeat renderer='FireFloodStateIcon'
-				(bind count "_floodCount")
-				(args
-					_isFire=false
-				)
+	)
+
+	(hblock
+		(controller $Repeat renderer='FireFloodStateIcon'
+			(bind count "_floodCount")
+			(args
+				_isFire = false
 			)
 		)
 	)
@@ -408,22 +488,6 @@
 	)
 )
 
-(def element HealthBarShipMarkerIconSimple (_entityId:number, _shipType:str)
-	(scope
-		(var entity:gfx = "$datahub.getEntity(_entityId)")
-		
-		(var icon:str = "RELATION_NAMES.OWN + '_' + _shipType + '_small'")
-	)
-	(bind name "icon")
-	(block
-		(style
-			(width = 21px)
-			(height = 11px)
-			(bind backgroundImage "'bitmap:' + icon")
-		)
-	)
-)
-
 
 
 (def element NewShipHealthContainer (_entityId:number, _isSelfObserved:bool, _shipInfo:gfx)
@@ -466,7 +530,6 @@
 		(controller $Instance renderer='NewHealthBar'
 			(args
 				_entityId = "entityId"
-				_shipInfo = "shipInfo"
 			)
 			(bindcall recreate (bind trigger "entityId"))
 		)
@@ -550,18 +613,16 @@
 	)
 )
 
-(def element NewHealthBar (_shipInfo:gfx, _entityId:number = 0)
+(def element NewHealthBar (_entityId:number=0)
 	(name = 'vehicle_hp_text')
+
 	(scope
 		(var entityId:number = "_entityId")
 		(var entity:gfx = "$datahub.getEntity(entityId)")
-		(var shipInfo:gfx = "_shipInfo")
 		(var healthComponent:gfx = "entity.health")
 		(var maxHealth:number = "healthComponent.max" (event "healthComponent.evMaxChanged"))
 		(var shieldMaxHealth:number = "healthComponent.shieldMaxHealth" (event "healthComponent.evShieldMaxHealthChanged"))
 		(var isAlive:bool = "healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
-
-		(var shortName:str = "shipInfo.ship.shortName")
 	)
 
 	(style
@@ -578,30 +639,30 @@
 			(backgroundImage = 'img://gui/battle_hud/own_ship_health/health_bar_border.png')
 		)
 
-		(element NewHealthBarRegen entity="entity" shortName="shortName" maxHealth="maxHealth"
+		(element NewHealthBarRegen _entity="entity" _maxHealth="maxHealth"
 			(bind visible "isAlive")
 		)
 
-		(element NewHealthBarFX entity="entity" shortName="shortName"
+		(element NewHealthBarFX _entity="entity"
 			(bind visible "isAlive")
 		)
 
-		(element NewHealthBarValue entity="entity" shortName="shortName"
+		(element NewHealthBarValue _entity="entity"
 			(bind visible "isAlive")
 		)
 
-		(element ShipStatesBar entityId="entityId"
+		(element ShipStatesBar _healthComponent="healthComponent"
 			(bind visible "isAlive")
 		)
 	)
 )
 
-(def element NewHealthBarRegen (entity:gfx, shortName:str, maxHealth:number)
+(def element NewHealthBarRegen (_entity:gfx, _maxHealth:number)
 	(scope
-		(var regenComponent:gfx = "entity.regeneration" (event "entity.evAdded"))
-		(var regenMaxValue:number = "regenComponent.maxValue" (event "regenComponent.evChanged"))
-		(var regenValue:number = "regenComponent.value" (event "regenComponent.evChanged"))
-		(var regenPercent:number = "regenMaxValue / maxHealth" (event "regenComponent.evChanged"))
+		(var regenComponent:gfx = "_entity.regeneration" (event "_entity.evAdded"))
+		(var regenMaxValue:number = "regenComponent.maxValue ?: 0" (event "regenComponent.evChanged"))
+		(var regenValue:number = "regenComponent.value ?: 0" (event "regenComponent.evChanged"))
+		(var regenPercent:number = "min(regenMaxValue / _maxHealth, 1)" (event "regenComponent.evChanged"))
 
 		(var resultWidth:number = "100% * regenPercent")
 		(var currentWidth:number = "resultWidth ?: 0" watch=false)
@@ -619,30 +680,21 @@
 		)
 	)
 
-	(style
-		(position = "absolute")
-		(left = "NEW_BAR_IMAGE_WIDTH_HALF")
-		(top = 1px)
-		(marginLeft = -50%)
-		(backgroundSize = "autosize")
-		(backgroundImage = 'img://gui/battle_hud/own_ship_health/health_bar.png')
-	)
+	(class $FullsizeAbsolute)
+	(style (padding = "NEW_BAR_IMAGE_BORDER_WIDTH"))
 
 	(block
-		(class $FullsizeAbsolute)
+		(class $Fullsize)
 		(style
-			(backgroundColor = "NO_COLOR")
 			(bind width "currentWidth")
+			(bind backgroundColor "regenValue > 0 ? C_HEALTH_POSITIVE_REGEN : C_HEALTH_MAX_REGEN")
 		)
-		(isMask = true)
 	)
-
-	(bind colorTransform "regenValue > 0 ? SHIP_HP_TRANSFORM_COLORS.POSITIVE_REGEN : SHIP_HP_TRANSFORM_COLORS.MAX_REGEN")
 )
 
-(def element NewHealthBarFX (entity:gfx, shortName:str)
+(def element NewHealthBarFX (_entity:gfx)
 	(scope
-		(macro HEALTH_PERCENT_AND_ALIVE "entity")
+		(macro HEALTH_PERCENT_AND_ALIVE "_entity")
 
 		(var resultWidth:number = "100% * healthPercent")
 		(var healthDelta:number = "healthComponent.delta" (event "healthComponent.evDeltaChanged"))
@@ -664,30 +716,21 @@
 		)
 	)
 
-	(style
-		(position = "absolute")
-		(left = "NEW_BAR_IMAGE_WIDTH_HALF")
-		(top = 1px)
-		(marginLeft = -50%)
-		(backgroundSize = "autosize")
-		(backgroundImage = 'img://gui/battle_hud/own_ship_health/health_bar.png')
-	)
+	(class $FullsizeAbsolute)
+	(style (padding = "NEW_BAR_IMAGE_BORDER_WIDTH"))
 
 	(block
-		(class $FullsizeAbsolute)
+		(class $Fullsize)
 		(style
-			(backgroundColor = "NO_COLOR")
 			(bind width "currentWidth")
+			(bind backgroundColor "healthDelta >= 0 ? C_HEALTH_POSITIVE_REGEN : SC.Ui_styles.SERVICE_COLORS.WHITE")
 		)
-		(isMask = true)
 	)
-
-	(bind colorTransform "healthDelta >= 0 ? SHIP_HP_TRANSFORM_COLORS.POSITIVE_REGEN : SHIP_HP_TRANSFORM_COLORS.WHITE")
 )
 
-(def element NewHealthBarValue (entity:gfx, shortName:str)
+(def element NewHealthBarValue (_entity:gfx)
 	(scope
-		(macro HEALTH_PERCENT_AND_ALIVE "entity")
+		(macro HEALTH_PERCENT_AND_ALIVE "_entity")
 
 		(var resultWidth:number = "100% * healthPercent")
 		(var healthDelta:number = "healthComponent.delta" (event "healthComponent.evDeltaChanged"))
@@ -709,25 +752,19 @@
 		)
 	)
 
-	(style
-		(position = "absolute")
-		(left = "NEW_BAR_IMAGE_WIDTH_HALF")
-		(top = 1px)
-		(marginLeft = -50%)
-		(backgroundSize = "autosize")
-		(backgroundImage = 'img://gui/battle_hud/own_ship_health/health_bar.png')
-	)
+	(class $FullsizeAbsolute)
+	(style (padding = "NEW_BAR_IMAGE_BORDER_WIDTH"))
 
 	(block
-		(class $FullsizeAbsolute)
+		(class $Fullsize)
 		(style
-			(backgroundColor = "NO_COLOR")
 			(bind width "currentWidth")
+			(bind backgroundColor "	healthPercent > 0.8 ? C_HEALTH_HIGH :
+									healthPercent > 0.3 ? C_HEALTH_MEDIUM
+														: C_HEALTH_LOW"
+			)
 		)
-		(isMask = true)
 	)
-
-	(bind colorTransform "healthPercent > 0.8 ? SHIP_HP_TRANSFORM_COLORS.GREEN : healthPercent > 0.3 ? SHIP_HP_TRANSFORM_COLORS.YELLOW : SHIP_HP_TRANSFORM_COLORS.RED")
 )
 
 (def element NewShieldHealthBarValue (_entity:dhEntity)

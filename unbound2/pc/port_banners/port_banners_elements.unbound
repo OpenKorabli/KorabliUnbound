@@ -46,7 +46,7 @@
 
 		(var hasNoImage:bool = "	!toBool(contentId) ||
 									tileSize == SC.Ui_common.TILE_SIZE.S ||
-									isIn(contentId, [SC.Common.TILE_CONTENT.ACCOUNT_LEVELING, SC.Common.TILE_CONTENT.PROMO_REWARD])")
+									contentId == SC.Common.TILE_CONTENT.ACCOUNT_LEVELING")
 	)
 	(class $FullsizeAbsolute)
 
@@ -71,8 +71,7 @@
 (def element EventBannerTileBackgroundImage (	_entityContentId:number = 0,
 												_rollOver:bool = false,
 												_mouseDown:bool = false,
-												_isWithTitle:bool = true,
-												_isSliderItem:bool = false)
+												_isWithTitle:bool = true)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 		(macro HIGH_CONTRAST_DATA_SCOPE)
@@ -82,8 +81,7 @@
 		(var externalImageKey:str = "tileContentInfo.tileSize == SC.Ui_common.TILE_SIZE.M	? tileContentInfo.tileContent.smallImageUrl
 																							: tileContentInfo.tileContent.bigImageUrl" (event "tileContentInfo.tileContent.evChanged"))
 
-		(var externalImageEntity:dhEntity = "getPrimaryEntity(CC.externalImage, externalImageKey)")
-		(var externalImageComponent:dhComponent = "externalImageEntity.externalImage")
+		(var externalImageComponent:dhComponent = "getPrimaryComponent(CC.externalImage, externalImageKey)")
 		(var isImageLoaded:bool = "externalImageComponent.isLoaded" (event "externalImageComponent.evIsLoadedChanged"))
 		(var externalImageUrl:str = "isImageLoaded ? 'img://embedded:byteImage?url=' + externalImageComponent.url : ''")
 
@@ -269,8 +267,8 @@
 		(style
 			(hitTest = false)
 			(position = "absolute")
-			(right = 0)
-			(bottom = 0)
+			(right = 0px)
+			(bottom = 0px)
 			(width = 200px)
 			(backgroundSize = "cover")
 			(bind backgroundImage "bgAnimation")
@@ -340,24 +338,35 @@
 	)
 )
 
-(def element EventBannerMarkers (	_isTimerMarker:bool = false,
-									_isActionMarker:bool = false,
+(def element EventBannerMarkers (	_isActionMarker:bool = false,
 									_isRewardMarker:bool = false,
 									_isNewMarker:bool = false,
 									_isDiscountMarker:bool = false,
+									_isTimeStampMarker:bool = false,
 									_text:str = '',
-									_size:number = "SC.Ui_common.TILE_SIZE.M")
+									_size:number = "SC.Ui_common.TILE_SIZE.M",
+									_timeStamp:number = 0)
+	(scope
+		(var isBannerSizeSmall:bool = "_size == SC.Ui_common.TILE_SIZE.S")
+	)
 	(style
-		(flow = "horizontal")
-		(gap = "XS")
 		(position = "absolute")
 		(right = "XS")
+		(flow = "horizontal")
+		(gap = "XS")
 		(bind top "_size == SC.Ui_common.TILE_SIZE.S ? -6px : XS")
 	)
-
+	(block
+		(controller $Instance renderer='EventBannerMarkerTime'
+			(bind enabled "_isTimeStampMarker && _timeStamp > 0 && !isBannerSizeSmall")
+			(args
+				_timeStamp = "_timeStamp"
+			)
+		)
+	)
 	(block
 		(controller $Instance renderer='EventBannerMarker'
-			(bind enabled "_isRewardMarker && _size != SC.Ui_common.TILE_SIZE.S")
+			(bind enabled "_isRewardMarker && !isBannerSizeSmall")
 			(args
 				_type = "EVENT_MARKER_TYPE.REWARD"
 			)
@@ -387,6 +396,31 @@
 	)
 )
 
+(def element EventBannerMarkerTime (_timeStamp:number = 0)
+	(scope
+		(struct serverTime = SERVER_TIME())
+		(var timeLeft:number = "_timeStamp - serverTime.value")
+		(var isLastDayLeft:bool = "timeLeft < DAY_IN_SEC")
+		(var timeFormat:str = "isLastDayLeft ? 'hh:mm:ss' : 'HIGHESTDAYS'")
+		(struct formattedTime = COUNTDOWN(_time = "_timeStamp" _serverTime = "serverTime.value" _format = "timeFormat"))
+	)
+	(style
+		(hitTest = false)
+		(padding = [7px, 6px])
+		(backgroundColor = 0x33FFFFFF)
+		(borderRadius = 6)
+	)
+	(tf
+		(class $TextDefaultBold12NMWithoutShadow)
+		(style
+			(antiAliasType = "ANTI_ALIAS_NAMES.ADVANCED")
+			(bind textColor "isLastDayLeft ? SC.Ui_styles.SERVICE_COLORS.ORANGE : SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(bind alpha "isLastDayLeft ? 1 : TA")
+		)
+		(bind text "formattedTime.value")
+	)
+)
+
 (def element EventBannerMarker (_type:str = "EVENT_MARKER_TYPE.NEW", _newContentCounter:number = null, _text:str = '')
 	(scope
 		(var isNewMarker:bool = "_type == EVENT_MARKER_TYPE.NEW")
@@ -397,10 +431,10 @@
 	(style
 		(hitTest = false)
 		(padding = [7px, 6px])
-		(bind backgroundColor "	isNewMarker							? 0xFFD20020 :
+		(bind backgroundColor "	isNewMarker							? SC.Ui_styles.SERVICE_COLORS.MARKER_NEW :
 								isActionMarker						? SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE :
 								isRewardMarker || isDiscountMarker	? SC.Ui_styles.SERVICE_COLORS.YELLOW
-																	: 0xFFD20020")
+																	: SC.Ui_styles.SERVICE_COLORS.MARKER_NEW")
 		(borderRadius = 6)
 	)
 	(tf
@@ -450,14 +484,6 @@
 																		: taskDescriptionData.ids")
 
 		(var achievements:array = "taskDescriptionData.achievements ?: []")
-		(var achievementType:str = "taskDescriptionData.achievementType ?: ''")
-		(var achievementCount:number = "taskDescriptionData.maxProgress ?: 0")
-
-		(var isAchievementTypeTask:bool = "achievementType && achievementType != 'battle_any'")
-
-		(var achievementTypeText:str = "isAchievementTypeTask	? subst('IDS_PL_SSE_CONDITIONS_ACHIEVEMENT_DESC_' + achievementType,
-																		[], {count: achievementCount}, achievementCount)
-																: ''")
 	)
 
 	(class $Fullsize)

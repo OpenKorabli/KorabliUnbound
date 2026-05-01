@@ -22,33 +22,41 @@
 )
 
 
-(def element MapEpicenterMarker (_markerEntity:gfx, _mapScale:number, _itemScale:number, _scaleRatio:number, _isLoading:bool = false) layout=true
+(def element MapEpicenterMarker (_markerEntity:gfx, _mapScale:number, _itemScale:number, _scaleRatio:number) 
 	(scope
-		(var points:gfx = "$datahub.getCollection(CC.capturePoint).child('epicenter').child(_markerEntity.epicenter.id)")
+		(var capturePointCollection:dhCollection = "getCollectionByPath(CC.capturePoint, 'epicenter.' + _markerEntity.epicenter.id)")
 	)
-	(controller $Repeat renderer='MapEpicenterCircle' 
-		(bind count "points.items.length")
-		(args _scaleRatio="_scaleRatio")
+
+	(controller $Repeat renderer='MapEpicenterCircle'
+		(bind items "capturePointCollection")
+		(args
+			_scaleRatio = "_scaleRatio"
+			_capturePointEntity = "$item"
+		)
 	)
 
 	(macro BIND_FAIR_SCALE "_itemScale / _mapScale")
 )
 
 
-(def element MapEpicenterCircle (_scaleRatio:number) layout=true
+(def element MapEpicenterCircle (_scaleRatio:number, _capturePointEntity:dhEntity)
 	(scope
+		(var capturePointComponent:dhComponent = 	"_capturePointEntity.capturePoint")
+		(var relationComponent:dhComponent = 		"_capturePointEntity.relation")
+		(var progressComponent:dhComponent = 		"_capturePointEntity.progress")
+		(var circleComponent:dhComponent = 			"_capturePointEntity.circle")
 
-		(var collection:gfx = "$datahub.getCollection(CC.capturePoint)")
-		(var entity:gfx = "collection.items[$index]")
+		(var circleRadius:number = 		"circleComponent.radius * _scaleRatio"		(event "circleComponent.evRadiusChanged"))
+		(var circleInnerRadius:number = "circleComponent.innerRadius * _scaleRatio" (event "circleComponent.evInnerRadiusChanged"))
 
-		(var circleRadius:number = "entity.circle.radius * _scaleRatio" (event "entity.circle.evRadiusChanged"))
-		(var circleInnerRadius:number = "entity.circle.innerRadius * _scaleRatio" (event "entity.circle.evInnerRadiusChanged"))
+		(var captureProgress:number = "progressComponent.value" (event "progressComponent.evChanged"))
 
-		(var captureProgress:number = "entity.progress.value" (event "entity.progress.evChanged"))
-		(var invaderRelation:str = "entity.capturePoint.invaderRelation == 1 ? 'ally' : 'enemy'" (event "entity.capturePoint.evInvaderChanged"))
-		(var isCaptureInProgress:bool = "entity.capturePoint.bothInside || (captureProgress != 0)" (event "entity.capturePoint.evBothInsideChanged"))
+		(var invaderRelation:str = "capturePointComponent.invaderRelation == 1 ? 'ally' : 'enemy'" (event "capturePointComponent.evInvaderChanged"))
 
-		(macro VAR_RELATION "entity")
+		(var relationValue:number = "relationComponent.value ?: SC.Battle.PLAYER_RELATION.NEUTRAL" 	(event "relationComponent.evChanged"))
+		(var relation:str = "SC.Battle.PLAYER_RELATION.NAMES[SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationValue]]")
+
+		(var isCenterSector:bool = "$index == 0")
 	)
 
 	(style (position = "absolute"))
@@ -57,15 +65,15 @@
 	
 	
 	(block
-		(style (position = "absolute"))		
+		(style (position = "absolute"))
 		(controller $Sector
-			(offset = "-90")
+			(offset = -90)
 			(bind colors "EPICENTER_POINTS_SETTINGS[toUpper(relation)].COLORS")
 			(bind alphas "EPICENTER_POINTS_SETTINGS[toUpper(relation)].ALPHAS")
 			(bind ratios "EPICENTER_POINTS_SETTINGS[toUpper(relation)].RATIOS")
 			(bind arc "360 * (1 - captureProgress) * (invaderRelation == 'ally' ? -1 : 1)")
 			(bind radius "circleRadius")
-			(bind innerRadius "circleInnerRadius")
+			(bind innerRadius "isCenterSector ? circleInnerRadius : circleInnerRadius + XS")
 		)
 	)
 
@@ -75,33 +83,47 @@
 	(block
 		(style (position = "absolute"))
 		(controller $Sector
-			(arc = "360")
-			(offset = "0")
+			(offset = -90)
+			(alphas = [0.3])
+			(ratios = [])
+
+			(bind colors "[EPICENTER_POINTS_SETTINGS[toUpper(invaderRelation)].STROKE_COLOR]")
+			(bind arc "360 * captureProgress * (invaderRelation == 'ally' ? 1 : -1)")
+			(bind radius "circleRadius + 1")
+			(bind innerRadius "circleInnerRadius + XS")
+		)
+	)
+
+	
+	
+	
+	(block
+		(style (position = "absolute"))
+		(controller $Sector
+			(arc = 360)
+			(alphas = [0])
+			(ratios = [])
+			(lineAlpha = 0.4)
+			(lineThickness = 1px)
 
 			(bind radius "circleRadius")
-			(bind colors "[0xFFFFFF]")
-			(bind alphas "[0]")
-			(bind ratios "[0]")
-
-			(bind lineThickness "2")
-			(bind lineAlpha "0.4")
 			(bind lineColor "EPICENTER_POINTS_SETTINGS[toUpper(relation)].STROKE_COLOR")
 		)
 	)
 
-	
-	
-	
 	(block
+		(bind visible "!isCenterSector")
 		(style (position = "absolute"))
-		(alpha = 0.3)
-		
 		(controller $Sector
-			(offset = "-90")
-			(bind color "EPICENTER_POINTS_SETTINGS[toUpper(invaderRelation)].STROKE_COLOR")
-			(bind arc "360 * captureProgress * (invaderRelation == 'ally' ? 1 : -1)")
-			(bind radius "circleRadius + 1")
-			(bind innerRadius "circleInnerRadius + 1")
+			(arc = 360)
+			(offset = 0)
+			(alphas = [0])
+			(ratios = [])
+			(lineAlpha = 0.4)
+			(lineThickness = 1px)
+
+			(bind radius "circleInnerRadius + XS + 1")
+			(bind lineColor "EPICENTER_POINTS_SETTINGS[toUpper(relation)].STROKE_COLOR")
 		)
 	)
 )

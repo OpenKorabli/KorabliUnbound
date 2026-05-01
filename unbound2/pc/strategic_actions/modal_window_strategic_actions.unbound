@@ -14,26 +14,12 @@
 	SC.Ui_styles.BUTTON_STATE.UP:		0
 })
 
-(def struct THRESHOLDS_POINTS (_entityId:number)
-	(var entity:dhEntity = "getEntity(_entityId)")
-	(var component:dhComponent = "entity.strategicActionsTerritory")
-	(var thresholdsCount:number = "component.stagesCount ?: 1" (event "component.evChanged"))
-	(var progressCurrent:number = "component.progress ?: 0" (event "component.evChanged"))
-	(var progressMax:number = "component.maxProgress ?: 1" (event "component.evChanged"))
-	(var thresholdPoints:number = "progressMax/thresholdsCount")
-	(var stage:number = "floor(progressCurrent/thresholdPoints)")
-)
-
-(def struct STRATEGIC_ACTIONS_DIMENSIONS (_stageWidth:number, _stageHeight:number)
-	(var isLargeScreen:bool = "_stageHeight > 900 && _stageWidth > 1380")
-)
-
 (def element ModalWindowStrategicActions ()
 	(macro MODAL_WINDOW_INIT)
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
 	(scope
-		(event onClick)
 		(event evAddedToStage)
+		(event evArchiveMarkerClicked)
 
 		(macro HIGH_CONTRAST_DATA_SCOPE)
 
@@ -57,25 +43,19 @@
 		(var territories:dhCollection = "getCollection(CC.strategicActionsTerritory)")
 		(var territoryMarkers:dhCollection = "getCollection(CC.strategicActionsTerritoryMarker)")
 
-		(var territoryEntity:dhEntity = "getEntity(observedTerritory)")
-		(var territory:dhComponent = "territoryEntity.strategicActionsTerritory")
-		(var territoryId:str = "territory.id ?: GLOBAL_VIEW_NAME" (event "territory.evChanged"))
-		(var territoryStagesCount:number = "territory.stagesCount ?: 1" (event "territory.evChanged"))
-		(var territoryProgress:number = "territory.progress ?: 0" (event "territory.evChanged"))
-		(var territoryProgressMax:number = "territory.maxProgress ?: 1" (event "territory.evChanged"))
-		(var maxStageProgress:number = "territoryProgressMax/territoryStagesCount")
-		(var territoryStatus:number = "territory.status ?: 0" (event "territory.evChanged"))
-		(var isTerritoryLocked:bool = "territoryStatus != SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.LOCKED")
+		(struct territory = THRESHOLDS_POINTS(_entityId = "observedTerritory"))
+		(var territoryId:str = "territory.component.id ?: GLOBAL_VIEW_NAME" (event "territory.component.evChanged"))
+		(var isTerritoryUnlocked:bool = "territory.component.status != SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.LOCKED")
 
 		(var isAllTerritoriesCompleted:bool = "doneTerritories == territories.length")
 		(var isGlobalState:bool = "observedTerritory == GLOBAL_VIEW_ID || isObservingArchive")
-		(var territoryStage:number = "isGlobalState ? toNumber(isAllTerritoriesCompleted) : floor(territoryProgress/maxStageProgress)")
+		(var territoryStage:number = "isGlobalState ? toNumber(isAllTerritoriesCompleted) : floor(territory.progressCurrent / territory.thresholdPoints)")
 
 		(var strategicActionsMessageGlobalVisible:bool = "strategicActionsEntity.hasComponent(CC.strategicActionsMessage) && isOnboardingSeen && isOnTop")
-		(var strategicActionsMessageTerritoryVisible:bool = "territoryEntity.hasComponent(CC.strategicActionsMessage) && isOnboardingSeen && isOnTop")
+		(var strategicActionsMessageTerritoryVisible:bool = "territory.entity.hasComponent(CC.strategicActionsMessage) && isOnboardingSeen && isOnTop")
 
 		(var isStrategicActionsMessageVisible:bool = "isGlobalState ? strategicActionsMessageGlobalVisible : strategicActionsMessageTerritoryVisible")
-		(var isMessageButtonVisible:bool = "isGlobalState || !isTerritoryLocked")
+		(var isMessageButtonVisible:bool = "isGlobalState || !isTerritoryUnlocked")
 
 		(var selectedState:str = "isGlobalState ? 'GlobalState' : 'TerritoryState'")
 	)
@@ -91,7 +71,19 @@
 		watch=false
 		(event "evAddedToStage")
 	)
-	(dispatch evCloseMessage args="{isMessageVisible:false}" dir="EventDirection.DOWN" (bind enabled "!isOnTop") (bind trigger "isOnTop"))
+	(dispatch
+		evCloseMessage
+		args="{isMessageVisible:false}"
+		dir="EventDirection.DOWN"
+		(bind enabled "!isOnTop")
+		(bind trigger "isOnTop")
+		(event "evArchiveMarkerClicked")
+	)
+	(dispatch
+		evCloseMessageByArchiveClick
+		dir="EventDirection.DOWN"
+		(event "evArchiveMarkerClicked")
+	)
 
 	(name = "'window_ModalWindowStrategicActions'")
 	(alpha = "isObservingArchive ? 0 : 1")
@@ -207,7 +199,7 @@
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
 		(class $MiddleAlignedAbsolutely)
 		(style
-			(bottom = 0)
+			(bottom = 0px)
 			(bind left "strategicActionDimension.isLargeScreen ? 50% : 35%")
 			(bind marginLeft "strategicActionDimension.isLargeScreen ? -50% : -35%")
 		)
@@ -221,8 +213,8 @@
 								to = "{alpha: 0, visible: false}"
 								action = "kill"
 								easing = "Easing.quad_out"
-								reverse = "isTerritoryLocked"
-								(bind trigger "!isTerritoryLocked")
+								reverse = "isTerritoryUnlocked"
+								(bind trigger "!isTerritoryUnlocked")
 				)
 			)
 			(element StrategicActionsMessages
@@ -256,42 +248,31 @@
 (def element GlobalState ()
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
-		(event selectRewardCategory)
+		(event evSelectRewardCategory)
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var strategicActionsEntity:dhEntity = "getSingleEntity(CC.strategicActionsEvent)")
-		(var strategicActionsEvent:dhComponent = "strategicActionsEntity.strategicActionsEvent")
-		(var finishTime:number = "strategicActionsEvent.finishTime ?: 0" (event "strategicActionsEvent.evChanged"))
+		(struct strategicActionsEvent = PULL_STRATEGIC_ACTIONS_EVENT())
 
-		(var isAnyRewardClaim:bool = "strategicActionsEvent.isAnyRewardClaim" (event "strategicActionsEvent.evChanged"))
-		(var rewardsCategories:array = "strategicActionsEvent.rewardsCategories" (event "strategicActionsEvent.evChanged"))
-		(var rewards:array = "strategicActionsEvent.rewards" (event "strategicActionsEvent.evChanged"))
-		(var territoriesThresholds:array = "strategicActionsEvent.thresholds" (event "strategicActionsEvent.evChanged"))
-		(var activeThresholdIndex:number = "strategicActionsEvent.activeThresholdIndex" (event "strategicActionsEvent.evChanged"))
-		(var doneTerritories:number = "strategicActionsEvent.doneTerritories" (event "strategicActionsEvent.evDoneTerritoriesChanged"))
+		(var selectedIndex:number = "strategicActionsEvent.activeThresholdIndex < strategicActionsEvent.territoriesThresholds.length	? strategicActionsEvent.activeThresholdIndex
+																																		: strategicActionsEvent.activeThresholdIndex - 1")
+		(bind selectedIndex "$event.index" init=false watch=false (event "evSelectRewardCategory"))
 
-		(var selectedIndex:number = "activeThresholdIndex < territoriesThresholds.length ? activeThresholdIndex : activeThresholdIndex - 1")
-		(bind selectedIndex "$event.index" init=false watch=false (event "selectRewardCategory"))
-
-		(var territoriesLeft:number = "territoriesThresholds[selectedIndex] ?: 0")
-		(var isRewardThresholdClaimed:bool = "selectedIndex < activeThresholdIndex")
-		(var isRewardCategoryAvailable:bool = "doneTerritories >= territoriesThresholds[selectedIndex]")
+		(var territoriesLeft:number = "strategicActionsEvent.territoriesThresholds[selectedIndex] ?: 0")
+		(var isRewardThresholdClaimed:bool = "selectedIndex < strategicActionsEvent.activeThresholdIndex")
+		(var isRewardCategoryAvailable:bool = "strategicActionsEvent.doneTerritories >= strategicActionsEvent.territoriesThresholds[selectedIndex]")
 		(var isStatusVisible:bool = "isRewardThresholdClaimed || !isRewardCategoryAvailable")
 		(var rewardStatusText:str = "isRewardThresholdClaimed	? 'IDS_STRATEGIC_ACTIONS_ADDITIONAL_REWARD_STATUS_RECEIVED'
 																: subst('IDS_SUBST_STRATEGIC_ACTIONS_ADDITIONAL_REWARD_STATUS_LOCKED',
 																	[], {_count: toString(territoriesLeft)}, territoriesLeft)")
 		(var unifiedStatus:str = "isRewardThresholdClaimed ? SC.Ui_styles.UNIFIED_STATUS.CHECK : SC.Ui_styles.UNIFIED_STATUS.LOCK")
 
-		(var thresholdReward:number = "rewards[selectedIndex][0]")
+		(var thresholdReward:number = "strategicActionsEvent.rewards[selectedIndex][0]")
 		(var rewardEntity:dhEntity = "getEntity(thresholdReward)")
 		(var rewardComponent:dhComponent = "rewardEntity.rewardComponent")
 		(var isCoeffReward:bool = "REWARD_RESOURCE_ELEMENT[rewardComponent.subtype].rewardDefault == 'RewardResourcesCoeff'")
-		(var isShipReward:bool = "rewardComponent.type == 'Ship'")
-		(var shipId:number = "isShipReward ? toNumber(rewardEntity.rewardComponent.name) : null")
-		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
 
 		(macro SERVER_TIME_SCOPE)
-		(macro COUNTDOWN_SCOPE "'timeLeft'" "finishTime" "'HIGHEST,WITH_DAYS'")
+		(macro COUNTDOWN_SCOPE "'timeLeft'" "strategicActionsEvent.finishTime" "'HIGHEST,WITH_DAYS'")
 	)
 	(class $Fullsize)
 	(style (paddingTop = "{720:M, 1080:LM}"))
@@ -347,12 +328,12 @@
 				(paddingTop = "-M")
 			)
 			(controller $Repeat renderer='StrategicActionsRewardCategory'
-				(bind count "rewardsCategories.length")
+				(bind count "strategicActionsEvent.rewardsCategories.length")
 				(args
-					_rewardCategory = "rewardsCategories[$index]"
-					_territoriesThreshold = "territoriesThresholds[$index]"
-					_isReceived = "$index < activeThresholdIndex"
-					_isRewardAvailable = "doneTerritories >= territoriesThresholds[$index]"
+					_rewardCategory = "strategicActionsEvent.rewardsCategories[$index]"
+					_territoriesThreshold = "strategicActionsEvent.territoriesThresholds[$index]"
+					_isReceived = "$index < strategicActionsEvent.activeThresholdIndex"
+					_isRewardAvailable = "strategicActionsEvent.doneTerritories >= strategicActionsEvent.territoriesThresholds[$index]"
 					_isSelected = "$index == selectedIndex"
 				)
 			)
@@ -408,10 +389,10 @@
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
 			(macro MOUSE_EVENTS_DISPATCHER)
-			(macro SOUND_HANDLER _soundSet = "isAnyRewardClaim ? 'strategic_actions_reward' : ''")
+			(macro SOUND_HANDLER _soundSet = "strategicActionsEvent.isAnyRewardClaim ? 'strategic_actions_reward' : ''")
 
 			(controller $Instance renderer='DefaultButton'
-				(bind enabled "isAnyRewardClaim")
+				(bind enabled "strategicActionsEvent.isAnyRewardClaim")
 				(args
 					_label = 'IDS_STRATEGIC_ACTIONS_TERRITORY_REWARDS_CLAIM'
 					_width = 250px
@@ -427,7 +408,7 @@
 						{
 							type: 'inputMapping.onRequest',
 							name: 'openRewardsModalWithoutAnimation',
-							args: {	rewardsEntityId: strategicActionsEntity.id,
+							args: {	rewardsEntityId: strategicActionsEvent.entity.id,
 									header: 'IDS_RECEIVED_LOOTBOXES_REWARDS'}
 						},
 						{
@@ -465,46 +446,29 @@
 		(macro MOUSE_HANDLER_SCOPE)
 
 		(var strategicActionsEntity:dhEntity = "getSingleEntity(CC.strategicActionsEvent)")
-		(var territoryEntity:dhEntity = "getEntity(_entityId)")
-		(var territory:dhComponent = "territoryEntity.strategicActionsTerritory")
-		(var progressMax:number = "territory.maxProgress ?: 1" (event "territory.evChanged"))
-		(var previousProgressCurrent:number = "territory.previousProgress ?: 0" (event "territory.evChanged"))
-		(var progressCurrent:number = " territory.progress ?: 0" (event "territory.evChanged"))
-		(var previousProgress:number = "100% * previousProgressCurrent/progressMax")
-		(var progress:number = "100% * progressCurrent/progressMax")
-		(var rewards:array = "territory.rewards ?: []" (event "territory.evChanged"))
-		(var status:number = "territory.status ?: 0" (event "territory.evChanged"))
-		(var level:number = "territory.level ?: 0" (event "territory.evChanged"))
-		(var territoryId:str = "territory.id ?: GLOBAL_VIEW_NAME" (event "territory.evChanged"))
-		(var currentTaskIndex:number = "territory.currentTaskIndex ?: 0" (event "territory.evChanged"))
-		(var restrictionsEntityId:number = "territory.restrictionsEntity ?: 0" (event "territory.evChanged"))
-		(var restrictionsEntity:dhEntity = "getEntity(restrictionsEntityId)")
+		(struct territory = PULL_TERRITORY_FULL_INFO(_entityId="_entityId"))
+
+		(var restrictionsEntity:dhEntity = "getEntity(territory.restrictionsEntityId)")
 		(var battleTypes:array = "restrictionsEntity.battleTypesView.viewList ?: []" (event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
 		(var shipRestrictions:array = "restrictionsEntity.shipListRestrictions.selectedFilters ?: []")
 		(var isVerticalDividerVisible:bool = "shipRestrictions.length > 0 && battleTypes.length > 0")
 		(var isShipRestrictionsBlockVisible:bool = "shipRestrictions.length > 0 || battleTypes.length > 0")
 
-		(var tasksCollection:dhCollection = "getCollection(CC.strategicActionsTask).getChildByPath('byTerritoryId.' + territoryId)")
+		(var tasksCollection:dhCollection = "getCollection(CC.strategicActionsTask).getChildByPath('byTerritoryId.' + territory.id)")
 
-		(var taskActiveEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTask, territoryId + '_' + toString(currentTaskIndex))")
+		(var taskActiveEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTask, territory.id + '_' + toString(territory.currentTaskIndex))")
 		(var thresholds:array = "taskActiveEntity.strategicActionsTask.thresholds" (event "taskActiveEntity.strategicActionsTask.evChanged"))
 		(var points:array = "taskActiveEntity.strategicActionsTask.points" (event "taskActiveEntity.strategicActionsTask.evChanged"))
 
 		(var pveModifier:number = "taskActiveEntity.strategicActionsTask.pveModifier" (event "taskActiveEntity.strategicActionsTask.evChanged"))
 		(var isPVEModifierApplied:bool = "pveModifier != PVE_DEFAULT_MODIFIER_COEFF")
 
-		(var isComplexityLevelVisible:bool = "level > 0")
+		(var isComplexityLevelVisible:bool = "territory.level > 0")
 
 		
-		(var isLocked:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.LOCKED")
-		(var isSelected:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.SELECTED")
-		(var isCompleted:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.COMPLETED")
-		(var isAvailable:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.AVAILABLE")
-		(var isRewardsClaim:bool = "status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.REWARDS_CLAIM")
-		(var isDone:bool = "isIn(status, SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.DONE)")
-		(var isProgressFull:bool = "isCompleted && isRewardsClaim")
-		(var textButton:str = "	isRewardsClaim	? 'IDS_STRATEGIC_ACTIONS_TERRITORY_REWARDS_CLAIM'
-												: 'IDS_STRATEGIC_ACTIONS_TERRITORY_AVAILABLE'")
+		(struct territoryStatus = PULL_TERRITORY_STATUS(_status = "territory.status"))
+		(var textButton:str = "territoryStatus.isRewardsClaim	? 'IDS_STRATEGIC_ACTIONS_TERRITORY_REWARDS_CLAIM'
+																: 'IDS_STRATEGIC_ACTIONS_TERRITORY_AVAILABLE'")
 
 		(struct activeTip = PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId = SAFE_CHECK_ACTIVE_TIP_ID(
@@ -525,7 +489,7 @@
 	(style (paddingTop = "{720:MS, 1080:LM}"))
 
 	(block
-		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 0)
+		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 0)
 
 		(style
 			(marginBottom = "{720:MS, 1080:L}")
@@ -546,7 +510,7 @@
 		)
 
 		(block
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 1)
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 1)
 
 			(style
 				(width = 100%)
@@ -554,13 +518,13 @@
 			)
 
 			(tf
-				(bind name "'title_' + territoryId")
+				(bind name "'title_' + territory.id")
 				(class $TextDefaultBold24NM)
 				(style
 					(marginBottom = "{720:S, 1080:SXS}")
 					(alpha = "TA")
 				)
-				(bind text "toUpper(tr('IDS_TERRITORY_TITLE_' + territoryId))")
+				(bind text "toUpper(tr('IDS_TERRITORY_TITLE_' + territory.id))")
 			)
 
 			(hblock
@@ -581,7 +545,7 @@
 						(bind enabled "isComplexityLevelVisible")
 						(bind count "SC.Common.STRATEGIC_ACTIONS_UI.MAX_TERRITORY_LEVEL")
 						(args
-							_isFilled = "$index + 1 <= level"
+							_isFilled = "$index + 1 <= territory.level"
 						)
 					)
 				)
@@ -590,15 +554,15 @@
 
 		
 		(block
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 1.5)
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 1.5)
 
 			(style
 				(width = 100%)
-				(bind marginBottom " isLocked ? PANEL_MARGINS_LARGE : 0")
+				(bind marginBottom "territoryStatus.isLocked ? PANEL_MARGINS_LARGE : 0")
 			)
 
 			(controller $Instance renderer='StatusLine'
-				(bind enabled "isLocked")
+				(bind enabled "territoryStatus.isLocked")
 				(args
 					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.LOCK"
 					_text = 'IDS_STRATEGIC_ACTIONS_TERRITORY_LOCKED'
@@ -610,7 +574,7 @@
 
 		
 		(block
-			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 1.5)
+			(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 1.5)
 
 			(style
 				(width = 100%)
@@ -618,17 +582,17 @@
 			)
 
 			(controller $Instance renderer='TerritoryProgress'
-				(bind enabled "!(isLocked || isCompleted || isRewardsClaim)")
+				(bind enabled "!(territoryStatus.isLocked || territoryStatus.isCompleted || territoryStatus.isRewardsClaim)")
 				(args
 					_entityId = "_entityId"
 				)
 			)
 
 			(controller $Instance renderer='StatusLine'
-				(bind enabled "isRewardsClaim || isCompleted")
+				(bind enabled "territoryStatus.isRewardsClaim || territoryStatus.isCompleted")
 				(args
-					_unifiedStatus = "isRewardsClaim ? SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE : SC.Ui_styles.UNIFIED_STATUS.CHECK"
-					_text = "isRewardsClaim ? 'IDS_AVAILABLE_REWARD' : 'IDS_STRATEGIC_ACTIONS_TERRITORY_STATUS_DONE'"
+					_unifiedStatus = "territoryStatus.isRewardsClaim ? SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE : SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = "territoryStatus.isRewardsClaim ? 'IDS_AVAILABLE_REWARD' : 'IDS_STRATEGIC_ACTIONS_TERRITORY_STATUS_DONE'"
 				)
 			)
 
@@ -691,14 +655,14 @@
 
 			
 			(block
-				(bind visible "!isDone")
+				(bind visible "!territoryStatus.isDone")
 				(style
 					(width = 100%)
 					(paddingLeft = "L")
 					(paddingRight = "L")
 				)
 				(block
-					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 2)
+					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 2)
 
 					(style
 						(width = 100%)
@@ -726,7 +690,7 @@
 						(controller $Tooltip
 							(renderer='StrategicActionsTasksListTooltip')
 							(args
-								_entityId = "territoryEntity.id"
+								_entityId = "territory.entity.id"
 							)
 							(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 						)
@@ -748,12 +712,12 @@
 					(block
 						(style
 							(width = 100%)
-							(bind marginTop "isLocked || isAvailable ? PANEL_MARGINS_SMALL : 0")
+							(bind marginTop "territoryStatus.isLocked || territoryStatus.isAvailable ? PANEL_MARGINS_SMALL : 0")
 						)
 
 						(controller $Repeat renderer='StrategicActionsTaskDescription'
 							(bind count "tasksCollection.length")
-							(bind enabled "isLocked || isAvailable")
+							(bind enabled "territoryStatus.isLocked || territoryStatus.isAvailable")
 							(args
 								_entityId = "tasksCollection[$index].id"
 								_isMarker = true
@@ -766,8 +730,8 @@
 
 				
 				(block
-					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 2.5)
-					(bind visible "!isLocked && !isAvailable")
+					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 2.5)
+					(bind visible "!territoryStatus.isLocked && !territoryStatus.isAvailable")
 
 					(style
 						(width = 100%)
@@ -870,12 +834,12 @@
 					(block
 						(style (width = 100%))
 						(controller $Instance renderer = 'HorizontalDividerTwoPx'
-							(bind enabled "!isLocked")
+							(bind enabled "!territoryStatus.isLocked")
 						)
 					)
 
 					(block
-						(bind visible "!isLocked && isShipRestrictionsBlockVisible")
+						(bind visible "!territoryStatus.isLocked && isShipRestrictionsBlockVisible")
 
 						(style
 							(paddingLeft = "M")
@@ -896,7 +860,7 @@
 						(hblock
 							(hblock
 								(controller $Repeat renderer='TaskBattleTypeRestriction'
-									(bind enabled "!isRewardsClaim")
+									(bind enabled "!territoryStatus.isRewardsClaim")
 									(bind count "battleTypes.length")
 									(args
 										_battleType = "battleTypes[$index].battleName"
@@ -925,7 +889,7 @@
 								(controller $Instance renderer='ShipRestrictions'
 									(bind enabled "isShipRestrictionsBlockVisible")
 									(args
-										_restrictionsEntityId = "restrictionsEntityId"
+										_restrictionsEntityId = "territory.restrictionsEntityId"
 									)
 								)
 							)
@@ -943,7 +907,7 @@
 
 				
 				(block
-					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 3.5)
+					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 3.5)
 
 					(style (marginBottom = "{720:M, 1080:MS}"))
 
@@ -968,15 +932,15 @@
 				)
 
 				(hblock
-					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 4)
+					(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 4)
 
 					(style (marginBottom = "PANEL_MARGINS_SMALL"))
 
 					(controller $Repeat renderer='RewardItemAdapter'
-						(bind count "rewards.length")
+						(bind count "territory.rewards.length")
 						(args
-							_entityId = "rewards[$index]"
-							_isReceived = "isCompleted"
+							_entityId = "territory.rewards[$index]"
+							_isReceived = "territoryStatus.isCompleted"
 						)
 					)
 				)
@@ -992,36 +956,36 @@
 			(align = "center")
 		)
 
-		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territoryId" 6)
+		(macro DETAILED_CARD_ELEMENTS_APPEAR_ANIMATION_BY_ID "territory.id" 6)
 		(macro MOUSE_EVENTS_DISPATCHER)
-		(macro SOUND_HANDLER "isRewardsClaim ? 'strategic_actions_reward' : ''")
+		(macro SOUND_HANDLER "territoryStatus.isRewardsClaim ? 'strategic_actions_reward' : ''")
 
 		(controller $Instance renderer='DefaultButton'
-			(bind enabled "!isCompleted && !isSelected")
+			(bind enabled "!territoryStatus.isCompleted && !territoryStatus.isSelected")
 			(args
 				_width = 250px
-				_name = "isAvailable ? 'select_territory' : 'take_reward'"
+				_name = "territoryStatus.isAvailable ? 'select_territory' : 'take_reward'"
 				_focusIndex = 0
 				_defaultFocused = true
-				_enabled = "isAvailable || isRewardsClaim"
+				_enabled = "territoryStatus.isAvailable || territoryStatus.isRewardsClaim"
 				_label = "textButton"
 				_size = "SIZE.LARGE"
 				_methods = "[
 					{
 						type: 'inputMapping.onAction',
-						name: isAvailable ? 'StrategicActionsProxyUSS.selectTerritory' : 'StrategicActionsProxyUSS.claimTerritoryRewards',
+						name: territoryStatus.isAvailable ? 'StrategicActionsProxyUSS.selectTerritory' : 'StrategicActionsProxyUSS.claimTerritoryRewards',
 						args: {territoryID: territory.id}
 					},
 					{
 						type: 'inputMapping.onRequest',
-						name: isAvailable ? '' : 'openRewardsModalWithoutAnimation',
+						name: territoryStatus.isAvailable ? '' : 'openRewardsModalWithoutAnimation',
 						args: {	rewardsEntityId: strategicActionsEntity.id,
 								header: 'IDS_RECEIVED_LOOTBOXES_REWARDS'}
 					},
 					{
 						type: 'inputMapping.onAction',
-						name: isAvailable ? '' : 'StrategicActionsProxyUSS.setStrategicActionsMessageSeen',
-						args: {territoryId: territoryId}
+						name: territoryStatus.isAvailable ? '' : 'StrategicActionsProxyUSS.setStrategicActionsMessageSeen',
+						args: {territoryId: territory.id}
 					}
 				]"
 			)
@@ -1040,7 +1004,6 @@
 		(macro STAGE_SIZE)
 		(struct strategicActionDimension = STRATEGIC_ACTIONS_DIMENSIONS(_stageWidth = "stageWidth" _stageHeight = "stageHeight"))
 
-		(var elementsPerRow:number = 4)
 		(var isRewardActive:bool = "_isRewardAvailable && !_isReceived")
 		(var iconSize:number = "strategicActionDimension.isLargeScreen ? 74 : 62")
 		(var iconMargin:number = "strategicActionDimension.isLargeScreen ? M : S")
@@ -1083,7 +1046,7 @@
 
 
 	(macro MOUSE_HANDLER
-		_dispatchedEv = "'selectRewardCategory'"
+		_dispatchedEv = "'evSelectRewardCategory'"
 		_dispatchParams = "{ index: $index }"
 		_soundSet = "'button_battlepass_reward'"
 	)
@@ -1389,6 +1352,7 @@
 		(event evArchiveObservationRequested)
 		(event evDelayBeforeShowingArchivePassed)
 		(event evCloseMessage)
+		(event evCloseMessageByArchiveClick)
 
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -1509,6 +1473,7 @@
 												to: { alpha: 0, top: 100 }
 											}
 											(event "evStartHideInfotip")
+											(event "evCloseMessageByArchiveClick")
 											(event "evArchiveObservationRequested"))
 
 				(hideOnEsc = true)
@@ -1648,16 +1613,22 @@
 			)
 		)
 
-
-
-
-
-
-
-
-
-
-
+		(element TextButton
+			_label = 'IDS_TERRITORY_MESSAGE_LEARN_MORE'
+			_name = 'ArchiveButton'
+			_dispatchedEv = 'evArchiveObservationRequested'
+			_dispatchParams = "{
+				territoryName: _messageId,
+				territoryStage: _messageType
+			}"
+			_methods = "[
+				{
+					type: 'inputMapping.onAction',
+					name: 'observeArchive',
+					args: {}
+				}
+			]"
+		)
 	)
 )
 
@@ -1710,49 +1681,26 @@
 
 (def element StrategicOperationAreaTooltip (_territoryName:str='')
 	(scope
-		(var strategicActionsEntity:dhEntity = "getSingleEntity(CC.strategicActionsEvent)")
-		(var strategicActionsEvent:dhComponent = "strategicActionsEntity.strategicActionsEvent")
-		(var observedTerritoryId:number = "strategicActionsEvent.observedTerritory ?: 0" (event "strategicActionsEvent.evObservedTerritoryChanged"))  
-		(var observedTerritoryEntity:dhEntity = "getEntity(observedTerritoryId)")
-		(var observedTerritory:dhComponent = "observedTerritoryEntity.strategicActionsTerritory")
-		(var observedTerritoryName:str = "observedTerritory.id")
-
 
 		
 		
 		
 		(var territoryEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTerritory, _territoryName)")
-		(var territoryComponent:dhComponent = "territoryEntity.strategicActionsTerritory")
-		(var territoryEntityId:number =	"territoryEntity.id"					(event "territoryComponent.evChanged"))
-		(var territoryLevel:number =	"territoryComponent.level"				(event "territoryComponent.evChanged"))
-		(var currentTaskIndex:number =	"territoryComponent.currentTaskIndex"	(event "territoryComponent.evChanged"))
+
+		(struct territory = PULL_TERRITORY_FULL_INFO(_entityId="territoryEntity.id"))
 
 		
 		(var tasksCollection:dhCollection = "getCollection(CC.strategicActionsTask).getChildByPath('byTerritoryId.' + _territoryName)")
 		(var tasksCollectionItems:array = "tasksCollection.items ?: []")
-		(var nextTaskIndex:number = "currentTaskIndex + 1")
+		(var nextTaskIndex:number = "territory.currentTaskIndex + 1")
 		(var nextTaskIndexToDisplay:number = "tasksCollectionItems.length == nextTaskIndex ? 0 : nextTaskIndex")
 		
 		
-		(var taskActiveEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTask, _territoryName + '_' + toString(currentTaskIndex))")
+		(var taskActiveEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTask, _territoryName + '_' + toString(territory.currentTaskIndex))")
 		(var taskNextEntity:dhEntity = "getPrimaryEntity(CC.strategicActionsTask, _territoryName + '_' + toString(nextTaskIndexToDisplay))")
 
-		(var progress:number = "territoryComponent.progress" (event "territoryComponent.evChanged"))
-		(var maxProgress:number = "territoryComponent.maxProgress" (event "territoryComponent.evChanged"))
-
-		(var status:number = "territoryComponent.status" (event "territoryComponent.evChanged"))
-
-		(var isLocked:bool=				"status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.LOCKED")
-		(var isSelected:bool =			"status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.SELECTED")
-		(var isCompleted:bool =			"status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.COMPLETED")
-		(var isAvailable:bool =			"status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.AVAILABLE")
-		(var isRewardsClaim:bool =		"status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.REWARDS_CLAIM")
-		(var isRewardAvailable:bool =	"status == SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.REWARDS_CLAIM")
-		(var isDone:bool =				"isIn(status, SC.Common.STRATEGIC_ACTIONS_TERRITORY_STATUS.DONE)")
-
-		(var restrictionsEntityId:number = "territoryComponent ? territoryComponent.restrictionsEntity : 0" (event "territoryComponent.evChanged"))
-		(var restrictionsEntity:dhEntity = "getEntity(restrictionsEntityId)")
-		(var battleTypes:array = "restrictionsEntity.battleTypesView.viewList  ?: []"	(event "territoryComponent.evChanged")
+		(var restrictionsEntity:dhEntity = "getEntity(territory.restrictionsEntityId)")
+		(var battleTypes:array = "restrictionsEntity.battleTypesView.viewList  ?: []"	(event "territory.component.evChanged")
 																						(event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
 		(var shipRestrictions:array = "restrictionsEntity.shipListRestrictions.selectedFilters ?: []")
 		(var hasReducedBattleTypes:bool = "restrictionsEntity.battleTypesView.hasReducedBattleTypes" (event "restrictionsEntity.battleTypesView.evBattleTypesViewChanged"))
@@ -1760,23 +1708,23 @@
 		(var pveModifier:number = "taskActiveEntity.strategicActionsTask.pveModifier ?: 1.0" (event "taskActiveEntity.strategicActionsTask.evChanged"))
 		(var isPVEModifierApplied:bool = "pveModifier != PVE_DEFAULT_MODIFIER_COEFF && hasReducedBattleTypes")
 
-		(var isStatusVisible:bool = "isLocked || isSelected || isDone")
-		(var isProgressVisible:bool = "isRewardsClaim || isSelected || !isCompleted && progress > 0")
-		(var areRestrictionsVisible:bool = "(!isDone && !isLocked) && (battleTypes.length > 0 || shipRestrictions.length > 0)")
+		(struct territoryStatus = PULL_TERRITORY_STATUS(_status = "territory.status"))
 
-		(var rewards:array = "territoryComponent.rewards" (event "territoryComponent.evChanged"))
+		(var isStatusVisible:bool = "territoryStatus.isLocked || territoryStatus.isSelected || territoryStatus.isDone")
+		(var isProgressHidden:bool = "territoryStatus.isCompleted || territoryStatus.isRewardsClaim || territoryStatus.isLocked")
+		(var areRestrictionsVisible:bool = "(!territoryStatus.isDone && !territoryStatus.isLocked) && (battleTypes.length > 0 || shipRestrictions.length > 0)")
 
-		(var unifiedStatus:str =	"	isCompleted			? SC.Ui_styles.UNIFIED_STATUS.CHECK :
-										isRewardAvailable	? SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE :
-										isLocked			? SC.Ui_styles.UNIFIED_STATUS.LOCK :
-										isSelected			? SC.Ui_styles.UNIFIED_STATUS.SELECTED
-															: SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
-		(var statusText:str =		"	isCompleted			? 'IDS_TOOLTIP_REWARD_TAKEN' :
-										isRewardAvailable	? 'IDS_AVAILABLE_REWARD' :
-										isSelected			? 'IDS_STRATEGIC_ACTIONS_TERRITORY_SELECTED'
-															: 'IDS_STRATEGIC_ACTIONS_TERRITORY_MARKER_TOOLTIP_STATUS_LOCKED'")
+		(var unifiedStatus:str = "	territoryStatus.isCompleted		? SC.Ui_styles.UNIFIED_STATUS.CHECK :
+									territoryStatus.isRewardsClaim	? SC.Ui_styles.UNIFIED_STATUS.REWARD_AVAILABLE :
+									territoryStatus.isLocked		? SC.Ui_styles.UNIFIED_STATUS.LOCK :
+									territoryStatus.isSelected		? SC.Ui_styles.UNIFIED_STATUS.SELECTED
+																	: SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
+		(var statusText:str = "	territoryStatus.isCompleted		? 'IDS_TOOLTIP_REWARD_TAKEN' :
+								territoryStatus.isRewardsClaim	? 'IDS_AVAILABLE_REWARD' :
+								territoryStatus.isSelected		? 'IDS_STRATEGIC_ACTIONS_TERRITORY_SELECTED'
+																: 'IDS_STRATEGIC_ACTIONS_TERRITORY_MARKER_TOOLTIP_STATUS_LOCKED'")
 
-		(var canTasksBeShown:bool = "(territoryEntityId != 0) && !isLocked && !isDone")
+		(var canTasksBeShown:bool = "(territoryEntity.id != 0) && !territoryStatus.isLocked && !territoryStatus.isDone")
 	)
 
 	(style (width = 340px))
@@ -1808,20 +1756,39 @@
 
 		
 		(block
+			(bind visible "!isProgressHidden")
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemProgressBarBlock'
-				(bind enabled "isProgressVisible")
-				(args
-					_title = 'IDS_STRATEGIC_ACTIONS_TERRITORY_SCORE'
-					_currentValue = "progress"
-					_maxValue = "maxProgress"
+			(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
+
+			(element TOOLTIP_SYSTEM_ELEMENTS_GROUP _isEnabled="!isProgressHidden"
+				(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="!isProgressHidden"
+					(controller $Instance renderer='TooltipSystemProgressDividedCounter'
+						(bind enabled "!isProgressHidden")
+						(args
+							_title = 'IDS_STRATEGIC_ACTIONS_POINTS_TILL_REWARD'
+							_currentValue = "territory.progressCurrent"
+							_maxValue = "territory.progressMax"
+							_isCurrentValueHighlighted = true
+						)
+					)
+				)
+				(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="!isProgressHidden"
+					(controller $Instance renderer='TooltipSystemProgressDividedCounter'
+						(bind enabled "!isProgressHidden")
+						(args
+							_title = 'IDS_STRATEGIC_ACTIONS_TOOLTIP_TILL_NEXT_THRESHOLD'
+							_currentValue = "territory.thresholdPointsDiff"
+							_maxValue = "territory.thresholdPoints"
+							_isCurrentValueHighlighted = true
+						)
+					)
 				)
 			)
 		)
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "isProgressVisible")
+				(bind enabled "!isProgressHidden")
 			)
 		)
 
@@ -1901,7 +1868,7 @@
 		)
 
 		(element TooltipSystemRewardsDHList
-			_rewards = "rewards"
+			_rewards = "territory.rewards"
 			_rewardsTitle = 'IDS_STRATEGIC_ACTIONS_TERRITORY_REWARDS_TOOLTIP'
 		)
 		(element TooltipSystemHorizontalDivider)
@@ -1920,8 +1887,7 @@
 
 (def element TerritoryProgress (_entityId:number)
 	(scope
-		(struct territory = THRESHOLDS_POINTS (_entityId = "_entityId"))
-		(var pointsTillNextReward:number = "territory.thresholdPoints - territory.progressCurrent % territory.thresholdPoints")
+		(struct territory = THRESHOLDS_POINTS(_entityId = "_entityId"))
 		(var isLastStage:bool = "territory.stage+1 == territory.thresholdsCount")
 		(var textStage:str = "isLastStage ? 'IDS_STRATEGIC_ACTIONS_POINTS_TILL_REWARD' : 'IDS_STRATEGIC_ACTIONS_POINTS_TILL_NEXT_STAGE'")
 	)
@@ -1939,7 +1905,7 @@
 
 		(block
 			(element PriceTag
-				_priceInfo = "{currency: SC.Common.CURRENCIES.STRATEGIC_POINTS, finalPrice: pointsTillNextReward}"
+				_priceInfo = "{currency: SC.Common.CURRENCIES.STRATEGIC_POINTS, finalPrice: territory.pointsTillNextReward}"
 				_size = "SIZE.MEDIUM"
 			)
 			(controller $Tooltip
@@ -1975,12 +1941,12 @@
 (def element TerritoryProgressBar (_entityId:number)
 	(scope
 		(struct territory = THRESHOLDS_POINTS(_entityId = "_entityId"))
-		(var currentThresholdIndex:number = "floor(territory.progressCurrent/territory.thresholdPoints)")
+		(var currentThresholdIndex:number = "floor(territory.progressCurrent / territory.thresholdPoints)")
 		(var isThresholdCompleted:bool = "currentThresholdIndex > $index")
 		(var thresholdsCount:number = "territory.thresholdsCount ?: 1")
 
 		(var thresholdsProgress:number = "isThresholdCompleted	? 1
-																: max(0, territory.progressCurrent/territory.thresholdPoints - $index)")
+																: max(0, territory.progressCurrent / territory.thresholdPoints - $index)")
 		
 		(var progressBarWidth:number = "ceil((PANEL_CONTENT_WIDTH - ((thresholdsCount - 1) * XXS)) / thresholdsCount)")
 	)
@@ -2026,9 +1992,6 @@
 		(var posX:number = "screenPosition.position.x ?: 0" (event "evEnterFrame"))
 		(var posY:number = "screenPosition.position.y ?: 0" (event "evEnterFrame"))
 
-		(var markerState:number = "rollOver ? SC.Ui_styles.BUTTON_STATE.OVER : SC.Ui_styles.BUTTON_STATE.UP")
-		(var markerAlpha:number = "rollOver ? 0.5 : 1")
-
 		(var animationName:str = "	isArchiveEntryPoint		? 'archive' :
 									isLocked				? 'lock' :
 									isRewardsClaim			? 'reward' :
@@ -2055,6 +2018,7 @@
 	)
 
 	(dispatch evDelayBeforeShowingArchivePassed delay=0.625 on='leftClick') 
+	(dispatch evArchiveMarkerClicked dir="EventDirection.UP" (bind enabled "isArchiveEntryPoint") (event "evClicked"))
 	(bindcall externalCall "isArchiveEntryPoint ? 'inputMapping.onAction' : ''" "['observeArchive', {}]" watch=false on='leftClick')
 	(bindcall externalCall "isArchiveEntryPoint ? 'inputMapping.onRequest' : ''" "['showArchive', {}]" watch=false (event "evDelayBeforeShowingArchivePassed"))
 	(bindcall externalCall "!isArchiveEntryPoint ? 'inputMapping.onAction' : ''" "['observeTerritoryByMarker', {territoryName: territoryName}]" watch=false on='leftClick')
@@ -2065,13 +2029,13 @@
 	(bind name "territoryName")
 
 	(style
+		(position = "absolute")
 		(align = "center|middle")
 		(backgroundColor = "NO_COLOR")
 		(width = 124px)
 		(height = 124px)
 		(pivotX = 50%)
 		(pivotY = 50%)
-		(position = "absolute")
 		(roundPosition = false)
 		(bind left "posX")
 		(bind top "posY")
@@ -2227,7 +2191,7 @@
 	(style
 		(hitTest = false)
 		(position = "absolute")
-		(width = 1920px)
+		(width = "{1280:1700px, 1920:1920px}")
 		(height = 100%)
 		(backgroundSize = "cover")
 		(backgroundImage = 'url:../animations/spine/strategic_actions/panel.skel')

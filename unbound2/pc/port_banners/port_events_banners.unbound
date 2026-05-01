@@ -435,8 +435,6 @@
 
 		(struct tileContent = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
 
-		(var isSmallBanner:bool = "tileContent.tileSize == SC.Ui_common.TILE_SIZE.S")
-
 		(var commonBannerRenderer:str = "tileContent.contentId in BANNERS_CONFIG ? BANNERS_CONFIG[tileContent.contentId].bannerContent : ''")
 	)
 	(class $Fullsize)
@@ -467,10 +465,11 @@
 	)
 )
 
-(def element EventBannerContentCustom (_entityContentId:number = 0, _guidingOffsets:dict = {})
+(def element EventBannerContentCustom (_entityContentId:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
+		(struct serverTime = SERVER_TIME())
 		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
 
 		(var route:str = "tileContentInfo.tileContent.route ?: ''" (event "tileContentInfo.tileContent.evChanged"))
@@ -481,7 +480,15 @@
 		(var skipURLTranslation:bool = "!isIn(url, SC.Ui_windows.GUI_URL.ALL)")
 		(var mainText:str = "tileContentInfo.tileContent.mainText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
 		(var tooltipText:str = "tileContentInfo.tileContent.tooltipText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
-		(var isNew:bool = "tileContentInfo.tileContentEntity.hasComponent(CC.newItem)")
+		(var isNewTileContent:bool = "tileContentInfo.tileContentEntity.hasComponent(CC.newItem)")
+
+		(var metashopCategoryEntity:dhEntity =	"getPrimaryEntity(CC.metashopCategory, tileContentInfo.contentId)")
+		(var isRewardMarker:bool = "metashopCategoryEntity.metashopCategory.isRewardAvailable" (event "metashopCategoryEntity.metashopCategory.evChanged"))
+		(var timeStamp:number = "metashopCategoryEntity.metashopCategory.activeUntil ?: 0" (event "metashopCategoryEntity.metashopCategory.evChanged"))
+		(var isTimeStampMarker:bool = "timeStamp > 0 && timeStamp - DAY_IN_SEC * 7 < serverTime.value")
+		(var isNewMetashopCategory:bool = "metashopCategoryEntity.hasComponent(CC.newItem)")
+
+		(var isNew:bool = "isNewTileContent || isNewMetashopCategory")
 
 		(var isSmallBanner:bool = "tileContentInfo.tileSize == SC.Ui_common.TILE_SIZE.S")
 	)
@@ -537,8 +544,8 @@
 		(bind visible "toBool(url)")
 		(style
 			(position = "absolute")
-			(right = 0)
-			(bottom = 0)
+			(right = 0px)
+			(bottom = 0px)
 			(width = 48px)
 			(height = 48px)
 			(backgroundImage = 'url:../events/banners/icons/link.png')
@@ -548,17 +555,19 @@
 	)
 
 	(controller $Instance renderer='EventBannerMarkers'
-		(bind enabled "isNew")
+		(bind enabled "isNew || timeStamp > 0 || isRewardMarker")
 		(args
 			_isNewMarker = "isNew"
+			_isRewardMarker = "isRewardMarker"
 			_size = "tileContentInfo.tileSize"
+			_isTimeStampMarker = "isTimeStampMarker"
+			_timeStamp = "timeStamp"
 		)
 	)
 )
 
 (def element EventBannerBattlePass (	_size:number = "SC.Ui_common.TILE_SIZE.S",
 										_guidingOffsets:dict = {},
-										_bannerHeight:number = 0,
 										_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -672,7 +681,6 @@
 
 (def element EventBannerStrategicActions (	_size:number = "SC.Ui_common.TILE_SIZE.S",
 											_guidingOffsets:dict = {},
-											_bannerHeight:number = 0,
 											_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -692,17 +700,15 @@
 		(var isCompleted:bool =				"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.COMPLETED")
 		(var isFinishedWithResults:bool =	"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.FINISHED_WITH_RESULTS")
 
-		(var bannerDescription:str = "isActive && isTerritoryAvailable && !isAnyRewardClaim	? 'IDS_STRATEGIC_ACTIONS_BANNER_TEXT_TERRITORY' : ''")
-
-		(var hasReward:bool = "isAnyRewardClaim && !isFinishedWithResults")
-
 		(var isNew:bool = "strategicActionsEntity.hasComponent(CC.newItem)")
-		(var isNewMarkerVisible:bool = "isNew && !isAnyRewardClaim && !isFinishedWithResults")
 		(var isActionMarker:bool = "isActive && isTerritoryAvailable && !isAnyRewardClaim")
 
 		(var isSmallBanner:bool = "_size == SC.Ui_common.TILE_SIZE.S")
 		(var isDisableState:bool = "isSmallBanner && (isCompleted && !isAnyRewardClaim || isFinishedWithResults)")
 
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.STRATEGIC_ACTIONS"))
+		(var isNewMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW")
+		(var isRewardMarker:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.REWARD")
 
 		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.STRATEGIC_ACTIONS_EVENT,
@@ -754,14 +760,14 @@
 		(element EventBannerTitle
 			_title = 'IDS_STRATEGIC_ACTIONS_COMMON_EVENT_TITLE'
 			_size = "_size"
-			_hasIcon = "hasReward"
+			_hasIcon = "isRewardMarker"
 		)
 	)
 
 	(block
 		(class $EventBannerReward)
 		(controller $Instance renderer = 'EventBannerIcon'
-			(bind enabled "hasReward")
+			(bind enabled "isRewardMarker")
 			(args
 				_icon = 'url:../service_kit/port_banner/icon_banner_reward.png'
 				_isAnimated = true
@@ -771,11 +777,11 @@
 	)
 
 	(controller $Instance renderer='EventBannerMarkers'
-		(bind enabled "isNewMarkerVisible || hasReward || isActionMarker")
+		(bind enabled "isNewMarkerVisible || isRewardMarker || isActionMarker")
 		(args
 			_isActionMarker = "isActionMarker"
 			_isNewMarker = "isNewMarkerVisible"
-			_isRewardMarker = "hasReward"
+			_isRewardMarker = "isRewardMarker"
 			_text = 'IDS_STRATEGIC_ACTIONS_BANNER_TEXT_TERRITORY'
 			_size = "_size"
 		)
@@ -801,7 +807,6 @@
 
 (def element EventBannerRepairDock (	_size:number = "SC.Ui_common.TILE_SIZE.S",
 										_guidingOffsets:dict = {},
-										_bannerHeight:number = 0,
 										_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -917,7 +922,6 @@
 
 (def element EventBannerArcEvent (	_size:number = "SC.Ui_common.TILE_SIZE.S",
 									_guidingOffsets:dict = {},
-									_bannerHeight:number = 0,
 									_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -952,7 +956,6 @@
 
 		(var personalProgressPoints:number = "personalProgressArray[0] ?: 1")
 		(var pointsTillNextRewardTotal:number =	"isPersonalRewardIndex ? personalProgressArray[personalRewardIndex + 1] : personalProgressPoints")
-		(var lastReceivedRewardPoints:number =	"isPersonalRewardIndex ? personalProgressArray[personalRewardIndex] : 0")
 		(var hasReceivedAllRewards:bool =		"isPersonalRewardIndex && personalRewardIndex == personalProgressArrayMaxIndex")
 
 		(var personalProgressBarValue:number = "hasReceivedAllRewards ? 1 : personalProgress/pointsTillNextRewardTotal")
@@ -1122,7 +1125,6 @@
 
 (def element EventBannerSnowflakes (	_size:number = "SC.Ui_common.TILE_SIZE.S",
 										_guidingOffsets:dict = {},
-										_bannerHeight:number = 0,
 										_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -1289,7 +1291,6 @@
 
 (def element EventBannerShipyard (	_size:number = "SC.Ui_common.TILE_SIZE.S",
 									_guidingOffsets:dict = {},
-									_bannerHeight:number = 0,
 									_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -1426,10 +1427,7 @@
 	)
 )
 
-(def element EventBannerProspectiveEvent (	_size:number = "SC.Ui_common.TILE_SIZE.S",
-											_guidingOffsets:dict = {},
-											_bannerHeight:number = 0,
-											_screenOffsetRight:number = 0)
+(def element EventBannerProspectiveEvent (	_size:number = "SC.Ui_common.TILE_SIZE.S")
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -1476,10 +1474,7 @@
 	)
 )
 
-(def element EventBannerCasualCvc (	_size:number = "SC.Ui_common.TILE_SIZE.S",
-									_guidingOffsets:dict = {},
-									_bannerHeight:number = 0,
-									_screenOffsetRight:number = 0)
+(def element EventBannerCasualCvc (	_size:number = "SC.Ui_common.TILE_SIZE.S")
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -1588,7 +1583,6 @@
 
 (def element EventBannerTutorial (	_size:number = "SC.Ui_common.TILE_SIZE.S",
 									_guidingOffsets:dict = {},
-									_bannerHeight:number = 0,
 									_screenOffsetRight:number = 0)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
@@ -1728,7 +1722,6 @@
 )
 
 (def element SseMotivatorSubBannerItem (	_sseId:number = 0,
-											_bannerHeight:number = 0,
 											_isMotivatorDoneStateView:bool = false,
 											_guidingOffsets:dict = {})
 	(scope
@@ -1841,7 +1834,7 @@
 		(bind visible "isTaskCompletedBlock && !_isMotivatorDoneStateView")
 		(style
 			(position = "absolute")
-			(right = 0)
+			(right = 0px)
 			(width = 280px)
 			(height = 160px)
 			(backgroundImage = 'url:../sse/motivator/task_completed.png')
@@ -1992,7 +1985,6 @@
 
 (def element SseMotivatorTaskActive (	_sseId:number = 0,
 										_guidingOffsets:dict = {},
-										_bannerHeight:number = 0,
 										_isClaimButtonVisible:bool = false)
 	(scope
 		(event evSubBannerItemClicked)
@@ -2004,9 +1996,6 @@
 		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
 
 		(struct sseMotivator = GET_MOTIVATOR_INFO(_sseId = "_sseId"))
-
-		(var taskDescriptionData:dict = "sseMotivator.conditions.taskDescriptionData" (event "sseMotivator.conditions.evConditionSetChanged"))
-		(var isSingleBattle:bool = "sseMotivator.conditions.isSingleBattle" (event "sseMotivator.conditions.evConditionSetChanged"))
 
 		(var sseTaskRewards:array = "sseMotivator.infoSourceComponent.rewards ?: []" (event "sseMotivator.infoSourceComponent.evChanged"))
 		(var rewardEntity:dhEntity = "getEntity(sseTaskRewards[0])")
@@ -2209,7 +2198,6 @@
 )
 
 (def element SseMotivatorTaskCompleted (	_sseId:number = 0,
-											_bannerHeight:number = 0,
 											_isMotivatorDoneStateView:bool = false,
 											_guidingOffsets:dict = {})
 	(scope
@@ -2283,7 +2271,7 @@
 )
 
 
-(def element EventBannerPromoReward (_size:number = "SC.Ui_common.TILE_SIZE.S", _guidingOffsets:dict = {}, _bannerHeight:number = 0)
+(def element EventBannerPromoReward ()
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -2294,32 +2282,19 @@
 
 		(var promoRewardBattles:number =	"accountPromoRewardBannerComponent.battles" (event "accountPromoRewardBannerComponent.evChanged"))
 		(var promoRewardLevel:number =		"accountPromoRewardBannerComponent.level" (event "accountPromoRewardBannerComponent.evChanged"))
-		(var promoRewardImageSmall:str =	"accountPromoRewardBannerComponent.imageSmall" (event "accountPromoRewardBannerComponent.evChanged"))
 
-		(var promoImageEntity:dhEntity =		"getPrimaryEntity(CC.externalImage, promoRewardImageSmall)")
-		(var promoImageComponent:dhComponent =	"promoImageEntity.externalImage")
-		(var isImageLoaded:bool =				"promoImageComponent.isLoaded" (event "promoImageComponent.evIsLoadedChanged"))
-		(var promoImageUrl:str =				"isImageLoaded ? 'img://embedded:byteImage?url=' + promoImageComponent.url : ''")
+		(var tileContentEntity:dhEntity = "getPrimaryEntity(CC.tileContent, SC.Common.TILE_CONTENT.PROMO_REWARD)")
+		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="tileContentEntity.id"))
 
 		(var accountLevelPointsEntity:dhEntity = "getSingleEntity(CC.accountLevelPoints)")
 		(var accountLevelPointsComponent:dhComponent = "accountLevelPointsEntity.accountLevelPoints")
 		(var currentPoints:number = "accountLevelPointsComponent.currentLevelPoints" (event "accountLevelPointsComponent.evCurrentLevelPointsChanged"))
 		(var battlesToPromoReward:number = "(promoRewardBattles - currentPoints) ?: 0")
 	)
+	(name = 'promoRewardBannerImage')
 
 	(class $Fullsize)
 	(style (backgroundColor = "NO_COLOR"))
-
-	(block
-		(name = 'promoRewardBannerImage')
-
-		(class $FullsizeAbsolute)
-		(style
-			(borderRadius = "S")
-			(backgroundSize = "crop")
-			(bind backgroundImage "promoImageUrl")
-		)
-	)
 
 	(macro MOUSE_HANDLER_BANNER
 		_methods = "[{
@@ -2359,10 +2334,8 @@
 		(macro MOUSE_HANDLER_SCOPE)
 
 		(var metaEventEntity:dhEntity = "getSingleEntity(CC.metaEvent)")
+		(var isActiveState:bool = "metaEventEntity.metaEvent.state == SC.Common.META_EVENT_STATE.ACTIVE" (event "metaEventEntity.metaEvent.evChanged"))
 		(struct metaEventProgression = PULL_META_EVENT_PROGRESSION(_component="metaEventEntity.metaEvent"))
-
-		(var currentThreshold:number = "metaEventProgression.currentThreshold")
-		(var maxThresholds:number = "metaEventProgression.mainProgression.length")
 
 		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.META_EVENT"))
 		(var isRewardMarker:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.REWARD")
@@ -2394,11 +2367,13 @@
 
 		(block
 			(controller $Instance renderer='EventBannerDividedCounter'
-				(bind enabled "!isRewardMarker && currentThreshold < maxThresholds")
+				(bind enabled "	isActiveState &&
+								!metaEventProgression.isCompleted &&
+								!isRewardMarker")
 				(args
 					_textClass = '$TextDefaultBold22NM'
-					_currentValue = "currentThreshold"
-					_maxValue = "maxThresholds"
+					_currentValue = "metaEventProgression.currentThreshold"
+					_maxValue = "metaEventProgression.mainProgression.length"
 				)
 			)
 		)
@@ -2421,6 +2396,59 @@
 		(args
 			_isNewMarker = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW"
 			_isRewardMarker = "isRewardMarker"
+			_size = "_size"
+		)
+	)
+)
+
+(def element EventBannerShipAces (	_size:number = "SC.Ui_common.TILE_SIZE.S")
+	(scope
+		(macro MOUSE_HANDLER_SCOPE)
+
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.SHIP_ACES"))
+		(struct shipAces = SHIP_ACES_BANNER_SCOPE())
+		(struct serverTime = SERVER_TIME())
+		(var finishTime:number = "shipAces.seasonComponent.finishTime" (event "shipAces.seasonComponent.evChanged"))
+		(var isSeasonOver:bool = "finishTime - serverTime.value <= 0")
+	)
+	(class $Fullsize)
+	(style (backgroundColor = "NO_COLOR"))
+
+	(macro PORT_BANNER_CHANGE_ALPHA_BY_TRIGGER_ANIM
+		_triggerExpression = "isSeasonOver"
+	)
+
+	(macro MOUSE_HANDLER_BANNER
+		_methods = "[
+			{
+				type: 'inputMapping.onAction',
+				name: 'navigateTo',
+				args: { route: SC.Ui_windows.ROUTE.SSE_SHIP_ACES }
+			}
+		]"
+	)
+
+	(hblock
+		(class $EventBanner)
+		(element EventBannerTitle
+			_title = 'IDS_SHIP_ACES_COMMON_TITLE'
+			_size = "_size"
+		)
+
+		(block
+			(controller $Instance renderer = 'EventBannerCounter'
+				(bind enabled "shipAces.taskTotal")
+				(args
+					_count = "shipAces.taskTotal"
+				)
+			)
+		)
+	)
+
+	(controller $Instance renderer='EventBannerMarkers'
+		(bind enabled "markerData.isVisible")
+		(args
+			_isNewMarker = "markerData.isVisible"
 			_size = "_size"
 		)
 	)

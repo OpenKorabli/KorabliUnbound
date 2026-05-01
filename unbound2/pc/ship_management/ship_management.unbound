@@ -26,7 +26,7 @@
 	(var align:number = "stageSize.height > 1000 ? top|center : left|middle")
 )
 
-(def element ShipManagementMainInset ()
+(def element ShipManagementMainInset (_isWebPreview:bool = false)
 	(scope
 		(struct highContrast = HIGH_CONTRAST_INFO())
 
@@ -40,19 +40,25 @@
 		(macro PULL_CURRENT_TOP_WINDOW_NAME)
 		(var isOnTop:bool = "currentTopWindowName == 'Dock'")
 
+		(struct webPreviewRoute =		PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_SHIP_PREVIEW"))
 
-		(struct armoryRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.OVERVIEW"))
-		(struct upgradesRoute = PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.UPGRADES"))
+		(struct overviewRoute =			PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.OVERVIEW"))
+		(struct browserOverviewRoute =	PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_OVERVIEW"))
+		(struct upgradesRoute =			PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.UPGRADES"))
+		(struct browserUpgradesRoute =	PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_UPGRADES"))
 
-		(var renderManagementPage:str = "	armoryRoute.isActive	?	'ArmoryManagementInset' :
-											upgradesRoute.isActive	?	'UpgradesManagementInset'
-																	:	''")
+		(var renderManagementPage:str = "	overviewRoute.isActive || browserOverviewRoute.isActive		?	'OverviewManagementInset' :
+											upgradesRoute.isActive || browserUpgradesRoute.isActive		?	'UpgradesManagementInset'
+																										:	''")
 
 		(var currentSoundInset:str = "upgradesRoute.isActive ? SC.Ui_windows.ROUTE.UPGRADES : SC.Ui_windows.ROUTE.OVERVIEW")
 
 		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, viewedShipId)")
 		(var shipInfo:dhComponent = "shipEntity.ship")
 		(var previousShipId:number =	"shipInfo.previousShipId"	(event "shipInfo.evUpdate"))
+
+		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
+		(var isExcursionActive:bool = "dockData.excursionVisible" (event "dockData.evExcursionVisibleChanged"))
 	)
 
 	
@@ -73,6 +79,7 @@
 	(macro DEFAULT_CACHED_SHOW_ANIMATION 1)
 
 	(block
+		(bind visible "!_isWebPreview")
 		(class $DockInsetPageHeaderOffset)
 		(style (hitTest = false))
 
@@ -80,7 +87,7 @@
 			(class $FullsizeAbsolute)
 
 			(controller $Instance renderer='BlurMap'
-				(bind enabled "!highContrast.isEnabled")
+				(bind enabled "!highContrast.isEnabled && !_isWebPreview")
 				(args
 					_blurType = "BLUR_TYPE.SHIP_MANAGEMENT"
 				)
@@ -98,7 +105,7 @@
 
 	(block
 		(class $Fullsize)
-		(style (bind paddingBottom "carouselAreaHeightPref.value"))
+		(style (bind paddingBottom "webPreviewRoute.isActive ? XL : carouselAreaHeightPref.value"))
 
 		(controller $Animation
 			(bindcall play
@@ -110,6 +117,17 @@
 				action = "kill"
 				on = 'addedToStage'
 				(bind trigger "viewedShipId")
+			)
+
+			(bindcall play
+				id = 'shipHistoryContentAnim'
+				duration = 0.3
+				from = "{ alpha: 1, visible: true }"
+				to = "{ alpha: 0, visible: false }"
+				easing = "Easing.quad_in"
+				action = "killAndContinue"
+				reverse = "!isExcursionActive"
+				(bind trigger "isExcursionActive")
 			)
 		)
 
@@ -140,7 +158,10 @@
 					)
 				)
 
-				(element ShipInfoWidget)
+				(element ShipInfoWidget
+					_isExcursionActive = "isExcursionActive"
+					_isWebPreview = "webPreviewRoute.isActive"
+				)
 			)
 		)
 
@@ -259,7 +280,7 @@
 	)
 )
 
-(def element ArmoryManagementInset ()
+(def element OverviewManagementInset ()
 	(style
 		(width = 100%)
 		(align = "center")

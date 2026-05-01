@@ -92,7 +92,7 @@
 		_isSelected = "_tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS"
 		_width = 50%
 		_methods = "[{ type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsInset', value: SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS } },
-					 { type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsAndChannelsSearchState', value: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF } }]"
+					 { type: 'direct.action', name: 'setSessionPref', args: { prefName: 'contactsAndChannelsSearchState', newValue: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF } }]"
 	)
 
 	(element TabButton
@@ -101,7 +101,7 @@
 		_isSelected = "_tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CHANNELS"
 		_width = 50%
 		_methods = "[{ type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsInset', value: SC.Common.CONTACTS_AND_CHANNELS_INSET.CHANNELS } },
-					 { type: 'inputMapping.onAction', name: 'setUserPref', args: { name: 'contactsAndChannelsSearchState', value: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF } }]"
+					 { type: 'direct.action', name: 'setSessionPref', args: { prefName: 'contactsAndChannelsSearchState', newValue: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF } }]"
 	)
 
 	(block
@@ -115,51 +115,32 @@
 		(event evTextInputSearchCancelled)
 		(event evSearchChannelsButtonClicked)
 		
-		(event evAllContactSearchButtonClicked)
-		(event evStrangersContactSearchButtonClicked)
+		(event evContactSearchButtonClicked)
+
+		(var sessionPrefs:dhComponent =	"getSingleComponent(CC.sessionPreference)")
+		(var contactsAndChannelsSearchActiveState:number =	"sessionPrefs.contactsAndChannelsSearchState"	(event "sessionPrefs.evContactsAndChannelsSearchStateChanged"))
+		(var chatActiveSearchState:number = "sessionPrefs.chatSearchState"	(event "sessionPrefs.evChatSearchStateChanged"))
 
 		(struct userPrefs = USER_PREF_DATA())
-		(var searchActiveState:number =		"userPrefs.prefs.contactsAndChannelsSearchState == null	? SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF	: userPrefs.prefs.contactsAndChannelsSearchState")
-		(var contactsSearchState:number =	"userPrefs.prefs.contactsSearchState == null			? SC.Common.PLAYERS_SEARCH_STATE.COMMON				: userPrefs.prefs.contactsSearchState")
-		(var tabIndex:number =				"userPrefs.prefs.contactsInset == null					? SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS	: userPrefs.prefs.contactsInset")
-		
-		(var isActiveSearch:bool = "searchActiveState == SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.ON")
-		(var isActiveAllContactSearch:bool = "isActiveSearch && contactsSearchState == SC.Common.PLAYERS_SEARCH_STATE.COMMON")
+		(var tabIndex:number = "!_isFromDockChatBtn || userPrefs.prefs.contactsInset == null ? SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS : userPrefs.prefs.contactsInset")
+		(var tabContentRenderers:array = ['ContactsList', 'ChannelsList'])
 
-		(var isActiveContactList:bool = "_isFromDockChatBtn	?	!isActiveSearch && tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS : !isActiveSearch")
-		(var isActiveChannelList:bool = "_isFromDockChatBtn	?	!isActiveSearch && tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CHANNELS : false")
+		(var isActiveSearch:bool = "_isFromDockChatBtn ? contactsAndChannelsSearchActiveState == SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.ON
+													   : chatActiveSearchState == SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.ON")
 
-		(var searchRequests:array = "tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS	?	_isFromDockChatBtn	? isActiveAllContactSearch	? [['contacts', 13]]
-																																					: [['contacts', 13], ['channels', null]]
-																														: [['contacts', 13]]
-																								:	[['channels', null], ['contacts', 13]]")
-		
-		(var resultsDisplay:array = "tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS	?	_isFromDockChatBtn	? isActiveAllContactSearch	? ['contacts']
-																																					: ['myContacts', 'contacts', 'ignoredContacts', 'myChannels', 'channels']
-																														: ['myContacts', 'contacts', 'ignoredContacts']
-																								:	['myChannels', 'channels', 'myContacts', 'contacts', 'ignoredContacts']")
+		(var searchRequests:array = "_isFromDockChatBtn && tabIndex != SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS ? [['channels', null], ['contacts', 13]] : [['contacts', 13]]")
 
-		
-		(event evCacheContactsList)
-		(var isCacheContactsList:bool = "$event ? true : isActiveContactList" watch=false (event "evCacheContactsList"))
-
-		(event evCacheChannelsList)
-		(var isCacheChannelsList:bool = "$event ? true : isActiveChannelList" watch=false (event "evCacheChannelsList"))
-		
+		(var resultsDisplay:array = "_isFromDockChatBtn	?	tabIndex == SC.Common.CONTACTS_AND_CHANNELS_INSET.CONTACTS	? ['contacts']
+																														: ['myChannels', 'channels', 'myContacts', 'contacts', 'ignoredContacts']
+														:	['myContacts', 'contacts', 'ignoredContacts']")
 	)
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'contactsAndChannelsSearchState', value: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF }]"	(event "evTextInputSearchCancelled"))
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'contactsAndChannelsSearchState', value: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.ON }]"	(event "evAllContactSearchButtonClicked")
-																																											(event "evStrangersContactSearchButtonClicked")
-																																											(event "evSearchChannelsButtonClicked"))
 
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'contactsSearchState', value: SC.Common.PLAYERS_SEARCH_STATE.STRANGERS }]" (event "evAllContactSearchButtonClicked"))
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref', { name: 'contactsSearchState', value: SC.Common.PLAYERS_SEARCH_STATE.COMMON }]" (event "evStrangersContactSearchButtonClicked"))
+	(bindcall externalCall 'direct.action' "['setSessionPref', { prefName: _isFromDockChatBtn ? 'contactsAndChannelsSearchState' : 'chatSearchState', newValue: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.OFF }]" (event "evTextInputSearchCancelled"))
 
-	(dispatch evCacheContactsList (bind enabled "isActiveContactList")	(bind trigger "isActiveContactList"))
-	(dispatch evCacheChannelsList (bind enabled "isActiveChannelList")	(bind trigger "isActiveChannelList"))
+	(bindcall externalCall 'direct.action' "['setSessionPref', { prefName: _isFromDockChatBtn ? 'contactsAndChannelsSearchState' : 'chatSearchState', newValue: SC.Common.CONTACTS_AND_CHANNELS_SEARCH_STATE.ON }]" (event "evContactSearchButtonClicked")
+																																																					(event "evSearchChannelsButtonClicked"))
 
 	(class $Fullsize)
-
 	(block
 		(bind visible "_isFromDockChatBtn")
 		(style (width = 100%) (marginTop = "S"))
@@ -174,27 +155,15 @@
 
 	(block
 		(class $Fullsize)
-		(bind visible "isActiveContactList")
+		(bind visible "!isActiveSearch")
 
-		(controller $Instance renderer='ContactsList'
-			(bind enabled "isCacheContactsList || isActiveContactList")
+		(controller $Instance
+			(bind renderer "tabContentRenderers[tabIndex]")
 			(args
 				_playerContext = "_playerContext"
 				_isFromDockChatBtn = "_isFromDockChatBtn"
 			)
-		)
-	)
-
-	(block
-		(class $Fullsize)
-		(bind visible "isActiveChannelList")
-		
-		(controller $Instance renderer='ChannelsList'
-			(bind enabled "isCacheChannelsList || isActiveChannelList")
-			(args
-				_playerContext = "_playerContext"
-				_isFromDockChatBtn = "_isFromDockChatBtn"
-			)
+			(reuseElement = true)
 		)
 	)
 
@@ -382,7 +351,7 @@
 			(element ImageWithTextButton
 				_imgUrl = 'url:../service_kit/buttons/context/search.png'
 				_text = 'IDS_SEARCH_PLAYER'
-				_dispatchedEv = 'evStrangersContactSearchButtonClicked'
+				_dispatchedEv = 'evContactSearchButtonClicked'
 			)
 
 			(controller $Tooltip

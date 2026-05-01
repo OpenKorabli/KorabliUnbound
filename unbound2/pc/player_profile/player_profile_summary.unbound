@@ -76,7 +76,8 @@
 
 (def element StatRow (_title:str, _value:str, _hintVehicleId:number = null)
 	(scope
-		(var value:str = "	!toBool(_title)		? '' :
+		(var value:str = "	!toBool(_title)						? '' :
+							_value == 'null'					? '0' :
 							_value[_value.length - 1] == '%'	? _value
 																: formatSeparator(toNumber(_value), 1, false)")
 		(var valueTextAlpha:number = "(_value == '0') || (_value == '0%') ? TS : TA")
@@ -129,12 +130,16 @@
 	)
 )
 
-(def constant PROFILE_SUMMARY_TYPE "{	COOP: 0,
-										RANDOM: 1,
-										RANKED: 2,
-										RATING: 3,
-										CLUB_OR_OLD_RANKED: 4,
-										CLUB: 5 }")
+(def constant PROFILE_SUMMARY_TYPE "{
+	COOP:					0,
+	RANDOM:					1,
+	PVE:					2,
+	BRAWL:					3,
+	RANKED:					4,
+	RATING:					5,
+	CLUB_OR_OLD_RANKED:		6,
+	CLUB:					7
+}")
 
 (def element PlayerProfileSummaryPage ()
 	(scope
@@ -147,8 +152,9 @@
 		(macro USER_PREF_DATA)
 		(macro GET_PREF_BOOL 'shipSortStatsDirectionPref' "'ui.profile.shipSorting.shipSortStatsDirection'")
 
-		(struct battleSeniorFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.BATTLE_SENIOR"))
-		(struct rankBattlesFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.RANK_BATTLES"))
+		(struct battleSeniorFeature =		FEATURES(_state="SC.Common.ACCOUNT_FEATURE.BATTLE_SENIOR"))
+		(struct operationBattlesFeature =	FEATURES(_state="SC.Common.ACCOUNT_FEATURE.PVE"))
+		(struct rankBattlesFeature =		FEATURES(_state="SC.Common.ACCOUNT_FEATURE.RANK_BATTLES"))
 
 		(var statDataCollection:dhCollection = "getCollectionByPath(CC.rankedSeasonHistory, 'statToShow')")
 		(var statDataEntity:dhEntity = "statDataCollection.getEntityAtIndex(0)" watch=false autoUpdate=false (event "statDataCollection.evAdded"))
@@ -164,10 +170,11 @@
 		(var hasOldRankedHistoryData:bool = "oldRankedHistoryEntity.rankedSeasonHistory.hasGamesPlayed")
 
 		(var curBattleTypeItemIndex:number =	"userPrefs.summaryInset == null ||
-												(battleSeniorFeature.state  == 'locked' && userPrefs.summaryInset == 1) ||
-												(rankBattlesFeature.state == 'locked' && userPrefs.summaryInset == 2) ||
-												(!(hasClubHistoryData || hasOldRankedHistoryData) && userPrefs.summaryInset == 4)	? 0
-																																	: userPrefs.summaryInset")
+												(battleSeniorFeature.state  == 'locked'				&& userPrefs.summaryInset == PROFILE_SUMMARY_TYPE.RANDOM) ||
+												(operationBattlesFeature.state  == 'locked'			&& userPrefs.summaryInset == PROFILE_SUMMARY_TYPE.PVE) ||
+												(rankBattlesFeature.state == 'locked'				&& userPrefs.summaryInset >= PROFILE_SUMMARY_TYPE.BRAWL) ||
+												(!(hasClubHistoryData || hasOldRankedHistoryData)	&& userPrefs.summaryInset >= PROFILE_SUMMARY_TYPE.CLUB_OR_OLD_RANKED)	? PROFILE_SUMMARY_TYPE.COOP
+																																											: userPrefs.summaryInset")
 
 		(var curSeasonIndex:number = "$event.selectedIndex ?: 0" (event "ItemChooser_historySeasonChanged") (event "evResetSeasonData"))
 		(var seasonId:number = "statData.seasonList[curSeasonIndex].id")
@@ -177,6 +184,8 @@
 
 		(var battleType:str = "	curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.COOP						? SC.Common.BATTLE_TYPES.COOPERATIVE_BATTLE :
 								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.RANDOM					? SC.Common.BATTLE_TYPES.RANDOM_BATTLE :
+								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.PVE						? SC.Common.BATTLE_TYPES.PVE_BATTLE :
+								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.BRAWL					? SC.Common.BATTLE_TYPES.BRAWL_BATTLE :
 								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.RANKED					? SC.Common.BATTLE_TYPES.RANKED_BATTLE :
 								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.RATING					? SC.Common.BATTLE_TYPES.RATING_BATTLE :
 								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.CLUB_OR_OLD_RANKED		? hasOldRankedHistoryData	? SC.Common.BATTLE_TYPES.OLD_RANKED_BATTLE
@@ -184,34 +193,38 @@
 								curBattleTypeItemIndex == PROFILE_SUMMARY_TYPE.CLUB						? SC.Common.BATTLE_TYPES.CLUB_BATTLE
 																										: SC.Common.BATTLE_TYPES.COOPERATIVE_BATTLE")
 
-		(var battleTypes:array = "	battleSeniorFeature.state == 'locked' 	?	['IDS_COOPERATIVEBATTLE'] :
-									rankBattlesFeature.state == 'locked'	?	['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE'] :
-									hasOldRankedHistoryData					?	!hasClubHistoryData	? ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_RANKEDBATTLE_OLD']
-																									: ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_RANKEDBATTLE_OLD', 'IDS_CLUBBATTLE']
-																			:	!hasClubHistoryData	? ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE']
-																									: ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_CLUBBATTLE']")
+		(var battleTypes:array = "	battleSeniorFeature.state == 'locked'		?	['IDS_COOPERATIVEBATTLE'] :
+									operationBattlesFeature.state == 'locked'	?	['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE'] :
+									rankBattlesFeature.state == 'locked'		?	['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_PVEBATTLE'] :
+									hasOldRankedHistoryData						?	!hasClubHistoryData		? ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_PVEBATTLE', 'IDS_BRAWLBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_RANKEDBATTLE_OLD']
+																											: ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_PVEBATTLE', 'IDS_BRAWLBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_RANKEDBATTLE_OLD', 'IDS_CLUBBATTLE']
+																				:	!hasClubHistoryData		? ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_PVEBATTLE', 'IDS_BRAWLBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE']
+																											: ['IDS_COOPERATIVEBATTLE', 'IDS_RANDOMBATTLE', 'IDS_PVEBATTLE', 'IDS_BRAWLBATTLE', 'IDS_RANKEDBATTLE', 'IDS_RATINGBATTLE', 'IDS_CLUBBATTLE']")
 
 		(var isRankedBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE || battleType == SC.Common.BATTLE_TYPES.OLD_RANKED_BATTLE")
+		(var isBrawlBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.BRAWL_BATTLE")
 		(var isNewRankedBattle:bool =	"battleType == SC.Common.BATTLE_TYPES.RANKED_BATTLE")
 		(var isRatingBattle:bool =		"battleType == SC.Common.BATTLE_TYPES.RATING_BATTLE")
 
-		(var isSeasonDropdownVisible:bool = "isRankedBattle || isRatingBattle && statData.basicStats.gamesPlayed")
+		(var isSeasonDropdownVisible:bool = "(isRankedBattle || isRatingBattle || isBrawlBattle) && statData.basicStats.gamesPlayed")
 		(var isRankedLeagueDropdownVisible:bool = "isNewRankedBattle && curSeasonIndex")
 	)
 
 	(dispatch evResetSeasonData dir="EventDirection.NONE" args="{ selectedIndex: 0 }" on='addedToStage' (bind trigger "battleType"))
 	(dispatch evResetLeagueData dir="EventDirection.NONE" args="{ selectedIndex: 0 }" (bind trigger "seasonId"))
 
-	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref',			{	name: 'summaryInset',
-																					value: $event.selectedIndex }]"	watch=false (event "ItemChooser_battleTypeChanged"))
+	(bindcall externalCall "'inputMapping.onAction'" "['setUserPref',			{ name: 'summaryInset',
+																				  value: $event.selectedIndex }]"	watch=false						(event "ItemChooser_battleTypeChanged"))
 
-	(bindcall externalCall "'inputMapping.onAction'" "[isRankedBattle	? 'rankedSeasonChanged'
-																		: isRatingBattle	? 'ratingSeasonChanged'
-																							: '',					{	seasonId: seasonId }]"		watch=false						(bind trigger "seasonId"))
-	(bindcall externalCall "'inputMapping.onAction'" "['battleTypeChanged',											{	battleType: battleType }]"	watch=false on='addedToStage'	(bind trigger "battleType"))
-	(bindcall externalCall "'inputMapping.onAction'" "['rankedLeagueChanged',										{	leagueId: leagueId }]"		watch=false						(bind trigger "leagueId"))
+	(bindcall externalCall "'inputMapping.onAction'" "[	isRankedBattle	? 'rankedSeasonChanged' :
+														isRatingBattle	? 'ratingSeasonChanged'
+																		: '',	{ seasonId: seasonId }]"			watch=false						(bind trigger "seasonId"))
+
+	(bindcall externalCall "'inputMapping.onAction'" "['battleTypeChanged',		{ battleType: battleType }]"		watch=false on='addedToStage'	(bind trigger "battleType"))
+	(bindcall externalCall "'inputMapping.onAction'" "['rankedLeagueChanged',	{ leagueId: leagueId }]"			watch=false						(bind trigger "leagueId"))
 
 	(name = 'PlayerProfileSummary')
+
 	(class $Fullsize)
 	(style
 		(flow = "horizontal")
@@ -262,14 +275,14 @@
 
 		
 		(element ItemChooser
-			_name = 'dropdown_battle_types'
-			_items = "battleTypes"
-			_curIndex = "curBattleTypeItemIndex"
-			_listItemRenderer = 'TextListItemRenderer'
-			_choosedItemRenderer = 'LargeTextChoosedItemRenderer'
-			_onItemSelectedEvent = 'battleTypeChanged'
-			_dropDownWidth = 160px
-			_itemChooserTooltipText = 'IDS_CHOOSE_BATTLETYPE_STATS'
+			_name =						'dropdown_battle_types'
+			_items =					"battleTypes"
+			_curIndex =					"curBattleTypeItemIndex"
+			_listItemRenderer =			'TextListItemRenderer'
+			_choosedItemRenderer =		'LargeTextChoosedItemRenderer'
+			_onItemSelectedEvent =		'battleTypeChanged'
+			_dropDownWidth =			160px
+			_itemChooserTooltipText =	'IDS_CHOOSE_BATTLETYPE_STATS'
 		)
 
 		(block
@@ -372,6 +385,17 @@
 				(marginTop = "M")
 			)
 
+			(controller $Instance renderer='ShipSortingDropdown'
+				(bind enabled "statData.shipsList.length > 1")
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "M")
+			)
+
 			(controller $Tooltip
 				(renderer = 'SimpleStatusTooltip')
 				(args
@@ -427,17 +451,6 @@
 					(itemHeight = "SUMMARY_SHIP_ROW_HEIGHT")
 					(itemOffset = "SUMMARY_SHIP_ROW_HEIGHT * 2")
 				)
-			)
-		)
-
-		(block
-			(style
-				(width = 100%)
-				(marginTop = "S")
-			)
-
-			(controller $Instance renderer='ShipSortingDropdown'
-				(bind enabled "statData.shipsList.length >= 2")
 			)
 		)
 	)

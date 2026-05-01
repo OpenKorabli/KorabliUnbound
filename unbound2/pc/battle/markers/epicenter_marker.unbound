@@ -1,8 +1,7 @@
-(def constant EPICENTER_INDICATOR_SIZE 42)
 (def constant EPICENTER_INDICATOR_ITEMS [
-	{ bg: 'epicenter_bar_small_grey', barSize: 5, barInnerSize: 0 },
-	{ bg: 'epicenter_bar_middle_grey', barSize: 12, barInnerSize: 8 },
-	{ bg: 'epicenter_bar_big_grey', barSize: 19, barInnerSize: 15 }
+	{ barSize: 6, 	barInnerSize: 0 },
+	{ barSize: 15, 	barInnerSize: 8 },
+	{ barSize: 24, 	barInnerSize: 17 }
 ])
 
 (def css $EpicenterIndicatorItemFXBlur ()
@@ -15,109 +14,122 @@
 	)
 )
 
-
-(def element EpicenterIndicator (_markerEntity:gfx) layout=true
-	(scope
-		(var points:gfx = "$datahub.getCollection(CC.capturePoint).child('epicenter').child(_markerEntity.epicenter.id)")
-	)
-
+(def element EpicenterIndicator (_capturePointCollection:dhCollection)
 	(style
-		(width = "EPICENTER_INDICATOR_SIZE")
-		(height = "EPICENTER_INDICATOR_SIZE")
+		(width = 	"EPICENTER_INDICATOR_ITEMS[2].barSize * 2")
+		(height = 	"EPICENTER_INDICATOR_ITEMS[2].barSize * 2")
 	)
-	
 
 	(controller $Repeat renderer='EpicenterIndicatorItem'
-		(bind count "points.items.length")
-		(args "points.items[$index].id")
+		(bind count "_capturePointCollection.length")
+		(args
+			_capturePointEntityId = "_capturePointCollection.items[$index].id"
+		)
 	)
 )
 
-(def element EpicenterIndicatorItem (_markerEntity:gfx) layout=true
+(def element EpicenterIndicatorItem (_capturePointEntityId:number) layout=true
 	(scope
+		(event evAddedToStage)
+		(var capturePointEntity:dhEntity = "getEntity(_capturePointEntityId)")
 
-		(macro GET_MARKER_ENTITY_COMPONENT 'capturePoint')
-		(macro GET_MARKER_ENTITY_COMPONENT 'progress')
-		(macro GET_MARKER_ENTITY_COMPONENT 'relation')
-		(macro VAR_RELATION "_markerEntity")
+		(var capturePointComponent:dhComponent = 	"capturePointEntity.capturePoint")
+		(var relationComponent:dhComponent = 		"capturePointEntity.relation")
+		(var progressComponent:dhComponent = 		"capturePointEntity.progress")
 
-		
-		(var relationValue:number = "relationComponent ? relationComponent.value : SC.Battle.PLAYER_RELATION.SELF" (event "relationComponent.evChanged"))
+		(var relationValue:number = 	"relationComponent.value ?: SC.Battle.PLAYER_RELATION.NEUTRAL" 	(event "relationComponent.evChanged"))
+		(var captureProgress:number = 	"progressComponent.value ?: 0" 									(event "progressComponent.evChanged"))
+		(var invaderRelation:str = 		"capturePointComponent.invaderRelation == 1 ? 'ally' : 'enemy'" (event "capturePointComponent.evInvaderChanged"))
 
-		
-		(var bothInside:bool = "capturePointComponent && capturePointComponent.bothInside" (event "capturePointComponent.evBothInsideChanged"))
-		(var invaderRelation:number = "capturePointComponent ? capturePointComponent.invaderRelation : 0" (event "capturePointComponent.evInvaderChanged"))
-		
-		
-		(var captureProgress:number = "progressComponent ? progressComponent.value : 0" (event "progressComponent.evChanged"))
-		(var isCaptureInProgress:bool = "bothInside || captureProgress > 0" (event "progressComponent.evChanged") (event "capturePointComponent.evBothInsideChanged"))
-		(var progressInvertion:number = "invaderRelation == SC.Battle.PLAYER_RELATION.ALLY ? 1 : -1")
-		(var captureBarProgress:number = "isCaptureInProgress	? captureProgress == 0	? 0 
-																						: 360 * captureProgress * progressInvertion
-																: 0")
-		
-		
 		(var itemSettings:dict = "EPICENTER_INDICATOR_ITEMS[$index]")
-		(var mainBarColor:number = "relationValue == SC.Battle.PLAYER_RELATION.ALLY	? CAPTURE_POINT_LABEL_COLORS.GREEN
-																					: CAPTURE_POINT_LABEL_COLORS.RED")
 
-		(var captureBarColor:number = "invaderRelation == SC.Battle.PLAYER_RELATION.ALLY	? CAPTURE_POINT_LABEL_COLORS.GREEN
-																							: CAPTURE_POINT_LABEL_COLORS.RED")
-	)
+		(var bothInside:bool = "capturePointComponent.bothInside" (event "capturePointComponent.evBothInsideChanged"))
+		(var alphaForContesting:number = 0)
 
-	(style (zindex = 0))
+		(controller $Animation
+			(bindcall play
+				repeatCount = -1
+				keyframes = "[	{ time: 0.01, to: { alphaForContesting: 0 }},
+								{ time: 0.35, to: { alphaForContesting: 0.5 }},
+								{ time: 1.05, to: { alphaForContesting: 0 }}]"
+				action = "kill"
+				(event "evAddedToStage")
+				(bind enabled "bothInside")
+			)
 
-	
-	
-	
-	(block
-		(style
-			(bind backgroundImage "'url:../battle_hud/markers/epicenter/' + itemSettings.bg + '.png'")
-		)
-	)
+			(bindcall play
+				repeatCount = 2
+				keyframes = "[	{ time: 0.01, to: { alphaForContesting: 0 }},
+								{ time: 0.35, to: { alphaForContesting: 0.7 }},
+								{ time: 1.05, to: { alphaForContesting: 0 }}]"
+				action = "kill"
+				(bind enabled "relationValue == SC.Battle.PLAYER_RELATION.ALLY || relationValue == SC.Battle.PLAYER_RELATION.ENEMY")
+			)
 
-	(block
-		(style
-			(position = "absolute")
-			(left = "EPICENTER_INDICATOR_SIZE / 2")
-			(top = "EPICENTER_INDICATOR_SIZE / 2")
-		)
-
-		
-		
-		
-		(block
-			(bind visible "relationValue != SC.Battle.PLAYER_RELATION.NEUTRAL")
-			(style (position = "absolute"))
-			(controller $Sector
-				(offset = "-90")
-				(bind color "mainBarColor")
-				(bind arc "360")
-				(bind radius "itemSettings.barSize")
-				(bind innerRadius "itemSettings.barInnerSize")
+			(bindcall play
+				duration = 0.25
+				to = "{ alphaForContesting: 0 }"
+				action = "kill"
+				(event "evAddedToStage")
+				(bind enabled "!bothInside")
 			)
 		)
+	)
 
-		
-		
-		
-		(block
-			(style (position = "absolute"))
-			(controller $Sector
-				(offset = "-90")
-				(bind color "captureBarColor")
-				(bind arc "captureBarProgress")
-				(bind radius "itemSettings.barSize")
-				(bind innerRadius "itemSettings.barInnerSize")
-			)
+	(class $FullsizeAbsolute)
+
+	(style
+		(paddingLeft = 50%)
+		(paddingTop = 50%)
+	)
+
+	(dispatch evAddedToStage dir="EventDirection.NONE" on='addedToStage')
+
+	
+	(block
+		(controller $Sector
+			(offset = -90)
+			(ratios = [])
+
+			(radius 		= "itemSettings.barSize")
+			(innerRadius 	= "itemSettings.barInnerSize")
+
+			(bind colors "	relationValue == SC.Battle.PLAYER_RELATION.NEUTRAL 	? [CAPTURE_POINT_LABEL_COLORS.BLACK] :
+						 	relationValue == SC.Battle.PLAYER_RELATION.ALLY		? [CAPTURE_POINT_LABEL_COLORS.GREEN]
+																				: [CAPTURE_POINT_LABEL_COLORS.RED]")
+
+			(bind alphas "relationValue == SC.Battle.PLAYER_RELATION.NEUTRAL ? [0.3] : [0.8]")
+			(bind arc "360 * (1 - captureProgress) * (invaderRelation == 'ally' ? -1 : 1)")
 		)
+	)
 
-		
-		
-		
-		(controller $FxInstance renderer='EpicenterIndicatorItemFX' lifetime="1"
-			(bindcall create (bind enabled "!(isCaptureInProgress)"))
-			(args "itemSettings")
+	
+	(block
+		(controller $Sector
+			(offset = -90)
+			(ratios = [])
+			(alphas = [0.8])
+
+			(radius 		= "itemSettings.barSize")
+			(innerRadius 	= "itemSettings.barInnerSize")
+
+			(bind colors "invaderRelation == 'ally' ? [CAPTURE_POINT_LABEL_COLORS.GREEN] : [CAPTURE_POINT_LABEL_COLORS.RED]")
+			(bind arc "360 * captureProgress * (invaderRelation == 'ally' ? 1 : -1)")
+		)
+	)
+
+	(block
+		(controller $Sector
+			(offset = -90)
+			(arc = 360)
+			(ratios = [])
+
+			(radius = "itemSettings.barSize")
+			(innerRadius = "itemSettings.barInnerSize")
+
+			(bind colors "[CAPTURE_POINT_LABEL_COLORS.WHITE]")
+
+			(bind alphas "[alphaForContesting]")
 		)
 	)
 )
@@ -165,22 +177,29 @@
 )
 
 
-(def element WorldEpicenterMarker (_markerEntity:gfx) layout=true
+(def element WorldEpicenterMarker (_markerEntity:gfx) 
+	(scope
+		(var capturePointsCollection:dhCollection = "getCollection(CC.capturePoint)")
+	)
 
 	(style
-		(width = 0) (height = 0)
 		(align = "center|middle")
+		(width = 0px)
+		(height = 0px)
 	)
-	
+
 	(block
 		(style
 			(position = "absolute")
-			(bottom = 40)
+			(bottom = 40px)
 		)
-		(element TargetAnimationItem "_markerEntity"
-			(style (position = "absolute"))
+
+		(element TargetAnimationItem
+			_markerEntity = "_markerEntity"
 		)
 	)
 
-	(element EpicenterIndicator "_markerEntity")
+	(element EpicenterIndicator
+		_capturePointCollection = "capturePointsCollection"
+	)
 )

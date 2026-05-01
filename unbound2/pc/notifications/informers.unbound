@@ -35,15 +35,15 @@
 	)
 )
 
-(def element AchievementInfotipBg (_rollOver:bool)
+(def element AchievementInfotipBg (_rollOver:bool, _informerWasShown:bool)
 	(scope
 		(event evBgAnimEnded)
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 	)
 	(style
+		(position = "absolute")
 		(width = "ACHIEVEMENT_LOG_WIDTH")
 		(height = "ACHIEVEMENT_LOG_HEIGHT")
-		(position = "absolute")
 		(align = "center")
 	)
 
@@ -51,8 +51,8 @@
 		(class $Fullsize)
 		(style
 			(pivotX = 50%)
-			(ubScaleX = 0)
-			(alpha = 0)
+			(ubScaleX = "_informerWasShown ? 1 : 0")
+			(alpha = "_informerWasShown ? 1 : 0")
 		)
 
 		(controller $Animation
@@ -62,7 +62,9 @@
 				to =		"{ alpha: 1, ubScaleX: 1}"
 				easing =	"Easing.expo_in_out"
 				action =	"kill"
+				watch =		false
 				on =		'addedToStage'
+				(bind enabled "!_informerWasShown")
 			)
 			(dispatch evBgAnimEnded dir="EventDirection.UP" on=evAnimEnded)
 		)
@@ -79,7 +81,7 @@
 					duration =	0.1
 					to =		"_rollOver ? { alpha: 1.5 } : { alpha: 1 }"
 					easing =	"Easing.sine_in"
-					watch = false
+					watch =		false
 					action =	"kill"
 					(bind trigger "_rollOver")
 				)
@@ -99,13 +101,13 @@
 		)
 
 		(controller $Spine
-			(bindcall play sequence="{ name:'show',		repeatCount:1			}" append=true	on='addedToStage')
-			(bindcall play sequence="{ name:'static',	repeatCount:-1,	mix:0.3	}" append=true	on='addedToStage')
+			(bindcall play sequence=['show'] init=true watch=false (bind enabled "!_informerWasShown"))
+			(bindcall play sequence=['static'] init=true watch=false (bind enabled "_informerWasShown"))
 		)
 	)
 )
 
-(def element CommonInfotipBg (_rollOver:bool)
+(def element CommonInfotipBgWithCloseIcon (_rollOver:bool, _informerWasShown:bool)
 	(scope
 		(event evBgAnimEnded)
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
@@ -117,8 +119,8 @@
 		(class $Fullsize)
 		(style
 			(pivotX = 50%)
-			(ubScaleX = 0)
-			(alpha = 0)
+			(ubScaleX = "_informerWasShown ? 1 : 0")
+			(alpha = "_informerWasShown ? 1 : 0")
 		)
 
 		(controller $Animation
@@ -127,7 +129,9 @@
 				to =		"{ alpha: 1, ubScaleX: 1}"
 				easing =	"Easing.circ_out"
 				action =	"kill"
+				watch =		false
 				on =		'addedToStage'
+				(bind enabled "!_informerWasShown")
 			)
 			(dispatch evBgAnimEnded dir="EventDirection.UP" on=evAnimEnded)
 		)
@@ -166,11 +170,13 @@
 
 		(var typeId:str = "'typeId' in informerData ? toString(informerData.typeId) : ''")
 		(var bgRenderElement:str = "typeId in CUSTOM_INFORMER_BACKGROUND_LIST	? CUSTOM_INFORMER_BACKGROUND_LIST[typeId]
-																				: 'CommonInfotipBg'")
+																				: 'CommonInfotipBgWithCloseIcon'")
 		(var contentRenderElement:str = "	typeId in COMMON_INFORMER_CONTENT_LIST	? COMMON_INFORMER_CONTENT_LIST[typeId] :
 											typeId in CUSTOM_INFORMER_CONTENT_LIST	? CUSTOM_INFORMER_CONTENT_LIST[typeId]
 																					: ''")
-		(var hasCommonShow:bool = "typeId in COMMON_INFORMER_CONTENT_LIST")
+
+		(var informerSysMsgToBeRendered:dhComponent = "_informerEntity.informerSysMsgToBeRendered")
+		(var informerWasShown:bool = "informerSysMsgToBeRendered.wasShowInterrupted" (event "informerSysMsgToBeRendered.evWasShowInterruptedChanged"))
 
 		(var contentShowDuration:number = "typeId == SC.System_messages.SYS_MESSAGE_TYPE_UI.ACHIEVEMENT_EARNED_INFORMER	? ACHIEVEMENT_LOG_DURATION_SHOW + 0.5
 																														: COMMON_LOG_DURATION_SHOW + 0.5")
@@ -195,12 +201,13 @@
 			(bind renderer "bgRenderElement")
 			(args
 				_rollOver = "rollOver"
+				_informerWasShown = "informerWasShown"
 			)
 		)
 	)
 
 	(block
-		(style (alpha = 0))
+		(style (alpha = "informerWasShown ? 1 : 0"))
 
 		(controller $Animation
 			(bindcall play
@@ -211,6 +218,7 @@
 				watch = false
 				action = "kill"
 				(event "evBgAnimEnded")
+				(bind enabled "!informerWasShown")
 			)
 			(bindcall play
 				to =		"{ alpha: 0}"
@@ -226,6 +234,7 @@
 			(bind renderer "contentRenderElement")
 			(args
 				_data = "informerData"
+				_informerWasShown = "informerWasShown"
 			)
 		)
 
@@ -244,15 +253,6 @@
 	)
 
 	(controller $Animation
-		
-		(bindcall play
-			from = 		"{ alpha: 0, visualOffsetY: 15px }"
-			to =		"{ alpha: 1, visualOffsetY: 0px }"
-			easing =	"Easing.quad_out"
-			duration =	"0.2"
-			(bind enabled "hasCommonShow")
-		)
-
 		
 		(bindcall play
 			delay = 0.02
@@ -521,7 +521,7 @@
 	)
 )
 
-(def element InformerAchievementEarned (_data:dict, _isInformerVisible:bool)
+(def element InformerAchievementEarned (_data:dict, _isInformerVisible:bool, _informerWasShown:bool)
 	(scope
 		(var achievementEntity:dhEntity = "getEntity(_data.achievementId)")
 		(var achievementComponent:dhComponent = "achievementEntity.achievement")
@@ -532,7 +532,7 @@
 		(var rarity:number = "achievementInfo.rarity")
 		(var typeIDS:str = "rarity ? 'IDS_ACHIEVEMENT_RARITY_' + SC.Common.UNIFIED_ITEM_RARITY.VALUE_TO_NAME[rarity] : ''")
 	)
-	(bindcall externalCall 'sound.playSetSoundDirect' "['achievement_earned', 'start']" on='addedToStage')
+	(bindcall externalCall "!_informerWasShown ? 'sound.playSetSoundDirect' : ''" "['achievement_earned', 'start']" init=false watch=false on='addedToStage')
 
 	(style
 		(hitTest = false)
