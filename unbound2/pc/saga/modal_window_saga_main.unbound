@@ -1,0 +1,408 @@
+(def element ModalWindowSagaMain (sagaID:str) 
+	(macro MODAL_WINDOW_INIT)
+	(scope
+		(event evUpdateViewedReward)
+
+		(struct sagaID = EXTRACT_SAGA_ID())
+		(var sagaEntity:dhEntity =			"getPrimaryEntity(CC.saga, sagaID.value)")
+		(var saga:dhComponent =				"sagaEntity.saga")
+		(var sagaFlags:number =				"saga.flags ?: 0"			(event "saga.evChanged"))
+		(var sagaRewardsStackID:number =	"saga.rewardsStackID ?: 0"	(event "saga.evRewardsStackIDChanged"))
+
+		(var sagaPointer:dhComponent =		"getSingleComponent(CC.sagaPointer)")
+		(var activeElementID:str =			"sagaPointer.activeElementID ?: ''"		(event "sagaPointer.evChanged"))
+
+		(var sagaActiveElementEntity:dhEntity =		"getPrimaryEntity(CC.sagaElement, activeElementID)")
+		(var sagaActiveElement:dhComponent =		"sagaActiveElementEntity.sagaElement")
+		(var sagaActiveElementType:number =			"sagaActiveElement.elementType ?: SC.Sagas.ELEMENT_TYPE.NONE"	(event "sagaActiveElement.evChanged"))
+
+
+		(var sagaEpisodeEntity:dhEntity =	"getPrimaryEntity(CC.sagaEpisode, activeElementID)")
+		(var sagaEpisode:dhComponent =		"sagaEpisodeEntity.sagaEpisode")
+		(var sagaEpisodeHeader:str =		"sagaEpisode.header ?: ''"		(event "sagaEpisode.evChanged"))
+
+		(var sagaForkEntity:dhEntity =		"getPrimaryEntity(CC.sagaFork, activeElementID)")
+		(var sagaFork:dhComponent =			"sagaForkEntity.sagaFork")
+		(var sagaForkHeader:str =			"sagaFork.header ?: ''"			(event "sagaFork.evChanged"))
+
+
+		(var isOnboardingSeen:bool =	"toBool(sagaFlags & SC.Sagas.SAGA_FLAGS.ONBOARDING_SEEN)")
+
+		(struct sagaRoute =	PULL_FULL_ROUTE(_id = "SC.Ui_windows.ROUTE.SAGA"))
+
+		(var isNarrative:bool =	"sagaRoute.activeChild == SC.Ui_windows.ROUTE.SAGA_NARRATIVE")
+		(var isJourney:bool =	"sagaRoute.activeChild == SC.Ui_windows.ROUTE.SAGA_JOURNEY")
+		(var isArchive:bool =	"sagaRoute.activeChild == SC.Ui_windows.ROUTE.SAGA_ARCHIVE")
+
+		(var selectedRewardId:number = "SAGA_INVALID_THRESHOLD_ID")
+		(bind selectedRewardId	"$event.value"	init=false watch=false	(event "evUpdateViewedReward"))
+
+		(struct windowQueue = PULL_WINDOW_QUEUE())
+		(var isConfirmationWindowActive:bool =	"isIn('ModalWindowSagaChoiceConfirm', windowQueue.queue)")
+	)
+
+	(bindcall externalCall "isOnboardingSeen ? '' : 'inputMapping.onRequest'" "['showSagaOnboarding', {}]" init=false watch=false on='addedToStage')
+
+	(bindcall externalCall "sagaRewardsStackID ?'inputMapping.onRequest' : '' " "['openRewardsModalWithoutAnimation', {	rewardsEntityId: sagaRewardsStackID, header: 'IDS_RECEIVED_LOOTBOXES_REWARDS' }]" init=false)
+
+	(class $Fullsize)
+	(style (align = "center"))
+
+	(block
+		(class $FullsizeAbsolute)
+		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.BLACK"))
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='SagaNarrative'
+			(bind enabled "isNarrative")
+			(args
+				_isConfirmationWindowActive = "isConfirmationWindowActive"
+			)
+		)
+
+		(controller $Instance renderer='SagaJourney'
+			(bind enabled "isJourney")
+			(args
+				_selectedRewardId = "selectedRewardId"
+			)
+		)
+
+		(controller $Instance renderer='SagaArchive'
+			(bind enabled "isArchive")
+		)
+	)
+
+	(element SagaHeader
+		_header =	"isJourney													? 'IDS_SAGAS_MODAL_WINDOW_HEADER_JOURNEY' :
+					 isArchive													? 'IDS_SAGAS_MODAL_WINDOW_HEADER_ARCHIVE' :
+					 sagaActiveElementType == SC.Sagas.ELEMENT_TYPE.EPISODE		? sagaEpisodeHeader :
+					 sagaActiveElementType == SC.Sagas.ELEMENT_TYPE.FORK		? sagaForkHeader
+																				: ''"
+		_route =	"sagaRoute.activeChild"
+	)
+)
+
+(def element SagaNarrative (_isConfirmationWindowActive:bool)
+	(scope
+		(var sagaPointer:dhComponent =	"getSingleComponent(CC.sagaPointer)")
+
+		(var sagaPath:array =	"sagaPointer.path ?: []"				(event "sagaPointer.evChanged"))
+		(var parentID:str =		"sagaPointer.activeElementID ?: ''"		(event "sagaPointer.evChanged"))
+		(var sceneID:number =	"sagaPointer.activeSceneID ?: 0"		(event "sagaPointer.evChanged"))
+
+		(var completedPathLength:number =	"sagaPath.length")
+		(var lastPathElementID:str =		"sagaPath[completedPathLength - 1]")
+
+
+		(var sceneEntity:dhEntity =		"getPrimaryEntity(CC.sagaScene, parentID + '_' + sceneID)")
+		(var scene:dhComponent =		"sceneEntity.sagaScene")
+		(var actingCharacterID:str =	"scene.speakerID ?: ''"			(event "scene.evChanged"))
+		(var background:str =			"scene.backgroundID ?: ''"		(event "scene.evChanged"))
+
+		(var sagaElementEntity:dhEntity =	"getPrimaryEntity(CC.sagaElement, parentID)")
+		(var sagaElement:dhComponent =		"sagaElementEntity.sagaElement")
+		(var sagaElementType:number =		"sagaElement.elementType ?: SC.Sagas.ELEMENT_TYPE.NONE"		(event "sagaElement.evChanged"))
+	)
+
+	(class $FullsizeAbsolute)
+	(style
+		(bind backgroundImage "background")
+		(backgroundSize = "cover")
+	)
+
+	(element SagaCharactersScene
+		_sagaParentID =					"parentID"
+		_sagaSceneID =					"sceneID"
+		_activeCharacterID =			"actingCharacterID"
+		_isConfirmationWindowActive =	"_isConfirmationWindowActive"
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(align = "center")
+			(bottom = "{ 720: MS, 1080: XL }")
+			(width = 100%)
+		)
+
+		(controller $Instance renderer='SagaEpisodeSpeechBubbleContainer'
+			(bind enabled "sagaElementType == SC.Sagas.ELEMENT_TYPE.EPISODE")
+			(args
+				_sagaPointer =			"sagaPointer"
+				_sceneEntity =			"sceneEntity"
+				_sagaInitPathId =		"sagaPath[0]"
+				_lastPathElementID =	"lastPathElementID"
+			)
+		)
+
+		(controller $Instance renderer='SagaChoiceOperatingContainer'
+			(bind enabled "sagaElementType == SC.Sagas.ELEMENT_TYPE.FORK")
+			(args
+				_sagaParentID =					"parentID"
+				_sceneEntity =					"sceneEntity"
+				_lastPathElementID =			"lastPathElementID"
+				_isConfirmationWindowActive =	"_isConfirmationWindowActive"
+			)
+		)
+	)
+)
+
+(def element SagaCharactersScene (_sagaParentID:str, _sagaSceneID:number, _activeCharacterID:str, _isConfirmationWindowActive:bool)
+	(scope
+		(struct stageSize = STAGE_SIZE())
+		(var screenSizeType:number = "stageSize.height < 860 || stageSize.width < 1500 ? SC.Ui_styles.SIZE.SMALL : SC.Ui_styles.SIZE.MEDIUM")
+	)
+
+	(class $FullsizeAbsolute)
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(bottom = 100px)
+			(width = 0px)
+			(height = 0px)
+		)
+
+		(controller $Repeat renderer='SagaPositionContainer'
+			(bind count "SC.Sagas.CHAR_POSITION.ALL.length")
+			(args
+				_sagaParentID =					"_sagaParentID"
+				_sagaSceneID =					"_sagaSceneID"
+				_positionID =					"$index"
+				_activeCharacterID =			"_activeCharacterID"
+				_isConfirmationWindowActive =	"_isConfirmationWindowActive"
+				_screenSizeType =				"screenSizeType"
+			)
+		)
+	)
+)
+
+(def element SagaEpisodeSpeechBubbleContainer (_sagaPointer:dhComponent, _sceneEntity:dhEntity, _sagaInitPathId:str, _lastPathElementID:str)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(var parentID:str =		"_sagaPointer.activeElementID"		(event "_sagaPointer.evChanged"))
+		(var sceneID:number =	"_sagaPointer.activeSceneID"		(event "_sagaPointer.evChanged"))
+
+		(var scene:dhComponent =		"_sceneEntity.sagaScene")
+		(var actingCharacterID:str =	"scene.speakerID"		(event "scene.evChanged"))
+		(var currentTextLine:str =		"scene.text"			(event "scene.evChanged"))
+
+		(var isBeginningOfEpisode:bool =	"sceneID == 0")
+		(var isStoryBeginning:bool =		"(parentID == _sagaInitPathId) && isBeginningOfEpisode")
+
+		(var actingCharacter:dhComponent =	"getPrimaryComponent(CC.sagaCharacter, actingCharacterID)")
+		(var actingCharacterName:str =		"actingCharacter.name"		(event "actingCharacter.evChanged"))
+		(var actingCharacterFace:str =		"'img://gui/saga/characters/portrait/160/' + actingCharacterID + '.png'")
+
+		(var isThisNarrativeLastReached:bool = "parentID == _lastPathElementID")
+	)
+
+	(style
+		(width = "SAGA_ELEMS.EPISODE.OPERATING_CONTAINER.WIDTH")
+		(height = "SAGA_ELEMS.EPISODE.OPERATING_CONTAINER.HEIGHT")
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+		(style
+			(width = "SAGA_ELEMS.EPISODE.SPEECH_BUBBLE.WIDTH")
+			(height = "SAGA_ELEMS.EPISODE.SPEECH_BUBBLE.HEIGHT")
+			(marginTop = 46px)
+			(marginLeft = 50px)
+			(paddingTop = 42px)
+			(paddingBottom = 42px)
+			(paddingLeft = "XL")
+			(paddingRight = 82px)
+			(backgroundImage = "SAGA_TEXTURES.PANELS.EPISODE_MAIN")
+			(scale9grid = [86, 0, 300, 0])
+		)
+
+		(scrollArea
+			(class $Fullsize)
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_wheelScrollAcceleration =	"0.8"
+				_isDrag =					"false"
+				_thumbColor =				"SAGA_COLORS.MAIN.UP"
+			)
+
+			(content
+				(style
+					(width = 100%)
+					(paddingBottom = "S")
+				)
+
+				(tf
+					(class $TextDefault24NMWithoutShadow)
+					(style
+						(width = 100%)
+						(textColor = "SAGA_COLORS.COMMON_TEXT")
+					)
+
+					(bind text "currentTextLine")
+				)
+			)
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+		(style (position = "absolute"))
+
+		(element SagaActingCharacterNarrativeWidget
+			_image =	"actingCharacterFace"
+			_name =		"actingCharacterName"
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+		(style
+			(align = "right")
+			(width = 100%)
+			(marginTop = "M")
+			(paddingRight = 54px)
+		)
+
+		(element SagaDefaultButton
+			_name =				'btn_backward'
+			_enabled =			"!isStoryBeginning"
+			_width =			"SAGA_ELEMS.BUTTON.DEFAULT.WIDTH"
+			_label =			'IDS_SAGA_BUTTON_BACKWARD'
+			_focusIndex =		1
+			_methods =			"[{ type: 'direct.action',	name: 'onTurnNarrativeBackward',	args: {} }]"
+		)
+
+		(block
+			(style (marginLeft = "M"))
+
+			(element SagaDefaultButton
+				_name =				'btn_forward'
+				_width =			"SAGA_ELEMS.BUTTON.DEFAULT.WIDTH"
+				_label =			'IDS_SAGA_BUTTON_FORWARD'
+				_focusIndex =		0
+				_methods =			"[{ type: 'direct.action',	name: 'onTurnNarrativeForward',	args: {} }]"
+			)
+		)
+
+		(block
+			(bind visible "!isThisNarrativeLastReached")
+
+			(style (marginLeft = "M"))
+
+			(controller $Instance renderer='SagaButtonRewind'
+				(bind enabled "!isThisNarrativeLastReached")
+			)
+		)
+	)
+)
+
+(def element SagaPositionContainer (_sagaParentID:str, _sagaSceneID:number, _positionID:number, _activeCharacterID:str, _isConfirmationWindowActive:bool, _screenSizeType:number)
+	(scope
+		(event evCharacterSetActive)
+		(event evCharacterSetInactive)
+
+		(var sagaCharacterStateEntity:dhEntity =	"getPrimaryEntity(CC.sagaCharacterState, _sagaParentID + '_' + toString(_sagaSceneID) + '_' + _positionID)")
+		(var sagaCharacterState:dhComponent =		"sagaCharacterStateEntity.sagaCharacterState")
+		(var sagaAssetId:str =		"sagaCharacterState.assetID"		(event "sagaCharacterState.evChanged"))
+		(var sagaCharacterId:str =	"sagaCharacterState.characterID"	(event "sagaCharacterState.evChanged"))
+
+		(var isAnyCharacter:bool =	"sagaCharacterStateEntity != null")
+		(var imageScale:number = "SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].OFFSETS[_positionID].scale")
+
+		(var isCharacterActive:bool = "_activeCharacterID == sagaCharacterId")
+	)
+
+	(dispatch evCharacterSetActive		dir="EventDirection.NONE"	(bind enabled "isCharacterActive") (bind trigger "isCharacterActive"))
+	(dispatch evCharacterSetActive		dir="EventDirection.NONE"	on='addedToStage'	(bind enabled "isCharacterActive"))
+	(dispatch evCharacterSetInactive	dir="EventDirection.NONE"	(bind enabled "!isCharacterActive") (bind trigger "isCharacterActive"))
+
+	(macro DEFAULT_VISIBILITY_ANIMATION_BY_TRIGGER
+		_trigger =			"_isConfirmationWindowActive"
+		_compareValue =		"false"
+	)
+
+	(style
+		(position = "absolute")
+		(bind width "isCharacterActive ? SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].ACTING : SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].PASSIVE")
+		(bind height "isCharacterActive ? SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].ACTING : SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].PASSIVE")
+		(pivotX = 50%)
+		(pivotY = 50%)
+
+		(bind top "SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].OFFSETS[$index].vertical")
+		(bind left "SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].OFFSETS[$index].horizontal")
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(pivotX = 50%)
+			(pivotY = 50%)
+			(bind visualScaleX "imageScale")
+			(bind visualScaleY "imageScale")
+		)
+
+		(colorTransform = "isCharacterActive ? CT_ACTIVE_CHARACTER : CT_INACTIVE_CHARACTER")
+
+		(controller $Instance renderer='SagaCharacter'
+			(bind enabled "isAnyCharacter")
+			(args
+				_sagaAssetId =		"sagaAssetId"
+				_screenSizeType =	"_screenSizeType"
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				keyframes = "[
+					{ percent: 0,		to: { colorTransform: CT_INACTIVE_CHARACTER }},
+					{ percent: 50,		to: { colorTransform: CT_ACTIVE_CHARACTER }},
+					{ percent: 100,		to: { colorTransform: CT_INACTIVE_CHARACTER }}
+				]"
+				duration = 1
+				repeatCount = -1
+				action = "kill"
+				(event "evCharacterSetActive")
+			)
+			(bindcall play
+				to = "{ colorTransform: CT_INACTIVE_CHARACTER }"
+				duration = 0.5
+				action = "kill"
+				(event "evCharacterSetInactive")
+			)
+		)
+	)
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+)
+
+(def element SagaCharacter (_sagaAssetId:str, _screenSizeType:number)
+	(scope
+		(var characterAssetEntity:dhEntity =	"getPrimaryEntity(CC.sagaCharacterAsset, _sagaAssetId)")
+		(var characterAsset:dhComponent =		"characterAssetEntity.sagaCharacterAsset")
+		(var img:str = "characterAsset.image"	(event "characterAsset.evChanged"))
+
+		(var assetSize:number =	"SAGA_CHAR_ASSET_CONTAINER[_screenSizeType].PASSIVE")
+		(var imgPath:str =		"img + '/' + toString(assetSize) + '.png'")
+	)
+
+	(class $Fullsize)
+	(style
+		(bind backgroundImage "imgPath")
+		(backgroundSize = "fill")
+	)
+)

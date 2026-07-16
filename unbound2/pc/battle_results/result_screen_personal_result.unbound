@@ -93,13 +93,9 @@
 		(var isCustomBattle:bool = "gameData.battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE ||
 									gameData.battleType == SC.Common.BATTLE_TYPES.TOURNAMENT_BATTLE")
 		(var isEarnedBlockVisible:bool = "(!isFirstBattle || personal.achievements.length > 0) && !isCustomBattle")
-		(var isAchievementBlockVisible:bool = "isEarnedBlockVisible && toBool(personal.achievements)")
 		(var isEarnedRewardBlockVisible:bool = "isEarnedBlockVisible && !isEconomicallyPunished")
 
 		(var sseTasks:dhCollection = "getCollectionByPath(CC.sseCorePersistent, 'byArenaId.' + gameData.arena_id)")
-
-		(var playerShipMasteryEntity:dhEntity =	"getPrimaryEntity(CC.shipMastery, personal.player.shipId)")
-		(var killerShipMasteryEntity:dhEntity =	"getPrimaryEntity(CC.shipMastery, personal.killer.shipId)")
 
 		(var causedDamageToShipsEntity:dhEntity = "getEntity(battleResultsStructuredComponent.causedDamage[0])")
 		(var causedDamageToShips:number = "causedDamageToShipsEntity.battleResultsEntry.values[0].value ?: 0")
@@ -306,9 +302,9 @@
 				)
 
 				(style
-					(align = "right")
 					(position = "absolute")
-					(right = 0)
+					(align = "right")
+					(right = 0px)
 					(top = "MS")
 				)
 
@@ -815,7 +811,8 @@
 									_isBot:bool = false,
 									_isTeamKiller:bool = false,
 									_isInMyDivision:bool = false,
-									_name:str = '')
+									_name:str = '',
+									_isLimitedWidth:bool = false)
 	(scope
 		(var isInMyDivision:bool = "_isInMyDivision && !_isSelf")
 
@@ -842,11 +839,17 @@
 																		:	'$TextDefault20NM'")
 	)
 
-	(style (flow = "horizontal"))
+	(style
+		(flow = "horizontal")
+		(width = "_isLimitedWidth ? 100% : auto")
+	)
 
 	(tf
 		(bind class "fontClass")
 		(style
+			(elideMode = true)
+			(wordWrap = false)
+			(maxWidth = "_isLimitedWidth ? 100% : auto")
 			(bind textColor "textColor")
 			(bind marginRight "!toBool(_masteryRank) && _fontSize == SIZE.SMALL ? XS : S")
 			(bind noTranslate "!_isBot")
@@ -889,7 +892,6 @@
 (def element PersonalResultKiller (	_killerIsBuilding:bool = false,
 									_killer:dict = {},
 									_deathReasonId:number = 0,
-									_relation:number = 0,
 									_masteryRank:number = 0,
 									_killerBuildingType:str = '',
 									_killerBuildingName:str = '')
@@ -962,7 +964,7 @@
 	)
 )
 
-(def element PBSEarnedReward (_name:str = '', _value:number = 0, _currency:str = '', _animationIndex:number = 0)
+(def element PBSEarnedReward (_name:str = '', _value:number = 0, _currency:str = '')
 	(style (flow = "horizontal"))
 
 	(tf
@@ -1448,7 +1450,6 @@
 (def element PostBattleShipAcesTaskTooltip (_entityId:number = 0, _taskDescription:str = '')
 	(scope
 		(var sseEntity:dhEntity = "getEntity(_entityId)")
-		(var stepsNumber:number = "sseEntity.shipAcesPersistent.stepsNumber")
 		(var shipId:number = "sseEntity.shipAcesPersistent.shipId")
 		(var shipAcesType:number = "sseEntity.shipAcesPersistent.shipAcesType")
 
@@ -1458,7 +1459,6 @@
 		(var isPVEModifierApplied:bool = "conditionEntity.sseConditions.pveModifierApplied")
 
 		(struct shipInfo = PULL_OWN_SHIP(_playerShipId = "shipId"))
-		(var upgradableShipInfo:gfx = "shipInfo.shipEntity.upgradableShipInfo" (event "shipInfo.shipEntity.upgradableShipInfo.evUpdate"))
 		(var dockShipNation:str = "shipInfo.shipComponent.nation")
 		(var dockShipType:str = "shipInfo.shipComponent.subtype")
 		(var tooltipHeader:str = "	shipAcesType == SC.Common.SHIP_ACES_TYPE.SHIP_TYPE	? 'IDS_' + dockShipType :
@@ -1596,29 +1596,35 @@
 										_taskDescription:str = '')
 	(scope
 		(var arcEventTaskEntity:dhEntity = "getEntity(_entityId)")
-		(var finishTime:number = "arcEventTaskEntity.arcEventTaskPersistent.finishTime")
-		(var personalPoints:number = "arcEventTaskEntity.arcEventTaskPersistent.personalPoints")
-		(var pointsArray:array = "arcEventTaskEntity.progressWithRewardsPersistent.pointsArray")
-		(var progressIndex:number = "arcEventTaskEntity.progressWithRewardsPersistent.activeIndex - 1")
+		(var arcEventTaskPersistent:dhComponent = "arcEventTaskEntity.arcEventTaskPersistent")
+		(var progressWithRewardsPersistent:dhComponent = "arcEventTaskEntity.progressWithRewardsPersistent")
+
+		(var finishTime:number = "arcEventTaskPersistent.finishTime")
+		(var personalPoints:number = "arcEventTaskPersistent.personalPoints ?: 0")
+
+		(var pointsArray:array = "progressWithRewardsPersistent.pointsArray")
+		(var nextRewardIndex:number = "progressWithRewardsPersistent.activeIndex ?: 0")
+
+		(var progressIndex:number = "nextRewardIndex - 1")
 		(var isDone:bool = "progressIndex == pointsArray.length - 1")
-		(var hasPointsForThisBattle:bool = "personalPoints > 0")
 
 		(struct serverTime = SERVER_TIME())
 		(var timeLeft:number = "finishTime - serverTime.value")
 		(var isExpired:bool = "serverTime.value > finishTime")
-		(var isFailed:bool = "isExpired && !isDone")
 		(struct formattedLastDayLeft = COUNTDOWN(_time = "finishTime" _serverTime = "serverTime.value" _format = 'hh:mm:ss'))
 		(var daysLeft:number = "floor(timeLeft/DAY_IN_SEC)")
-
-		(var taskStatus:dict = "hasPointsForThisBattle	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
-															text: subst('IDS_SUBST_PL_ARC_EVENT_POSTBATTLE_TOOLTIP_POINTS_RECEIVED', [], { _points: personalPoints }, personalPoints) }
-														: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
-															text: 'IDS_SSE_STATUS_FAILED' }")
 
 		(var timeLeftStatusText:str =	"toBool(daysLeft)	? subst('IDS_SUBST_PL_SSE_TIME_LEFT_DAYS', [], { timeLeft: formatSeparator(daysLeft) }, daysLeft)
 															: subst('IDS_SUBST_SSE_TIME_LEFT_LAST_DAY', [], { timeLeft: formattedLastDayLeft.value })")
 		(var timeUnifiedStatus:str =	"toBool(daysLeft)	? SC.Ui_styles.UNIFIED_STATUS.DATE
 															: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION")
+
+		(var taskStatusData:dict = "isDone		? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
+													text: 'IDS_TASK_COMPLETED' } :
+									isExpired	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.NEGATIVE,
+													text: 'IDS_SSE_STATUS_FAILED' }
+												: { unifiedStatus: timeUnifiedStatus,
+													text: timeLeftStatusText}")
 	)
 
 	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
@@ -1626,61 +1632,71 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderSubheaderText
-			_headerText = "_taskDescription"
+			_headerText = 'IDS_ARC_EVENT_COMMON_EVENT_TITLE'
 		)
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus = "taskStatusData.unifiedStatus"
+			_text = "taskStatusData.text"
+		)
+		(element TooltipSystemHorizontalDivider)
 
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "hasPointsForThisBattle || isExpired")
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer = 'TooltipSystemStatusLine'
-				(bind enabled "hasPointsForThisBattle || isExpired")
+			(controller $Instance renderer='TooltipSystemDescriptionText'
+				(bind enabled "isDone")
 				(args
-					_unifiedStatus = "taskStatus.unifiedStatus"
-					_text = "taskStatus.text"
+					_descriptionText = "_taskDescription"
 				)
 			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "!isDone && !isExpired")
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "!isDone && !isExpired")
-				(args
-					_unifiedStatus =	"timeUnifiedStatus"
-					_text =				"timeLeftStatusText"
-				)
-			)
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider'
-				(bind enabled "!isDone")
-			)
-		)
-
-		(block
-			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemDoubleProgressBarBlock'
 				(bind enabled "!isDone")
 				(args
-					_title = 'IDS_SSE_PROGRESS_COLON'
+					_title = "_taskDescription"
 					_currentValue = "_currentValue"
 					_maxValue = "_maxValue"
 					_valueIncrement = "_valueIncrement"
+				)
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isDone")
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isDone")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_TOOLTIP_REWARD_TAKEN'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isDone")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemParamsModifiersList'
+				(bind enabled "isDone")
+				(args
+					_attributesNeutral = "[
+						{
+							attributeIDS: 'IDS_ARC_EVENT_MAIN_SCREEN_TASK_TOOLTIP_PROGRESS_BAR_COMPLETED_DESCRIPTION',
+							measuredValue: personalPoints,
+							measure: trPlural('IDS_PL_ARC_EVENT_MAIN_SCREEN_TASK_POINTS_FOR_PROGRESS_ITEM', personalPoints),
+							category: 'neutral'
+						}
+					]"
 				)
 			)
 		)
@@ -1696,13 +1712,11 @@
 		(var sseTask:dhComponent = "ssePostBattleEntity.sseTask")
 		(var sseEpic:dhComponent = " ssePostBattleEntity.sseEpic")
 		(var sseChain:dhComponent = "ssePostBattleEntity.sseChain")
-		(var sseRefresh:dhComponent = "ssePostBattleEntity.sseRefresh")
 		(var sseCorePersistent:dhComponent = "ssePostBattleEntity.sseCorePersistent")
 
 		(var doneConditionSetIndex:number =	"sseCorePersistent.doneConditionSetIndex")
 		(var isClaimed:bool =				"sseCorePersistent.isClaimed"	(event "sseCorePersistent.evIsClaimedChanged"))
 		(var isDone:bool =					"sseCorePersistent.isDone")
-		(var isFailed:bool =				"sseCorePersistent.isFailed")
 		(var taskConditions:array =			"sseTask.conditions")
 		
 		(var isManualRewardClaim:bool =	"sseChain.claimRewards || sseEpic.claimRewards || sseTask.claimRewards")
@@ -1711,7 +1725,6 @@
 		(var isEpic:bool = "ssePostBattleEntity.hasComponent(CC.sseEpic)")
 		(var isChain:bool = "ssePostBattleEntity.hasComponent(CC.sseChain)")
 		(var isSseOpenEnded:bool = "ssePostBattleEntity.hasComponent(CC.sseOpenEnded)")
-		(var isDailyTask:bool = "ssePostBattleEntity.sseRefresh.isDaily")
 		(var isOrTask:bool = "taskConditions.length > 1")
 		(var isTask:bool = "!(isEpic || isChain)")
 
@@ -1808,10 +1821,8 @@
 		(var sseTask:dhComponent = "ssePostBattleEntity.sseTask")
 		(var sseEpic:dhComponent = " ssePostBattleEntity.sseEpic")
 		(var sseChain:dhComponent = "ssePostBattleEntity.sseChain")
-		(var sseRefresh:dhComponent = "ssePostBattleEntity.sseRefresh")
 		(var sseCorePersistent:dhComponent = "ssePostBattleEntity.sseCorePersistent")
 		(var sseOpenEnded:dhComponent = "ssePostBattleEntity.sseOpenEnded")
-		(var sseGlobal:dhComponent = "ssePostBattleEntity.sseGlobal")
 
 		(var doneConditionSetIndex:number = "sseCorePersistent.doneConditionSetIndex")
 		(var isClaimed:bool = "sseCorePersistent.isClaimed")
@@ -1830,7 +1841,6 @@
 		(var isEpic:bool = "ssePostBattleEntity.hasComponent(CC.sseEpic)")
 		(var isChain:bool = "ssePostBattleEntity.hasComponent(CC.sseChain)")
 		(var isSseOpenEnded:bool = "ssePostBattleEntity.hasComponent(CC.sseOpenEnded)")
-		(var isDailyTask:bool = "ssePostBattleEntity.sseRefresh.isDaily")
 		(var isOrTask:bool = "taskConditions.length > 1")
 		(var isTask:bool = "!(isEpic || isChain)")
 
@@ -2001,7 +2011,6 @@
 		(var sseEpic:dhComponent =				"ssePostBattleEntity.sseEpic")
 		(var sseChain:dhComponent =				"ssePostBattleEntity.sseChain")
 		(var sseTask:dhComponent =				"ssePostBattleEntity.sseTask")
-		(var sseOpenEnded:dhComponent =			"ssePostBattleEntity.sseOpenEnded")
 		(var progressComponent:dhComponent =	"ssePostBattleEntity.progress")
 
 		(var taskConditions:array =				"sseTask.conditions")
@@ -2017,7 +2026,7 @@
 		(var sseConditions:dhComponent =		"sseConditionEntity.sseConditions")
 		(var taskDescriptionData:dict =			"sseConditions.taskDescriptionData")
 		(var taskCategory:str =					"sseConditions.conditionCategory")
-		(var achievements:array =				"sseConditions.achievements ?: []")
+		(var achievements:array =				"taskDescriptionData.achievements ?: []")
 
 		(var sseProgressMax:number =			"isEpic		? epicTasksToComplete :
 												 isChain	? progressMax
@@ -2056,9 +2065,6 @@
 		(var isTaskDoneFT:bool =				"_firstTaskEntityId		? sseProgressCurrentFT >= sseProgressMaxFT
 																		: false")
 		
-
-
-		(var isFirstTaskOfOrTaskDone:bool =		"isOrTask ? true : false")
 
 		(var isThisFirstTaskDone:bool =			"(isTaskDone && $index == 0)")
 		(var isThisSecondTaskDone:bool =		"(isTaskDone && $index == 1) && !isTaskDoneFT")

@@ -101,25 +101,37 @@
 		(var ensignName:str = "ensignEntity.ensign.name")
 
 		
+		(var decalEntity:dhEntity = "getPrimaryEntity(CC.exteriorDecal, _reward.id)")
+		(var decalIndex:str = "decalEntity ? decalEntity.exteriorDecal.index : _reward.params.itemIndex")
+
+		
 		(var selectedRenderRewardItem:str = "_reward.subtype in RENDER_REWARD_EXTERIOR_ITEMS ? RENDER_REWARD_EXTERIOR_ITEMS[_reward.subtype].rewardViewStylized : ''")
 		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE ? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounter : ''")
 		(var selectedRenderRewardTooltip:str = "_reward.subtype in RENDER_REWARD_EXTERIOR_ITEMS ? RENDER_REWARD_EXTERIOR_ITEMS[_reward.subtype].tooltip : ''")
 
-		(var isEnsignReward:bool = "_reward.subtype == 'Ensign'")
-		(var isCamouflageRewardWithBack:bool = "selectedRenderRewardItem == 'CamouflageRewardWithBackView'")
+		(var isEnsignReward:bool =		"_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.ENSIGN")
+		(var isDecalReward:bool =		"_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.DECAL")
+		(var isMultiboostReward:bool =	"_reward.subtype == SC.Ui_common.REWARD_EXTERIOR_TYPE.MULTIBOOST")
+
+		(var isCamouflageRewardWithBack:bool =	"selectedRenderRewardItem == 'CamouflageRewardWithBackView'")
+		(var isDecalRewardWithBack:bool =		"selectedRenderRewardItem == 'DecalRewardWithBackView'")
 
 		(var imagePathBgReward:str = "	selectedRenderRewardItem == 'EnsignRewardWithBackView'		? 'url:../reward_icons/medium/flag_bg.png' :
-										selectedRenderRewardItem == 'CamouflageRewardWithBackView'	? 'url:../reward_icons/medium/camo_bg.png'
+										isCamouflageRewardWithBack									? 'url:../reward_icons/medium/camo_bg.png' :
+										isDecalRewardWithBack										? 'url:../reward_icons/medium/decal_bg.png'
 																									: null")
 
 		(var imagePath:str = "	imagePathBgReward	? imagePathBgReward :
-								ecoBoostEntity		? _reward.subtype == 'Multiboost'	? 'url:../reward_icons/medium/multiboost.png'
-																						: 'url:../reward_icons/medium/' + ecoBoostName + '.png' :
+								ecoBoostEntity		? isMultiboostReward	? 'url:../reward_icons/medium/multiboost.png'
+																			: 'url:../reward_icons/medium/' + ecoBoostName + '.png' :
 								exteriorEntity		? 'url:../reward_icons/medium/exteriors/' + exteriorName + '.png' :
 								signalEntity		? 'url:../reward_icons/medium/' + signalName + '.png'
 													: ''")
 
-		(var data:dict = "	isEnsignReward				? {	ensignName: ensignName, rewardSubtype: _reward.subtype } :
+		(var data:dict = "	isEnsignReward				? {	ensignName: ensignName,
+															rewardSubtype: _reward.subtype } :
+							isDecalReward				? {	index: decalIndex,
+															rewardSubtype: _reward.subtype } :
 							isCamouflageRewardWithBack	? {	id: _reward.id,
 															rewardSubtype: _reward.subtype,
 															amount: _reward.amount,
@@ -168,6 +180,7 @@
 			_fakeColorScheme = "fakeColorScheme"
 			_noMouseInstructions = true
 			_rewardShipId = "toNumber(_reward.params.shipId)"
+			_params = "_reward.params"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
@@ -407,17 +420,25 @@
 
 (def element RewardDogTagDefaultCard (_reward:dict)
 	(scope
-		(var dogTagEntity:dhEntity =		"getPrimaryEntity(CC.dogTagComponent, _reward.id)")
-		(var dogTagComponent:dhComponent =	"dogTagEntity.dogTagComponent")
+		(var dogTagComponent:dhComponent = "_reward.subtype == 'BackgroundColor'	? getPrimaryComponent(CC.dollBackgroundColor, _reward.id) :
+											_reward.subtype == 'BorderColor'		? getPrimaryComponent(CC.dollBorderColor, _reward.id)
+																					: getPrimaryComponent(CC.dogTagComponent, _reward.id)")
 
-		(var gpName:str =				"dogTagComponent.gpName			?: ''"		(event "dogTagComponent.evUpdate"))
+		(var dogTagIconPrefix:str = "	_reward.subtype == 'BackgroundColor'	? SC.Common.DOGTAG_ELEMENTS.NAMES.BG_COLOR :
+										_reward.subtype == 'BorderColor'		? SC.Common.DOGTAG_ELEMENTS.NAMES.BG_BORDER_COLOR
+																				: ''")
+
+		(var dogTagName:str =			"dogTagComponent.gpName"	(event "dogTagComponent.evUpdate"))
 		(var isColorizableShape:bool =	"dogTagComponent.isColorizable	?: false"	(event "dogTagComponent.evUpdate"))
-
-		(var imagePath:str = "gpName ? 'url:../dogTags/medium/' + gpName +  (isColorizableShape ? '/PCNT001' : '') + '.png' : ''")
+		(var dogTagIconDir:str =		"dogTagIconPrefix || dogTagName ? ('url:../dogTags/' + (dogTagIconPrefix ? 'preview/' + dogTagIconPrefix : 'small/' + dogTagName)) : ''")
+		(var dogTagIconPath:str =		"dogTagIconDir ? dogTagIconDir + (isColorizableShape ? '/PCNT001' : '') + '.png' : ''")
+		(var iconColor:number = 		"dogTagIconPrefix && dogTagComponent.colorHEX ? toNumber(dogTagComponent.colorHEX) : DOGTAG_BASE_COLOR")
 
 		(var selectedRenderRewardItem:str = "_reward.type in REWARD_ELEMENT_BY_TYPE ? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardViewStylized : ''")
 		(var selectedRenderRewardCounter:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardCounter : ''")
 		(var selectedRenderRewardTooltip:str = "_reward.type in REWARD_ELEMENT_BY_TYPE	? REWARD_ELEMENT_BY_TYPE[_reward.type].tooltip : ''")
+
+		(macro COLOR_DIFF_TO_COLOR_TRANSFORM "'iconTransform'" "DOGTAG_BASE_COLOR" "iconColor")
 	)
 
 	(class $DefaultRewardCard)
@@ -426,10 +447,11 @@
 			(bind enabled "selectedRenderRewardItem")
 			(bind renderer "selectedRenderRewardItem")
 			(args
-				_imagePath = "imagePath"
+				_imagePath = "dogTagIconPath"
 				_size = "SC.Ui_styles.SIZE.MEDIUM"
 			)
 		)
+		(bind colorTransform "iconTransform")
 		(block
 			(class $FullsizeAbsolute)
 			(style (align = "middle|center"))

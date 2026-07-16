@@ -50,19 +50,28 @@
 		(tf
 			(bind visible "hoursVisible")
 			(class $TextDefaultNM)
-			(style (alpha = "TA") (bind marginRight "hours != 0 ? XS : 0"))
+			(style
+				(alpha = "TA")
+				(bind marginRight "hours != 0 ? XS : 0")
+			)
 			(bind text "toString(hours) + ' ' + trPlural('IDS_PL_HOUR_FULL', hours)")
 		)
 		(tf
 			(bind visible "minsVisible")
 			(class $TextDefaultNM)
-			(style (alpha = "TA") (bind marginRight "minutes != 0 ? XS : 0"))
+			(style
+				(alpha = "TA")
+				(bind marginRight "minutes != 0 ? XS : 0")
+			)
 			(bind text "toString(minutes) + ' ' + trPlural('IDS_PL_MINUTE_FULL', minutes)")
 		)
 		(tf
 			(bind visible "secondsVisible")
 			(class $TextDefaultNM)
-			(style (alpha = "TA") (bind marginRight "seconds != 0 ? XS : 0"))
+			(style
+				(alpha = "TA")
+				(bind marginRight "seconds != 0 ? XS : 0")
+			)
 			(bind text "toString(seconds) + ' ' + trPlural('IDS_PL_SECOND_FULL', seconds)")
 		)
 	)
@@ -89,5 +98,193 @@
 			_text = "subst(	'IDS_SUBST_ARC_EVENT_STAGE_ENDS_AT', [], { _expiryDateTime: currentStageFinishDateTime })"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+
+(def element ArcEventStatus (_isModalWindow:bool = false)
+	(scope
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var arcEventComponent:dhComponent = "arcEventEntity.arcEvent")
+		(var playerArcEventInfoComponent:dhComponent = "arcEventEntity.playerArcEventInfo")
+
+		(var arcEventstate:number =	"arcEventComponent.state"				(event "arcEventComponent.evEventStateChanged"))
+		(var nextPrimeAt:number =	"arcEventComponent.nextPrimeAt"			(event "arcEventComponent.evEventStateChanged"))
+		(var finishPrimeAt:number =	"arcEventComponent.finishPrimeAt"		(event "arcEventComponent.evEventStateChanged"))
+		(var playerSideId:number =	"playerArcEventInfoComponent.sideId"	(event "playerArcEventInfoComponent.evSideChanged"))
+
+		
+		(var playerProgressEntity:dhEntity = "getPrimaryEntity(CC.progressWithRewards, 'personal' + playerSideId)")
+		(var progressWithRewardsComponent:dhComponent = "playerProgressEntity.progressWithRewards")
+
+		(var personalRewardIndex:number = "(progressWithRewardsComponent.activeIndex ?: 0) - 1" (event "progressWithRewardsComponent.evChanged"))
+		(var personalProgress:number = "progressWithRewardsComponent.pointsCurrent ?: 0" (event "progressWithRewardsComponent.evChanged"))
+		(var personalProgressArray:array = "progressWithRewardsComponent.pointsArray ?: []" (event "progressWithRewardsComponent.evChanged"))
+
+		(var isPersonalRewardIndex:bool = "personalRewardIndex >= 0")
+		(var personalProgressArrayMaxIndex:number = "personalProgressArray.length - 1")
+		(var pointsTillNextRewardTotal:number = "isPersonalRewardIndex ? personalProgressArray[personalRewardIndex + 1] : personalProgressArray[0]")
+		(var pointsTillNextRewardRemaining:number = "pointsTillNextRewardTotal - personalProgress")
+		(var hasReceivedAllRewards:bool = "personalRewardIndex == personalProgressArrayMaxIndex")
+
+		(struct serverTime = SERVER_TIME())
+
+		(struct primeCountDownStart = COUNTDOWN(_time = "nextPrimeAt ?: 0" 	_serverTime = "serverTime.value" _format = "'HH:mm:ss'"))
+		(struct primeCountDownFinish = COUNTDOWN(_time = "finishPrimeAt ?:0"	_serverTime = "serverTime.value" _format = "'HIGHEST,WITH_DAYS'"))
+
+		(var isPrimeTimeActive:bool = "(arcEventstate & SC.Sse.RVR_EVENT_STATE.PRIME_ACTIVE) != 0")
+		(var isEventFinished:bool = "(arcEventstate & SC.Sse.RVR_EVENT_STATE.EVENT_FINISHED) != 0")
+		(var isPlayerChoseSide:bool = "(arcEventstate & SC.Sse.RVR_EVENT_STATE.SIDE_CHOSEN) != 0")
+
+		(var statusText:str = "	isEventFinished 							? 'IDS_ARC_EVENT_COMMON_STATUS_CALCULATING_EVENT_RESULTS' :
+								!isPlayerChoseSide 							? 'IDS_ARC_EVENT_COMMON_STATUS_CHOOSE_SIDE' :
+								isPrimeTimeActive && _isModalWindow 		? subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_ENDS_IN_FULL', [],
+																					{ _timeEnd: primeCountDownFinish.value }) :
+								isPrimeTimeActive && hasReceivedAllRewards	? 'IDS_ARC_EVENT_PORT_STATUS_ALL_REWARDS_RECEIVED' :
+								isPrimeTimeActive							? subst('IDS_ARC_EVENT_PORT_STATUS_POINTS_TILL_NEXT_REWARD', [],
+																					{ _pointsNext: pointsTillNextRewardRemaining }, pointsTillNextRewardRemaining) :
+								!nextPrimeAt								? 'IDS_ARC_EVENT_COMMON_STATUS_ALL_PRIMETIMES_ENDED' :
+								_isModalWindow								? subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_FULL', [],
+																					{ _timeStart: primeCountDownStart.value })
+																			: subst('IDS_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_SHORT', [],
+																					{ _timeStart: primeCountDownStart.value })")
+	)
+	(style (bind width "_isModalWindow ? auto : 100%"))
+
+	(controller $Instance renderer='StatusLine'
+		(bind enabled "_isModalWindow")
+		(args
+			_unifiedStatus = "isPrimeTimeActive && nextPrimeAt	? SC.Ui_styles.UNIFIED_STATUS.DATE
+																: SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_text = "statusText"
+		)
+	)
+
+	(tf
+		(bind visible "!_isModalWindow")
+		(class $TextDefaultNM)
+		(style
+			(width = 172px)
+			(alpha = 0.7)
+		)
+		(bind text "statusText")
+	)
+)
+
+(def element ArcEventSideStereotype (	_size:number = "SIZE.SMALL",
+										_sideId:number = "RVR_SIDE_INFO_MAP.NEUTRAL_SIDE",
+										_isSelected:bool = false,
+										_isChooseSideMW:bool = false)
+	(scope
+		(var iconData:dict = "{
+			SC.Ui_styles.SIZE.SMALL: {
+										iconWidth: 48px,
+										iconHeight: 48px,
+										iconMargin: SXS,
+										colorTransform: _sideId == RVR_SIDE_INFO_MAP.NEUTRAL_SIDE ? CT_NONE : CT_ARC_EVENT_LEVEL[_sideId]
+									},
+			SC.Ui_styles.SIZE.MEDIUM: {
+										iconWidth: 320px,
+										iconHeight: 140px,
+										iconMargin: SXS,
+										colorTransform: CT_NONE
+									},
+			SC.Ui_styles.SIZE.LARGE: {
+										iconWidth: 280px,
+										iconHeight: 280px,
+										iconMargin: SXS,
+										colorTransform: CT_NONE
+									}
+		}")
+		(var isSmallIcon:bool = "_size == SC.Ui_styles.SIZE.SMALL")
+		(var isNeutralSide:bool = "_sideId == RVR_SIDE_INFO_MAP.NEUTRAL_SIDE")
+		(var bgImage:str = "isNeutralSide ? '' : 'url:../events/arc_event/common/icon_side_' + _sideId + '_' + toLower(SC.Ui_styles.SIZE.VALUE_TO_NAME[_size]) + '.png'")
+	)
+
+	(block
+		(style
+			(bind width "iconData[_size].iconWidth")
+			(bind height "iconData[_size].iconHeight")
+			(bind backgroundImage "bgImage")
+		)
+		(bind colorTransform "iconData[_size].colorTransform")
+	)
+
+	(block
+		(bind visible "!isSmallIcon && !isNeutralSide")
+		(style
+			(width = 100%)
+			(align = "center")
+			(bind marginTop "iconData[_size].iconMargin")
+		)
+		(tf
+			(class $TextDefaultBold22NM)
+			(style
+				(bind textColor "_isSelected	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+												: SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(bind alpha "_isSelected ? 1 : TA")
+			)
+			(bind text "'IDS_ARC_EVENT_COMMON_SIDE_' + _sideId")
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'ArcEventSideStereotypeTooltip')
+		(bind enabled "!_isChooseSideMW")
+		(args
+			_sideId = "_sideId"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element ArcEventSideStereotypeTooltip (_sideId:number = 0, _rewards:array = [])
+	(scope
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var sideId:number = "arcEventEntity.playerArcEventInfo.sideId ?: 0" (event "arcEventEntity.playerArcEventInfo.evSideChanged"))
+		(var isPlayerSide:bool = "sideId == _sideId")
+		(var sideName:str = "tr('IDS_ARC_EVENT_COMMON_SIDE_' + _sideId)")
+		(var sideDescription:str = "tr('IDS_ARC_EVENT_COMMON_SIDE_DESCRIPTION_' + _sideId)")
+	)
+	(style (width = 340px))
+
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "sideName"
+		)
+		(element TooltipSystemHorizontalDivider)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isPlayerSide")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_ARC_EVENT_MAIN_SCREEN_STATUS_YOUR_SIDE'
+				)
+			)
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPlayerSide"))
+		)
+
+		(element TooltipSystemDescriptionText _descriptionText = "sideDescription")
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_rewards"))
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemDHRewards'
+				(bind enabled "_rewards")
+				(args
+					_rewardsTitle = 'IDS_TOOLTIP_REWARDS_TITLE'
+					_rewards = "_rewards"
+				)
+			)
+		)
 	)
 )

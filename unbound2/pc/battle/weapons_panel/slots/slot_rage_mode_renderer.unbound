@@ -4,9 +4,11 @@
 
 (def element SlotRageModeRenderer (_entityId:number)
 	(scope
+		(event evRageModeInstantProgressAnimEnded)
+
 		(var selfVehicleComponent:dhComponent = "getSingleComponent(CC.selfVehicle)")
 		(var avatarId:number = "getSingleEntity(CC.playerAvatar).avatar.id")
-		(var rageModeTTX:dict = "selfVehicleComponent.shipTTX.specials.rageMode")
+		(var rageModeTTX:dhStruct = "selfVehicleComponent.shipTTX.specials.rageMode")
 
 		(var rageModeSlotEntity:dhEntity = "getEntity(_entityId)")
 		(var rageModeVisualDataComponent:dhComponent = "rageModeSlotEntity.visualSlotData")
@@ -17,24 +19,31 @@
 
 		(var rageModeStateEntity:dhEntity = "getSingleEntity(CC.rageModeState)")
 		(var rageModeStateComponent:dhComponent = "rageModeStateEntity.rageModeState")
-		(var currentRageModeState:number = "rageModeStateComponent ? rageModeStateComponent.state : SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
+		(var currentRageModeState:number = "rageModeStateComponent.state ?: SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
 
 		(var isCharged:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.CHARGED")
 		(var isWorking:bool = "currentRageModeState == SC.Battle.RAGE_MODE_STATE.ACTIVE")
-		(var isInstant:bool = "rageModeStateComponent.isInstant")
+		(var hasProgress:bool = "rageModeStateComponent.hasProgress")
+		(var hasDuration:bool = "rageModeStateComponent.duration > 0")
+		(var isInstant:bool = "!hasProgress && !hasDuration")
 
-		(var currentProgress:number = "rageModeStateComponent ? rageModeStateComponent.currentProgress : 0" (event "rageModeStateComponent.evCurrentProgressChanged"))
+		(var currentProgress:number = "rageModeStateComponent.currentProgress ?: 0" (event "rageModeStateComponent.evCurrentProgressChanged"))
 
 		(var timerComponent:dhComponent = "getSingleComponent(CC.timer)")
 		(var countdownComponent:dhComponent = "rageModeStateEntity.countDown")
 		(var remainTime:number = "countdownComponent ? countdownComponent.endTime - timerComponent.currentTime : 0" (event "timerComponent.evFrequent") (event "countdownComponent.evEndTimeChanged"))
-		(var percentPassed:number = "countdownComponent.duration > 0 && !isInstant ? remainTime / countdownComponent.duration : 1")
+		(var percentPassed:number = "countdownComponent.duration > 0 ? remainTime / countdownComponent.duration : 1")
 
 		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
 		(var isAltVision:bool = "cameraComponent.altVision" (event "cameraComponent.evAltVisionChanged"))
 
 		(var currentActivationCount:number = "rageModeStateComponent.currentActivationCount ?: 0" (event "rageModeStateComponent.evStateChanged"))
 		(var maxActivationCount:number = "rageModeTTX ? rageModeTTX.maxActivationCount : SC.Battle.RAGE_MODE_ACTIVATION_COUNT.UNLIMITED")
+
+		(var isInstantProgressAnimation:bool = false)
+
+		(bind isInstantProgressAnimation "true" init=false (bind enabled "!hasProgress && isWorking") (bind trigger "isWorking"))
+		(bind isInstantProgressAnimation "false" init=false (event "evRageModeInstantProgressAnimEnded"))
 	)
 
 	(style
@@ -48,12 +57,12 @@
 	(macro MOUSE_LMB_EXTERNAL_CALL 'direct.action' "['weaponSlot.pressed', [commandId]]" "!isAutoUsage")
 
 	(block
-		(bind visible "!isAltVision || isInstant")
+		(bind visible "!isAltVision || !hasProgress")
 
 		(style (position = "absolute"))
 
 		(controller $Instance
-			(bind renderer "isInstant ? 'RageModeProgressInstant' : 'RageModeProgressDefault'")
+			(bind renderer "!hasProgress ? 'RageModeProgressInstant' : 'RageModeProgressDefault'")
 			(args
 				_rageModeStateEntity = "rageModeStateEntity"
 			)
@@ -76,7 +85,7 @@
 		(style (position = "absolute"))
 
 		(controller $Instance renderer='RageModeAltInfo'
-			(bind enabled "!isInstant")
+			(bind enabled "hasProgress")
 			(args
 				_currentProgress 	= "currentProgress"
 				_remainTime 		= "remainTime"
@@ -86,12 +95,12 @@
 
 	
 	(block
-		(bind visible "isWorking")
+		(bind visible "isWorking && !isInstantProgressAnimation")
 
 		(class $FullsizeAbsolute)
 
 		(controller $Instance renderer='SlotReloadBar'
-			(bind enabled "!isInstant")
+			(bind enabled "hasDuration")
 			(args
 				_isWorking 		= "isWorking"
 				_percentPassed 	= "percentPassed"
@@ -136,7 +145,8 @@
 
 		(controller $FxInstance lifetime=0.5
 			(renderer = 'SlotWorkStartedFX')
-			(bindcall create (bind enabled "isWorking"))
+			(bindcall create (bind enabled "isWorking && hasProgress"))
+			(bindcall create (event "evRageModeInstantProgressAnimEnded"))
 		)
 
 		(controller $FxInstance lifetime=0.5
@@ -144,7 +154,7 @@
 			(args
 				_isAccented = true
 			)
-			(bindcall create (bind enabled "isCharged && !isInstant"))
+			(bindcall create (bind enabled "isCharged && hasProgress"))
 		)
 
 		(controller $FxInstance lifetime=0.5
@@ -196,13 +206,12 @@
 (def element RageModeProgressDefault (_rageModeStateEntity:dhEntity)
 	(scope
 		(var selfVehicleComponent:dhComponent = "getSingleComponent(CC.selfVehicle)")
-		(var shipTTX:dict = "selfVehicleComponent.shipTTX")
-		(var rageModeTTX:dict = "shipTTX.specials.rageMode")
+		(var rageModeTTX:dhStruct = "selfVehicleComponent.shipTTX.specials.rageMode")
 
 		(var rageModeStateComponent:dhComponent = "_rageModeStateEntity.rageModeState")
-		(var currentRageModeState:number = "rageModeStateComponent ? rageModeStateComponent.state : SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
+		(var currentRageModeState:number = "rageModeStateComponent.state ?: SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
 
-		(var currentProgress:number = "rageModeStateComponent ? rageModeStateComponent.currentProgress : 0" (event "rageModeStateComponent.evCurrentProgressChanged"))
+		(var currentProgress:number = "rageModeStateComponent.currentProgress ?: 0" (event "rageModeStateComponent.evCurrentProgressChanged"))
 		(var decrementCount:number	= "rageModeTTX ? rageModeTTX.decrementCount.value : 1")
 		(var decrementPeriod:number = "rageModeTTX ? rageModeTTX.decrementPeriod.value : 1")
 
@@ -323,6 +332,8 @@
 
 (def element RageModeProgressInstant (_rageModeStateEntity:dhEntity)
 	(scope
+		(event evRageModeInstantProgressAnimEnded)
+
 		(var rageModeStateComponent:dhComponent = "_rageModeStateEntity.rageModeState")
 		(var currentRageModeState:number = "rageModeStateComponent ? rageModeStateComponent.state : SC.Battle.RAGE_MODE_STATE.IDLE" (event "rageModeStateComponent.evStateChanged"))
 
@@ -341,17 +352,50 @@
 		(style
 			(backgroundSize = "fill")
 			(backgroundImage = 'img://gui/consumables_dds_scale/rageMode_background_green.dds')
-			(alpha = 0)
+
+			(bind alpha "1" (bind enabled "isWorking") (bind trigger "isWorking"))
 		)
 
 		(controller $Animation
 			(bindcall play
 				duration = 0.3
-				from = "{alpha: 2}"
-				to = "{alpha: 0}"
-				action = "kill"
-				(bind enabled "isWorking")
+				from = {alpha: 1}
+				to = {alpha: 0}
+				action = "killAll"
+				(event "evRageModeInstantProgressAnimEnded")
 			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(marginTop = 3px)
+				(marginLeft = 2px)
+				(marginBottom = 3px)
+				(rotation = 180)
+				(pivotX = "MASK_WIDTH")
+				(pivotY = "MASK_HEIGHT")
+				(width = "MASK_WIDTH")
+				(backgroundColor = 0xFFFFFFFF)
+				(height = 0%)
+			)
+
+			(controller $Animation
+				(controllerEvents evProgressAnimEnded)
+				(bindcall play
+					duration = 0.3
+					from = {height: 0%}
+					to = {height: 100%}
+					easing = "Easing.quad_in"
+					action = "killAll"
+					onEndedEvent = 'evProgressAnimEnded'
+					(bind enabled "isWorking")
+				)
+
+				(dispatch evRageModeInstantProgressAnimEnded dir="EventDirection.UP" on='evProgressAnimEnded')
+			)
+
+			(isMask = true)
 		)
 	)
 )

@@ -112,26 +112,24 @@
 )
 (def element CrosshairIndicators ()
 	(scope
-		(var cameraEntity:gfx = "$datahub.getSingleEntity(CC.camera)")
-		(var selfVehicleWatcher:gfx = "$datahub.getFirstWatcher(CC.selfVehicle)")
-		(var selfVehicleEntity:gfx = "selfVehicleWatcher.entity" (event "selfVehicleWatcher.event"))
-		(var controller:gfx = "selfVehicleEntity.weaponController" (event "selfVehicleEntity.evAdded") (event "selfVehicleEntity.evRemoved"))
+		(var selfVehicleEntity:dhEntity = "getSingleEntity(CC.selfVehicle)")
+		(var selfVehicleComponent:dhComponent = "selfVehicleEntity.selfVehicle")
+		(var weaponControllerComponent:dhComponent = "selfVehicleEntity.weaponController")
 
 		
-		(var weaponType:number = "controller ? controller.selectedWeapon
-													: SC.Ships.SHIP_WEAPON_TYPES.NONE" (event "controller.evSelectedWeaponChanged"))
+		(var weaponType:number = "weaponControllerComponent ? weaponControllerComponent.selectedWeapon
+															: SC.Ships.SHIP_WEAPON_TYPES.NONE" (event "weaponControllerComponent.evSelectedWeaponChanged"))
 		(var usableGunsCollection:dhCollection = "getCollectionByPath(CC.gun, 'byWeaponType.' + weaponType + '.usable')")
 		(var usableGunsCount:number = "usableGunsCollection.length ?: 0")
 		(var isOutOfDistWeapon:bool = "usableGunsCount == 0")
 
 		
-		(var cameraMode:number = "cameraEntity.camera.mode" (event "cameraEntity.camera.evModeChanged"))
+		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
+		(var cameraMode:number = "cameraComponent.mode" (event "cameraComponent.evModeChanged"))
 		(struct altVisionMode = GET_PREF_STR(_option = "'battle.altVision.mode'"))
 
-		(var isAltVision:bool = "cameraEntity.camera.altVision || AltVisionMode[altVisionMode.value] >= AltVisionMode.ADAPTIVE" (event "cameraEntity.camera.evAltVisionChanged"))
-		(var isTacticalMap:bool = "cameraEntity.camera.isTactical" (event "cameraEntity.camera.evTacticalStateChanged"))
-		(var isSnakeTailMode:bool = "cameraEntity.camera.mode == SC.Battle.CAMERA_MODE.SNAKETAIL")
-		(var isObserving:bool = "cameraEntity.camera.observing" (event "cameraEntity.camera.evObservingChanged"))
+		(var isAltVision:bool = "cameraComponent.altVision || AltVisionMode[altVisionMode.value] >= AltVisionMode.ADAPTIVE" (event "cameraComponent.evAltVisionChanged"))
+		(var isTacticalMap:bool = "cameraComponent.isTactical" (event "cameraComponent.evTacticalStateChanged"))
 		(var isCameraTracking:bool = "cameraMode == SC.Battle.CAMERA_MODE.PLANETRACKER || cameraMode == SC.Battle.CAMERA_MODE.SHELLTRACKER")
 
 		(macro SCOPE_IS_BATTLE_IN_PROGRESS "'isBattleInProgress'")
@@ -210,13 +208,14 @@
 		(var rageModeSlotDataEntity:gfx = "$datahub.getPrimaryEntity(CC.visualSlotData, SC.Ships.SHIP_INFO_WEAPON_TYPE.VALUE_TO_NAME[SC.Ships.SHIP_INFO_WEAPON_TYPE.RAGE_MODE] + '_' + DEFAULT_AVATAR_ID)")
 		(var rageModeStateEntity:gfx = "$datahub.getPrimaryEntity(CC.rageModeState, vehicleID)")
 
-		(var drumFireModeEntity:gfx = "$datahub.getSingleEntity(CC.drumFireMode)")
-		(var isDrumActive:bool = "drumFireModeEntity.drumFireMode.isActive" (event "drumFireModeEntity.drumFireMode.evIsActiveChanged"))
+		(var isSecondaryArtilleryWithFireMode:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.SECONDARY_ARTILLERY && toBool(selfVehicleComponent.shipTTX.secondaryArtillery.drumFireMode)")
+		(var drumFireModeComponent:dhComponent = "getSingleComponent(CC.drumFireMode)")
+		(var isDrumActive:bool = "drumFireModeComponent.isActive || isSecondaryArtilleryWithFireMode" (event "drumFireModeComponent.evIsActiveChanged"))
 
-		(var isDrumFireGageVisible:bool = "drumFireModeEntity && weaponType == SC.Ships.SHIP_WEAPON_TYPES.ARTILLERY")
+		(var isDrumFireGageVisible:bool = "(drumFireModeComponent && weaponType == SC.Ships.SHIP_WEAPON_TYPES.ARTILLERY) || isSecondaryArtilleryWithFireMode")
 		(var isRageModeGageVisible:bool = "rageModeSlotDataEntity != null && weaponType == SC.Ships.SHIP_WEAPON_TYPES.ARTILLERY")
 
-		(var isAddIndicatorOffset:bool = "(isRageModeGageVisible || isDrumFireGageVisible)")
+		(var isAddIndicatorOffset:bool = "isRageModeGageVisible || isDrumFireGageVisible")
 
 		(var arcOffset:number = "isAddIndicatorOffset ? OFFSET_ARC : 0" watch=false)
 		(controller $Animation
@@ -305,12 +304,17 @@
 			(style (marginTop = 0px))
 		)
 	)
+
+	
 	(block
-		(style (position = "absolute"))
-		(bind visible "isDrumFireGageVisible")
-		(controller $Instance renderer='CrosshairBurstFireGage'
-			(bind enabled "drumFireModeEntity && isDrumActive")
-			(args _drumFireModeEntity="drumFireModeEntity" )
+		(bind visible "isDrumFireGageVisible && isDrumActive")
+		(style
+			(position = "absolute")
+			(width = 16px)
+			(height = 16px)
+			(top = 18px)
+			(left = "-S")
+			(backgroundImage = 'url:../battle_hud/crosshair/fire_mode/fire_mode_burst_enabled.png')
 		)
 	)
 

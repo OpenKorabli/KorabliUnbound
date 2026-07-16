@@ -23,7 +23,9 @@
 							_isBattlePassSmallIconView:bool = false,
 							_isReceived:bool = false,
 							_isUnavailable:bool = false,
-							_withTooltip:bool = true)
+							_withTooltip:bool = true,
+							_isAmountVisible:bool = true,
+							_isCheckIconForceHidden:bool = false)
 	(scope
 		(var selectedRenderRewardItem:str =	"_reward.type in REWARD_ELEMENT_BY_TYPE ? REWARD_ELEMENT_BY_TYPE[_reward.type].rewardDefault : ''")
 		(var isAvailableForRender:bool =	"selectedRenderRewardItem && _reward")
@@ -54,19 +56,20 @@
 				_rewardItem = "_reward"
 				_withTooltip = "_withTooltip"
 				_isBattlePassSmallIconView = "_isBattlePassSmallIconView"
+				_isAmountVisible = "_isAmountVisible"
 			)
 		)
 	)
 
 	(block
-		(bind visible "!_reward.isPRMP || _isReceived")
+		(bind visible "(!_reward.isPRMP || _isReceived) && !_isCheckIconForceHidden")
 		(class $MiddleAlignedAbsolutely)
 		(style
+			(hitTest = false)
 			(width = 48px)
 			(height = 48px)
 			(top = "M")
 			(backgroundImage = 'url:../reward_categories/icon_check.png')
-			(hitTest = false)
 		)
 	)
 )
@@ -76,7 +79,7 @@
 	(style (backgroundImage = 'url:../reward_icons/sse.png'))
 )
 
-(def element RewardExteriorContainer (_rewardItem:dict)
+(def element RewardExteriorContainer (_rewardItem:dict, _isAmountVisible:bool = true)
 	(scope
 		(var selectedRenderRewardItem:str = "_rewardItem.subtype in RENDER_REWARD_EXTERIOR_ITEMS ? RENDER_REWARD_EXTERIOR_ITEMS[_rewardItem.subtype].rewardDefault : ''")
 		(var isAvailableForRender:bool = "_rewardItem && selectedRenderRewardItem")
@@ -90,6 +93,7 @@
 			_amount = "_rewardItem.amount"
 			_isReward = true
 			_params = "_rewardItem.params"
+			_isAmountVisible = "_isAmountVisible"
 		)
 	)
 )
@@ -127,7 +131,10 @@
 	(block
 		(bind visible "isDuplicate")
 		(class $FullsizeAbsolute)
-		(style (hitTest = false) (align = "middle|center"))
+		(style
+			(hitTest = false)
+			(align = "middle|center")
+		)
 		(controller $Instance renderer='IssuedStampSmall'
 			(bind enabled "isDuplicate")
 			(args
@@ -150,7 +157,7 @@
 )
 
 
-(def element RewardResourceItem (_rewardItem:dict, _withTooltip:bool = false)
+(def element RewardResourceItem (_rewardItem:dict, _withTooltip:bool = false, _isAmountVisible:bool = true)
 	(scope
 		(struct rewardSubtype = CORRECT_REWARD_RESOURCE_SUBNAME(_subtype = "_rewardItem.subtype"))
 		(var selectedRenderRewardResourceItem:str = "rewardSubtype.value in REWARD_RESOURCE_ELEMENT ? REWARD_RESOURCE_ELEMENT[rewardSubtype.value].rewardDefault : ''")
@@ -163,6 +170,7 @@
 		(bind enabled "isAvailableForRender")
 		(args
 			_rewardItem = "_rewardItem"
+			_isAmountVisible = "_isAmountVisible"
 		)
 	)
 
@@ -179,21 +187,42 @@
 	)
 )
 
-(def element RewardDogTagItem (_rewardItem:dict, _withTooltip:bool = false)
+(def element RewardDogTagItem (_rewardItem:dict, _withTooltip:bool = false, _isAmountVisible:bool = true)
 	(scope
-		(var dogTagEntity:dhEntity =		"getPrimaryEntity(CC.dogTagComponent, _rewardItem.id)")
-		(var dogTagComponent:dhComponent =	"dogTagEntity.dogTagComponent")
-		
-		(var gpName:str =				"dogTagComponent.gpName			?: ''"		(event "dogTagComponent.evUpdate"))
-		(var isColorizableShape:bool =	"dogTagComponent.isColorizable	?: false"	(event "dogTagComponent.evUpdate"))
+		(var dogTagComponent:dhComponent = "_rewardItem.subtype == 'BackgroundColor'	? getPrimaryComponent(CC.dollBackgroundColor, _rewardItem.id) :
+											_rewardItem.subtype == 'BorderColor'		? getPrimaryComponent(CC.dollBorderColor, _rewardItem.id)
+																						: getPrimaryComponent(CC.dogTagComponent, _rewardItem.id)")
 
-		(var iconPath:str = "gpName ? 'url:../dogTags/small/' + gpName +  (isColorizableShape ? '/PCNT001' : '') + '.png' : ''")
+		(var dogTagIconPrefix:str = "	_rewardItem.subtype == 'BackgroundColor'	? SC.Common.DOGTAG_ELEMENTS.NAMES.BG_COLOR :
+										_rewardItem.subtype == 'BorderColor'		? SC.Common.DOGTAG_ELEMENTS.NAMES.BG_BORDER_COLOR
+																					: ''")
+
+		(var dogTagName:str =			"dogTagComponent.gpName"	(event "dogTagComponent.evUpdate"))
+		(var isColorizableShape:bool =	"dogTagComponent.isColorizable	?: false"	(event "dogTagComponent.evUpdate"))
+		(var dogTagIconDir:str =		"dogTagIconPrefix || dogTagName ? ('url:../dogTags/' + (dogTagIconPrefix ? 'preview/' + dogTagIconPrefix : 'small/' + dogTagName)) : ''")
+		(var dogTagIconPath:str =		"dogTagIconDir ? dogTagIconDir + (isColorizableShape ? '/PCNT001' : '') + '.png' : ''")
+
+		(var iconColor:number = "dogTagIconPrefix && dogTagComponent.colorHEX ? toNumber(dogTagComponent.colorHEX) : DOGTAG_BASE_COLOR")
+
+		(macro COLOR_DIFF_TO_COLOR_TRANSFORM "'iconTransform'" "DOGTAG_BASE_COLOR" "iconColor")
 	)
 
-	(element IconWithAmount
-		_width =	80px
-		_height =	80px
-		_iconPath = "iconPath"
+	
+	(block
+		(style
+			(width = "DOGTAG_CONTENT_WIDTH")
+			(height = "DOGTAG_CONTENT_WIDTH")
+		)
+
+		(element DogTagItemView
+			_isActive = true
+			_iconPath = "dogTagIconPath"
+			_hasInStorage = true
+			_isEnabled = true
+			_isSelected = false
+			_iconColorTransform = "dogTagIconPrefix ? iconTransform : CT_NONE"
+			_isReward = true
+		)
 	)
 
 	(block
@@ -224,7 +253,7 @@
 )
 
 
-(def element RewardModernizationItem (_rewardItem:dict, _withTooltip:bool = false)
+(def element RewardModernizationItem (_rewardItem:dict, _withTooltip:bool = false, _isAmountVisible:bool = true)
 	(element IconWithAmount
 		_width = 80px
 		_height = 80px
@@ -232,6 +261,7 @@
 		_iconHeight = 60px
 		_iconPath = "'url:' + _rewardItem.params.item.iconPath"
 		_amount = "_rewardItem.amount"
+		_isAmountVisible = "_isAmountVisible"
 	)
 
 	(controller $Tooltip
@@ -246,7 +276,7 @@
 
 
 
-(def element RewardLootboxItem (_rewardItem:dict, _withTooltip:bool = false)
+(def element RewardLootboxItem (_rewardItem:dict, _withTooltip:bool = false, _isAmountVisible:bool = true)
 	(bind name "'reward_' + _rewardItem.subtype + '_' + _rewardItem.amount" )
 
 	(element IconWithAmount
@@ -254,6 +284,7 @@
 		_height = 80px
 		_iconPath = "'url:../reward_icons/' + _rewardItem.subtype + '.png'"
 		_amount = "_rewardItem.amount"
+		_isAmountVisible = "_isAmountVisible"
 	)
 
 	(controller $Tooltip
@@ -266,12 +297,13 @@
 	)
 )
 
-(def element RewardDummyItem (_rewardItem:dict, _withTooltip:bool = false)
+(def element RewardDummyItem (_rewardItem:dict, _withTooltip:bool = false, _isAmountVisible:bool = true)
 	(element IconWithAmount
 		_width = 80px
 		_height = 80px
 		_iconPath = "'url:../reward_icons/' + _rewardItem.subtype + '.png'"
 		_amount = "_rewardItem.amount"
+		_isAmountVisible = "_isAmountVisible"
 	)
 
 	(controller $Tooltip
@@ -284,13 +316,14 @@
 	)
 )
 
-(def element RewardCampaignStarItem (_rewardItem:dict)
+(def element RewardCampaignStarItem (_rewardItem:dict, _isAmountVisible:bool = true)
 
 	(element IconWithAmount
 		_width = 80px
 		_height = 80px
 		_iconPath = 'url:../reward_icons/campaign_star.png'
 		_amount = "_rewardItem.amount"
+		_isAmountVisible = "_isAmountVisible"
 	)
 
 	(controller $Tooltip
@@ -302,7 +335,7 @@
 	)
 )
 
-(def element RewardShip (_rewardItem:dict, _isRentHidden:bool=false, _isBattlePassSmallIconView:bool=false)
+(def element RewardShip (_rewardItem:dict, _isRentHidden:bool=false, _isBattlePassSmallIconView:bool=false, _withTooltip:bool = false)
 	(scope
 		(var shipEntity:dhEntity =	"getPrimaryEntity(CC.ship, _rewardItem.id)")
 		(var shipInfo:dhComponent =	"shipEntity.ship")
@@ -327,6 +360,7 @@
 		(style (bind backgroundImage "'url:../reward_icons/ship_' + shipProfitabilitySuffix + '.png'"))
 
 		(controller $Tooltip
+			(bind enabled "_withTooltip")
 			(renderer = 'ShipExtendedTooltip')
 			(args
 				_shipId = "_rewardItem.id"
@@ -342,9 +376,9 @@
 			(bind visible "isRentShip && !_isRentHidden")
 			(style
 				(position = "absolute")
+				(hitTest = false)
 				(left = 4px)
 				(bottom = 7px)
-				(hitTest = false)
 				(width = 21px)
 				(height = 21px)
 				(backgroundImage = 'url:../service_kit/icons/icon_rent_white.png')
@@ -364,6 +398,7 @@
 			(style (backgroundColor = "NO_COLOR"))
 
 			(controller $Tooltip
+				(bind enabled "_withTooltip")
 				(renderer = 'ShipExtendedTooltip')
 				(args
 					_shipId = "_rewardItem.id"
@@ -378,12 +413,12 @@
 		(block
 			(class $FullsizeAbsolute)
 			(style
+				(hitTest = false)
 				(align = "center|middle")
 				(paddingTop = 3px)
 				(paddingBottom = 3px)
 				(paddingLeft = 6px)
 				(paddingRight = 6px)
-				(hitTest = false)
 			)
 
 			(element ShipImage
@@ -413,11 +448,11 @@
 		
 		(block
 			(style
-				(width = 100%)
 				(position = "absolute")
+				(hitTest = false)
+				(width = 100%)
 				(align = "center")
 				(bottom = "S")
-				(hitTest = false)
 			)
 
 			(element ShipLineItemNM
@@ -463,22 +498,23 @@
 		_size =				"SC.Ui_styles.SIZE.SMALL"
 		_hasVoiceMarker =	"hasVoiceOver"
 		_isReward =			true
+		_withTooltip =		"_withTooltip"
 	)
 )
 
-(def element RewardResourceSlot (_rewardItem:dict)
+(def element RewardResourceSlot (_rewardItem:dict, _isAmountVisible:bool = true)
 	(class $RewardWithAmountContainer)
 	(style (bind backgroundImage "'url:../reward_icons/' + _rewardItem.subtype + '.png'"))
 
 	(controller $Instance renderer='ImageItemsCounter'
-		(bind enabled "_rewardItem.amount > 0")
+		(bind enabled "_isAmountVisible && _rewardItem.amount > 0")
 		(args
 			_amount = "toNumber(_rewardItem.amount)"
 		)
 	)
 )
 
-(def element RewardResourcePremium (_rewardItem:dict)
+(def element RewardResourcePremium (_rewardItem:dict, _isAmountVisible:bool = true)
 	(scope
 		(struct rewardSubtype = CORRECT_REWARD_RESOURCE_SUBNAME(_subtype = "_rewardItem.subtype"))
 	)
@@ -486,7 +522,7 @@
 	(style (bind backgroundImage "'url:../reward_icons/' + rewardSubtype.value + '.png'"))
 
 	(controller $Instance renderer='ImageTextCounter'
-		(bind enabled "_rewardItem.amount != 0")
+		(bind enabled "_isAmountVisible && _rewardItem.amount != 0")
 		(args
 			_text = "formatTime(_rewardItem.amount, 'HIGHESTDAYS', '', true)"
 			_textColor = "SC.Ui_styles.SERVICE_COLORS.YELLOW"
@@ -495,7 +531,7 @@
 )
 
 
-(def element RewardResourcesCoeff (_rewardItem:dict)
+(def element RewardResourcesCoeff (_rewardItem:dict, _isAmountVisible:bool = true)
 	(scope
 		(var isResMulCoeffPositive:bool = "_rewardItem.amount > 0")
 		(var resMulCoeff:str = "(isResMulCoeffPositive ? '+' : '') + toString(_rewardItem.amount) + '%'")
@@ -503,8 +539,11 @@
 	(class $RewardWithAmountContainer)
 	(style (bind backgroundImage "'url:../reward_icons/' + _rewardItem.subtype + '.png'"))
 
-	(element ImageTextCounter
-		_text = "resMulCoeff"
+	(controller $Instance renderer='ImageTextCounter'
+		(bind enabled "_isAmountVisible")
+		(args
+			_text = "resMulCoeff"
+		)
 	)
 )
 
@@ -540,7 +579,7 @@
 	(style (bind backgroundImage "_path"))
 )
 
-(def element RewardResourceUnit (_rewardItem:dict, _isAmountVisible:bool = true, _withTooltip:bool = false)
+(def element RewardResourceUnit (_rewardItem:dict, _isAmountVisible:bool = true, _withTooltip:bool = false, _isAmountVisible:bool = true)
 	(scope
 		(var iconPath:str = "	_rewardItem.params.item.uiState			?	'url:../modules/icon_module' + _rewardItem.params.item.type + _rewardItem.params.item.uiState + '.png' :
 								_rewardItem.params.item.moduleIconName	?	'url:../modules/event/' + _rewardItem.params.item.type + '/icon_module_' + _rewardItem.params.item.moduleIconName + '.png'
@@ -551,6 +590,7 @@
 		_iconPath = "iconPath"
 		_isAmountVisible = "_isAmountVisible"
 		_amount = "_rewardItem.amount"
+		_isAmountVisible = "_isAmountVisible"
 	)
 	
 	(controller $Tooltip
@@ -700,7 +740,7 @@
 	)
 )
 
-(def element RewardShipMaterialItem (_rewardItem:dict, _withTooltip:bool = false)
+(def element RewardShipMaterialItem (_rewardItem:dict, _withTooltip:bool = false, _isAmountVisible:bool = true)
 	(scope
 		(var amount:number = "_rewardItem.amount ?: 0")
 		(var shipLevel:number = "_rewardItem.params.shipLevel ?: 0")
@@ -712,6 +752,7 @@
 		_height = 80px
 		_iconPath = "iconPath"
 		_amount = "amount"
+		_isAmountVisible = "_isAmountVisible"
 	)
 	(controller $Tooltip
 		(bind enabled "_withTooltip")
@@ -725,7 +766,14 @@
 	)
 )
 
-(def element RewardItemAdapter (_entityId:number, _isUnavailable:bool=false, _isReceived:bool=false, _iconTopMargin:number = "S", _iconRightMargin:number = "S", _withTooltip:bool = true)
+(def element RewardItemAdapter (	_entityId:number,
+									_isUnavailable:bool=false,
+									_isReceived:bool=false,
+									_iconTopMargin:number = "S",
+									_iconRightMargin:number = "S",
+									_withTooltip:bool = true,
+									_isAmountVisible:bool = true,
+									_isBattlePassSmallIconView:bool = false)
 	(scope
 		(var rewardEntity:dhEntity =		"getEntity(_entityId)")
 		(var rewardComponent:dhComponent =	"rewardEntity.rewardComponent" autoUpdate=false)
@@ -748,6 +796,8 @@
 		_isUnavailable = "_isUnavailable"
 		_isReceived = "_isReceived"
 		_withTooltip = "_withTooltip"
+		_isAmountVisible = "_isAmountVisible"
+		_isBattlePassSmallIconView = "_isBattlePassSmallIconView"
 	)
 )
 

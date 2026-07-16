@@ -1,0 +1,247 @@
+(def element ModalWindowShipExchangeForCoin (_shipId:number)
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+
+	(scope
+		(macro USER_PREF_DATA)
+		(macro PULL_SHIP_SCOPE "_shipId" "'shipEntity'" "'shipInfo'")
+
+		(struct shipBuyPrice =				PULL_PRICE(_entityId = "_shipId"					_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct moneyTrainingHirePrice =	PULL_PRICE(_entityId = "'CREW_CR_TRAINING_Cost'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct goldTrainingHirePrice =		PULL_PRICE(_entityId = "'CREW_GOLD_TRAINING_Cost'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(struct crewToHire = PULL_CREW_TO_HIRE())
+
+		(struct crewFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.CREW"))
+
+		(var hireTypes:array = "[
+			{
+				skillPoints: crewToHire.baseTrainingLevel - 1,
+				priceInfo: { currency: SC.Common.CURRENCIES.CREDITS, finalPrice : 0 }
+			},
+			{
+				skillPoints: crewToHire.moneyTrainingLevel - 1,
+				priceInfo: moneyTrainingHirePrice.info
+			},
+			{
+				skillPoints: crewToHire.goldTrainingLevel - 1,
+				priceInfo: goldTrainingHirePrice.info
+			}
+		]")
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var accountGold:number =		"accountResourceComponent.gold" (event "accountResourceComponent.evChangedGold"))
+		(var accountCredits:number =	"accountResourceComponent.credits" (event "accountResourceComponent.evChangedCredit"))
+		(var accountShipCoin:number =	"accountResourceComponent[SHIP_LEVEL_TO_SHIP_COINS[shipInfo.level]]" (event "accountResourceComponent.evChangedShipcoin"))
+
+		(struct crewPurchaseOptionPref =			GET_PREF_NUMBER(_option="'ui.crew.purchase'"))
+		(struct switchPurchaseShipBuyCommander =	GET_PREF_BOOL(_option="'ui.switchPurchaseShipBuyCommander'"))
+		(struct switchPurchaseShipBuySlots =		GET_PREF_BOOL(_option="'ui.switchPurchaseShipBuySlots'"))
+
+		(var crewData:dhComponent =			"getSingleComponent(CC.crewData)")
+		(var areAnySlotsInBarracks:bool =	"crewData.freeBarracksSlots > 0" (event "crewData.evFreeBarracksSlotsChanged"))
+		(var hireCrewSwitchState:bool =		"areAnySlotsInBarracks && switchPurchaseShipBuyCommander.value")
+		(var selectedHireType:number =		"crewPurchaseOptionPref.value")
+
+		(var isSelectedHireTypeCredits:bool =	"selectedHireType == SC.Common.CREW_TRAINING_TYPE.MoneyTraining")
+		(var isSelectedHireTypeGold:bool =		"selectedHireType == SC.Common.CREW_TRAINING_TYPE.GoldTraining")
+
+		(var crewCreditTrainingCost:number =	"hireCrewSwitchState && isSelectedHireTypeCredits ? moneyTrainingHirePrice.info.finalPrice : 0")
+		(var crewGoldTrainingCost:number =		"hireCrewSwitchState && isSelectedHireTypeGold ? goldTrainingHirePrice.info.finalPrice : 0")
+
+		(var isEnoughGold:bool = "(accountGold - crewGoldTrainingCost) >= 0")
+		(var isEnoughCredits:bool = "(accountCredits - crewCreditTrainingCost) >= 0")
+		(var isEnoughShipCoins:bool = "(accountShipCoin - SC.Common.SHIP_COIN_EXCHANGE_RATE.COST) >= 0")
+		(var isNotEnoughFunds:bool = "!isEnoughGold || !isEnoughCredits || !isEnoughShipCoins")
+
+		(var priceInfoExchange:dict = "{
+			currency: SHIP_LEVEL_TO_SHIP_COINS[shipInfo.level],
+			finalPrice: SC.Common.SHIP_COIN_EXCHANGE_RATE.COST
+		}")
+
+		(var isOptionalPriceInfoVisible:bool = "hireCrewSwitchState && selectedHireType > 0")
+		(var optionalPriceInfoExchange:dict = "isSelectedHireTypeGold || shipInfo.isPremium	? {	finalPrice:	crewGoldTrainingCost,
+																								currency:SC.Common.CURRENCIES.GOLD }
+																							: {	finalPrice:	crewCreditTrainingCost,
+																								currency:	SC.Common.CURRENCIES.CREDITS }")
+
+		(var currenciesPanelPrices:array =	"[
+			{ currency: SC.Common.CURRENCIES.GOLD, finalPrice: -crewGoldTrainingCost },
+			{ currency: SC.Common.CURRENCIES.CREDITS, finalPrice: -crewCreditTrainingCost },
+			{ currency: SHIP_LEVEL_TO_SHIP_COINS[shipInfo.level], finalPrice: -SC.Common.SHIP_COIN_EXCHANGE_RATE.COST}
+		]")
+	)
+
+	(bindcall externalCall
+		"crewFeature.state == 'locked' ? 'direct.action' : ''"
+		"['option.set', [ 'ui.crew.purchase', SC.Common.CREW_TRAINING_TYPE.BaseTraining ]]"
+		watch=false
+		on='addedToStage'
+	)
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = 412px))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_EXCHANGE_SHIP_FOR_COIN_HEADER'
+				_hasDivider = false
+			)
+
+			(element CurrenciesPanel
+				_priceInfo = "currenciesPanelPrices"
+				_width = 412px
+			)
+
+			(block
+				(style
+					(width = 340px)
+					(marginBottom = "M")
+				)
+				(element StatusLine
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.INFO"
+					_text = 'IDS_EXCHANGE_SHIP_FOR_COIN_STATUS_INFO'
+					_width = 100%
+				)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginBottom = "SXS")
+				)
+
+				(element ModalWindowShipPreview
+					_shipId = "_shipId"
+				)
+			)
+		)
+
+		(block
+			(bind visible "crewFeature.state != 'locked'")
+
+			(style (width = 100%))
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+				(style (width = 100%))
+
+				(element HorizontalDividerTwoPx)
+
+				(block
+					(style
+						(width = 100%)
+						(padding = "M")
+					)
+
+					(element SwitchWithRightLabel
+						_enabled =		"areAnySlotsInBarracks"
+						_state =		"hireCrewSwitchState"
+						_textClass =	'$TextDefault18NM'
+						_label =		'IDS_HIRE_CREW'
+						_methods =		"[
+							{
+								type: 'direct.action',
+								name: 'option.set',
+								args: [ 'ui.switchPurchaseShipBuyCommander', !hireCrewSwitchState ]
+							}
+						]"
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_unifiedStatus =	"!areAnySlotsInBarracks	? SC.Ui_styles.UNIFIED_STATUS.NEGATIVE
+																		: SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+							_text =				"!areAnySlotsInBarracks	? 'IDS_UNABLE_HIRE_CREW_NO_PLACE_IN_BARRACKS_TOOLTIP' :
+												 hireCrewSwitchState	? 'IDS_HIRE_CREW_SWITCH_OFF_TOOLTIP'
+																		: 'IDS_HIRE_CREW_SWITCH_ON_TOOLTIP'"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+
+				(block
+					(style (width = 100%))
+					(controller $Instance renderer='HorizontalDividerTwoPx'
+						(bind enabled "!hireCrewSwitchState")
+					)
+				)
+			)
+
+			(block
+				(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+
+				(style
+					(width = 100%)
+					(flow = "reverse_vertical")
+				)
+
+				(controller $Repeat renderer='CrewHireTypeSmallItem'
+					(bind count "hireTypes.length")
+					(args
+						_selectedHireType = "selectedHireType"
+						_hireTypeIndex = "$index"
+						_crewHireType = "hireTypes[$index]"
+						_availableGoldAfterShipPurchase = "accountGold - crewGoldTrainingCost"
+						_availableCreditsAfterShipPurchase = "accountCredits - crewCreditTrainingCost"
+						_isVisible = "hireCrewSwitchState"
+						_isLast = "$index == hireTypes.length - 1"
+					)
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "{ 720: M, 800: MS }")
+			)
+
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_isPriceForceShown = true
+				_questionString = "isOptionalPriceInfoVisible ? 'IDS_QUESTION_PURCHASE_SHIP_FOR' : 'IDS_EXCHANGE_SHIP_FOR_COIN_QUESTION'"
+				_priceInfo = "priceInfoExchange"
+				_optionalPriceInfo = "isOptionalPriceInfoVisible ? optionalPriceInfoExchange : null"
+				_isWarningText = "isNotEnoughFunds"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "{ 720: M, 800: MS }")
+			)
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_customOkBtnName = 'btn_ok'
+				_isDeficit = "isNotEnoughFunds"
+				_okMethods = "[
+					{
+						type: 'inputMapping.onAction',
+						name: 'DockProxy.unlockShip',
+						args:	{
+									shipID: shipInfo.id,
+									hireCrew: hireCrewSwitchState,
+									trainingType: selectedHireType
+								}
+					}
+				]"
+			)
+		)
+	)
+)

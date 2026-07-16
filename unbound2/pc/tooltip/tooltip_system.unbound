@@ -102,7 +102,9 @@
 	SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.ECO_BOOST:				'TooltipSystemHeaderIconEcoBoost',
 	SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CAMPAIGN:				'TooltipSystemHeaderIconCampaignView',
 	SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW_SKILL:			'TooltipSystemHeaderIconCrewSkill',
-	SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.PBS_WITH_AMOUNT:		'TooltipSystemHeaderIconPBSItemWithCounter'
+	SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.PBS_WITH_AMOUNT:		'TooltipSystemHeaderIconPBSItemWithCounter',
+
+	SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW_CATEGORY:			'TooltipSystemHeaderIconCrewCategory'
 }")
 
 
@@ -454,8 +456,8 @@
 		(class $TextDefaultNM)
 		(style
 			(width = 100%)
-			(marginTop = "S")
 			(leading = -2)
+			(bind marginTop "_headerText ? S : 0")
 			(bind textColor "textColor")
 			(bind alpha "textColor == SC.Ui_styles.SERVICE_COLORS.WHITE ? TC : 1")
 		)
@@ -709,6 +711,12 @@
 	)
 )
 
+(def element TooltipSystemHeaderIconCrewCategory (_data:dict)
+	(element CrewCategoryReward
+		_rarity = "'crewRarity' in _data ? _data.crewRarity : SC.Common.UNIFIED_ITEM_RARITY.COMMON"
+	)
+)
+
 (def element TooltipSystemIconWithCounter (_imageUrl:str, _imageWidth:number, _imageHeight:number, _iconAmount:str, _data:dict="null")
 	(scope
 		(var imageUrl:str = "_imageUrl")
@@ -842,11 +850,16 @@
 	)
 )
 
-(def element TooltipSystemHeaderWithIconAndText (_imageUrl:str='', _imageWidth:number=0, _imageHeight:number=0, _headerText:str='',
-												_subheaderText:str='', _headerIconType:number=0, _iconAmount:str='', _data:dict=null)
+(def element TooltipSystemHeaderWithIconAndText (	_imageUrl:str = '',
+													_imageWidth:number = 0,
+													_imageHeight:number = 0,
+													_headerText:str = '',
+													_subheaderText:str = '',
+													_headerIconType:number = "SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.SIMPLE",
+													_iconAmount:str = '',
+													_data:dict = null)
 	(scope
-		(var headerIconType:number =	"_headerIconType ? _headerIconType : SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.SIMPLE")
-		(var iconRendererItem:str =		"toString(headerIconType) in TOOLTIP_SYSTEM_HEADER_ICONS	? TOOLTIP_SYSTEM_HEADER_ICONS[headerIconType]
+		(var iconRendererItem:str =		"toString(_headerIconType) in TOOLTIP_SYSTEM_HEADER_ICONS	? TOOLTIP_SYSTEM_HEADER_ICONS[_headerIconType]
 																									: TOOLTIP_SYSTEM_HEADER_ICONS[SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.WITH_AMOUNT]")
 	)
 
@@ -880,7 +893,7 @@
 		(style (width = 100%))
 
 		(controller $Instance renderer='TooltipSystemHeaderSubheaderText'
-			(bind enabled "headerIconType != SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW")
+			(bind enabled "!isIn(_headerIconType, [SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW, SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW_CATEGORY])")
 			(args
 				_headerText =		"_headerText"
 				_subheaderText =	"_subheaderText"
@@ -888,9 +901,10 @@
 		)
 
 		(controller $Instance renderer='TooltipSystemHeaderSubheaderTextCrewOnly'
-			(bind enabled "headerIconType == SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW")
+			(bind enabled "isIn(_headerIconType, [SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW, SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW_CATEGORY])")
 			(args
-				_headerText =		"_headerText"
+				_headerText =		"SC.Ui_styles.TOOLTIP_SYSTEM_HEADER_ICON_TYPE.CREW_CATEGORY		? _headerText ?: 'IDS_CREW'
+																									: _headerText"
 				_subheaderText =	"_subheaderText"
 				_crewRarity =		"_data && 'crewRarity' in _data ? _data.crewRarity : null"
 			)
@@ -972,11 +986,11 @@
 
 
 
-(def element TooltipSystemParamsModifiersList (_attributesNegative:array = [], _attributesPositive:array = [], _attributesNeutral:array = [], _ownerId:number = 0)
+(def element TooltipSystemParamsModifiersList (_attributesNegative:array = [], _attributesPositive:array = [], _attributesNeutral:array = [], _ownerId:number = 0, _forceNotMarkUseless:bool = false)
 	(macro TOOLTIP_SYSTEM_PARAMS_CONTAINER)
 	(scope
 		(macro PULL_CURRENT_TOP_WINDOW_NAME)
-		
+
 		(struct profileRoute =	PULL_FULL_ROUTE(_id = "SC.Ui_windows.MODAL.PROFILE"))
 		(struct dockRoute =		PULL_FULL_ROUTE(_id = "SC.Ui_windows.WINDOWS.DOCK"))
 
@@ -984,7 +998,7 @@
 		(var isInDockRouteWithoutUselessAttrs:bool =	"isIn(dockRoute.activeChild, DOCK_ROUTES_WITHOUT_USELESS_ATTRIBUTES)")
 		(var isInProfileRouteWithoutUselessAttrs:bool =	"profileRoute.activeChild == SC.Ui_windows.ROUTE.STATS")
 
-		(var notMarkUseless:bool = "isInWindowWithoutUselessAttrs || isInProfileRouteWithoutUselessAttrs || isInDockRouteWithoutUselessAttrs")
+		(var notMarkUseless:bool = "_forceNotMarkUseless || isInWindowWithoutUselessAttrs || isInProfileRouteWithoutUselessAttrs || isInDockRouteWithoutUselessAttrs")
 	)
 
 	(block
@@ -1044,8 +1058,11 @@
 	)
 )
 
-(def element TooltipSystemCounterLine (_title:str, _count:number, _measurement:str='', _isAutoWidth:bool=false, _isCounterBold:bool=false)
-	(style (flow = "horizontal") (width = 100%))
+(def element TooltipSystemCounterLine (_title:str, _count:number, _measurement:str='', _measurmentSeparator:str = ' ', _isAutoWidth:bool=false, _isCounterBold:bool=false)
+	(style
+		(flow = "horizontal")
+		(width = 100%)
+	)
 
 	(tf
 		(style
@@ -1061,7 +1078,7 @@
 	(tf
 		(style (alpha = "TA"))
 		(bind class "_isCounterBold ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
-		(bind text "formatSeparator(_count) + (_measurement ? ' ' + _measurement : '')")
+		(bind text "formatSeparator(_count) + (_measurement ? _measurmentSeparator + _measurement : '')")
 	)
 )
 

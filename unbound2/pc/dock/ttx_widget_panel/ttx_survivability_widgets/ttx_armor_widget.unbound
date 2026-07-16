@@ -1,15 +1,13 @@
-(def element ArmorWidget (_isShown:bool)
+(def element ArmorWidget ()
 	(scope
 		(struct browserArmorRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_ARMOR"))
 		(struct armorRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.ARMOR"))
 
 		(var isArmorEnabledRouteActive:bool = "browserArmorRoute.isActive || armorRoute.isActive")
 		(var dockData:dhComponent = "getSingleComponent(CC.dockData)")
-
-		(var isArmorVisible:bool = "isArmorEnabledRouteActive && _isShown")
 	)
-	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.showArmor', {}]" (bind enabled "isArmorVisible"))
-	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.hideArmor', {}]" (bind enabled "!isArmorVisible"))
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.showArmor', {}]" (bind enabled "isArmorEnabledRouteActive"))
+	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.hideArmor', {}]" (bind enabled "!isArmorEnabledRouteActive"))
 	(class $TTXWidgetContainer)
 
 	(block
@@ -28,7 +26,7 @@
 
 		(hblock
 			(style (width = 100%))
-	
+
 			(tf
 				(class $TextDefaultBold18NM)
 				(style (alpha = "TA"))
@@ -41,6 +39,7 @@
 					(height = 22px)
 					(marginTop = "-XS")
 					(marginLeft = "S")
+					(alpha = 1.2)
 					(backgroundImage = 'url:../service_kit/buttons/info_tab_new.png')
 				)
 
@@ -76,7 +75,9 @@
 		(var armorPartsComponent:dhComponent =	"armorPartsEntity.shipStructuralParts")
 		(var armorParts:array =					"armorPartsComponent.parts ?: []"	(event "armorPartsComponent.evUpdate"))
 
-		(var pickerWidth:number = "armorRanges.length ? round(280 / armorRanges.length) : 0")
+		(var pickerGap:number = "XS")
+		(var pickerWidth:number = "armorRanges.length ? round((308 - pickerGap * (armorRanges.length - 1)) / armorRanges.length) : 0")
+		(var pickerHeight:number = 17px)
 
 		(var showBusyIndicator:bool = "!armorPick && !armorConfig")
 		(var isShipArmorRangeVisible:bool = "armorPick && thicknessMax != 0")
@@ -148,7 +149,8 @@
 				(align = "center")
 				(marginBottom = "S")
 				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.INNER_PANEL")
-				(borderRadius = "XS")
+				(borderRadius = "(pickerHeight + 4px) / 2 + 2")
+				(hgap = "pickerGap")
 			)
 
 			(controller $Repeat renderer='ArmorRangePicker'
@@ -156,6 +158,7 @@
 				(args
 					_data =			"armorRanges[$index]"
 					_pickerWidth =	"pickerWidth"
+					_pickerHeight =	"pickerHeight"
 					_pickersCount =	"armorRanges.length"
 				)
 			)
@@ -179,7 +182,7 @@
 						action =	"kill"
 						(bind enabled "!isShipArmorRangeVisible")
 					)
-				
+
 					(bindcall play
 						duration =	0.15
 						from =		"{ alpha: 0, visible: false }"
@@ -259,51 +262,63 @@
 	)
 )
 
-(def element ArmorRangePicker (_data:dict, _pickerWidth:number, _pickersCount:number)
+(def element ArmorRangePicker (_data:dict, _pickerWidth:number, _pickerHeight:number, _pickersCount:number)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
 		(var rangeIndex:number =	"_data.index")
-		(var rangeColor:number =	"_data.color")
-
-		(var overScaleX:number = "_pickerWidth	?	(_pickerWidth + 2) / (_pickerWidth / 100) / 100
-												:	1")
-		(var overScaleY:number = "(12 + 2) / (12 / 100) / 100")
 	)
 	(style (backgroundColor = "NO_COLOR"))
 	(macro MOUSE_EVENTS_DISPATCHER)
+
 	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setArmorRangeVisible', { rangeIdx: rangeIndex, visible: true }]"	watch=false (bind enabled "rollOver"))
 	(bindcall externalCall "'inputMapping.onAction'" "['ShipArmor.setArmorRangeVisible', { rangeIdx: rangeIndex, visible: false }]"	watch=false (bind enabled "!rollOver"))
 
+	(element RangePickerItem
+		_pickerWidth =	"_pickerWidth"
+		_pickerHeight =	"_pickerHeight"
+		_rangeColor =	"_data.color"
+		_rollOver =		"rollOver"
+		_isFirstItem =	"$index == 0"
+		_isLastItem =	"$index == _pickersCount - 1 || _pickersCount == 1"
+	)
+)
+
+(def element RangePickerItem (_pickerWidth:number, _pickerHeight:number, _rangeColor:number, _isFirstItem:bool, _isLastItem:bool, _rollOver:bool, _text:str = null)
+	(scope
+		(var borderRadiusLeft:number = "_isFirstItem ? _pickerHeight / 2 : 0")
+		(var borderRadiusRight:number = "_isLastItem ? _pickerHeight / 2 : 0")
+	)
+	(style
+		(paddingTop =		"XS")
+		(paddingBottom =	"XS")
+		(bind paddingLeft "_isFirstItem ? XS : 0")
+		(bind paddingRight "_isLastItem ? XS : 0")
+	)
+
 	(block
 		(style
-			(paddingTop = "XS")
-			(paddingBottom = "XS")
-			(bind paddingLeft "$index == 0 ? XS : XXS")
-			(bind paddingRight "$index == _pickersCount - 1 ? XS : XXS")
+			(bind width "_pickerWidth")
+			(bind height "_pickerHeight")
+			(align = "center|middle")
+		)
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(bind backgroundColor "C_DARK + _rangeColor")
+				(bind borderRadius "[borderRadiusLeft, borderRadiusRight]")
+			)
+			(bind colorTransform "_rollOver ? { redMultiplier: 1, greenMultiplier: 1, blueMultiplier: 1, alphaMultiplier: 1,
+												redOffset: 10, greenOffset: 10, blueOffset: 10, alphaOffset: 0 }
+											: CT_NONE")
 		)
 
-		(block
-			(style
-				(width = "_pickerWidth")
-				(height = 12px)
-				(alpha = 0.8)
-				(bind backgroundColor "0xFF000000 + rangeColor")
-				(borderRadius = "XXS")
-				(pivotX = 50%)
-				(pivotY = 50%)
-			)
+		(tf
+			(bind visible "_text")
 
-			(controller $Animation
-				(bindcall play
-					duration = 0.12
-					to = "rollOver	? { alpha: 1,	visualScaleX: overScaleX, visualScaleY: overScaleY }
-									: { alpha: 0.8,	visualScaleX: 1, visualScaleY: 1 }"
-					watch = false
-					action = "kill"
-					(bind trigger "rollOver")
-				)
-			)
+			(class $TextDefaultNM)
+			(style (alpha = "TA"))
+			(bind text "_text")
 		)
 	)
 )

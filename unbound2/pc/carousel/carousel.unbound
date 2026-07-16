@@ -59,6 +59,14 @@
 									redOffset: 0,		greenOffset: 0,		blueOffset: 0,		alphaOffset: 0
 })
 
+(def constant SHIP_FILTER_GROUP_COLORS "{
+	SC.Common.SHIP_FAVORITES_FILTER_TYPE.GREEN: 0xFF4BAC9E,
+	SC.Common.SHIP_FAVORITES_FILTER_TYPE.YELLOW: 0xFFC7C44F,
+	SC.Common.SHIP_FAVORITES_FILTER_TYPE.RED: 0xFFC4465B,
+	SC.Common.SHIP_FAVORITES_FILTER_TYPE.PURPLE: 0xFF8A63C9,
+	SC.Common.SHIP_FAVORITES_FILTER_TYPE.BLUE: 0xFF3A8ADC
+}")
+
 (def element ScrollButton (_scrollEnabled:bool, _canScroll:bool, _clickDispatchedEv:str,
 										_doubleClickDispatchedEv:str, _buttonCarouselName:str, _direction:str)
 	(scope
@@ -342,16 +350,13 @@
 		(var isShipInBalancer:bool =		"ownShipInfo.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipInfo.evUpdateLock"))
 		(var isNeedRepair:bool = 			"ownShipInfo.isNeedRepair" 										(event "ownShipInfo.evUpdateDockState"))
 
-		(var isExcludedMain:bool =	"shipEntity.mainShipFilter.excluded" (event "shipEntity.mainShipFilter.evUpdate"))
+		(var mainShipFilter:dhComponent = "shipEntity.mainShipFilter")
+		(var isExcludedMain:bool =	"mainShipFilter.excluded" (event "mainShipFilter.evUpdate"))
 		(var isReadyInFormationBattle:bool = "(!isNeedRepair && isShipReadyForBattle) || isShipInBalancer")
 
 		(var fullName:str =		"shipEntity.ship.fullName"	(event "shipEntity.ship.evUpdate"))
 		(var shipId:number =	"shipEntity.ship.id"		(event "shipEntity.ship.evUpdate"))
 		(var isSelected:bool =	"shipId == _selectedShipId")
-		
-
-		
-		(var shipParams:dict = "ownShipInfo.params" (event "ownShipInfo.evShipParamsUpdate"))
 		
 
 		(var isContextMenuVisible:bool = false)
@@ -496,7 +501,7 @@
 	)
 )
 
-(def element ShipCarouselDefaultSlot (_shipEntityId:number, _rollOver:bool, _mouseDown:bool, _isSelected:bool="false")
+(def element ShipCarouselDefaultSlot (_shipEntityId:number, _isSelected:bool="false")
 	(scope
 		(macro FEATURES "13")
 		(macro PULL_ROUTE "SC.Ui_windows.ROUTE.SHIP_MASTERY" "'isInShipMastery'")
@@ -506,7 +511,8 @@
 		(var masteryRank:number = "shipEntity.shipMastery.rank ?: 0" (event "shipEntity.shipMastery.evRankChanged"))
 
 		(var ownShipInfo:dhComponent = "shipEntity.ownShip")
-		(var isPrimary:bool = "ownShipInfo.isPrimary" (event "ownShipInfo.evIsPrimaryChanged"))
+		
+		(var shipGroup:str = "ownShipInfo.favoriteGroupKey" (event "ownShipInfo.evFavoriteGroupKeyChanged"))
 
 		
 		(var crewId:number = "ownShipInfo.crewId ?: 0" (event "ownShipInfo.evCrewChanged"))
@@ -542,14 +548,14 @@
 	
 	(hblock
 		(style
+			(hitTest = false)
 			(position = "absolute")
-			(top = 0)
-			(right = 0)
+			(top = 0px)
+			(right = 0px)
 			(paddingRight = "XS")
 			(paddingTop = 5px)
 			(paddingLeft = "XS")
 			(paddingBottom = 5px)
-			(hitTest = false)
 		)
 
 		(block
@@ -591,7 +597,7 @@
 		)
 
 		(block
-			(bind visible "isEarlyAccess && !isInShipMastery")
+			(bind visible "isEarlyAccess")
 			(style
 				(height = 21px)
 				(width = 21px)
@@ -603,28 +609,31 @@
 	
 	(hblock
 		(style
+			(position = "absolute")
+			(align = "middle")
 			(width = 100%)
 			(height = 31px)
-			(align = "middle")
-
-			(position = "absolute")
-			(bottom = 0)
+			(bottom = 0px)
 		)
 
 		(block
 			(class $FullsizeAbsolute)
 			(style
-				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(hitTest = false)
 				(borderRadiusBottomLeft = "XS")
 				(borderRadiusBottomRight = "XS")
-				(hitTest = false)
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
 			)
 
 			(macro DEFAULT_CONTROL_STATE_ANIMATION_CT "_isSelected ? CT_CAROUSEL_NAME_PANEL_SELECTED : CT_CAROUSEL_NAME_PANEL_DEFAULT")
 		)
 
 		(block
-			(style (hitTest = false) (width = 100%) (paddingLeft = "S"))
+			(style
+				(hitTest = false)
+				(width = 100%)
+				(paddingLeft = "S")
+			)
 
 			(element ShipLineItemNM
 				_shipId = "_shipEntityId"
@@ -654,16 +663,17 @@
 		)
 	)
 
+	
 	(block
-		(bind visible "isPrimary")
+		(bind visible "shipGroup")
 		(style
+			(hitTest = false)
+			(position = "absolute")
 			(width = 23px)
 			(height = 23px)
-			(position = "absolute")
 			(left = "XXS")
 			(top = -1px)
-			(backgroundImage = 'swf:../service_kit/icons_svg/icons_svg.swf:primary')
-			(hitTest = false)
+			(bind backgroundImage "shipGroup ? 'swf:../service_kit/icons_svg/icons_svg.swf:' + shipGroup : ''")
 		)
 	)
 )
@@ -679,7 +689,8 @@
 		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipEntityId)")
 		(var masteryRank:number = "shipEntity.shipMastery.rank ?: 0" (event "shipEntity.shipMastery.evRankChanged"))
 		(var ownShipInfo:dhComponent = "shipEntity.ownShip")
-		(var isPrimary:bool = "ownShipInfo ? ownShipInfo.isPrimary : false"	(event "ownShipInfo.evIsPrimaryChanged"))
+		(var shipGroupKey:str = "ownShipInfo ? ownShipInfo.favoriteGroupKey : ''" (event "ownShipInfo.evFavoriteGroupKeyChanged"))
+		(var hasGroup:bool = "toBool(shipGroupKey)")
 
 		
 		(var crewId:number = "ownShipInfo ? ownShipInfo.crewId : 0" (event "ownShipInfo.evCrewChanged"))
@@ -732,15 +743,15 @@
 		
 		(hblock
 			(style
+				(hitTest = false)
 				(paddingLeft = 1px)
 				(paddingRight = 5px)
-				(paddingTop = 5px)
+				(paddingTop = 6px)
 				(paddingBottom = 5px)
-				(hitTest = false)
 			)
 
 			(block
-				(bind visible "!hasCrew && !isInShipMastery")
+				(bind visible "!hasCrew")
 				(style
 					(height = 21px)
 					(width = 21px)
@@ -779,7 +790,7 @@
 			)
 
 			(block
-				(bind visible "isEarlyAccess && !isInShipMastery")
+				(bind visible "isEarlyAccess")
 				(style
 					(height = 21px)
 					(width = 21px)
@@ -809,15 +820,15 @@
 	)
 
 	(block
-		(bind visible "isPrimary")
+		(bind visible "hasGroup")
 		(style
+			(hitTest = false)
 			(position = "absolute")
 			(height = 100%)
 			(width = 4px)
-			(backgroundColor = 0xFF4BAC9E)
-			(hitTest = false)
-			(borderRadiusTopLeft = "XS")
-			(borderRadiusBottomLeft = "XS")
+			(bind borderRadiusTopLeft "hasGroup ? XS : 0px")
+			(bind borderRadiusBottomLeft "hasGroup ? XS : 0px")
+			(bind backgroundColor "SHIP_FILTER_GROUP_COLORS[shipGroupKey]")
 		)
 	)
 )

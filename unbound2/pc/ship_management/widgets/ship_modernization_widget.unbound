@@ -149,36 +149,30 @@
 
 (def element ModernizationItem (_equipmentSlotEntity:dhEntity)
 	(scope
-		(var modernizationFeatureEntity:dhEntity = "getPrimaryEntity(CC.accountFeature, SC.Common.ACCOUNT_FEATURE.BIT_MASKS[SC.Common.ACCOUNT_FEATURE.MODERNIZATIONS])")
-
 		(var equipmentSlot:dhComponent = "_equipmentSlotEntity.equipmentSlot")
 		(var subCollectionKey:number = "equipmentSlot.subCollectionKey")
-		(var bestItemTypeInSlot:number = "equipmentSlot.bestItemTypeInSlot" (event "equipmentSlot.evBestItemTypeInSlotChanged"))
 		(var installedEntityId:number = "equipmentSlot.installedEntityId" (event "equipmentSlot.evInstalledEntityIdChanged"))
 
 		(var modernizationEntity:dhEntity = "getEntity(installedEntityId)")
 		(var modernization:dhComponent = "modernizationEntity.modernization")
 
+		(var installedOnShips:array = "modernization.installedOnShips")
+
 		(var modId:number =	"modernization.modId")
 		(var name:str =		"modernization.name")
 		(var rarity:number = "modernization.rarity")
-		(var numInStorage:number = "modernization.numInStorage ?: 0" (event "modernization.evNumInStorageChanged"))
 		(var isRecommended:bool = "modernization.isRecommended" (event "modernization.evIsRecommendedChanged"))
 
 		(var attributes:dhComponent = "modernizationEntity.attributes" (event "attributes.evChanged"))
-		(var attributesNegative:array = "attributes.negative" (event "attributes.evChanged"))
-		(var attributesNeutral:array = "attributes.neutral" (event "attributes.evChanged"))
-		(var attributesPositive:array = "attributes.positive" (event "attributes.evChanged"))
 
 		(macro PULL_SHIP_ID)
 		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
 		(var ownShipInfo:dhComponent = "ownShipEntity.ownShip")
-		(var isOwned:bool = "ownShipEntity != null")
 
 		(var isShipReadyForBattle:bool =	"ownShipInfo.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" (event "ownShipInfo.evUpdateLock"))
 		(var isShipInBalancer:bool =		"ownShipInfo.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipInfo.evUpdateLock"))
 
-		(var isNeedRepair:bool = "ownShipInfo.isNeedRepair ?: false" (event "ownShipInfo.evUpdateDockState"))
+		(var isNeedRepair:bool = "ownShipInfo.isNeedRepair" (event "ownShipInfo.evUpdateDockState"))
 
 		(var isClickableSlot:bool = "!isShipInBalancer && !isShipReadyForBattle && !isNeedRepair")
 		(var hasInstalledItem:bool = "modernizationEntity != null") 
@@ -191,7 +185,7 @@
 		
 
 		(var isInfotipModernizationVisible:bool = false)
-		(var isContextMenuAvailable:bool =	"isClickableSlot && hasInstalledItem")
+		(var isContextMenuAvailable:bool =	"isClickableSlot && hasInstalledItem && ownShipInfo != null")
 
 		(var selectionState:number = "isClickableSlot		?	isInfotipModernizationVisible			? SC.Ui_styles.BUTTON_STATE.SELECTED :
 																mouseDown								? SC.Ui_styles.BUTTON_STATE.DOWN :
@@ -204,16 +198,21 @@
 
 		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_AVAILABLE,
-																												SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_AVAILABLE_REPEAT ]"))
+																												SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_AVAILABLE_REPEAT,
+																												SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_AVAILABLE_ON_OTHER_SHIPS]"))
+
+		(struct finalTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_SELECT_WITH_INSTALLED_SHIPS]"))
 
 		(var isGuidingTipVisible:bool = "checkedTipId.value && $index == activeTip.targetId && !isInfotipModernizationVisible")
 	)
 
 	(bind name "'ButtonModernizationSlot_' + $index")
-	(style (backgroundColor = "NO_COLOR"))
 
+	(bindcall externalCall "checkedTipId.value && isInfotipModernizationVisible ? 'inputMapping.onAction' : ''" "['setNextTip', {}]" init=false on='leftClick')
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(macro SOUND_HANDLER "isClickableSlot ? 'button_modernization' : ''")
+
+	(style (backgroundColor = "NO_COLOR"))
 
 	(controller $Tooltip
 		(renderer = 'ModernizationEmptySlotTooltip')
@@ -258,8 +257,11 @@
 	(controller $Tooltip
 		(renderer = 'ModernizationSlotInfotip')
 		(bind enabled "isClickableSlot")
+		(bindcall externalCall "finalTipId.value ? 'inputMapping.onAction' : ''" "['setNextTip', {}]" init=false watch=false on='evHide')
+
 		(args
 			_slotId = "subCollectionKey"
+			_installedModId = "installedEntityId"
 		)
 
 		(macro VERTICAL_INFOTIP_BEHAVIOUR "1")
@@ -292,10 +294,12 @@
 				_tipId =			"checkedTipId.value"
 				_tipPositioning =	"TIP_POSITION_RIGHT"
 				_hasFinishButton =	"hasInstalledItem"
-				_offsetX =			"S"
-				_pointerOffset =	-42
+				
+				_offsetX =			"7"
+				_offsetY =			"-2"
+				_pointerOffset =	-42px
 				_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
-				_hasAssistant =		true
+				_hasAssistant =		"checkedTipId.value != SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_AVAILABLE_ON_OTHER_SHIPS"
 			)
 		)
 	)
@@ -375,7 +379,7 @@
 		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
 		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" 	(event "ownShipComponent.evUpdateLock"))
 
-		(var isNeedRepair:bool = "ownShipComponent.isNeedRepair ?: false" (event "ownShipComponent.evUpdateDockState"))
+		(var isNeedRepair:bool = "ownShipComponent.isNeedRepair" (event "ownShipComponent.evUpdateDockState"))
 
 		(var modernizationEntity:dhEntity = "getEntity(_modernizationEntityId)")
 		(var modernizationComponent:dhComponent = "modernizationEntity.modernization")
@@ -385,8 +389,9 @@
 		(var name:str = "modernizationComponent.name ?: ''")
 		(var rarity:number = "modernizationComponent.rarity")
 		(var numInStorage:number = "modernizationComponent.numInStorage ?: 0" (event "modernizationComponent.evNumInStorageChanged"))
-		(var isInstalled:bool = "modernizationComponent.isInstalled ?: false" (event "modernizationComponent.evIsInstalledChanged"))
-		(var isRecommended:bool = "modernizationComponent.isRecommended ?: false" (event "modernizationComponent.evIsRecommendedChanged"))
+		(var isInstalled:bool = "modernizationComponent.isInstalled" (event "modernizationComponent.evIsInstalledChanged"))
+		(var isRecommended:bool = "modernizationComponent.isRecommended" (event "modernizationComponent.evIsRecommendedChanged"))
+		(var installedOnShips:array = "modernizationComponent.installedOnShips" (event "modernizationComponent.evInstalledOnShipsChanged"))
 
 		(var attributesNegative:array = "modernizationAttributes.negative  ?: []" (event "modernizationAttributes.evChanged"))
 		(var attributesNeutral:array = "modernizationAttributes.neutral ?: []" (event "modernizationAttributes.evChanged"))
@@ -399,6 +404,7 @@
 		(var descriptionText:str = "tr('IDS_DESC_' + toUpper(name))")
 		(var descriptionVisible:bool = "descriptionText != ' '")
 
+		(var isInstalledOnOtherShipsVisible:bool = "installedOnShips.length > 0 && !isInstalled && numInStorage == 0")
 		(var isInStorageVisible:bool = "(numInStorage > 0) && !isInstalled")
 		(var isPriceVisible:bool = "(numInStorage == 0) && !isInstalled && rarity == SC.Common.UNIFIED_ITEM_RARITY.COMMON")
 		(var isArmoryItemStatus:bool = "(numInStorage == 0) && !isInstalled && rarity != SC.Common.UNIFIED_ITEM_RARITY.COMMON")
@@ -424,9 +430,11 @@
 																		: null")
 		
 		(var isLockAction:bool = "isShipInBalancer || isShipReadyForBattle || isNeedRepair")
-		(var cnxtMenuMouseInstruction:dict = "	!mouseInstruction									? null :
-												!isLockAction && _isSlotTooltip && isInstalled		? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT,
-																										text:			'IDS_SELL_OR_UNMOUNT_MODERNIZATION_MOUSE_INSTRUCTION' }
+		(var cnxtMenuMouseInstruction:dict = "	!mouseInstruction								? null :
+												!isLockAction && _isSlotTooltip && isInstalled	? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT,
+																									text:			'IDS_SELL_OR_UNMOUNT_MODERNIZATION_MOUSE_INSTRUCTION' } :
+												isInstalledOnOtherShipsVisible					? {	unifiedStatus:	SC.Ui_styles.UNIFIED_STATUS.MOUSE_RIGHT,
+																									text:			'IDS_UNMOUNT_AND_INSTALL_MODERNIZATION_MOUSE_INSTRUCTION' }
 																									: null")
 	)
 
@@ -445,20 +453,37 @@
 
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInStorageVisible"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInStorageVisible || isInstalledOnOtherShipsVisible"))
 		)
 
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemCounterLine'
-				(bind enabled "isInStorageVisible")
+				(bind enabled "isInStorageVisible || isInstalledOnOtherShipsVisible")
 				(args
-					_title = 'IDS_IN_WAREHOUSE'
-					_count = "numInStorage"
+					_title = "isInstalledOnOtherShipsVisible ? 'IDS_MODERNIZATION_AVAILABLE_ON' : 'IDS_IN_WAREHOUSE'"
+					_count = "isInstalledOnOtherShipsVisible ? installedOnShips.length : numInStorage"
 					_isAutoWidth = true
 				)
 			)
 		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInstalledOnOtherShipsVisible"))
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='ModernizationInstalledShips'
+				(bind enabled "isInstalledOnOtherShipsVisible")
+				(args
+					_ships = "installedOnShips"
+				)
+			)
+		)
+
 
 		(block
 			(style (width = 100%))
@@ -582,7 +607,7 @@
 	)
 )
 
-(def element ModernizationSlotInfotip (_slotId:number)
+(def element ModernizationSlotInfotip (_slotId:number, _installedModId:number)
 	(scope
 		(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_SCOPE)
 
@@ -624,6 +649,7 @@
 						(bind count "modernizationAvailableOnStorageOrCommonCollection.length")
 						(args
 							_modernizationEntity = "modernizationAvailableOnStorageOrCommonCollection.getEntityAtIndex($index)"
+							_installedModId = "_installedModId"
 						)
 					)
 				)
@@ -668,6 +694,7 @@
 							(bind count "modernizationMetashopPurchasableCollection.length")
 							(args
 								_modernizationEntity = "modernizationMetashopPurchasableCollection.getEntityAtIndex($index)"
+								_installedModId = "_installedModId"
 							)
 						)
 					)
@@ -692,7 +719,7 @@
 
 		(var isShipInBalancer:bool = 		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER" 			(event "ownShipComponent.evUpdateLock"))
 		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" 	(event "ownShipComponent.evUpdateLock"))
-		(var isNeedRepair:bool = 			"ownShipComponent.isNeedRepair ?: false"								(event "ownShipComponent.evUpdateDockState"))
+		(var isNeedRepair:bool = 			"ownShipComponent.isNeedRepair"								(event "ownShipComponent.evUpdateDockState"))
 
 		(var mouseInstruction:dict = "	isOwned &&	isShipInBalancer		? 	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,
 																					text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER'} :
@@ -776,7 +803,7 @@
 	)
 )
 
-(def element ModernizationSlotInfotipItem (_modernizationEntity:dhEntity)
+(def element ModernizationSlotInfotipItem (_modernizationEntity:dhEntity, _installedModId:number)
 	(scope
 		(macro PULL_SHIP_ID)
 		(var ownShipEntity:dhEntity = "getPrimaryEntity(CC.ownShip, viewedShipId)")
@@ -789,8 +816,8 @@
 		(var isShipLocked:bool = "isShipInBalancer || isShipReadyForBattle")
 
 		(var modernization:dhComponent = "_modernizationEntity.modernization")
-		(var attributes:dhComponent = "_modernizationEntity.attributes")
-	
+		(var installedOnShips:array = "modernization.installedOnShips")
+
 		(var name:str =			"modernization.name		?: ''")
 		(var modId:number =		"modernization.modId	?: 0")
 		(var slotId:number =	"modernization.slotId	?: 0")
@@ -801,25 +828,16 @@
 		(var numInStorage:number = "modernization.numInStorage ?: 0" (event "modernization.evNumInStorageChanged"))
 		(var rarity:number = "modernization.rarity")
 
-		(var attributesNegative:array =	"attributes.negative	?: []")
-		(var attributesNeutral:array =	"attributes.neutral		?: []")
-		(var attributesPositive:array =	"attributes.positive	?: []")
+		(var isInstalledOnOtherShipsVisible:bool = "installedOnShips.length > 0 && !isInstalled && numInStorage == 0")
+		(var isInStorageVisible:bool = "numInStorage > 0 && !isInstalled")
 
 		(struct unmountPrice =	PULL_PRICE(_entityId = "'MODS_COST_Demontage'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
 		(struct buyPrice =		PULL_PRICE(_entityId = "toString(modId)"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
 		(struct sellCoef =		PULL_PRICE(_entityId = "'SELL_COEF'"			_actionId = "SC.Common.PRICE_ACTION.INFO"))
 
-		(var unmountCost:number = "unmountPrice.info.finalPrice")
 		(var isCommonModernization:bool = "rarity == SC.Common.UNIFIED_ITEM_RARITY.COMMON")
 		(var isShipAvailable:bool = "!isShipLocked && isOwned")
 		(var isBuyMetashopItemAvailable:bool = "!isCommonModernization && !numInStorage && !isInstalled")
-
-		(var accountResource:dhComponent = "getSingleComponent(CC.accountResource)")
-		(var accountGold:number =		"accountResource.gold		?: 0" (event "accountResource.evChangedGold"))
-		(var accountCredits:number =	"accountResource.credits	?: 0" (event "accountResource.evChangedCredit"))
-	
-		(var curCurrencyResource:number = "unmountPrice.info.currency == SC.Common.CURRENCIES.GOLD	? accountGold
-																									: accountCredits")
 
 		(macro MOUSE_HANDLER_SCOPE)
 
@@ -828,7 +846,16 @@
 											rollOver		? SC.Ui_styles.BUTTON_STATE.OVER :
 											isInstalled		? SC.Ui_styles.BUTTON_STATE.SELECTED
 															: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[SC.Context_guiding_tip.TIP_TYPE.MODERNIZATION_SELECT_WITH_INSTALLED_SHIPS]"))
+
+		(var isGuidingTipVisible:bool = "checkedTipId.value && modernization.modId == activeTip.targetId")
 	)
+
+	
+	(bindcall externalCall 'inputMapping.onRequest' "['showModernizationsManagementWindow', {_itemToMount: modId, _shipId: viewedShipId, _mountFlag: 0, _unmountFlag: 0, _slotId: slotId, _fromAnotherShip: true, _installedModId: _installedModId}]" watch=false on='rightClick' (bind enabled "isInstalledOnOtherShipsVisible"))
+
 	(style (width = 100%))
 	(bind name "name")
 
@@ -848,7 +875,7 @@
 		)
 
 		(controller $Tooltip
-			(bind enabled "!isShipLocked")
+			(bind enabled "!isShipLocked && ownShipInfo != null && !isInstalledOnOtherShipsVisible")
 			(renderer = 'SelectUnmountTypeInfotip')
 			(args
 				_sellCoef =  "sellCoef.info"
@@ -885,19 +912,19 @@
 							{
 								type:	isInstalled && isShipAvailable ? 'inputMapping.onRequest' : '',
 								name:	'showModernizationsManagementWindow',
-								args:	{ itemToUnmount: modId, shipId: viewedShipId, slotId: slotId }
+								args:	{ _itemToUnmount: modId, _shipId: viewedShipId, _slotId: slotId }
 							}]"
 		)
 
 		(hblock
 			(class $FullsizeAbsolute)
 			(style
+				(hitTest = false)
 				(align = "middle")
 				(paddingTop = "S")
 				(paddingBottom = "S")
 				(paddingLeft = "SXS")
 				(paddingRight = "SXS")
-				(hitTest = false)
 			)
 
 			(block
@@ -931,13 +958,17 @@
 
 				(hblock
 					(bind name "'bought_' + name")
-					(bind visible "numInStorage > 0 && !isInstalled")
+					(bind visible "isInStorageVisible || isInstalledOnOtherShipsVisible")
 					(style (marginTop = "SXS"))
 
 					(tf
 						(class $TextDefaultNM)
 						(style (alpha = "TC"))
-						(bind text "tr('IDS_IN_WAREHOUSE') + ' ' + formatSeparator(numInStorage)")
+						(bind text "tr(isInstalledOnOtherShipsVisible		? 'IDS_MODERNIZATION_AVAILABLE_ON'
+																			: 'IDS_IN_WAREHOUSE')
+						+ ' '
+						+ formatSeparator(isInstalledOnOtherShipsVisible	? installedOnShips.length
+																			: numInStorage)")
 					)
 				)
 			)
@@ -956,7 +987,7 @@
 					(style
 						(width = 19px)
 						(height = 19px)
-						(right = 0)
+						(right = 0px)
 						(backgroundImage = 'url:../service_kit/icons/icon_armory.png'))
 				)
 
@@ -994,16 +1025,39 @@
 			)
 		)
 	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "isGuidingTipVisible")
+		(args
+			_tipId =			"checkedTipId.value"
+			_tipPositioning =	"TIP_POSITION_RIGHT"
+			_hasFinishButton =	"_installedModId != 0"
+			_offsetX =			"S"
+			_pointerOffset =	-42
+			_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+			_hasAssistant =		"false"
+		)
+	)
+
 )
 
-(def element SelectUnmountTypeInfotip (_sellCoef:dict, _numInStorage:number, _isInstalled:bool, _modId:number, _slotId:number, _shipId:number, _rarity:number, _unmountPriceInfo:dict, _purchasePriceInfo:dict)
+(def element SelectUnmountTypeInfotip (_sellCoef:dict,
+									_numInStorage:number,
+									_isInstalled:bool,
+									_modId:number,
+									_slotId:number,
+									_shipId:number,
+									_rarity:number,
+									_unmountPriceInfo:dict,
+									_purchasePriceInfo:dict)
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 		(var isArmoryItemStatus:bool = "_rarity != SC.Common.UNIFIED_ITEM_RARITY.COMMON && !_numInStorage")
 	)
-	(class $ContextMenuDimensions)
 	(macro MOUSE_EVENTS_DISPATCHER)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND _isInfotip="true")
+
+	(style (width = 210px))
 
 	(element INFOTIP_SYSTEM_DEFAULT_CONTAINER _hasInsideOffset = true
 		(block
@@ -1019,15 +1073,21 @@
 					_methods = "[{
 									type:	'inputMapping.onRequest',
 									name:	'showModernizationsManagementWindow',
-									args:	{	itemToUnmount:	_modId,
-												shipId:			_shipId,
-												mountFlag:		0,
-												unmountFlag:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET,
-												slotId:			_slotId }
+									args:	{	_itemToUnmount:	_modId,
+												_shipId:		_shipId,
+												_mountFlag:		0,
+												_unmountFlag:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET,
+												_slotId:		_slotId }
 								}]"
 				)
 				(block
-					(style (position = "absolute") (height = 100%) (align = "middle") (right = "S") (hitTest = false))
+					(style
+						(hitTest = false)
+						(position = "absolute")
+						(height = 100%)
+						(align = "middle")
+						(right = "S")
+					)
 					(element PriceTag
 						_priceInfo = "_unmountPriceInfo"
 						_showDiscountTag = true
@@ -1044,15 +1104,21 @@
 					_methods = "[{
 									type:	'inputMapping.onRequest',
 									name:	'showModernizationsManagementWindow',
-									args:	{	itemToUnmount:	_modId,
-												shipId:			_shipId,
-												mountFlag:		0,
-												unmountFlag:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL,
-												slotId:			_slotId }
+									args:	{	_itemToUnmount:	_modId,
+												_shipId:		_shipId,
+												_mountFlag:		0,
+												_unmountFlag:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SELL,
+												_slotId:		_slotId }
 								}]"
 				)
 				(block
-					(style (position = "absolute") (height = 100%) (align = "middle") (right = "S") (hitTest = false))
+					(style
+						(hitTest = false)
+						(position = "absolute")
+						(height = 100%)
+						(align = "middle")
+						(right = "S")
+					)
 					(element PriceTag
 						_priceInfo = "{finalPrice: (_purchasePriceInfo.finalPrice) * (_sellCoef.finalPrice), currency: SC.Common.CURRENCIES.CREDITS}"
 						_showDiscountTag = true
@@ -1077,7 +1143,13 @@
 			)
 			(block
 				(bind visible "_numInStorage == 0 && !isArmoryItemStatus")
-				(style (position = "absolute") (height = 100%) (align = "middle") (right = "S") (hitTest = false))
+				(style
+					(hitTest = false)
+					(position = "absolute")
+					(height = 100%)
+					(align = "middle")
+					(right = "S")
+				)
 				(element PriceTag
 					_priceInfo = "_purchasePriceInfo"
 					_showDiscountTag = true
@@ -1098,5 +1170,45 @@
 							}]"
 			)
 		)
+	)
+)
+
+(def element ModernizationInstalledShips (_ships:array)
+	(scope
+		(var countOfItemToRender:number =  "min(3, _ships.length)")
+		(var additionalShipsCount:number = "_ships.length - 3")
+	)
+
+	(tf
+		(class $TextDefaultNM)
+		(style
+			(marginBottom = "SXS")
+			(alpha = "TA")
+		)
+		(text = 'IDS_MODERNIZATION_INSTALLED_ON')
+	)
+	(block
+		(style
+			(width = 100%)
+			(gap = "M")
+		)
+		(controller $Repeat renderer = 'ShipLineItemNM'
+			(bind items "_ships")
+			(bind count "countOfItemToRender")
+
+			(args
+				_shipId = "$item"
+				_withFlag = true
+			)
+		)
+	)
+	(tf
+		(bind visible "additionalShipsCount > 0")
+		(class $TextDefaultNM)
+		(style
+			(marginTop = "M")
+			(alpha = "TC")
+		)
+		(bind text "subst('IDS_MODERNIZATION_INSTALLED_ON_MORE', [], {_count: additionalShipsCount}, additionalShipsCount)")
 	)
 )

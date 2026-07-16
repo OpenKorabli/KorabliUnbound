@@ -1,32 +1,3 @@
-(def constant CHOOSE_SIDE_ANIMATION_NAME {
-	SIDE_ONE: 'phoenix',
-	SIDE_TWO: 'qilin',
-	DEFAULT: 'animation'
-})
-
-(def constant RVR_SIDE_INFO_MAP {
-	NEUTRAL_SIDE: -1,
-	SIDE_ONE: 0,
-	SIDE_TWO: 1,
-	TWO_SIDES: 2,
-	THREE_SIDES: 3
-})
-
-(def constant SIDE_TO_ANIMATION_NAME_MAP "{
-	0	: CHOOSE_SIDE_ANIMATION_NAME.SIDE_ONE,
-	1	: CHOOSE_SIDE_ANIMATION_NAME.SIDE_TWO
-}")
-
-(def constant SIDE_BG_ALPHA {
-	SC.Ui_styles.BUTTON_STATE.OVER : 0.02,
-	SC.Ui_styles.BUTTON_STATE.UP : 0
-})
-
-(def constant SIDE_BORDER_ALPHA {
-	SC.Ui_styles.BUTTON_STATE.OVER : 0.2,
-	SC.Ui_styles.BUTTON_STATE.UP : 0.1
-})
-
 (def element ModalWindowArcEventChooseSide ()
 	(macro MODAL_WINDOW_INIT)
 	(scope
@@ -35,6 +6,8 @@
 
 		(event evEnableSideOne)
 		(event evEnableSideTwo)
+
+		(event evSelectDifficultyLevel)
 
 		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
 		(var sides:number = "arcEventEntity.arcEventConfig.sidesCount ?: 0")
@@ -50,15 +23,20 @@
 
 		(var isAnimationOneEnabled:bool = "isTwoSidedBattle && $event ? $event.state : false" (event "evEnableSideOne"))
 		(var isAnimationTwoEnabled:bool = "isTwoSidedBattle && $event ? $event.state : false" (event "evEnableSideTwo"))
-	)
-	(dispatch "'evRollOverSideOne'" args="$event" dir="EventDirection.DOWN" (bind enabled "!isStatic") (event "evRollOverSideOneCard"))
-	(dispatch "'evRollOverSideTwo'" args="$event" dir="EventDirection.DOWN" (bind enabled "!isStatic") (event "evRollOverSideTwoCard"))
 
-	(dispatch "'evEnableSideOne'" delay=0.1 args="{ state: true }" (event "startShow"))
-	(dispatch "'evEnableSideTwo'" delay=0.2 args="{ state: true }" (event "startShow"))
+		(var selectedSideId:number = "DEFAULT_DIFFICULTY_LEVEL")
+		(bind selectedSideId "$event.sideId" init=false (event "evSelectDifficultyLevel"))
+	)
+
+	(dispatch evRollOverSideOne args="$event" dir="EventDirection.DOWN" (bind enabled "!isStatic") (event "evRollOverSideOneCard"))
+	(dispatch evRollOverSideTwo args="$event" dir="EventDirection.DOWN" (bind enabled "!isStatic") (event "evRollOverSideTwoCard"))
+
+	(dispatch evEnableSideOne delay=0.1 args="{ state: true }" (event "startShow"))
+	(dispatch evEnableSideTwo delay=0.2 args="{ state: true }" (event "startShow"))
 
 	(style (align = "center"))
 	(name = 'ModalWindowArcEventChooseSide')
+
 	(block
 		(class $FullsizeAbsolute)
 
@@ -67,6 +45,35 @@
 			_type = "SC.Ui_styles.ANIMATED_BG.ARC_EVENT"
 			_hideTime = 0.2
 			_hideDelay = 0.2
+		)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(alpha = 0)
+			(backgroundImage = 'url:../bg/animated/profile/effects/rating/mist.skel')
+		)
+		(controller $Spine
+			(bindcall pause init=true (bind enabled "isStatic"))
+			(bindcall resume (bind enabled "!isStatic"))
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT "CT_ARC_EVENT_LEVEL[selectedSideId]")
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.2
+				to = "{ alpha: 1 }"
+				(event "startShow")
+			)
+			(bindcall play
+				duration = 0.2
+				delay = 0.25
+				to = "{ alpha: 0 }"
+				action="kill"
+				(event "startHide")
+			)
 		)
 	)
 
@@ -131,40 +138,76 @@
 
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-		(style (width = 100%))
+		(style
+			(width = 100%)
+			(marginBottom = "{720:M, 1080:XLM}")
+		)
 		(element ModalWindowHeaderFullSize
 			_windowName = 'IDS_ARC_EVENT_COMMON_EVENT_TITLE'
 			_backButtonText = 'IDS_RETURN_FROM_MODAL_WINDOW_BUTTON'
 			_paddingRight = "M"
 			_paddingLeft = "M"
-			_methods = "[	{	type: 'inputMapping.onRequest',
-								name: 'goToPort',
-								args: {}}]"
+			_methods = "[
+				{
+					type: 'inputMapping.onRequest',
+					name: 'goToPort',
+					args: {}
+				}
+			]"
 		)
 	)
-	(block 
+
+	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
-		(style (width = 512px) (marginTop = "{720:L, 1080:XL}"))
+		(style
+			(width = 512px)
+			(marginBottom = "{720:XLM, 1080:XXL}")
+		)
 		(tf
 			(class $TextDefault22NM)
-			(style (width = 100%) (textAlign = "center") (alpha = "TC"))
+			(style
+				(width = 100%)
+				(textAlign = "center")
+				(alpha = "TC")
+			)
 			(text = 'IDS_ARC_EVENT_CHOOSE_SIDE_DESCRIPTION')
 		)
 	)
-	(hblock 
-		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
-		(style (marginTop = "{720:L, 1080:XL}"))
-		(controller $Repeat renderer='ArcEventSideSelectionCard'
-			(bind count "sides")
-			(args
-				_chosenSidesMap = "chosenSidesMap"
-				_isStatic = "isStatic"
+
+	(block
+		(style (marginBottom = "{720:L, 1080:XL}"))
+
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+			(style
+				(hgap = "MS")
+				(marginBottom = "{720:MS, 1080:LS}")
+			)
+
+			(controller $Repeat renderer='ArcEventSideSelectionCard'
+				(bind count "sides")
+				(args
+					_chosenSidesMap = "chosenSidesMap"
+					_isStatic = "isStatic"
+					_difficultyLevel = "$index+1"
+					_selectedSideId = "selectedSideId"
+				)
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (width = 100%))
+			(element ArcEventDifficultyLevelRewards
+				_sideId = "selectedSideId"
 			)
 		)
 	)
-	(block 
+
+	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
-		(style (marginTop = "{720:L, 1080:XL}"))
+		(class $MiddleAlignedAbsolutely)
+		(style (bottom = "{720:S, 1080:XLL}"))
 		(element DefaultButton
 			_width = 154px
 			_label = 'IDS_ARC_EVENT_CHOOSE_SIDE_RULES_LINK_TEXT'
@@ -219,52 +262,73 @@
 
 )
 
-(def element ArcEventSideSelectionCard (_chosenSidesMap:dict = {}, _isStatic:bool = false)
+(def element ArcEventSideSelectionCard (	_chosenSidesMap:dict = {},
+											_isStatic:bool = false,
+											_difficultyLevel:number = "DEFAULT_DIFFICULTY_LEVEL",
+											_selectedSideId:number = "DEFAULT_DIFFICULTY_LEVEL")
 	(scope
 		(event evEnableHitTest)
 		(event evCardRollOver)
 		(event evCardRollOut)
 
-		(macro STAGE_SIZE)
-		(macro MOUSE_HANDLER_SCOPE)
+		(struct mouseHandler = MOUSE_HANDLER())
 
-		(var playerProgressEntity:dhEntity = "getPrimaryEntity(CC.progressWithRewards, 'personal' + $index)")
-		(var mostValuablePersonalRewardIndex:number = "playerProgressEntity.progressWithRewards.mainRewardIndex ?: 0" (event "playerProgressEntity.progressWithRewards.evChanged"))
-		(var mostValuablePersonalRewards:array = "playerProgressEntity.progressWithRewards.rewards[mostValuablePersonalRewardIndex] ?: []" (event "playerProgressEntity.progressWithRewards.evChanged"))
+		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
+		(var sides:number = "arcEventEntity.arcEventConfig.sidesCount ?: 0")
 
 		(var isLoaded:bool = false)
 		(bind isLoaded "true" init=false on='evEnableHitTest')
 
-		(var isSmallResolution:bool = "stageWidth < 1440")
-		(var cardWidth:number = "isSmallResolution ? 296 : 344")
-		(var cardHeight:number = "isSmallResolution ? 448 : 512")
-		(var iconSize:number = "isSmallResolution ? SC.Ui_styles.SIZE.MEDIUM : SC.Ui_styles.SIZE.LARGE")
-		(var description:str = "tr('IDS_ARC_EVENT_COMMON_SIDE_DESCRIPTION_' + $index)")
-		(var sideId:number = "$index")
-		(var animationName:str = "SIDE_TO_ANIMATION_NAME_MAP[sideId]")
-		(var eventName:str = "	animationName == CHOOSE_SIDE_ANIMATION_NAME.SIDE_TWO		? 'evRollOverSideTwoCard' :
-								animationName == CHOOSE_SIDE_ANIMATION_NAME.SIDE_ONE		? 'evRollOverSideOneCard'
-																							: ''")
+		(var animationName:str = "SIDE_TO_ANIMATION_NAME_MAP[$index]")
+		(var eventName:str = "	animationName == CHOOSE_SIDE_ANIMATION_NAME.SIDE_TWO	? 'evRollOverSideTwoCard' :
+								animationName == CHOOSE_SIDE_ANIMATION_NAME.SIDE_ONE	? 'evRollOverSideOneCard'
+																						: ''")
 
-		(var state:number = "	$event.isCardHovered	? SC.Ui_styles.BUTTON_STATE.OVER
-														: SC.Ui_styles.BUTTON_STATE.UP" (event "evCardRollOver") (event "evCardRollOut"))
-		(var alphaBg:number = "SIDE_BG_ALPHA[state]")
-		(var alphaBorder:number = "SIDE_BORDER_ALPHA[state]")
-
+		(var isSelected:bool = "_selectedSideId == $index")
+		(var state:number = "	isSelected				? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseHandler.mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								mouseHandler.rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP")
+		(var alphaBg:number = "ARC_EVENT_CARD_BG_ALPHA[state]")
+		(var alphaSelected:number = "isSelected ? 1 : 0")
 	)
 	(name = "'arcEventSideSelectionCard_' + $index")
 
-	(dispatch "eventName" args="{ animationName: animationName }" dir="EventDirection.UP" (bind enabled "!_isStatic") (event "evCardRollOver"))
-	(dispatch "eventName" args="{ animationName: CHOOSE_SIDE_ANIMATION_NAME.DEFAULT }" dir="EventDirection.UP" (bind enabled "!_isStatic") (event "evCardRollOut"))
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
 
-	(bindcall externalCall "'inputMapping.onRequest'" "['arcEventConfirmSide', { sideId: sideId }]" watch=false on='leftClick')
+	(macro STRUCT_SOUND_HANDLER
+		_mouseHandler = "mouseHandler"
+		_soundSet = "'quest_item'"
+	)
+
+	(dispatch evSelectDifficultyLevel dir="EventDirection.UP" args="{sideId: $index}" on='leftClick')
+
+	(dispatch
+		"eventName"
+		args="{ animationName: animationName }"
+		dir="EventDirection.UP"
+		(bind enabled "!_isStatic")
+		(event "evCardRollOver")
+	)
+
+	(dispatch
+		"eventName"
+		args="{ animationName: CHOOSE_SIDE_ANIMATION_NAME.DEFAULT }"
+		dir="EventDirection.UP"
+		(bind enabled "!_isStatic")
+		(event "evCardRollOut")
+	)
 
 	(style
-		(align = "middle|center") (alpha = 0)
-		(bind width "cardWidth")
-		(bind height "cardHeight")
-		(bind marginLeft "$index ? {1280:M, 1920:MS} : 0")
 		(bind hitTest "isLoaded")
+		(width = 320px)
+		(height = 260px)
+		(borderRadius = "S")
+		(align = "center")
+		(alpha = 0)
+		(macro DESATURATION_DEFAULT "isSelected || mouseHandler.rollOver")
 	)
 
 	(controller $Animation
@@ -279,80 +343,136 @@
 	)
 
 	(block
+		(style
+			(position = "absolute")
+			(top = -50px)
+			(left = -50px)
+			(width = 420px)
+			(height = 360px)
+			(backgroundImage = 'url:../events/arc_event/bg_select.png')
+			(alpha = "alphaSelected")
+		)
+		(bind colorTransform "CT_ARC_EVENT_LEVEL[$index]")
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_duration = "0.15"
+			_trigger = "isSelected"
+			_alpha = "alphaSelected"
+		)
+	)
+
+	(block
 		(class $FullsizeAbsolute)
-		(element BlurMapWithLayerContrastPanel)
 
 		(block
 			(class $FullsizeAbsolute)
 			(style
-				(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-				(scale9grid = 2)
-				(alpha = "alphaBorder")
+				(backgroundImage = 'url:../events/arc_event/rounded_frame.png')
+				(scale9grid = 8)
+				(alpha = "alphaBg")
 			)
-			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="alphaBorder")
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_duration = "0.15"
+				_trigger = "state"
+				_alpha = "alphaBg"
+			)
 		)
+
 		(block
 			(class $FullsizeAbsolute)
 			(style
-				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+				(bind visualOffsetY "isSelected ? 0% : 25%")
+				(bottom = 0px)
+				(backgroundImage = 'url:../animations/spine/rating_battles/bg_card_smoke.skel')
+				(backgroundSize = "fill")
 				(alpha = "alphaBg")
 			)
-			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="alphaBg")
+			(bind colorTransform "CT_ARC_EVENT_LEVEL[$index]")
+			(controller $Spine)
+
+			(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+				_duration = "0.15"
+				_trigger = "state"
+				_alpha = "alphaBg"
+			)
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "NO_COLOR")
+				(borderRadius = "S")
+			)
+			(isMask = true)
+		)
+	)
+
+	(block
+		(class $MiddleAlignedAbsolutely)
+		(style
+			(top = -125px)
+			(width = 250px)
+			(height = 250px)
+			(backgroundImage = 'url:../animations/spine/battlepass/bp_icon_smoke/bp_icon_smoke.skel')
+			(backgroundSize = "fill")
+			(alpha = "alphaSelected")
+		)
+		(bind colorTransform "CT_ARC_EVENT_LEVEL[$index]")
+		(controller $Spine)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_duration = "0.15"
+			_trigger = "state"
+			_alpha = "alphaSelected"
 		)
 	)
 
 	(block
 		(style
+			(marginTop = -70px)
+			(marginBottom  = "MS")
 			(align = "middle|center")
-			(marginBottom = "XLL")
 		)
 
 		(element ArcEventSideStereotype
 			_sideId = "$index"
-			_size = "iconSize"
+			_size = "SIZE.MEDIUM"
 			_isChooseSideMW = true
 		)
+	)
 
-		(block
-			(style
-				(width = 256px)
-				(marginTop = "M")
-				(marginBottom = "L")
-			)
-			(tf
-				(class $TextDefaultNM)
-				(style
-					(width = 100%)
-					(textAlign = "center")
-					(alpha = "TC")
+	(block
+		(style
+			(width = 100%)
+			(align = "center")
+			(paddingLeft = "L")
+			(paddingRight = "L")
+			(paddingBottom = "L")
+		)
+
+		(hblock
+			(style (marginBottom = "MS"))
+			(controller $Repeat renderer='ComplexityLevelItem'
+				(count = "sides")
+				(args
+					_isFilled = "$index + 1 <= _difficultyLevel"
 				)
-				(bind text "description")
 			)
 		)
-	)
 
-	(element ArcEventSideSelectionCardRewardsHolder
-		_rewards = "mostValuablePersonalRewards"
-		_chosenSidesMap = "_chosenSidesMap"
-	)
-)
+		(element HorizontalDividerTwoPx)
 
-(def element ArcEventSideSelectionCardRewardsHolder (_rewards:array, _chosenSidesMap:dict = {})
-	(scope
-		(macro MOUSE_HANDLER_SCOPE)
-
-		(event evRewardHovered)
-		(var isRewardHovered:bool = "$event.isRewardHovered ?: false" (event "evRewardHovered"))
-	)
-	(macro MOUSE_EVENTS_DISPATCHER)
-
-	(dispatch "'evCardRollOver'" args="{ isCardHovered: true }" dir="EventDirection.UP" (event "evRollOver"))
-	(dispatch "'evCardRollOut'" args="{ isCardHovered: false }" dir="EventDirection.UP" (event "evRollOut"))
-
-	(class $FullsizeAbsolute)
-	(style
-		(align = "center|bottom")
-		(backgroundColor = "NO_COLOR")
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 100%)
+				(marginTop = "MS")
+				(textAlign = "center")
+				(alpha = "TC")
+			)
+			(bind text "'IDS_ARC_EVENT_COMMON_SIDE_DESCRIPTION_' + $index")
+		)
 	)
 
 	(controller $Tooltip
@@ -360,73 +480,101 @@
 		(args
 			_sideId = "$index"
 			_chosenSidesMap = "_chosenSidesMap"
-			_isRewardHovered = "isRewardHovered"
 		)
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
-
-	(element ArcEventSideSelectionCardRewards
-		_rewards = "_rewards"
-	)
-
-	(macro SOUND_HANDLER "'quest_item'")
 )
 
-
-(def element ArcEventSideSelectionCardRewards (_rewards:array)
+(def element ArcEventDifficultyLevelRewards (_sideId:number = "DEFAULT_DIFFICULTY_LEVEL")
 	(scope
-		(macro MOUSE_HANDLER_SCOPE)
+		(var progressWithRewards:dhComponent = "getPrimaryComponent(CC.progressWithRewards, 'personal' + _sideId)")
+		(var rewardsStackID:number = "progressWithRewards.rewardsStackID" (event "progressWithRewards.evChanged"))
+		(var rewardsStackEntity:dhEntity = "getEntity(rewardsStackID)")
+		(var rewards:array = "rewardsStackEntity.rewardsStack.rewards" (event "rewardsStackEntity.rewardsStack.evChanged"))
+
+		(var personalProgressArray:array = "progressWithRewards.pointsArray" (event "progressWithRewards.evChanged"))
+		(var maxProgress:number = "personalProgressArray[personalProgressArray.length - 1] ?: 0")
 	)
-	(macro MOUSE_EVENTS_DISPATCHER)
+	(style
+		(width = 100%)
+		(flow = "horizontal")
+	)
 
-	(dispatch "'evRewardHovered'" args="{ isRewardHovered: true }" dir="EventDirection.UP" (event "evRollOver"))
-	(dispatch "'evRewardHovered'" args="{ isRewardHovered: false }" dir="EventDirection.UP" (event "evRollOut"))
+	(block
+		(style (width = 100%))
 
-	(style (paddingBottom = "MS"))
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginBottom = "S")
+				(alpha = "TA")
+			)
+			(text = 'IDS_REWARDS')
+		)
 
-	(hblock
-		(style (gap = "XS"))
-		(controller $Repeat renderer='RewardItemAdapter'
-			(bind count "_rewards.length")
-			(args
-				_entityId = "_rewards[$index]"
-				_iconRightMargin = 0px
+		(htile
+			(style
+				(width = 100%)
+				(gap = "{720:XS, 1080:MS}")
+			)
+			(controller $Repeat renderer='RewardItemAdapter'
+				(bind count "rewards.length")
+				(args
+					_entityId = "rewards[$index]"
+					_iconRightMargin = 0px
+				)
 			)
 		)
 	)
+
+	(block
+		(style
+			(width = 320px)
+			(marginLeft = "MS")
+		)
+
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(marginBottom = "MS")
+				(leading = 4)
+				(styleSheet = '.bold { font-weight: bold; font-size: 22px }')
+				(multiline = true)
+				(alpha = "TA")
+			)
+			(bind htmlText "subst('IDS_ARC_EVENT_DIFFICULTY_LEVEL_SCORES', [], {_score: formatSeparator(maxProgress)}, maxProgress)")
+		)
+
+		(element DefaultButton
+			_width = 240px
+			_size = "SIZE.LARGE"
+			_label = 'IDS_ARC_EVENT_CHOOSE_SIDE_BUTTON'
+			_name = 'btn_set_off_on'
+			_enabled = true
+			_defaultFocused = true
+			_focusIndex = 1
+			_methods = "[
+				{
+					type: 'inputMapping.onRequest',
+					name: 'arcEventConfirmSide',
+					args: { _sideId: _sideId }
+				}
+			]"
+		)
+	)
 )
 
-(def element ArcEventSideSelectionCardTooltip (_sideId:number = 0, _chosenSidesMap:dict = {}, _isRewardHovered:bool = true)
+(def element ArcEventSideSelectionCardTooltip (_sideId:number = 0, _chosenSidesMap:dict = {})
 	(scope
-		(var sideName:gfx = "tr('IDS_ARC_EVENT_COMMON_SIDE_' + _sideId)")
-		(var sideHint:gfx = "tr('IDS_ARC_EVENT_CHOOSE_SIDE_MOUSE_INSTRUCTION_' + _sideId)")
 		(var isChosen:bool = "_chosenSidesMap[_sideId][0]")
 		(var isMainRewardReceived:bool = "_chosenSidesMap[_sideId][1]")
 	)
-	(bind visible "!_isRewardHovered")
-
-	(style
-		(width = 340px)
-		(hitTest = false)
-	)
-
-	(controller $Animation
-		(bindcall play
-			easing="Easing.quad_in"
-			keyframes = "[
-				{ time:0, 		to:{ alpha: 0, top: 5 }},
-				{ time:0.3, 	to:{ alpha: 0, top: 5 }},
-				{ time:0.6, 	to:{ alpha: 1, top: 0 }}
-			]"
-			action=kill
-			(bind enabled "!_isRewardHovered")
-			(bind trigger "_isRewardHovered")
-		)
-	)
-
+	(style (width = 340px))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemHeaderSubheaderText _headerText = "sideName")
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "'IDS_ARC_EVENT_COMMON_SIDE_' + _sideId"
+		)
 		(element TooltipSystemHorizontalDivider)
 
 		(block
@@ -441,7 +589,9 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isChosen"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isChosen")
+			)
 		)
 
 		(block
@@ -456,175 +606,15 @@
 		)
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isMainRewardReceived"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "isMainRewardReceived")
+			)
 		)
 
 		(element TooltipSystemStatusLine
 			_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-			_text = "sideHint"
+			_text = "'IDS_ARC_EVENT_CHOOSE_SIDE_MOUSE_INSTRUCTION_' + _sideId"
 		)
 	)
 )
 
-(def element ArcEventSideStereotype (_size:number = 0, _sideId:number = "RVR_SIDE_INFO_MAP.NEUTRAL_SIDE", _isSelected:bool = false, _isChooseSideMW:bool = false)
-	(scope
-		(var dimensions:dict = "{	SC.Ui_styles.SIZE.SMALL:		{	iconWidth: 48,
-																		iconHeight: 48,
-																		iconMargin: SXS},
-									SC.Ui_styles.SIZE.MEDIUM:		{	iconWidth: 184,
-																		iconHeight: 184,
-																		iconMargin: SXS},
-									SC.Ui_styles.SIZE.LARGE:		{	iconWidth: 264,
-																		iconHeight: 264,
-																		iconMargin: SXS},
-									SC.Ui_styles.SIZE.EXTRA_LARGE:	{	iconWidth: 296,
-																		iconHeight: 296,
-																		iconMargin: M}}")
-		(var isNeutralSide:bool = "_sideId == RVR_SIDE_INFO_MAP.NEUTRAL_SIDE")
-		(var sideId:str = "isNeutralSide ? 'none' : toString(_sideId)")
-		(var bgImage:str = "isNeutralSide ? '' : 'url:../events/arc_event/common/icon_side_' + sideId + '_' + toLower(SC.Ui_styles.SIZE.VALUE_TO_NAME[_size]) + '.png'")
-		(var titleColor:number = "_isSelected ? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE")
-		(var title:str = "tr('IDS_ARC_EVENT_COMMON_SIDE_' + sideId)")
-	)
-	(block
-		(style
-			(bind width "dimensions[_size].iconWidth")
-			(bind height "dimensions[_size].iconHeight")
-			(bind backgroundImage "bgImage")
-		)
-	)
-
-	(block
-		(bind visible "_size != SC.Ui_styles.SIZE.SMALL && !isNeutralSide")
-		(style (width = 100%) (align = "center") (bind marginTop "dimensions[_size].iconMargin"))
-		(tf
-			(class $TextDefaultBold22NM)
-			(style (bind textColor "titleColor") (bind alpha "_isSelected ? 1 : TA"))
-			(bind text "title")
-		)
-	)
-	(controller $Tooltip
-		(renderer = 'ArcEventSideStereotypeTooltip')
-		(bind enabled "!_isChooseSideMW")
-		(args _sideId = "_sideId")
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-	)
-)
-
-(def element ArcEventSideStereotypeTooltip (_sideId:number = 0, _rewards:array = [])
-	(scope
-		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
-		(var sideId:number = "arcEventEntity.playerArcEventInfo.sideId ?: 0" (event "arcEventEntity.playerArcEventInfo.evSideChanged"))
-		(var isPlayerSide:bool = "sideId == _sideId")
-		(var sideName:str = "tr('IDS_ARC_EVENT_COMMON_SIDE_' + _sideId)")
-		(var sideDescription:str = "tr('IDS_ARC_EVENT_COMMON_SIDE_DESCRIPTION_' + _sideId)")
-	)
-	(style (width = 340px) (hitTest = false))
-	
-	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
-	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemHeaderSubheaderText
-			_headerText = "sideName"
-		)
-		(element TooltipSystemHorizontalDivider)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isPlayerSide")
-				(args
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
-					_text = 'IDS_ARC_EVENT_MAIN_SCREEN_STATUS_YOUR_SIDE'
-				)
-			)
-		)
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPlayerSide"))
-		)
-
-		(element TooltipSystemDescriptionText _descriptionText = "sideDescription")
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_rewards"))
-		)
-
-		(block
-			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemDHRewards'
-				(bind enabled "_rewards")
-				(args
-					_rewardsTitle = 'IDS_TOOLTIP_REWARDS_TITLE'
-					_rewards = "_rewards"
-				)
-			)
-		)
-	)
-)
-
-(def element ArcEventStatus (_isModalWindow:bool = false)	
-	(scope
-		(var arcEventEntity:dhEntity = "getSingleEntity(CC.arcEvent)")
-		(var arcEventComponent:dhComponent = "arcEventEntity.arcEvent")
-		(var playerArcEventInfoComponent:dhComponent = "arcEventEntity.playerArcEventInfo")
-
-		(var arcEventstate:number = 	"arcEventComponent.state" 				(event "arcEventComponent.evEventStateChanged"))
-		(var eventFinishTime:number = 	"arcEventComponent.finishTime" 			(event "arcEventComponent.evChanged"))
-		(var nextPrimeAt:number = 		"arcEventComponent.nextPrimeAt" 		(event "arcEventComponent.evEventStateChanged"))
-		(var finishPrimeAt:number = 	"arcEventComponent.finishPrimeAt" 		(event "arcEventComponent.evEventStateChanged"))
-		(var playerSideId:number = 		"playerArcEventInfoComponent.sideId" 	(event "playerArcEventInfoComponent.evSideChanged"))
-
-		
-		(var playerProgressEntity:dhEntity = "getPrimaryEntity(CC.progressWithRewards, 'personal' + playerSideId)")
-		(var progressWithRewardsComponent:dhComponent = "playerProgressEntity.progressWithRewards")
-
-		(var personalRewardIndex:number = 	"(progressWithRewardsComponent.activeIndex 	?: 0) - 1" 	(event "progressWithRewardsComponent.evChanged"))
-		(var personalProgress:number = 		"progressWithRewardsComponent.pointsCurrent ?: 0" 		(event "progressWithRewardsComponent.evChanged"))
-		(var personalProgressArray:array = 	"progressWithRewardsComponent.pointsArray 	?: []" 		(event "progressWithRewardsComponent.evChanged"))
-
-		(var isPersonalRewardIndex:bool = "personalRewardIndex >= 0")
-		(var personalProgressArrayMaxIndex:number = "personalProgressArray.length - 1")
-		(var pointsTillNextRewardTotal:number = "isPersonalRewardIndex ? personalProgressArray[personalRewardIndex + 1] : personalProgressArray[0]")
-		(var pointsTillNextRewardRemaining:number = "pointsTillNextRewardTotal - personalProgress")
-		(var hasReceivedAllRewards:bool = "personalRewardIndex == personalProgressArrayMaxIndex")
-
-		(struct serverTime = SERVER_TIME())
-		(var isEventEnded:bool = "serverTime.value >= eventFinishTime")
-
-		(struct primeCountDownStart = 	COUNTDOWN(_time = "nextPrimeAt ?: 0" 	_serverTime = "serverTime.value" _format = "'HH:mm:ss'"))
-		(struct primeCountDownFinish = 	COUNTDOWN(_time = "finishPrimeAt ?:0"	_serverTime = "serverTime.value" _format = "'HIGHEST,WITH_DAYS'"))
-		
-		(var isPrimeTimeActive:bool = 	"(arcEventstate & SC.Sse.RVR_EVENT_STATE.PRIME_ACTIVE) 		!= 0")
-		(var isEventFinished:bool = 	"(arcEventstate & SC.Sse.RVR_EVENT_STATE.EVENT_FINISHED) 	!= 0")
-		(var isPlayerChoseSide:bool = 	"(arcEventstate & SC.Sse.RVR_EVENT_STATE.SIDE_CHOSEN) 		!= 0")
-
-		(var statusText:str = "	isEventFinished 							? 'IDS_ARC_EVENT_COMMON_STATUS_CALCULATING_EVENT_RESULTS' :
-								!isPlayerChoseSide 							? 'IDS_ARC_EVENT_COMMON_STATUS_CHOOSE_SIDE' :
-								isPrimeTimeActive && _isModalWindow 		? subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_ENDS_IN_FULL', [], 
-																					{ _timeEnd: primeCountDownFinish.value }) :
-								isPrimeTimeActive && hasReceivedAllRewards	? 'IDS_ARC_EVENT_PORT_STATUS_ALL_REWARDS_RECEIVED' :
-								isPrimeTimeActive							? subst('IDS_ARC_EVENT_PORT_STATUS_POINTS_TILL_NEXT_REWARD', [],
-																					{ _pointsNext: pointsTillNextRewardRemaining }, pointsTillNextRewardRemaining) :
-								!nextPrimeAt								? 'IDS_ARC_EVENT_COMMON_STATUS_ALL_PRIMETIMES_ENDED' :
-								_isModalWindow								? subst('IDS_SUBST_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_FULL', [],
-																					{ _timeStart: primeCountDownStart.value })
-																			: subst('IDS_ARC_EVENT_COMMON_STATUS_PRIMETIME_STARTS_IN_SHORT', [],
-																					{ _timeStart: primeCountDownStart.value })")
-	)
-	(style (bind width "_isModalWindow ? auto : 100%"))
-
-	(controller $Instance renderer='StatusLine'
-		(bind enabled "_isModalWindow")
-		(args
-			_unifiedStatus = "isPrimeTimeActive && nextPrimeAt ? SC.Ui_styles.UNIFIED_STATUS.DATE : SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
-			_text = "statusText"
-		) 
-	)
-
-	(tf
-		(bind visible "!_isModalWindow")
-		(class $TextDefaultNM)
-		(style (width = 172px) (alpha = 0.7))
-		(bind text "statusText")
-	)
-)

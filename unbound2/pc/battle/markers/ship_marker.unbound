@@ -56,7 +56,10 @@
 	)
 )
 
-(def element ShipMarkerIconItem (_markerEntity:gfx, _rotation:number, _isLampVisibility:bool, _isSpectatorTrainingMode:bool=false)
+(def element ShipMarkerIconItem (	_markerEntity:gfx,  
+									_rotation:number,
+									_visionState:number,
+									_isSpectatorTrainingMode:bool = false)
 	(scope
 		(macro GET_MARKER_ENTITY_COMPONENT 'vehicle')
 		(macro GET_MARKER_ENTITY_COMPONENT 'relation')
@@ -120,15 +123,20 @@
 		)
 
 		(block
-			(bind visible "_isLampVisibility && (isAltInterface || _isSpectatorTrainingMode) && isAlive")
+			(bind visible "_visionState != SC.Battle.SHIP_MARKER_VISION_STATE.NONE && isAlive && (isAltInterface || _isSpectatorTrainingMode)")
 			(style
 				(position = "absolute")
+				(pivotX = "SHIP_ICON_SIZE.WIDTH / 2")
+				(pivotY = "SHIP_ICON_SIZE.HEIGHT / 2")
 				(bind scaleX "isEnemy ? -1 : 1")
-				(pivotX = "SHIP_ICON_SIZE.WIDTH/2")
-				(pivotY = "SHIP_ICON_SIZE.HEIGHT/2")
 			)
+
 			(controller $Instance renderer='ShipVisibilityIcon'
-				(args "_isLampVisibility" "shipType")
+				(bind enabled "isAlive && _visionState != SC.Battle.SHIP_MARKER_VISION_STATE.NONE")
+				(args
+					_visionState 	= "_visionState"
+					_shipType 		= "shipType"
+				)
 			)
 		)
 
@@ -162,14 +170,18 @@
 
 		(block
 			(bind visible "!isTactical && isAltInterface")
+
 			(style
 				(position = "absolute")
-				(pivotX = "SHIP_ICON_SIZE.WIDTH/2")
-				(pivotY = "SHIP_ICON_SIZE.HEIGHT/2")
+				(pivotX = "SHIP_ICON_SIZE.WIDTH / 2")
+				(pivotY = "SHIP_ICON_SIZE.HEIGHT / 2")
 			)
-			(controller $Instance renderer='ShipVisibilityPoint'
-				(args "_isLampVisibility")
-				(bind enabled "_isLampVisibility")
+
+			(controller $FxInstance renderer='ShipVisibilityPoint' lifetime=2.3
+				(args
+					_visionState = "_visionState"
+				)
+				(bindcall create (bind enabled "_visionState != SC.Battle.SHIP_MARKER_VISION_STATE.NONE"))
 			)
 		)
 	)
@@ -226,41 +238,40 @@
 	)
 )
 
-(def element ShipVisibilityIcon (_isLampVisibility:bool, _shipType:str)
+(def element ShipVisibilityIcon (_visionState:number, _shipType:str)
 	(style
-		(bind backgroundImage "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:' + _shipType + '_visibility'")
+		(bind backgroundImage "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:' + _shipType + '_' + toLower(SC.Battle.SHIP_MARKER_VISION_STATE.VALUE_TO_NAME[_visionState]) + '_visibility'")
 	)
+
 	(controller $Animation
 		(bindcall play
-			duration=0.3
-			easing="Easing.quad_in_out"
-			from="{alpha:0}"
-			to="{alpha:1}"
-			(bind trigger "_isLampVisibility")
+			duration = 0.3
+			easing = "Easing.quad_in_out"
+			from = {alpha: 0}
+			to = {alpha: 1}
+			(bind trigger "_visionState != SC.Battle.SHIP_MARKER_VISION_STATE.NONE")
 		)
 	)
 )
 
-(def element ShipVisibilityPoint (_isLampVisibility:bool)
+(def element ShipVisibilityPoint (_visionState:number)
 	(style
-		(bind backgroundImage  "'swf:../battle_hud/markers/ship_svg/ship_svg.swf:attention_visibility'")
+		(bind backgroundImage "_visionState == SC.Battle.SHIP_MARKER_VISION_STATE.NONE ? '' : 'swf:../battle_hud/markers/ship_svg/ship_svg.swf:' + toLower(SC.Battle.SHIP_MARKER_VISION_STATE.VALUE_TO_NAME[_visionState]) + '_visibility'")
 	)
 
 	(controller $Animation
-		(bindcall play
-			duration=0.5
-			easing="Easing.quad_in_out"
-			from="{alpha:0}"
-			to="{alpha:1}"
-			(bind trigger "_isLampVisibility")
-
+		(play
+			duration = 0.5
+			easing = "Easing.quad_in_out"
+			from = {alpha: 0}
+			to = {alpha: 1}
 		)
 		(play
-			duration=0.3
-			delay=2
-			easing="Easing.quad_in_out"
-			from="{alpha:1}"
-			to="{alpha:0}"
+			duration = 0.3
+			delay = 2
+			easing = "Easing.quad_in_out"
+			from = "{alpha: 1}"
+			to = "{alpha: 0}"
 		)
 	)
 )
@@ -291,7 +302,6 @@
 		(dispatch evUpdateRotation args={} (event "timer.evFrequent") (bind enabled "isTactical"))
 
 		
-		(var visibilityFlags:number = "_markerEntity.vehicle.visibilityFlags" (event "_markerEntity.vehicle.evVisibilityFlagsChanged"))
 		(var targetFlags:number = "targetComponent ? targetComponent.flags : 0" (event "targetComponent.evChanged") (event "targetComponent.evFlagsChanged"))
 		(var isTargetLocked:bool = "(targetFlags & LOCKABLE_WEAPONS) > 0")
 		(var isTargetLockedByMissile:bool = "(targetFlags & (1 << SC.Ships.SHIP_WEAPON_TYPES.MISSILES)) > 0")
@@ -365,7 +375,9 @@
 
 		(var isTeamVisibleInSpectate:bool = "isSpectatorTrainingMode || !isEnemy")
 		(var isSpectatorInNotTacticalMap:bool = "isSpectatorTrainingMode && !isTactical")
-		(var isLampVisibility:bool = "visibilityFlags > 0 && showLampVisibility && !isSelf && isTeamVisibleInSpectate")
+
+		(var isVisionStateEnabled:bool = "showLampVisibility && !isSelf && isTeamVisibleInSpectate")
+		(var visionState:number = "toBool(_markerEntity.vehicle.visionState) && isVisionStateEnabled ? _markerEntity.vehicle.visionState : SC.Battle.SHIP_MARKER_VISION_STATE.NONE" (event "_markerEntity.vehicle.evVisionStateChanged"))
 
 		(var consumablesByAvatarCollection:dhCollection = "getCollectionByPath(CC.battleConsumable, 'byAvatarIdAndSquadronOwner.' + avatarComponent.id + '_' + DEFAULT_SQUADRON_OWNER_ID)")
 		(var activeConsumablesByAvatarCollection:dhCollection = "consumablesByAvatarCollection.getChildByPath('active.sorted')")
@@ -498,7 +510,7 @@
 			(style (align = "center"))
 
 			(block
-				(style (bind visualOffsetY "buffIndicationCollection.length > 0 ? -XL : 0px"))
+				(style (bind visualOffsetY "buffIndicationCollection.length > 0 && !isTactical ? -XL : 0px"))
 
 				(element TargetAnimationItem
 					_markerEntity = "_markerEntity"
@@ -568,10 +580,10 @@
 			(controller $Instance renderer='ShipMarkerIconItem'
 				(bind enabled "isSpectatorTrainingMode")
 				(args
-					_markerEntity="_markerEntity"
-					_rotation="iconRotation"
-					_isLampVisibility="isLampVisibility"
-					_isSpectatorTrainingMode="isSpectatorTrainingMode"
+					_markerEntity 				= "_markerEntity"
+					_rotation 					= "iconRotation"
+					_visionState 				= "visionState"
+					_isSpectatorTrainingMode 	= "isSpectatorTrainingMode"
 				)
 			)
 		)
@@ -597,10 +609,10 @@
 				(marginBottom = "-5") 
 			)
 			(element ShipMarkerIconItem
-				_markerEntity="_markerEntity"
-				_rotation="iconRotation"
-				_isLampVisibility="isLampVisibility"
-				_isSpectatorTrainingMode="isSpectatorTrainingMode"
+				_markerEntity 				= "_markerEntity"
+				_rotation 					= "iconRotation"
+				_visionState 				= "visionState"
+				_isSpectatorTrainingMode 	= "isSpectatorTrainingMode"
 			)
 		)
 		(element TargetLockItem "_markerEntity"

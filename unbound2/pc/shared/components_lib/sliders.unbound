@@ -12,11 +12,11 @@
 		(var curValue:number = "_value")
 		(bind curValue "$event.newValue" init=false watch=false (event "evSliderValueChangedInternal"))
 
-		(var rollOver:bool = "false")
+		(var rollOver:bool = false)
 		(bind rollOver "false"	init=false watch=false on='rollOut')
 		(bind rollOver "true"	init=false watch=false on='rollOver')
 
-		(var mouseDown:bool = "false")
+		(var mouseDown:bool = false)
 		(bind mouseDown "false"	init=false watch=false on='stageMouseUp')
 		(bind mouseDown "true"	init=false watch=false on='leftMouseDown' (event "evSliderThumbMouseDown"))
 	)
@@ -59,7 +59,7 @@
 
 (def element DefaultSliderThumb ()
 	(scope
-		(var mouseDown:bool = "false")
+		(var mouseDown:bool = false)
 		(bind mouseDown "false" init=false watch=false on='stageMouseUp')
 		(bind mouseDown "true" init=false watch=false on='leftMouseDown')
 	)
@@ -77,7 +77,7 @@
 
 (def element DefaultSliderTrack (_value:number, _intervalsCount:number)
 	(scope
-		(var filledWidth:number = "((_value / _intervalsCount) * 100) ?: 0")
+		(var filledWidth:number = "_intervalsCount > 0 ? (_value / _intervalsCount) * 100 : 0")
 	)
 	(style
 		(height = 10px)
@@ -108,6 +108,364 @@
 			(width = 100%)
 			(height = 22px)
 			(backgroundColor = "NO_COLOR")
+		)
+	)
+)
+
+(def element SliderWithButtons (_value:number, _minValue:number, _maxValue:number, _width:number=200px, _dispatchedEv:str = 'evSliderValueChanged')
+	(scope
+		(event evSliderThumbMouseDown)
+		(event evSliderValueChangedByInternalBtn)
+		
+		(var maxValue:number = "_maxValue")
+		(var curValue:number = "clamp(_value, _minValue, _maxValue)")
+		(bind curValue "$event.newValue" init=false watch=false (event "evSliderValueChangedByInternalBtn"))
+
+		(var rollOver:bool = false)
+		(bind rollOver "false"	init=false watch=false on='rollOut')
+		(bind rollOver "true"	init=false watch=false on='rollOver')
+
+		(var mouseDown:bool = false)
+		(bind mouseDown "false"	init=false watch=false on='stageMouseUp')
+		(bind mouseDown "true"	init=false watch=false on='leftMouseDown' (event "evSliderThumbMouseDown"))
+	)
+	(dispatch "_dispatchedEv" args="{ value: curValue }" dir="EventDirection.UP" init=false watch=false (bind trigger "curValue"))
+
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.OVER]"		on='rollOver')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.PRESS]"	on='leftMouseDown')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.CHANGE]"	(event "evSliderValueChangedByInternalBtn"))
+
+	(style
+		(width = "_width")
+		(flow = "horizontal")
+		(align = "middle")
+		(hgap = "S")
+	)
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+		_colorTransform = "rollOver && !mouseDown	? CT_SLIDER_OVER :
+							mouseDown				? CT_SLIDER_DOWN
+													: CT_NONE"
+	)
+
+	(block
+		(style (width = 22px))
+		(element SliderButtonArrow
+			_direction =		"BUTTON_ARROW_DIRECTION.LEFT"
+			_dispatchedEv =		'evSliderValueChangedByInternalBtn'
+			_dispatchParams =	"{ newValue: curValue - 1 }"
+			_isEnabled =		"curValue > _minValue"
+		)
+	)
+
+	(scroll_bar
+		(style (width = 100%))
+		(bind minimum "_minValue")
+		(bind maximum "maxValue")
+		(bind value "curValue")
+
+		(singleStep = 1)
+		(scrollDuration = 2)
+		(firstClickTimeout = 500)
+		(nextClickTimeout = 50)
+
+		(orientation = "horizontal")
+		(alignThumbToBorders = false)
+
+		(thumb DefaultSliderThumb)
+
+		(track DefaultSliderTrack
+			_value = "curValue - _minValue"
+			_intervalsCount = "_maxValue - _minValue"
+		)
+		(dispatch evSliderValueChangedByInternalBtn args="$event" dir="EventDirection.NONE" on='valueChanged' (bind enabled "mouseDown"))
+	)
+
+	(block
+		(style (width = 22px))
+		(element SliderButtonArrow
+			_direction =		"BUTTON_ARROW_DIRECTION.RIGHT"
+			_dispatchedEv =		'evSliderValueChangedByInternalBtn'
+			_dispatchParams =	"{ newValue: curValue + 1 }"
+			_isEnabled =		"curValue < _maxValue"
+		)
+	)
+)
+
+(def element SliderPointer (_setDefaultValue:bool = false,
+							_value:number = 0,
+							_visiblePointsCount:number = 7, 
+							_allPointsCount:number = 361, 
+							_itemPointWidth:number = 38px, 
+							_dispatchedEv:str = 'evSliderPointerValueChanged')
+	(scope
+		(event evScrollToBegin)
+		(event evScrollToEnd)
+		(event evScrollLeft)
+		(event evScrollRight)
+		(event evScrollToIndex)
+		(event evCanScrollChanged)
+
+		(event evRollOver)
+		(event evValueChanged)
+		
+		(var currentScrollPosition:number = "$event.newValue ?: 0" init=false watch=false (event "evValueChanged"))
+
+		
+		(var allPointsCountWithEmptyValues:number = "_allPointsCount + (_visiblePointsCount - 1)")
+
+		
+		(var halfSideSliderPoints:number = "(allPointsCountWithEmptyValues - 1) / 2")
+
+		
+		(var halfSideOnStage:number = "(_visiblePointsCount - 1) / 2")
+
+		
+		(var activeIndex:number = "round(currentScrollPosition / _itemPointWidth) + halfSideOnStage")
+
+		(var canScrollLeft:bool =	"$event ? $event.down	: false"	(event "evCanScrollChanged"))
+		(var canScrollRight:bool =	"$event ? $event.up		: false"	(event "evCanScrollChanged"))
+
+		(var soundOn:bool = true)
+		(bind soundOn false init=false watch=false (bind trigger "_value"))
+		(bind soundOn true init=false watch=false (event "evRollOver"))
+	)
+	(dispatch evRollOver on='rollOver')
+	
+	(bindcall externalCall 'sound.playSetSoundDirect' "['slider', SoundEvent.CHANGE]" watch=false (bind enabled "soundOn") (event "evValueChanged"))
+	(dispatch "_dispatchedEv" args="{ value: activeIndex - halfSideSliderPoints}" dir="EventDirection.UP" watch=false (bind trigger "activeIndex"))
+
+	(style (backgroundColor = "NO_COLOR"))
+	(hblock
+		(element SliderButtonArrow
+			_soundSet = ''
+			_dispatchedEv = "canScrollLeft ? 'evScrollLeft' : 'evScrollToEnd'"
+			_direction = "BUTTON_ARROW_DIRECTION.LEFT"
+		)
+
+		(block
+			(style
+				(width = "_itemPointWidth * _visiblePointsCount")
+				(align = "center")
+			)
+
+			(block
+				(style
+					(position = "absolute")
+					(width = 100%)
+					(top = 15px)
+					(align = "center")
+				)
+
+				(block
+					(style
+						(width = "_itemPointWidth * _visiblePointsCount - M")
+						(height = 2px)
+						(backgroundImage = 'url:../service_kit/slider/slider_line.png')
+						(scale9grid = [1, 2, 1, 2])
+					)
+				)
+			)
+
+			(scrollArea
+				(style
+					(width = "_itemPointWidth * _visiblePointsCount")
+					(height = 40px)
+				)
+
+				(macro DEFAULT_HORIZONTAL_SCROLL_PARAMS
+					_singleStep =					"_itemPointWidth"
+					_isScrollBarVisible =			"false"
+					_maxScrollingAnimatedDistance = "_itemPointWidth * _visiblePointsCount"
+					_valueChangedEvent =			"'evValueChanged'"
+					_canScrollChangedEvent =		 "'evCanScrollChanged'"
+				)
+
+				(repeatController = 'SliderPointer')
+				(scrollPerItem = true)
+
+				(content
+					(style
+						(flow = "horizontal")
+						(height = 100%)
+					)
+
+					(controller $DynamicRepeat renderer='SliderPoint' name='SliderPointer'
+						(bind count "allPointsCountWithEmptyValues")
+						(args
+							_isSelected = "$index == activeIndex"
+							_width = "_itemPointWidth"
+							_value = "$index - halfSideSliderPoints"
+							_isEmptyElement = "($index < halfSideOnStage) || ($index > ((allPointsCountWithEmptyValues - 1) - halfSideOnStage))"
+						)
+
+						(itemWidth = "_itemPointWidth")
+						(itemOffset = "_itemPointWidth * 3")
+					)
+				)
+
+				
+				(bindcall scrollTo index="_value + halfSideSliderPoints - halfSideOnStage" animated=false watch=false on='addedToStage')
+				(bindcall scrollTo index="_value + halfSideSliderPoints - halfSideOnStage" animated=false watch=false (bind trigger "_setDefaultValue"))
+				(bindcall scrollTo index="_value + halfSideSliderPoints - halfSideOnStage" animated=false watch=false (bind trigger "_value"))
+				(bindcall scrollTo index="$event.index - halfSideOnStage" animated=true watch=false (event "evScrollToIndex"))
+
+				(bindcall scrollLeft	(event "evScrollLeft"))
+				(bindcall scrollRight	(event "evScrollRight"))
+				(bindcall scrollToBegin animated=true (event "evScrollToBegin"))
+				(bindcall scrollToEnd animated=true (event "evScrollToEnd"))
+			)
+		)
+
+		(element SliderButtonArrow
+			_soundSet = ''
+			_dispatchedEv = "canScrollRight ? 'evScrollRight' : 'evScrollToBegin'"
+			_direction = "BUTTON_ARROW_DIRECTION.RIGHT"
+		)
+	)
+)
+
+(def constant SLIDER_POINT_ALPHA {
+	SC.Ui_styles.BUTTON_STATE.DISABLED	: 0,
+	SC.Ui_styles.BUTTON_STATE.SELECTED	: "TA",
+	SC.Ui_styles.BUTTON_STATE.DOWN		: 0.4,
+	SC.Ui_styles.BUTTON_STATE.OVER		: "TA",
+	SC.Ui_styles.BUTTON_STATE.UP		: "TS"
+})
+
+(def element SliderPoint (_isSelected:bool, _width:number,  _value:number, _isEmptyElement:bool)
+	(scope
+		(event evScrollToIndex)
+		(struct mouseHandler = MOUSE_HANDLER())
+		(var state:number = "	_isSelected				? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								 _isEmptyElement		? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								 mouseHandler.mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								 mouseHandler.rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP")
+		(var sliderPointAlpha:number = "SLIDER_POINT_ALPHA[state]")
+	)
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+	(dispatch evScrollToIndex args="{index: $index}" watch=false dir="EventDirection.UP" on='leftClick')
+
+	(style
+		(alpha = "sliderPointAlpha")
+		(width = "_width")
+		(height = 100%)
+		(vgap = 15px)
+		(align = "center|middle")
+		(backgroundColor = "NO_COLOR")
+		(bind hitTest "!_isEmptyElement")
+	)
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+		_trigger	= "state"
+		_alpha		= "sliderPointAlpha"
+	)
+
+	(block
+		(style
+			(bind width "_isSelected ? 3px : 2px")
+			(bind height "_isSelected ? 9px : 4px")
+			(bind marginTop "_isSelected ? -XXS : 0")
+			(bind borderRadius "_isSelected ? 1.5 : 1")
+			(bind backgroundColor "_isSelected ? SC.Ui_styles.SERVICE_COLORS.ACCENT_BLUE : SC.Ui_styles.SERVICE_COLORS.WHITE")
+		)
+	)
+
+	(hblock
+		(tf
+			(bind class "_isSelected ? '$TextDefaultNM' : '$TextDefault14NM'")
+			(style (marginRight = "XXS"))
+			(bind text "_value")
+		)
+		(tf
+			(bind visible "_isSelected")
+			(class $TextDefaultNM)
+			(style
+				(position = "absolute")
+				(alpha = "TC")
+				(right = -5px)
+			)
+			(text = 'IDS_DEGREE')
+		)
+	)
+)
+
+(def element SliderButtonArrow (_direction:str = "BUTTON_ARROW_DIRECTION.LEFT",
+								_isEnabled:bool = true,
+								_width:number = 22px,
+								_height:number = 40px,
+								_soundSet:str = 'button_default',
+								_dispatchedEv:str = '',
+								_dispatchParams:dict = {},
+								_methods:array = [])
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var state:number = "	!_isEnabled				? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								mouseHandler.mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								mouseHandler.rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP")
+
+		(var bgAlpha:number =		"BUTTON_ARROW_BACKGROUND_ALPHA[state]")
+		(var arrowAlpha:number =	"BUTTON_ARROW_IMAGE_ALPHA[state]")
+	)
+
+	(style
+		(bind hitTest "_isEnabled")
+		(align = "center|middle")
+		(width = "_width")
+		(height = "_height")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(borderRadius = "XXS")
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = "bgAlpha")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA "state" "bgAlpha")
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(width = 8px)
+			(height = 13px)
+			(bind backgroundImage "'url:../service_kit/buttons/arrows/' + _direction + '.png'")
+			(alpha = "arrowAlpha")
+		)
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA "state" "arrowAlpha")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+
+		(element MOUSE_HANDLER_CONTAINER
+			(macro STRUCT_MOUSE_DISPATCHER
+				_mouseHandler = "mouseHandler"
+			)
+
+			(macro STRUCT_SOUND_HANDLER
+				_mouseHandler = "mouseHandler"
+				_soundSet = "_soundSet"
+				_enabled = "_isEnabled"
+			)
+
+			(macro STRUCT_DISPATCH_HANDLER
+				_mouseHandler = "mouseHandler"
+				_dispatchedEv = "_dispatchedEv"
+				_dispatchParams = "_dispatchParams"
+			)
+
+			(macro STRUCT_CLICK_HANDLER
+				_mouseHandler = "mouseHandler"
+				_methods =		"_methods"
+			)
 		)
 	)
 )

@@ -1,34 +1,39 @@
 (def constant BP_CONTENT_WIDTH 1116px)
+(def constant BP_HEADER_AND_BOTTOM_MIN_HEIGHT 324px)
+
 
 (def element ModalWindowBattlePurchaseLevels ()
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
 	(macro INPUT_COUNTER_SCOPE_EVENTS)
 	(scope
-		(struct bpLevelPrice =		PULL_PRICE(_entityId = "'BATTLEPASS_LEVEL'"		_actionId = "SC.Common.PRICE_ACTION.BUY"))
-		(struct bpRegularPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_REGULAR'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
-		(struct bpEnhancedPrice =	PULL_PRICE(_entityId = "'BATTLEPASS_ENHANCED'"	_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(var battlePassComponent:dhComponent = "getSingleComponent(CC.battlePass)")
+
+		(struct battlePassPrice = PULL_BATTLEPASS_PRICES(_component="battlePassComponent"))
+
+		(struct battlePassCurrentLevel = PULL_BATTLEPASS_CURRENT_LEVEL())
 
 		(var levelsList:dhCollection = "getCollection(CC.battlePassLevel)")
 
-		(var battlePassCurrentLevelEntity:dhEntity = "getSingleEntity(CC.battlePassCurrentLevel)")
-		(var currentLevel:number = "battlePassCurrentLevelEntity.battlePassLevel.level" (event "battlePassCurrentLevelEntity.battlePassLevel.evChanged"))
-
-		(var battlePassEntity:dhEntity = "getSingleEntity(CC.battlePass)")
-		(var battlePassComponent:dhComponent = "battlePassEntity.battlePass")
 		(var bpType:number = "battlePassComponent.type" (event "battlePassComponent.evChanged"))
 		(var battlePassId:number = "battlePassComponent.id" (event "battlePassComponent.evChanged"))
-		(var previewRewardsStackId:number = "battlePassComponent.previewRewardsStack" (event "battlePassComponent.evChanged"))
-		(var finishTime:number = "battlePassComponent.finishTime" (event "battlePassComponent.evChanged"))
+		(var finishTime:number = "battlePassComponent.finishTime ?: 0" (event "battlePassComponent.evChanged"))
 
-		(var rewardsStackEntity:dhEntity = "getEntity(previewRewardsStackId)")
-		(var rewards:array = "rewardsStackEntity.rewardsStack.rewards ?: []" (event "rewardsStackEntity.rewardsStack.evChanged"))
-		(var rewardsLen:number = "rewards.length")
+		(var previewRewardsSingleStackId:number = "battlePassComponent.previewRewardsSingleStackId" (event "battlePassComponent.evChanged"))
+		(var previewRewardsMultipleStackId:number = "battlePassComponent.previewRewardsMultipleStackId" (event "battlePassComponent.evChanged"))
+
+		(var rewardsSingleStack:dhComponent = "getEntity(previewRewardsSingleStackId).rewardsStack")
+		(var rewardsSingle:array = "rewardsSingleStack.rewards ?: []" (event "rewardsSingleStack.evChanged"))
+		(var rewardsSingleLen:number = "rewardsSingle.length")
+
+		(var rewardsMultipleStack:dhComponent = "getEntity(previewRewardsMultipleStackId).rewardsStack")
+		(var rewardsMultiple:array = "rewardsMultipleStack.rewards ?: []" (event "rewardsMultipleStack.evChanged"))
+		(var rewardsMultipleLen:number = "rewardsMultiple.length")
 
 		(var accountResource:dhComponent = "getSingleEntity(CC.accountResource).accountResource")
 		(var currentGoldBalance:number = "accountResource.gold ?: 0" (event "accountResource.evChangedGold"))
 
-		(var maxLevel:number = "levelsList.length - currentLevel")
+		(var maxLevel:number = "levelsList.length - battlePassCurrentLevel.level")
 
 		(var levelsToPurchase:number = 1)
 		(var isDownBtnEnabled:bool = "toNumber(levelsToPurchase) > 1")
@@ -38,29 +43,31 @@
 		(bind levelsToPurchase "toNumber($event.value) ?: 1"	init=false watch=false (event "evInputCountChanged"))
 		(bind levelsToPurchase "1"								init=false watch=false (event "onTextInputChangeEvent"))
 
-		(var finalPrice:number = "bpLevelPrice.info.basePrice * toNumber(levelsToPurchase)")
+		(var finalPrice:number = "battlePassPrice.levelPrice * toNumber(levelsToPurchase)")
 		(var isGoldEnough:bool = "currentGoldBalance >= finalPrice")
 		(var deltaGold:number = "finalPrice - currentGoldBalance")
 
-		(var levelsRemaining:number = "levelsList.length - currentLevel")
+		(var levelsRemaining:number = "levelsList.length - battlePassCurrentLevel.level")
 		(var buyGoldRequestParams:dict = "{ url: SC.Ui_windows.GUI_URL.BATTLEPASS_SHOP_IN_GAME,
 											params: {	battlepass_type: bpType,
 														battlepass_expiration_date: finishTime,
 														remaining_level: levelsRemaining,
 														total_levels: levelsList.length,
-														level_price: bpLevelPrice.info.basePrice,
-														battlepass_price: bpRegularPrice.info.basePrice,
-														battlepass_big_price: bpEnhancedPrice.info.basePrice}}")
+														level_price: battlePassPrice.levelPrice,
+														battlepass_price: battlePassPrice.regularPrice,
+														battlepass_big_price: battlePassPrice.enhancedPrice}}")
 
-		(var columnRemainingRewards:number = "min(rewardsLen, MAX_DEFAULT_REWARDS_IN_ROW)")
-		(var rowRemainingRewards:number = "max(ceil(rewardsLen / MAX_DEFAULT_REWARDS_IN_ROW), 1)")
-		(var heightBlockReward:number = "min(rowRemainingRewards, 3) * (REWARD_DEFAULT_CARD_SIZE + REWARDS_OFFSET)")
-		(var heightScrollArea:number = "min(heightBlockReward, stageHeight - HEADER_AND_CLOSE_BUTTON_AREA_MIN_HEIGHT)")
+		(struct stageSize = STAGE_SIZE())
+		(struct scrollHeight = PULL_BATTLEPASS_REWARDS_SCROLL_HEIGHT(
+			_rewardsMultipleLen = "rewardsMultipleLen"
+			_rewardsSingleLen = "rewardsSingleLen"
+			_stageHeight = "stageSize.height"
+		))
 	)
 	(bindcall externalCall
 		"'inputMapping.onAction'"
 		"['BattlePassProxyUSS.previewBattlePassLevels', {levelsToPreview: toNumber(levelsToPurchase)}]"
-		init=false (bind trigger "currentLevel")
+		init=false (bind trigger "battlePassCurrentLevel.level")
 	)
 	(style (align = "center|middle"))
 	(block
@@ -81,20 +88,25 @@
 			(block
 				(style
 					(position = "absolute")
-					(right = 0)
+					(right = 0px)
 					(top = "-M")
 				)
 				(element DockResourcesWidget
 					_name = 'goldBalance'
 					_currency = "SC.Common.CURRENCIES.GOLD"
 					_label = 'IDS_DO_PURCHASE'
-					_methods = "[	{	type: 'inputMapping.onRequest',
-										name: 'openMetashop',
-										args: buyGoldRequestParams}]"
 					_height = 47
+					_methods = "[
+						{
+							type: 'inputMapping.onAction',
+							name: 'navigateTo',
+							args: {route: SC.Ui_windows.ROUTE.OVERLAY_BROWSER, data: buyGoldRequestParams}
+						}
+					]"
 				)
 			)
 		)
+
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
 			(style
@@ -125,6 +137,7 @@
 				)
 			)
 		)
+
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
 			(style
@@ -132,17 +145,10 @@
 				(marginBottom = "{720:M, 1080:L}")
 			)
 			(element HorizontalDividerTwoPx)
-		)
-		(block
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
-			(style
-				(width = 100%)
-				(marginBottom = "{720:M, 1080:L}")
-				(bind height "heightScrollArea")
-			)
+
 			(scrollArea
 				(class $Fullsize)
-				(style (backgroundColor = "NO_COLOR"))
+				(style (bind height "scrollHeight.value"))
 
 				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
 					_singleStep = "REWARD_DEFAULT_CARD_SIZE"
@@ -151,53 +157,109 @@
 				(content
 					(style
 						(width = 100%)
-						(align = "center")
-						(backgroundColor = "NO_COLOR")
+						(paddingTop = "L")
+						(paddingBottom = "L")
+						(paddingLeft = "LM")
+						(paddingRight = "LM")
 					)
 
 					(block
-						(style
-							(maxWidth = 1020px)
-							(flow = "tile_horizontal")
-							(gap = "REWARDS_OFFSET")
+						(bind visible "rewardsSingleLen")
+						(style (width = 100%))
+
+						(tf
+							(class $TextDefault18NM)
+							(style
+								(marginBottom = "SXS")
+								(alpha = "TA")
+							)
+							(text = 'IDS_BATTLEPASS_PURCHASE_LEVELS_REWARDS_SINGLE')
 						)
 
-						(controller $Repeat renderer='RewardDefaultCard'
-							(bind count "rewardsLen")
-							(args
-								_rewardEntityId = "rewards[$index]"
+						(htile
+							(style
+								(width = 100%)
+								(gap = "REWARDS_OFFSET")
+							)
+							(controller $Repeat renderer='RewardDefaultCard'
+								(bind count "rewardsSingleLen")
+								(args
+									_rewardEntityId = "rewardsSingle[$index]"
+								)
+							)
+						)
+					)
+
+					(block
+						(bind visible "rewardsMultipleLen")
+						(style
+							(width = 100%)
+							(marginTop = "L")
+						)
+
+						(tf
+							(class $TextDefault18NM)
+							(style
+								(marginBottom = "SXS")
+								(alpha = "TA")
+							)
+							(bind text "bpType == SC.Common.BATTLEPASS_TYPES.PAID_ENHANCED	? 'IDS_BATTLEPASS_PURCHASE_LEVELS_REWARDS_MULTIPLE_ALL'
+																							: 'IDS_BATTLEPASS_PURCHASE_LEVELS_REWARDS_MULTIPLE_CHOICE'")
+						)
+
+						(htile
+							(style
+								(width = 100%)
+								(gap = "REWARDS_OFFSET")
+							)
+							(controller $Repeat renderer='RewardDefaultCard'
+								(bind count "rewardsMultipleLen")
+								(args
+									_rewardEntityId = "rewardsMultiple[$index]"
+								)
 							)
 						)
 					)
 				)
 			)
-		)
-		(block
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
-			(style
-				(width = 100%)
-				(marginBottom = "{720:M, 1080:L}")
-			)
 			(element HorizontalDividerTwoPx)
 		)
 
 		(block
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
 			(style (marginBottom = "MS"))
 			(element ModalWindowSystemPurchaseItemPriceAndInfo
-				_priceInfo = "{finalPrice: finalPrice, currency: SC.Common.CURRENCIES.GOLD}"
+				_priceInfo = "{ finalPrice: finalPrice, currency: SC.Common.CURRENCIES.GOLD }"
 				_questionString = 'IDS_QUESTION_DO_PURCHASE_FOR'
 				_isDeficit = "!isGoldEnough"
 				_deficit = "deltaGold"
 			)
 		)
+
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
+			(style (marginBottom = "{720:SXS, 1080:MS}"))
 			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
 				_isDeficit = "!isGoldEnough"
-				_okMethods = "[{	type: 'inputMapping.onAction',
-									name: 'BattlePassProxyUSS.buyBattlePassLevels',
-									args: {battlePassId: battlePassId, amount: levelsToPurchase}}]"
+				_okMethods = "[
+					{
+						type: 'inputMapping.onAction',
+						name: 'BattlePassProxyUSS.buyBattlePassLevels',
+						args:	{
+									battlePassId: battlePassId,
+									amount: levelsToPurchase
+								}
+					}
+				]"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 5)
+			(tf
+				(class $TextDefaultNM)
+				(style (alpha = "TA"))
+				(text = 'IDS_BATTLEPASS_PURCHASE_LEVELS_INFO')
 			)
 		)
 	)

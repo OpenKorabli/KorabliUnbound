@@ -1,0 +1,154 @@
+(def struct PULL_BATTLEPASS_REWARD_INFO (_entityId:number = 0)
+	(var component:dhComponent = "getEntity(_entityId).battlePassReward")
+	(var rewardId:number = "component.rewardId")
+	(var type:number = "component.type")
+	(var level:number = "component.level")
+	(var row:number = "component.row")
+	(var rewardState:number = "component.rewardState" (event "component.evRewardStateChanged"))
+
+	(var isPaidTrack:bool = "type == SC.Common.BATTLEPASS_REWARD_TYPES.PAID")
+)
+
+(def struct PULL_BATTLEPASS_REWARD_STATE (_rewardState:number = 0)
+	(var isReceived:bool = "_rewardState == SC.Common.BATTLEPASS_REWARD_STATE.CLAIMED")
+	(var isAvailable:bool = "_rewardState == SC.Common.BATTLEPASS_REWARD_STATE.AVAILABLE")
+	(var isUnavailable:bool = "_rewardState == SC.Common.BATTLEPASS_REWARD_STATE.UNAVAILABLE")
+)
+
+(def struct PULL_BATTLEPASS_MULTIPLE_REWARD_STATE (_collection:dhCollection)
+	(var firstRewardComponent:dhComponent = "_collection.getEntityAtIndex(0).battlePassReward")
+	(var secondRewardComponent:dhComponent = "_collection.getEntityAtIndex(1).battlePassReward")
+	(var firstRewardState:number = "firstRewardComponent.rewardState" (event "firstRewardComponent.evRewardStateChanged"))
+	(var secondRewardState:number = "secondRewardComponent.rewardState" (event "secondRewardComponent.evRewardStateChanged"))
+	(var areAllClaimed:bool = "	firstRewardState == SC.Common.BATTLEPASS_REWARD_STATE.CLAIMED &&
+								secondRewardState == SC.Common.BATTLEPASS_REWARD_STATE.CLAIMED")
+	(var isAvailable:bool = "	firstRewardState == SC.Common.BATTLEPASS_REWARD_STATE.AVAILABLE ||
+								secondRewardState == SC.Common.BATTLEPASS_REWARD_STATE.AVAILABLE")
+	(var isAnyClaimed:bool = "	firstRewardState == SC.Common.BATTLEPASS_REWARD_STATE.CLAIMED ||
+								secondRewardState == SC.Common.BATTLEPASS_REWARD_STATE.CLAIMED")
+)
+
+(def struct PULL_BATTLEPASS_TYPE (_component:dhComponent)
+	(var type:number = "_component.type" (event "_component.evChanged"))
+	(var isFree:bool = "type == SC.Common.BATTLEPASS_TYPES.FREE")
+	(var isPaidRegular:bool = "type == SC.Common.BATTLEPASS_TYPES.PAID_REGULAR")
+	(var isPaidEnhanced:bool = "type == SC.Common.BATTLEPASS_TYPES.PAID_ENHANCED")
+	(var isPreviousPaidRegular:bool = "type - 1 == SC.Common.BATTLEPASS_TYPES.PAID_REGULAR")
+	(var isBonuses:bool = "isPaidRegular || isPreviousPaidRegular")
+)
+
+(def struct PULL_BATTLEPASS_CURRENT_LEVEL ()
+	(var entity:dhEntity = "getSingleEntity(CC.battlePassCurrentLevel)")
+	(var level:number = "entity.battlePassLevel.level ?: 0" (event "entity.battlePassLevel.evChanged"))
+	(var previousLevelEntityId:number = "entity.battlePassLevel.previousLevelEntityId" (event "entity.battlePassLevel.evChanged"))
+	(var countCompleted:number = "entity.battlePassPostProgressionLevel.countCompleted" (event "entity.battlePassPostProgressionLevel.evChanged"))
+)
+
+(def struct PULL_BATTLEPASS_LEVEL_INFO (_entity:dhEntity)
+	(var component:dhComponent = "_entity.battlePassLevel")
+	(var level:number = "component.level ?: 1" (event "component.evChanged"))
+	(var currentPoints:number = "component.points ?: 0" (event "component.evChanged"))
+	(var previousPoints:number = "component.previousPoints ?: 0" (event "component.evChanged"))
+	(var pointsPerLevel:number ="component.pointsPerLevel ?: 1" (event "component.evChanged"))
+
+	(var previousProgress:number = "100% * previousPoints/pointsPerLevel")
+	(var progress:number = "100% * currentPoints/pointsPerLevel")
+)
+
+(def struct PULL_BATTLEPASS_PRICES (_component:dhComponent)
+	(var regularPrice:number = "_component.regularPrice" (event "_component.evChanged"))
+	(var enhancedPrice:number = "_component.enhancedPrice" (event "_component.evChanged"))
+	(var levelPrice:number = "_component.levelPrice" (event "_component.evChanged"))
+)
+
+(def struct PULL_BATTLEPASS_REWARDS_SCROLL_HEIGHT (_rewardsMultipleLen:number = 0, _rewardsSingleLen:number = 0, _stageHeight:number = 0)
+	(var minRow:number = "_rewardsMultipleLen ? 2 : 1")
+	(var rowRemainingRewards:number = "max(ceil(_rewardsSingleLen/MAX_DEFAULT_REWARDS_IN_ROW) + ceil(_rewardsMultipleLen/MAX_DEFAULT_REWARDS_IN_ROW), minRow)")
+	(var minScrollHeight:number = "minRow * (REWARD_DEFAULT_CARD_SIZE + SXS + 18px) + L*2 + (minRow-1) * L")
+	(var heightRewardRow:number = "min(rowRemainingRewards-minRow, 3) * (REWARD_DEFAULT_CARD_SIZE + REWARDS_OFFSET)")
+	(var actualHeight:number = "max(minScrollHeight, minScrollHeight + heightRewardRow)")
+	(var value:number = "min(actualHeight, _stageHeight - BP_HEADER_AND_BOTTOM_MIN_HEIGHT)")
+)
+
+(def struct PULL_BP_ASSET_SCALE (_stageWidth:number)
+	(var value:number = "_stageWidth < 1400 ? BP_LEVEL_SIZE_MIN/BP_LEVEL_SIZE_MAX : 1")
+)
+
+(def struct BP_LEVEL_SIZE (_stageWidth:number)
+	(struct scale = PULL_BP_ASSET_SCALE(_stageWidth="_stageWidth"))
+	(var size:number = "scale.value * BP_LEVEL_SIZE_MAX")
+	(var height:number = "size * 2")
+)
+
+(def struct PULL_ANIMATION_SIZE (_scale:number)
+	(var size:number = "250 * _scale")
+	(var offset:number = "-50 * _scale")
+)
+
+(def macro SPECIAL_LEVEL_ELEMENTS_APPEAR_ANIMATION (_id:expression, _positionY:number)  
+	(style (bind alpha "_id ? 0 : 1" init=false))
+
+	(controller $Animation
+		(bindcall play  delay = "0.1 + _positionY * 0.075"
+			duration = 0.15
+			from = "{alpha: 0}"
+			to = "{alpha: 1}"
+			action = "kill"
+			easing = "Easing.quad_out"
+			(bind trigger "_id")
+		)
+	)
+)
+
+(def macro BATTLEPASS_MULTIPLE_REWARD_ANIM (	_rightTrigger:expression,  
+												_leftTrigger:expression,
+												_rollOver:expression,
+												_isFirstClaimed:expression,
+												_isSecondClaimed:expression,
+												_isFirstSelected:expression,
+												_isSecondSelected:expression,
+												_scale:expression)  
+
+	(style
+		(visualOffsetX = "	(	_isFirstSelected					? 30px :
+								_isSecondSelected					? -30px :
+								_isFirstClaimed && _isSecondClaimed	? 0px :
+								_isFirstClaimed						? -30px :
+								_isSecondClaimed					? 30px
+																	: 0px) * _scale")
+	)
+	(controller $Animation
+		(bindcall play
+			to = "{ visualOffsetX:	(	_isFirstSelected					? 30px :
+										_isSecondSelected					? -30px :
+										_isFirstClaimed && _isSecondClaimed	? 0px :
+										_isFirstClaimed						? -30px :
+										_isSecondClaimed					? 30px
+																			: 0px) * _scale}"
+			watch = false
+			duration = 0.4
+			easing = "Easing.quad_out"
+			(bind enabled "!_rollOver")
+			(bind trigger "!_rollOver")
+			(event "evSelectedStateDisabled")
+		)
+
+		(bindcall play
+			to = "{ visualOffsetX: (-30px * _scale)}"
+			watch = false
+			duration = 0.4
+			easing = "Easing.quad_out"
+			reverse = "!_rightTrigger"
+			(bind trigger "_rightTrigger")
+		)
+
+		(bindcall play
+			to = "{ visualOffsetX: (30px * _scale)}"
+			watch = false
+			duration = 0.4
+			easing = "Easing.quad_out"
+			reverse = "!_leftTrigger"
+			(bind trigger "_leftTrigger")
+		)
+	)
+)

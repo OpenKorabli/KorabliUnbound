@@ -1,0 +1,650 @@
+(def macro SAGA_MODAL_WINDOW_BG (_isBlurOptionEnabled:expression = null, _hideDuration:expression = "SC.Ui_windows.DEFAULT_HIDE_TIME_BG.DURATION") 
+	(dispatch startShow on='addedToStage')
+
+	(class $FullsizeAbsolute)
+
+	(block
+		(bind visible "!_isBlurOptionEnabled")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../bg/nations_tree_v2.jpg')
+			(backgroundSize = "cover")
+		)
+		(alpha = 0)
+
+		(controller $Animation
+			(bindcall play  id = 'modalWindowBgHighContrast'
+							duration = 0.2
+							to = "{ alpha: 1 }"
+							action = "kill"
+							(event "startShow")
+			)
+			(bindcall play  id = 'modalWindowBgHighContrast'
+							duration = "_hideDuration"
+							delay = "SC.Ui_windows.DEFAULT_HIDE_TIME_BG.DELAY"
+							to = "{ alpha: 0 }"
+							action = "kill"
+							(event "startHide")
+			)
+		)
+	)
+
+	(block
+		(bind visible "_isBlurOptionEnabled")
+		(class $FullsizeAbsolute)
+		(alpha = 0)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.1
+				from = "{ alpha: 0 }"
+				to = "{ alpha: 1 }"
+				easing = "Easing.quad_out"
+				action = "killAll"
+				(event "startShow")
+			)
+			(bindcall play
+				delay = 0.2
+				duration = 0.1
+				from = "{ alpha: 1 }"
+				to = "{ alpha: 0 }"
+				easing = "Easing.quad_out"
+				action = "killAll"
+				(event "startHide")
+			)
+		)
+
+		(element BlurMapWithLayerPanel
+			_blurType = "BLUR_TYPE.LOW"
+		)
+	)
+)
+
+(def struct GET_INTERACTIVE_COLOR_TRANSFORM (_states:dict, _isSelected:bool = false, _isDisabled:bool = false, _isRollOver:bool = false)
+	(var CT:dict = "_isSelected		? _states.DOWN :
+					_isDisabled		? _states.DISABLED :
+					_isRollOver		? _states.OVER
+									: _states.UP")
+)
+
+(def constant SAGA_BUTTON_TYPE {
+	ETERIA_RED:		0,
+	SECONDARY:		1,
+	ICON:			2,
+})
+
+(def constant SAGA_SCROLL_BUTTON_TYPE {
+	STORY:			'story',
+	ARCHIVE:		'archive',
+	JOURNEY:		'journey'
+})
+
+(def constant SAGA_MAIN_CT	{
+	UP:				"SAGA_COLORS.COLOR_TRANSFORM.MAIN.UP",
+	OVER:			"SAGA_COLORS.COLOR_TRANSFORM.MAIN.OVER",
+	DOWN:			"SAGA_COLORS.COLOR_TRANSFORM.MAIN.DOWN",
+	DISABLED:		"SAGA_COLORS.COLOR_TRANSFORM.MAIN.DISABLED"
+})
+
+(def constant SAGA_PAPER_CT	{
+	UP:				"SAGA_COLORS.COLOR_TRANSFORM.PAPER.UP",
+	OVER:			"SAGA_COLORS.COLOR_TRANSFORM.PAPER.OVER",
+	DOWN:			"SAGA_COLORS.COLOR_TRANSFORM.PAPER.DOWN",
+})
+
+(def constant SAGA_BUTTON_STYLE {
+	SAGA_BUTTON_TYPE.ETERIA_RED: {
+		LABEL_COLOR:		"SC.Ui_styles.SERVICE_COLORS.WHITE",
+		COLOR_TRANSFORM: 	"SAGA_MAIN_CT"
+	},
+	SAGA_BUTTON_TYPE.SECONDARY: {
+		LABEL_COLOR:		"SAGA_COLORS.PAPER",
+		BACKGROUND_IMAGE:	"SAGA_TEXTURES.SERVICE_KIT.BUTTON.SECONDARY",
+		COLOR_TRANSFORM:	"SAGA_PAPER_CT"
+	},
+	SAGA_BUTTON_TYPE.ICON: {
+		LABEL_COLOR:		"SC.Ui_styles.SERVICE_COLORS.WHITE",
+		COLOR_TRANSFORM: 	"SAGA_MAIN_CT"
+	}
+})
+
+(def element SagaDefaultButton (_name:str = '',
+								_enabled:bool = true,
+								_type:number = "SAGA_BUTTON_TYPE.ETERIA_RED",
+								_isTransactionBtn:bool = false,
+								_icon:str = '',
+								_label:str = '',
+								_focusIndex:number = "BUTTON_FOCUS_STATE.UNFOCUSABLE",
+								_clickInterval:number = 500,
+								_defaultFocused:bool = false,
+								_width:number = "SAGA_ELEMS.BUTTON.DEFAULT.WIDTH",
+								_height:number = "SAGA_ELEMS.BUTTON.DEFAULT.HEIGHT",
+								_imgBtnWidth:number = 0,
+								_imgBtnHeight:number = 0,
+								_dispatchedEv:str = '',
+								_dispatchParams:gfx = {},
+								_methods:array = [],
+								_customSoundSet:str = '',
+								_borderRadius:number = "XS")
+	(scope
+		(event evOperationsAccountLockedChanged)
+
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var accountResourceComponent:dhComponent =	"getSingleComponent(CC.accountResource)")
+		(var operationsAccountLocked:bool = "accountResourceComponent.operationsLocked" (event "accountResourceComponent.evOperationsLockChanged"))
+		(var isOperationsLocked:bool = "_isTransactionBtn && operationsAccountLocked")
+		(var enabled:bool = "_enabled && !isOperationsLocked")
+
+		(var isFocused:bool = false)
+		(var isKeyDown:bool = false)
+
+		
+		(dispatch evOperationsAccountLockedChanged dir="EventDirection.NONE" delay="0.3" reset=true (bind trigger "operationsAccountLocked"))
+		(var showOperationsLock:bool = false)
+		(bind showOperationsLock "operationsAccountLocked" init=false watch=false (event "evOperationsAccountLockedChanged"))
+		(var isDisabledVisual:bool = "!_enabled || (isOperationsLocked && showOperationsLock)")
+		
+
+		(var isDown:bool = "!isDisabledVisual && (mouseHandler.mouseDown || isKeyDown)")
+		(var isRollover:bool = "!isDisabledVisual && mouseHandler.rollOver")
+
+		(var isIconBtn:bool =		"_type == SAGA_BUTTON_TYPE.ICON")
+		(var isSecondaryBtn:bool =	"_type == SAGA_BUTTON_TYPE.SECONDARY")
+		(var isAutoWidth:bool =		"!toBool(_width)")
+
+		(var isFocusEnabled:bool = "_enabled && (_focusIndex != BUTTON_FOCUS_STATE.UNFOCUSABLE)")
+
+		(var backgroundImage:str = "'BACKGROUND_IMAGE' in SAGA_BUTTON_STYLE[_type] ? SAGA_BUTTON_STYLE[_type].BACKGROUND_IMAGE : null")
+
+		(var focusImage:str = "SAGA_TEXTURES.SERVICE_KIT.BUTTON.DEFAULT.FOCUS")
+
+		
+		(var ctDict:dict = "SAGA_BUTTON_STYLE[_type].COLOR_TRANSFORM")
+		(var backgroundColorTransform:dict = "	isDisabledVisual		? ctDict.DISABLED :
+												isRollover && !isDown	? ctDict.OVER :
+												isDown					? ctDict.DOWN
+																		: ctDict.UP")
+
+		(var contentAlpha:number = "isDown || isDisabledVisual		? TS :
+									isRollover						? 1.1
+																	: TA")
+	)
+
+	(dispatch 'mouseHandler.evClicked' dir="EventDirection.NONE" (bind enabled "isKeyDown") (bind trigger "isKeyDown"))
+
+	(controller $Focus
+		tabIndex = "_focusIndex"
+		defaultFocus = "_defaultFocused"
+		clickFocus = "false"
+		clickInterval = "_clickInterval"
+		(bind enabled "isFocusEnabled")
+		(bind isFocused "$event" init=false on='evFocused')
+		(bind isKeyDown "$event && isFocused && enabled" init=false on='evKeyboardClick')
+	)
+
+	(bind name "_name ? _name : null")
+
+	(style
+		(bind width "	isIconBtn		? _imgBtnWidth	? _imgBtnWidth
+													: 32px :
+						isAutoWidth		? auto
+										: _width")
+		(bind height "	isIconBtn		? _imgBtnHeight	? _imgBtnHeight
+														: 32px
+										: _height")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(bind backgroundColor "backgroundImage ? null : SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(bind backgroundImage "backgroundImage ?: null")
+			(bind borderRadius "backgroundImage		? 0 :
+								isIconBtn			? XS
+													: _borderRadius")
+			(bind scale9grid "backgroundImage ? 3 : null")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+			_colorTransform = "backgroundColorTransform"
+			_duration = "0.07"
+		)
+	)
+
+	(hblock
+		(style
+			(hitTest = false)
+			(align = "center|middle")
+			(height = 100%)
+			(alpha = "contentAlpha")
+			(bind width "isAutoWidth ? auto : 100%")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger =	"contentAlpha"
+			_alpha =	"contentAlpha"
+		)
+
+		(block
+			(macro CONTROL_VISIBLE_STATE_ANIMATION
+				_isTrigger = "isFocused && !isDisabledVisual"
+				_duration = "0.15"
+			)
+			(class $FullsizeAbsolute)
+			(style
+				(scale9grid = 2)
+				(bind backgroundImage "focusImage")
+			)
+		)
+
+		(block
+			(bind visible "_label && !isIconBtn")
+
+			(style
+				(align = "center|middle")
+				(bind width "isAutoWidth ? auto : 100%")
+				(bind minWidth "!isAutoWidth	? 0px : 110px")
+				(paddingLeft = "SXS")
+				(paddingRight = "SXS")
+			)
+
+			(tf
+				(bind visible "_label && !isIconBtn")
+				(bind class "isSecondaryBtn	? '$TextDefaultBoldNMWithoutShadow'
+											: '$TextDefaultBold18NMWithoutShadow'")
+				(style
+					(bind width "isAutoWidth ? auto : 100%")
+					(wordWrap = false)
+					(bind elideMode "!isAutoWidth")
+					(bind textAlign "isAutoWidth ? left : center")
+					(textColor = "SAGA_BUTTON_STYLE[_type].LABEL_COLOR")
+				)
+
+				(bind text "_label ? toUpper(tr(_label)) : ''")
+			)
+		)
+
+		(block
+			(bind visible "isIconBtn")
+
+			(style
+				(bind width "_imgBtnWidth ? _imgBtnWidth : 32px")
+				(bind height "_imgBtnHeight ? _imgBtnHeight : 32px")
+				(bind backgroundImage "isIconBtn ? 'swf:../saga/service_kit/buttons/icons/icons.swf:' + _icon : ''")
+				(backgroundSize = "align")
+			)
+		)
+	)
+
+	(macro STRUCT_MOUSE_HANDLER
+		_enabled = "_enabled"
+		_mouseHandler = "mouseHandler"
+		_dispatchedEv = "_dispatchedEv"
+		_dispatchParams = "_dispatchParams"
+		_methods = "_methods"
+		_soundSet = "_customSoundSet ?: 'button_default'"
+	)
+)
+
+(def element SagaPlayVoiceButton ()
+	(scope
+		(event evVoiceoversToggle)
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(struct playSagaCharacterVoicesPref =		GET_PREF_BOOL(_option="'ui.sagas.playSagaCharacterVoices'"))
+		(var areSagaCharacterVoicesPlayed:bool =	"playSagaCharacterVoicesPref.value")
+
+		(var isDown:bool = "mouseHandler.mouseDown")
+		(var isRollover:bool = "mouseHandler.rollOver")
+
+		(var ctDict:dict = "SAGA_BUTTON_STYLE[SAGA_BUTTON_TYPE.ICON].COLOR_TRANSFORM")
+		(var backgroundColorTransform:dict = "	isRollover && !isDown	? ctDict.OVER :
+												isDown					? ctDict.DOWN
+																		: ctDict.UP")
+	)
+
+	(style
+		(align = "center|middle")
+		(width = 50px)
+		(height = 50px)
+	)
+
+	(controller $Tooltip
+		(renderer='SagaDialogueVoiceoversTogglerTooltip')
+		(args
+			_state = "areSagaCharacterVoicesPlayed"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(bind backgroundColor "SC.Ui_styles.SERVICE_COLORS.WHITE")
+		)
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_CT
+			_colorTransform = "backgroundColorTransform"
+			_duration = "0.07"
+		)
+	)
+
+	(block
+		(style
+			(width = 24px)
+			(height = 24px)
+			(bind backgroundImage "areSagaCharacterVoicesPlayed		? 'swf:../saga/service_kit/buttons/icons/icons.swf:music_on'
+																	: 'swf:../saga/service_kit/buttons/icons/icons.swf:music_off'")
+			(backgroundSize = "cover")
+		)
+	)
+
+	(macro STRUCT_MOUSE_HANDLER
+		_mouseHandler =		"mouseHandler"
+		_methods =			"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.sagas.playSagaCharacterVoices', !areSagaCharacterVoicesPlayed ] }]"
+		_soundSet =			"'button_default'"
+	)
+)
+
+(def element SagaDialogueVoiceoversTogglerTooltip (_state:bool)
+	(style (width = 300px))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_SAGA_DIALOGUE_VOICEOVERS_LABEL'
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemStatusLine
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =				"_state ? 'IDS_SAGA_TOOLTIP_TOGGLE_OFF' : 'IDS_SAGA_TOOLTIP_TOGGLE_ON'"
+		)
+	)
+)
+
+(def element SagaButtonRewind ()
+	(element SagaDefaultButton
+		_name =				'btn_rewind'
+		_imgBtnWidth =		44px
+		_imgBtnHeight =		44px
+		_type =				"SAGA_BUTTON_TYPE.ICON"
+		_icon =				'rewind'
+		_focusIndex =		2
+		_methods =			"[{ type: 'direct.action',	name: 'onRewindNarrativeForward',	args: {} }]"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_text =				'IDS_SAGA_BUTTON_REWIND_FORWARD_TOOLTIP'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element SagaScrollButton (_isActive:bool = false, _type:str = '', _isDisabled:bool = false, _methods:array = [])
+	(scope
+		(var paperHeightOpened:number = "SAGA_ELEMS.BUTTON.SCROLL.HEIGHT_OPENED + S")
+		(var paperHeightClosed:number = "SAGA_ELEMS.BUTTON.SCROLL.HEIGHT_CLOSED + S")
+
+		(var image:str = "SAGA_TEXTURES.SERVICE_KIT.SCROLL.IMAGE + _type + '.png'")
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var isUnfold:bool = "_isActive || mouseHandler.rollOver")
+	)
+
+	(style
+		(align = "center")
+		(width = "SAGA_ELEMS.BUTTON.SCROLL.CONTAINER.WIDTH")
+		(height = "SAGA_ELEMS.BUTTON.SCROLL.CONTAINER.HEIGHT")
+		(paddingTop = "S")
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(width = "SAGA_ELEMS.BUTTON.SCROLL.CONTAINER.WIDTH")
+			(height = "SAGA_ELEMS.BUTTON.SCROLL.ROLL_HEIGHT")
+			(backgroundImage = "SAGA_TEXTURES.SERVICE_KIT.SCROLL.TOP")
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(width = 48px)
+			(height = "isUnfold ? paperHeightOpened : paperHeightClosed")
+			(marginTop = -3px)
+			(marginBottom = -3px)
+			(backgroundColor = "SAGA_COLORS.PAPER")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "NO_COLOR"))
+
+			(isMask = true)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(top = 6px)
+				(left = 6px)
+				(width = "SAGA_ELEMS.BUTTON.SCROLL.IMAGE.WIDTH")
+				(height = "SAGA_ELEMS.BUTTON.SCROLL.IMAGE.HEIGHT")
+				(backgroundImage = "image")
+				(backgroundSize = "contain")
+				(bind alpha "_isDisabled ? 0.5 : 1")
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.1
+				from = "{ height: paperHeightClosed }"
+				to = "{ height: paperHeightOpened }"
+				easing = "Easing.quad_out"
+				action = "killAll"
+				(bind enabled "isUnfold")
+			)
+			(bindcall play
+				delay = 0.15
+				duration = 0.1
+				from = "{ height: paperHeightOpened }"
+				to = "{ height: paperHeightClosed }"
+				easing = "Easing.quad_out"
+				action = "killAll"
+				(bind enabled "!isUnfold")
+			)
+		)
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(width = "SAGA_ELEMS.BUTTON.SCROLL.CONTAINER.WIDTH")
+			(height = "SAGA_ELEMS.BUTTON.SCROLL.ROLL_HEIGHT")
+			(backgroundImage = "SAGA_TEXTURES.SERVICE_KIT.SCROLL.BOTTOM")
+		)
+	)
+
+	(controller $Tooltip
+		(renderer = 'SagaScrollButtonTooltip')
+		(bind enabled "!_isActive")
+		(args
+			_type =			"_type"
+			_isDisabled =	"_isDisabled"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+
+	(macro STRUCT_MOUSE_HANDLER
+		_mouseHandler =		"mouseHandler"
+		_soundSet =			"_isActive || _isDisabled ? '' : 'button_saga_scroll'"
+		_methods =			"_isDisabled ? [] : _methods"
+	)
+)
+
+(def element SagaScrollButtonTooltip (_type:str, _isDisabled:bool)
+	(scope
+		(var header:str =			"'IDS_SAGA_SCROLL_BUTTON_TOOLTIP_' + toUpper(_type) + '_HEADER'")
+		(var description:str =		"'IDS_SAGA_SCROLL_BUTTON_TOOLTIP_' + toUpper(_type) + '_DESCRIPTION'")
+		(var mouseInstruction:str =	"'IDS_SAGA_SCROLL_BUTTON_TOOLTIP_' + toUpper(_type) + '_MOUSE_INSTRUCTION'")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = "header"
+		)
+
+		(element TooltipSystemHorizontalDivider)
+
+		(element TooltipSystemDescriptionText
+			_descriptionText = "description"
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer = 'TooltipSystemHorizontalDivider'
+				(bind enabled "!_isDisabled")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer = 'TooltipSystemStatusLine'
+				(bind enabled "!_isDisabled")
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text =				"mouseInstruction"
+				)
+			)
+		)
+	)
+)
+
+(def element SagaTextBoxTexture ()
+	(class $FullsizeAbsolute)
+	(style
+		(hitTest = false)
+		(paddingBottom = "-SAGA_ELEMS.ONBOARDING.RIBBON_BOTTOM_OFFSET")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = "SAGA_TEXTURES.PANELS.MAIN_UNDERLAYER")
+			(scale9grid = [90, 10, 30, 75])
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(bottom = 0px)
+				(width = 247px)
+				(left = 50%)
+				(height = 61px)
+				(marginLeft = -50%)
+				(backgroundImage = "SAGA_TEXTURES.PANELS.ROUNDED_SUBLABEL")
+			)
+		)
+
+	)
+
+	
+	(block
+		(class $Fullsize)
+		(style (paddingBottom = "SAGA_ELEMS.ONBOARDING.RIBBON_BOTTOM_OFFSET"))
+
+		(block
+			(class $Fullsize)
+			(isMask = true)
+
+			(block
+				(class $Fullsize)
+				(style
+					(paddingTop = "XS")
+					(paddingBottom = "M")
+					(paddingLeft = "M")
+					(paddingRight = "M")
+				)
+
+				(block
+					(class $Fullsize)
+					(style
+						(borderRadiusBottomRight = "S")
+						(borderRadiusBottomLeft = "S")
+						(backgroundColor = "NO_COLOR")
+					)
+				)
+
+			)
+
+			(block
+				(style
+					(position = "absolute")
+					(bottom = 164px)
+					(left = 50%)
+				)
+
+				(controller $Sector
+					(bind offset "45")
+					(bind arc "90")
+					(bind radius "190")
+					(bind color "NO_COLOR")
+				)
+			)
+		)
+
+		(element TextureCentrified
+			_image =			"SAGA_TEXTURES.PATTERN.MAIN_UNCOLORIZED"
+			_width =			"SAGA_ELEMS.TEXTURES.MAIN_PATTERN.WIDTH"
+			_height =			"SAGA_ELEMS.TEXTURES.MAIN_PATTERN.HEIGHT"
+			_offset =			-128px
+			_colorTransform =	"SAGA_COLORS.COLOR_TRANSFORM.MAIN.UP"
+		)
+	)
+	
+)
+
+(def element TextureCentrified (_image:str, _width:number, _height:number, _offset:number, _colorTransform:dict = "CT_NONE", _alpha:number = 1, _enabled:bool = true)
+	
+	(bind visible "_enabled")
+
+	(style
+		(position = "absolute")
+		(align = "center")
+		(width = 0px)
+		(height = 0px)
+		(bottom = 0px)
+		(left = 50%)
+		(backgroundColor = "NO_COLOR")
+		(alpha = "_alpha")
+	)
+
+	(block
+		(style
+			(width = "_width")
+			(height = "_height")
+			(marginTop = "_offset")
+			(backgroundImage = "_image")
+			(backgroundSize = "fill")
+		)
+
+		(colorTransform = "_colorTransform")
+	)
+)

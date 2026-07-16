@@ -1,0 +1,307 @@
+(def element DecalDockMainInset ()
+	(scope
+		(macro PULL_SHIP_ID)
+		(macro CAROUSEL_HEIGHT_SCOPE)
+
+		(struct peculiarityPref =					GET_PREF_BOOL(_option = "'ui.peculiarityEnabled'"))
+
+		(var installedCamouflageEntity:dhEntity =	"getSingleEntity(CC.installedCamouflage)")
+		(var isCamouflageAllowDecals:bool =			"installedCamouflageEntity ? installedCamouflageEntity.ownCamouflage.isDecalsEnabled : true")
+
+		(var ownShipComponent:dhComponent =			"getPrimaryComponent(CC.ownShip, playerShipId)")
+		(var canEquipDecal:bool =					"ownShipComponent.canEquipDecal"	(event "ownShipComponent.evUpdateConfig"))
+
+		(var isDecalsAvailable:bool =				"isCamouflageAllowDecals && peculiarityPref.value && canEquipDecal")
+	)
+
+	(class $Fullsize)
+	(style (bind paddingBottom "carouselAreaHeight + SXS"))
+
+	(bindcall externalCall 'inputMapping.onAction' "[SC.Ui_methods.EXTERIOR_DECALS.DISABLE_PREVIEW, {}]" on='removedFromStage')
+	(bindcall externalCall 'sound.playSetSoundDirect' "['exterior', 'main']" on='addedToStage')
+
+	(macro SOUND_DOCK_INSET_HANDLER "SC.Ui_windows.ROUTE.DECAL")
+
+	
+	(controller $Instance renderer='DecalsNotAvailable'
+		(bind enabled "!isDecalsAvailable")
+		(args
+			_text = "peculiarityPref.value	? canEquipDecal	? 'IDS_EXTERIOR_TYPE_DECAL_NOT_ALLOWED_CAMO'
+															: 'IDS_EXTERIOR_TYPE_DECAL_NOT_ALLOWED_SHIP'
+											: 'IDS_INFO_PECULIARITY_DISABLED'"
+		)
+	)
+
+	
+	(controller $Instance renderer='DecalPage'
+		(bind enabled "isDecalsAvailable")
+	)
+)
+
+(def element DecalPage ()
+	(scope
+		(struct stageSize = STAGE_SIZE())
+
+		(macro PULL_SHIP_ID)
+
+		(var allDecalsCollection:dhCollection = "getCollection(CC.exteriorDecal)")
+		(var hasNoDecals:bool =	"!toBool(allDecalsCollection.length)")
+
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"	_validValues = "[ SC.Context_guiding_tip.TIP_TYPE.DECALS_FINAL_REPEAT ]"))
+
+		(struct topGuidingOffset = ADAPTIVE_VERTICAL_SIZE(
+			_minStageHeight =	720px
+			_minValue =			-32px
+			_maxStageHeight =	1080px
+			_maxValue =			-200px
+			_stageHeight =		"stageSize.height"
+		))
+	)
+
+	(name = 'DecalPage')
+
+	(macro DEFAULT_CACHED_SHOW_ANIMATION 1.5)
+
+	(style
+		(width = "EXTERIOR_CONTENT_WIDTH")
+		(maxHeight = 100%)
+		(paddingTop = "{ 720:SXS, 900:L }")
+		(marginLeft = "{ 1280:SXS, 1920:L }")
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		(element BlurMapRoundedWithLayerContrastPanel)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style
+				(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.DARK_BLUE")
+				(borderRadius = "XS")
+				(alpha = 0.2)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(width = 100%)
+			(padding = "MS")
+		)
+
+		(element ShipLineItemNM
+			_width = '100%'
+			_shipId = "playerShipId"
+			_fontClass = '$TextDefaultBold22NM'
+			_withFlag = true
+		)
+	)
+
+	
+	(scrollArea
+		(style
+			(width = 100%)
+			(maxHeight = 100%)
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_singleStep = "200px"
+			_wheelScrollAcceleration = "0.8"
+			_isContrastScrollBar = "true"
+			_hasVerticalBorderOffset = "true"
+			_hasHorizontalBorderOffset = "true"
+		)
+
+		(content
+			(style
+				(width = 100%)
+				(paddingLeft = "MS")
+				(paddingRight = "MS")
+				(paddingBottom = "MS")
+			)
+
+			
+			(block
+				(style
+					(width = 100%)
+					(vgap = "MS")
+				)
+
+				(controller $Repeat renderer='DecalGroups'
+					(bind enabled "!hasNoDecals")
+					(bind items "SC.Common.EXTERIOR_DECAL_GROUPS.SORT_ORDER")
+					(args
+						_decalCollectionGroup = "$item"
+					)
+				)
+			)
+
+			
+			(block
+				(bind visible "hasNoDecals")
+				(style
+					(align = "middle")
+					(height = 280px)
+					(width = 100%)
+				)
+
+				(controller $Instance renderer='SimpleLockPlug'
+					(bind enabled "hasNoDecals")
+					(args
+						_text = 'IDS_EXTERIOR_TYPE_DECAL_NOT_ENOUGH'
+						_size = "SIZE.SMALL"
+					)
+				)
+			)
+		)
+
+		(bindcall scrollToBegin animated=false on='addedToStage')
+	)
+
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "checkedTipId.value")
+		(args
+			_tipId =			"checkedTipId.value"
+			_tipPositioning =	"TIP_POSITION_RIGHT"
+			_offsetX =			"XS"
+			_offsetY =			"topGuidingOffset.value"
+			_noPointer =		true
+			_hasFinishButton =	true
+			_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+			_hasAssistant =		true
+		)
+	)
+)
+
+(def element DecalGroups (_decalCollectionGroup:str)
+	(scope
+		(var decalCollection:dhCollection = "getCollectionByPath(CC.exteriorDecal, 'byGroup.' + _decalCollectionGroup)")
+		(var decaleGroupName:str = "'DECALS_' + toUpper(_decalCollectionGroup)")
+		(var subGroupSortOrder:array = "SC.Common[decaleGroupName].SORT_ORDER")
+
+		(var isUniqueCollection:bool = "_decalCollectionGroup == SC.Common.EXTERIOR_DECAL_GROUPS.UNIQUE")
+	)
+
+	(bind name "'DecalGroup_' + _decalCollectionGroup")
+
+	(style (width = 100%))
+
+	
+	(tf
+		(bind visible "decalCollection && decalCollection.length > 0")
+		(class $TextDefaultBold18NM)
+		(style
+			(width = 100%)
+			(marginBottom = "SXS")
+			(alpha = "TA")
+		)
+
+		(bind text "'IDS_SHIP_DECAL_GROUP_' + _decalCollectionGroup")
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(vgap = "MS")
+		)
+
+		(controller $Repeat renderer='DecalSubGroup'
+			(bind enabled "decalCollection && decalCollection.length > 0")
+			(bind count "subGroupSortOrder.length")
+			(args
+				_groupName = "_decalCollectionGroup"
+				_subGroupName = "isUniqueCollection ? '' : subGroupSortOrder[$index]"
+			)
+		)
+	)
+)
+
+(def element DecalSubGroup (_groupName:str, _subGroupName:str)
+	(scope
+		(var collectionPath:str = "_subGroupName ? 'byGroup.' + _groupName + '.bySubGroup.' + _subGroupName : 'byGroup.' + _groupName")
+		(var decalsSubGroupCollection:dhCollection = "getCollectionByPath(CC.exteriorDecal, collectionPath)")
+		(var decalsSubGroupCollectionLength:number = "decalsSubGroupCollection.length")
+		(struct decalPrice = PULL_PRICE(_entityId = "decalsSubGroupCollection.getEntityAtIndex(0).exteriorDecal.id" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+	)
+
+	(bind name "'DecalSubGroup_' + _subGroupName")
+
+	(style (width = 100%))
+
+	(block
+		(bind visible "decalPrice.info.finalPrice > 0")
+		(style (paddingBottom = "SXS"))
+		(controller $Instance renderer = 'PriceTag'
+			(bind enabled "decalPrice.info.finalPrice > 0")
+			(args
+				_priceInfo = "decalPrice.info"
+				_showDiscountTag = true
+			)
+		)
+	)
+
+	
+	(htile
+		(style
+			(width = 100%)
+			(gap = "S")
+		)
+
+		(controller $DynamicRepeat renderer='DecalItem'
+			(bind items "decalsSubGroupCollection")
+			(args
+				_decalGroupType =	"_groupName"
+				_subGroupName =		"_subGroupName"
+				_decalEntity =		"$item"
+				_groupLength =		"decalsSubGroupCollectionLength"
+			)
+
+			(itemWidth = "SHIP_EXTERIOR_ITEM_SIZE")
+			(itemHeight = "SHIP_EXTERIOR_ITEM_SIZE")
+			(itemOffset = "SHIP_EXTERIOR_ITEM_SIZE * 2")
+			(sharedCache = true)
+		)
+	)
+)
+
+(def element DecalsNotAvailable (_text:str)
+	(scope
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"	_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.DECALS_CANT_INSTALL_ON_SHIP,
+																											SC.Context_guiding_tip.TIP_TYPE.DECALS_CANT_INSTALL_ON_CAMO ]"))
+	)
+
+	(macro DEFAULT_CACHED_SHOW_ANIMATION 1.5)
+
+	(class $Fullsize)
+	(style
+		(align = "center|top")
+		(marginTop = "XXL")
+	)
+
+	(name = 'DecalNotAvailable')
+
+	(block
+		(element DockTabWarningPlug
+			_text = "_text"
+		)
+
+		(controller $Instance renderer='GuidingTipHub'
+			(bind enabled "checkedTipId.value")
+			(args
+				_tipId =			"checkedTipId.value"
+				_tipPositioning =	"TIP_POSITION_BOTTOM"
+				_offsetX =			0
+				_offsetY =			"M"
+				_noPointer =		true
+				_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+				_hasAssistant =		true
+			)
+		)
+	)
+)

@@ -39,10 +39,7 @@
 		(var hasShipRole:bool = "!shipRole.empty")
 
 		
-		(var isShipExpVisible:bool = "isOwned && isBlockInRepairDockVisible && !_isResurrectionModal")
-
-		
-		(var exp:number = "ownShipInfo.exp ?: 0" (event "ownShipInfo.evUpdateConfig"))
+		(var exp:number = "upgradableShipInfo.exp ?: 0" (event "upgradableShipInfo.evUpdateConfig"))
 		(var expInfo:dict = "{ finalPrice: exp, currency: SC.Common.CURRENCIES.XP}")
 
 		(var isSpecial:bool = "shipInfo.isSpecial" (event "shipInfo.evUpdate"))
@@ -56,12 +53,21 @@
 		(var isNeedRepair:bool = "ownShipInfo.isNeedRepair" (event "ownShipInfo.evUpdateDockState"))
 		(var isNeedServiceVisible:bool = "isNeedRepair && isBlockInRepairDockVisible")
 
-		(var isPrimary:bool = "ownShipInfo.isPrimary"	(event "ownShipInfo.evIsPrimaryChanged"))
+		(var shipGroupKey:str = "ownShipInfo.favoriteGroupKey ?: ''" (event "ownShipInfo.evFavoriteGroupKeyChanged"))
+
 		(var isEventLike:bool = "shipInfo.isEventLike"	(event "shipInfo.evUpdate"))
-		(var isPrimaryVisible:bool = "isPrimary && isBlockInRepairDockVisible")
+		(var isShipGroupVisible:bool = "!shipGroupKey.empty && isBlockInRepairDockVisible")
+
+		(var shipProgressEntity:dhEntity = "getPrimaryEntity(CC.shipResearchProgress, shipId)")
+		(var shipResearchProgress:dhComponent = "shipProgressEntity.shipResearchProgress")
+		(var isResearchReady:bool = "shipResearchProgress.isResearchReady" (event "shipResearchProgress.evChanged"))
+		(var expCost:number = "shipResearchProgress.expCost" (event "shipResearchProgress.evChanged"))
+		(var shipExp:number = "shipResearchProgress.clampedShipExp" (event "shipResearchProgress.evChanged"))
 
 		
-		(var shipComponentEntity:dhEntity = "getPrimaryEntity(CC.shipComponent, shipId)")
+		(var isShipExpVisible:bool = "(isOwned || exp > 0)  &&  isBlockInRepairDockVisible && !_isResurrectionModal")
+
+		
 		(var shipMaterialEntity:dhEntity = "getPrimaryEntity(CC.shipMaterial, shipLevel)")
 		(var shipMaterialsCount:number = "shipMaterialEntity.shipMaterial.count ?: 0" (event "shipMaterialEntity.shipMaterial.evChanged"))
 		(var isAvailableForCraftingStatus:bool = "shipMaterialsCount >= SHIP_SHARDS.SHIP_CRAFTING_COST && !_isRewards && _isShipComponentsCarousel")
@@ -101,21 +107,12 @@
 																	: SC.Ui_styles.UNIFIED_STATUS.DEFAULT")
 
 		
-		(var shipNameIDS:str = "shipInfo.nameIDS" (event "shipInfo.evUpdate"))
-		(var isPaperShip:bool = "shipInfo.isPaperShip" (event "shipInfo.evUpdate"))
-
-		(var yearInfo:str = "(isPaperShip ? tr('IDS_PROJECT_YEAR') : tr('IDS_RELEASE_YEAR')) + tr('IDS_COLON') + ' ' + tr(shipNameIDS + '_YEAR')")
-		(var seriesInfo:str = "tr('IDS_SHIPS_IN_SERIES') + tr('IDS_COLON') + ' ' + tr(shipNameIDS + '_NUMBER')")
-		(var isSeriesInfoVisible:bool = "!isPaperShip")
-
-		(var description:str = "shipNameIDS + '_DESCR'")
-
-		
 		(struct shipExplorePrice =	PULL_PRICE(_entityId = "toString(shipId)" _actionId = "SC.Common.PRICE_ACTION.RESEARCH"))
 		(struct shipBuyPrice =		PULL_PRICE(_entityId = "toString(shipId)" _actionId = "SC.Common.PRICE_ACTION.BUY"))
 
 		(var isPurchasePriceVisible:bool = "shipBuyPrice.info && !isOwned && !_isRewards && !(isEventLike || isEarlyAccess) && !isInRepairDock && !_isResurrectionModal")
-		(var isResearchPriceVisible:bool = "shipExplorePrice.info && !isExplored && !isSuperShip && isPurchasePriceVisible && !_isResurrectionModal")
+		(var isResearchPriceVisible:bool = "shipExplorePrice.info && !isExplored && !isResearchReady && !isSuperShip && isPurchasePriceVisible && !_isResurrectionModal")
+		(var isResearchProgressVisible:bool = "!isExplored && shipExp > 0 && !isResearchReady")
 		(var isUpgradeableExclOrUlt:bool = "shipGroup == SC.Ships.SHIP_GROUPS.UPGRADEABLE_EXCL || shipGroup == SC.Ships.SHIP_GROUPS.UPGRADEABLE_ULT")
 
 		
@@ -149,12 +146,23 @@
 										_isFromTTX		? [	{	text: 'IDS_TTX_WIDGET_SHIP_MOUSE_INSTRUCTION',
 																unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT }]
 														: []")
+
+		(var shipGroupUnifiedStatus:str = "	shipGroupKey == SC.Common.SHIP_FAVORITES_FILTER_TYPE.GREEN	?	SC.Ui_styles.UNIFIED_STATUS.SHIP_GROUP_GREEN :
+											shipGroupKey == SC.Common.SHIP_FAVORITES_FILTER_TYPE.YELLOW	?	SC.Ui_styles.UNIFIED_STATUS.SHIP_GROUP_YELLOW :
+											shipGroupKey == SC.Common.SHIP_FAVORITES_FILTER_TYPE.RED	?	SC.Ui_styles.UNIFIED_STATUS.SHIP_GROUP_RED :
+											shipGroupKey == SC.Common.SHIP_FAVORITES_FILTER_TYPE.PURPLE	?	SC.Ui_styles.UNIFIED_STATUS.SHIP_GROUP_PURPLE :
+											shipGroupKey == SC.Common.SHIP_FAVORITES_FILTER_TYPE.BLUE	?	SC.Ui_styles.UNIFIED_STATUS.SHIP_GROUP_BLUE
+																										:	''")
 	)
 	
 	(bindcall externalCall 'direct.action' "[_isCompare ? 'make_compareShipParams_list' : 'make_tooltipShipParams_list', {shipId: shipId}]" init=false watch=false (event "evStartShow"))
 
-	(style (hitTest = false) (width = 340px))
+	(style
+		(hitTest = false)
+		(width = 340px)
+	)
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND_MARKUP)
+
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 
 		(block
@@ -175,6 +183,7 @@
 				)
 			)
 		)
+
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "_hasShipImage"))
@@ -266,6 +275,21 @@
 			)
 		)
 
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isResearchReady"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isResearchReady")
+				(args
+					_text = 'IDS_SHIP_READY_RESEARCH'
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.READY_RESEARCH"
+				)
+			)
+		)
+
 		
 		(block
 			(style (width = 100%))
@@ -289,6 +313,29 @@
 		
 		(block
 			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isResearchProgressVisible"))
+		)
+		(block
+			(bind visible "isResearchProgressVisible")
+			(style (width = 100%))
+			(macro TOOLTIP_SYSTEM_INNER_PANEL_BACKGROUND)
+
+			(controller $Instance renderer='TooltipSystemProgressBarBlock'
+				(bind enabled "isResearchProgressVisible")
+				(args
+					_title = 'IDS_SHIP_RESEARCH_PROGRESS'
+					_currentValue = "shipExp"
+					_maxValue = "expCost"
+					_barColor = "SC.Ui_styles.SERVICE_COLORS.GRAY"
+					_showPercent = false
+					_progressIconPath = 'url:../service_kit/currencies/icon_exp_small.png'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPurchasePriceVisible"))
 		)
 		(block
@@ -305,15 +352,15 @@
 		
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isPrimaryVisible"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isShipGroupVisible"))
 		)
 		(block
 			(style (width = 100%))
 			(controller $Instance renderer='TooltipSystemStatusLine'
-				(bind enabled "isPrimaryVisible")
+				(bind enabled "isShipGroupVisible")
 				(args
-					_text = 'IDS_TOOLTIP_PRIMARY_SHIP'
-					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.PRIMARY"
+					_text = 'IDS_TOOLTIP_SHIP_IN_GROUP'
+					_unifiedStatus = "shipGroupUnifiedStatus"
 				)
 			)
 		)
@@ -649,11 +696,11 @@
 	(scope
 		(var comparison:dhComponent = "getSingleComponent(CC.comparison)")
 		
-		(var tooltipTTX:dict = "comparison.tooltipTTX" (event "comparison.evTooltipTTXChanged"))
-		(var compareTTX:dict = "_isReversedCompare	? comparison.compareReversedTTX
-													: comparison.compareTTX" (event "comparison.evCompareTTXChanged"))
+		(var tooltipTTX:dhStruct = "comparison.tooltipTTX" (event "comparison.evTooltipTTXChanged"))
+		(var compareTTX:dhStruct = "_isReversedCompare	? comparison.compareReversedTTX
+														: comparison.compareTTX" (event "comparison.evCompareTTXChanged"))
 
-		(var displayTTX:dict = "_isCompare ? compareTTX : tooltipTTX")
+		(var displayTTX:dhStruct = "_isCompare ? compareTTX : tooltipTTX")
 	)
 	(style (width = 100%))
 	
@@ -667,7 +714,7 @@
 (def element TooltipSystemShipIntegralParamsResurrection ()
 	(scope
 		(var avatarResurrectionComponent:dhComponent = "getSingleComponent(CC.avatarResurrection)")
-		(var tooltipTTX:dict = "avatarResurrectionComponent.shipTooltipTTX" (event "avatarResurrectionComponent.evShipTooltipTTXChanged"))
+		(var tooltipTTX:dhStruct = "avatarResurrectionComponent.shipTooltipTTX" (event "avatarResurrectionComponent.evShipTooltipTTXChanged"))
 	)
 
 	(style (width = 100%))

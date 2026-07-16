@@ -1,0 +1,281 @@
+(def element ModalModernizationFromAnotherShip (_itemToMountEntity:dhEntity, _shipId:number, _slotId:number, _installedModId:number)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(event evSetScrollToFirstItem)
+		(event ItemChooser_sortingOptionSelected)
+		(event evShipRowSelectableChanged)
+
+		(struct stageSize = STAGE_SIZE())
+
+		(var modernizationComponent:dhComponent =	"_itemToMountEntity.modernization")
+		(var name:str =								"modernizationComponent.name ?: ''")
+		(var rarity:number =						"modernizationComponent.rarity")
+		(var isRecommended:bool =					"modernizationComponent.isRecommended" (event "modernizationComponent.evIsRecommendedChanged"))
+
+		(var resourceEntity:dhEntity = "getSingleEntity(CC.accountResource)")
+		(var accountGold:number	= "resourceEntity.accountResource.gold ?: 0" (event "resourceEntity.accountResource.evChangedGold"))
+
+		(struct unmountPrice = PULL_PRICE(_entityId = "'MODS_COST_Demontage'" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(var goldDeficit:number = "unmountPrice.info.finalPrice - accountGold")
+		(var isDeficit:bool = "goldDeficit > 0")
+
+		(var installedOnShips:array = "modernizationComponent.installedOnShips" (event "modernizationComponent.evInstalledOnShipsChanged"))
+
+		
+		(struct shipsSortingIndexPref = GET_PREF_NUMBER(_option = "'ui.swapModernization.sorting.sortIndex'"))
+		(var selectedSortingOptionIndex:number = "shipsSortingIndexPref.value")
+		(struct shipsSortingReversedPref = GET_PREF_BOOL(_option = "'ui.swapModernization.sorting.isReversed'"))
+		(var isSortingReversed:bool = "shipsSortingReversedPref.value")
+		
+
+		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
+	)
+
+	(bindcall externalCall "'direct.action'"	"['option.set',		[ 'ui.swapModernization.sorting.sortIndex',		$event.selectedIndex ]]"	(event "ItemChooser_sortingOptionSelected"))
+	(bindcall externalCall "'direct.action'"	"['option.set',		[ 'ui.swapModernization.sorting.isReversed',	$event.direction ]]"		(event "ItemChooser_sortingOptionSelected"))
+	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "selectedSortingOptionIndex"))
+	(dispatch evSetScrollToFirstItem	dir="EventDirection.DOWN"	(bind trigger "isSortingReversed"))
+
+	(bindcall externalCall "activeTip.chainId == SC.Context_guiding_tip.TIP_CHAIN_ID.MODERNIZATION_FROM_ANOTHER_SHIP ? 'inputMapping.onAction' : ''" "['deactivateCurrentTipChain', {'tip_id': activeTip.chainId}]" watch=false on='addedToStage')
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+		(element CurrenciesPanel
+			_priceInfo = "[{currency: unmountPrice.info.currency, finalPrice: -unmountPrice.info.finalPrice}]"
+			_width = 404px
+			_paddingBottom = 0px
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+		(style
+			(marginBottom = "SXS")
+			(marginTop = "SXS")
+			(width = 100%)
+			(align = "middle|center")
+		)
+		(element ModalWindowSystemExpendableIconWithHeaderAndSubheader
+			_headerIconType =	'ModalWindowSystemModernizationIcon'
+			_imageWidth =		60px
+			_imageHeight =		60px
+			_maxWidth =			488px
+			_headerText =		"'IDS_TITLE_' + name"
+			_subheaderText =	"'IDS_MODERNIZATION_' + SC.Common.UNIFIED_ITEM_RARITY.VALUE_TO_NAME[rarity]"
+			_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.DEFAULT"
+			_data = 			"{name: name, isRecommended: isRecommended}"
+		)
+	)
+
+	(hblock
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(style
+			(align = "middle")
+			(marginBottom = 6px)
+		)
+
+		(block
+			(style (marginRight = "S"))
+
+			(element ImageButton
+				_width =			24px
+				_height =			24px
+				_backgroundImage =	"isSortingReversed ? 'url:../service_kit/buttons/icons/sort_up.png' : 'url:../service_kit/buttons/icons/sort_down.png'"
+				_methods =			"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.swapModernization.sorting.isReversed', !isSortingReversed ] }]"
+			)
+
+			(controller $Tooltip
+				(renderer='SimpleStatusTooltip')
+				(args
+					_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					_text =				'IDS_HINT_SHIP_EXP_FILTERING_SORT_SET_REVERSE'
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+
+		(element ItemChooser
+			_items =							"[ 'IDS_SHIP_SORT_NATION', 'IDS_SHIP_SORT_CLASS', 'IDS_SHIP_SORT_LEVEL' ]"
+			_curIndex =							"selectedSortingOptionIndex"
+			_curDirection =						"isSortingReversed"
+			_onItemSelectedEvent =				'sortingOptionSelected'
+			_itemChooserTooltipUnifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+			_itemChooserTooltipText =			'IDS_HINT_SHIP_FILTERING_SORT'
+			_dropDownWidth =					160px
+			_name =								'ShipWithModernizationOrdering'
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+		(style
+			(width = 404px)
+			(marginBottom = "M")
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(bind maxHeight "	stageSize.height <= 1080	?	{720:230px, 1080:354px}	:
+									stageSize.height <= 1440	?	{1080:354px, 1440:495px}
+																:	{1440:495px, 2000:1220px}")
+			)
+
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_singleStep = "SHIP_ROW_HEIGHT"
+				_wheelScrollAcceleration = "0.8"
+				_maxScrollingAnimatedDistance = "280"
+			)
+
+			(repeatController = 'shipExpConvertItemRenderer')
+			(scrollPerItem = true)
+
+			(content
+				(style
+					(width = 100%)
+					(vgap = "XS")
+				)
+
+				(controller $DynamicRepeat renderer='ShipWithModernizationSelect' name='shipExpConvertItemRenderer'
+					(bind count "installedOnShips.length")
+					(args
+						_shipId =	"installedOnShips[$index]"
+					)
+					(itemHeight =	"SHIP_ROW_HEIGHT")
+					(itemOffset =	"SHIP_ROW_HEIGHT * 2")
+				)
+			)
+			(bindcall scrollToBegin animated=false (event "evSetScrollToFirstItem"))
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.7)
+		(style (width = 100%))
+		(element HorizontalDividerTwoPx)
+	)
+
+	(block
+		(bind visible "isDeficit")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+		(style
+			(width = 100%)
+			(align = "middle|center")
+			(marginTop = "MS")
+		)
+
+		(tf
+			(class $TextDefault26NM)
+			(style (textColor = "SC.Ui_styles.SERVICE_COLORS.ORANGE"))
+			(text = 'IDS_NOT_ENOUGH_FUNDS')
+		)
+	)
+
+	(block
+		(bind visible "isDeficit")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+		(style
+			(width = 100%)
+			(align = "middle|center")
+			(marginTop = "SXS")
+			(marginBottom = 22px)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	0.15
+				from	 =	"{ alpha: 0, ubScaleY: 0 }"
+				to		 =	"{ alpha: 1, ubScaleY: 1 }"
+				easing	 =	"Easing.quad_out"
+				action	 =	"kill"
+				reverse	=	"!isDeficit"
+				(bind trigger "isDeficit")
+			)
+		)
+
+		(controller $Instance renderer='PriceDeficit'
+			(bind enabled "isDeficit")
+			(args
+				_priceInfo =	"{currency: SC.Common.CURRENCIES.GOLD}"
+				_deficit =		"goldDeficit"
+				_size =			"SIZE.MEDIUM"
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isDeficit")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
+
+		(style
+			(marginTop = "MS")
+			(width = 100%)
+			(align = "middle|center")
+		)
+
+		(tf
+			(class $TextDefault26NM)
+			(style (alpha = "TC"))
+			(text = 'IDS_UNMOUNT_MODERNIZATION_FROM_SELECTED')
+		)
+
+		(hblock
+			(style
+				(marginTop = "SXS")
+				(marginBottom = 22px)
+			)
+
+			(element PriceTagWithQuestion
+				_questionText =		"_installedModId ? 'IDS_SHIP_FOR' : 'IDS_AND_INSTALL_ON_THIS_SHIP'"
+				_priceInfo =		"unmountPrice.info"
+				_size =				"SIZE.LARGE"
+				_alpha = 			"TC"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+		(style
+			(align = "center|middle")
+			(width = 100%)
+		)
+		(element ModalWindowSystemYesNoButtons
+			_isBtnOkEnabled =			"!isDeficit"
+			_btnOkMethods = "[{	type:	'inputMapping.onRequest',
+								name:	'setModernizations',
+								args:	_installedModId	? {	slotId:						_slotId,
+															unmountFlag:				SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET,
+															waitAndOpenReplaceWindow:	true}
+														: {	shipId:			_shipId,
+															slotId:			_slotId,
+															modAdd:			_itemToMountEntity.modernization.modId,
+															mountFlag:		SC.Common.LOBBY_CONSTANTS.MODERNIZATION_SET,
+															unmountFlag:	SC.Common.LOBBY_CONSTANTS.MODERNIZATION_UNSET}}]"
+			_btnOkFocusIndex =			2
+			_btnNoLabel = 				"!isDeficit ? 'IDS_NO' : 'IDS_CLOSE_UPPER_CASE'"
+			_btnNoFocusIndex =			3
+		)
+	)
+)
+
+(def element ShipWithModernizationSelect(_shipId:number)
+	(scope
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var ownShipInfo:dhComponent = "shipEntity.ownShip")
+		(var isForModernizationSwap:bool =	"ownShipInfo.isSelectedForModernizationSwap"	(event "ownShipInfo.evIsSelectedForModernizationSwapChanged"))
+	)
+
+	(style (width = 100%))
+
+	(element ShipRowSelectableElement
+		_shipId =					"_shipId"
+		_hasMouseInstructions =		true
+		_canDeselect =				false
+		_isSelected =				"isForModernizationSwap"
+		_mouseInstructionsSelect = 	'IDS_HINT_LEFT_SELECT_SHIP_FOR_MOD_UNMOUNT'
+		_methods =					"[{ type:	'inputMapping.onAction',	name: 'selectShipForModernizationSwap',	args: { shipId: _shipId } }]"
+	)
+)

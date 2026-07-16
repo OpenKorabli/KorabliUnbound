@@ -1,5 +1,3 @@
-(def constant SHIP_ROW_HEIGHT 48px)
-
 (def constant SHIP_ROW_ITEM_ALPHA {
 	SC.Ui_styles.BUTTON_STATE.DISABLED		: 0.2,
 	SC.Ui_styles.BUTTON_STATE.SELECTED		: 1,
@@ -9,7 +7,7 @@
 	SC.Ui_styles.BUTTON_STATE.UP			: 1
 })
 
-(def element ModalWindowConvertExp (convertionType:number = "SC.Common.EXCHANGE_EXP_INSET.SHIP_XP")
+(def element ModalWindowConvertExp (convertionType:number = "SC.Common.EXCHANGE_EXP_INSET.SHIP_XP") 
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
 
@@ -235,19 +233,19 @@
 						(renderer='SimpleStatusTooltip')
 						(args
 							_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-							_text =				'IDS_HINT_SHIP_EXP_FILTERING_SORT_SET_REVERSE'
+							_text =				'IDS_HINT_SHIP_FILTERING_SORT_SET_REVERSE'
 						)
 						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 					)
 				)
 
 				(element ItemChooser
-					_items =							"[ 'IDS_SHIP_EXP_SORT_DEFAULT', 'IDS_SHIP_EXP_SORT_NATION', 'IDS_SHIP_EXP_SORT_CLASS', 'IDS_SHIP_EXP_SORT_LEVEL' ]"
+					_items =							"SHIP_LIST_SORTING_OPTIONS"
 					_curIndex =							"selectedSortingOptionIndex"
 					_curDirection =						"isSortingReversed"
 					_onItemSelectedEvent =				'sortingOptionSelected'
 					_itemChooserTooltipUnifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
-					_itemChooserTooltipText =			'IDS_HINT_SHIP_EXP_FILTERING_SORT'
+					_itemChooserTooltipText =			'IDS_HINT_SHIP_FILTERING_SORT'
 					_dropDownWidth =					160px
 					_name =								'ShipExpConvertOrdering'
 				)
@@ -360,13 +358,10 @@
 							(vgap = "XS")
 						)
 
-						(controller $DynamicRepeat renderer='ShipRowSelectableElement' name='shipExpConvertItemRenderer'
-							(bind count "ships.length")
+						(controller $DynamicRepeat renderer='ShipForExpConversionSelect' name='shipExpConvertItemRenderer'
+							(bind items "ships")
 							(args
-								_shipEntity =			"ships.getEntityAtIndex($index)"
-								_hasPriceTag =			true
-								_hasMouseInstructions =	true
-								_hideLowerDivider =		"$index == ships.length - 1"
+								_shipId =	"$item.ship.id"
 							)
 							(itemHeight =	"SHIP_ROW_HEIGHT")
 							(itemOffset =	"SHIP_ROW_HEIGHT * 2")
@@ -679,41 +674,34 @@
 	)
 )
 
-(def constant SHIP_ROW_ITEM_TYPE {
-	0	: 'EXP_CONVERT',
-	1	: 'SNOWFLAKES'
-})
-
-(def element ShipRowSelectableElement (	_shipEntity:dhEntity, _hasPriceTag:bool, _hasMouseInstructions:bool = false, _hideLowerDivider:bool = false, _isAllSelected:bool = false,
-										_isSnowflakesModal:bool = false, _isLocked:bool = false, _isConfirmedList:bool = false, _needSelectionChange:bool = false)
+(def element ShipRowSelectableElement (	_shipId:number,
+										_priceInfo:dict,
+										_hasMouseInstructions:bool =		false,
+										_mouseInstructionsSelect:str =		'IDS_HINT_LEFT_SELECT_SHIPS',
+										_mouseInstructionsDeselect:str =	'IDS_HINT_LEFT_DESELECT_SHIPS',
+										_isInactive:bool =					false,
+										_isViewOnly:bool =					false,
+										_canDeselect:bool =					true,
+										_isSelected:bool =					false,
+										_methods:array =					[])
 	(scope
 		(macro MOUSE_HANDLER_SCOPE)
 
-		(var upgradableShipInfo:dhComponent =	"_shipEntity.upgradableShipInfo")
-		(var upgradableShipInfoExp:number =		"upgradableShipInfo.exp ?: 0"	(event "upgradableShipInfo.evUpdate"))
-		(var isOwnShip:bool =					"_shipEntity.hasComponent(CC.ownShip)")
-		(var shipId:number =					"_shipEntity.ship.id")
+		(var isSelected:bool =			"_isSelected")
 
-		(var bonusTagIndex:number =		"_shipEntity.ship.bonusTags.length == 1 ? 0 : 1")
-		(var bonusTagEntityId:number =	"_shipEntity.ship.bonusTags[bonusTagIndex]")
-		(var bonusTagEntity:dhEntity =	"getEntity(bonusTagEntityId)")
-		(var rewards:array =			"bonusTagEntity.bonusTag.rewards")
+		(var isInactive:bool =			"_isInactive")
+		(var instructionText:str =		"!isSelected		?	_mouseInstructionsSelect :
+										_canDeselect		?	_mouseInstructionsDeselect
+															:	''")
 
-		(var isSelectedDH:bool =			"upgradableShipInfo.isSelectedForExpConversion"	(event "upgradableShipInfo.evIsSelectedForExpConversionChanged"))
-		(var isSnowflakeShipSelected:bool =	"_shipEntity.ship.isSelectedForSnowflakes"		(event "_shipEntity.ship.evIsSelectedForSnowflakesChanged"))
-		(var isSelected:bool =				"_isSnowflakesModal ? isSnowflakeShipSelected : isSelectedDH")
+		(var hasMouseInstructionsTooltip:bool =	"!isInactive && _hasMouseInstructions && instructionText")
 
-		(var isInactive:bool =			"_isAllSelected && !isSelected || _isLocked")
-		(var hasMouseInstructionsTooltip:bool =	"!isInactive && !_isSnowflakesModal")
-		(var hasRewardsTooltip:bool =			"!isInactive && _isSnowflakesModal && _hasMouseInstructions")
-		(var instructionText:str =		"isSelected ? 'IDS_HINT_LEFT_DESELECT_SHIPS' : 'IDS_HINT_LEFT_SELECT_SHIPS'")
-
-		(var state:number = "	_isConfirmedList		? SC.Ui_styles.BUTTON_STATE.UP :
-								isInactive				? SC.Ui_styles.BUTTON_STATE.DISABLED :
-								mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
-								isSelected && rollOver	? SC.Ui_styles.BUTTON_STATE.SELECTED_OVER :
-								isSelected				? SC.Ui_styles.BUTTON_STATE.SELECTED :
-								rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
+		(var state:number = "	_isViewOnly				? SC.Ui_styles.BUTTON_STATE.UP :
+								 isInactive				? SC.Ui_styles.BUTTON_STATE.DISABLED :
+								 mouseDown				? SC.Ui_styles.BUTTON_STATE.DOWN :
+								 isSelected && rollOver	? SC.Ui_styles.BUTTON_STATE.SELECTED_OVER :
+								 isSelected				? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								 rollOver				? SC.Ui_styles.BUTTON_STATE.OVER
 														: SC.Ui_styles.BUTTON_STATE.UP")
 	)
 
@@ -732,17 +720,6 @@
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 
-	(controller $Tooltip
-		(renderer = 'SnowflakesRewardsTooltip')
-		(bind enabled "hasRewardsTooltip")
-		(args
-			_rewards =			"rewards"
-			_isSelected =		"isSelected"
-			_isConfirmAction =	"_isConfirmedList"
-		)
-		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-	)
-
 	
 	(block
 		(style
@@ -753,12 +730,10 @@
 			(top = "-XS")
 		)
 
-		
 		(macro MOUSE_HANDLER
-			_enabled =	"!(_isSnowflakesModal && isInactive)"
-			_soundSet =	"isInactive || _isConfirmedList ? '' : 'button_secondary'"
-			_methods =	"[	{ type: 'inputMapping.onAction',								name: 'selectShipForConvert',	args: { shipId: shipId } },
-							{ type: _needSelectionChange ? 'inputMapping.onAction' : '',	name: 'changeSelection',		args: { shipId: shipId, selectionState: !isSelected } } ]"
+			_enabled =	"!isInactive"
+			_soundSet =	"isInactive || _isViewOnly ? '' : 'button_secondary'"
+			_methods =	"_methods"
 		)
 	)
 
@@ -779,7 +754,6 @@
 			(paddingLeft = "MS")
 			(paddingRight = "SXS")
 			(alpha = "SHIP_ROW_ITEM_ALPHA[state]")
-			(bind marginBottom "_isSnowflakesModal && !_isConfirmedList ? 5 : 0")
 		)
 
 		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
@@ -788,13 +762,10 @@
 		)
 
 		(block
-			(style
-				(width = 100%)
-				(bind alpha "isOwnShip ? 1 : 0.5")
-			)
+			(style (width = 100%))
 
 			(element ShipLineItemNM
-				_shipId =		"shipId"
+				_shipId =		"_shipId"
 				_withFlag =		true
 				_fontClass =	'$TextDefaultBold18NM'
 			)
@@ -802,22 +773,36 @@
 
 		(block
 			(controller $Instance renderer='PriceTag'
-				(bind enabled "_hasPriceTag")
+				(bind enabled "_priceInfo")
 				(args
-					_priceInfo =	"{ finalPrice: upgradableShipInfoExp, currency: SC.Common.CURRENCIES.XP }"
+					_priceInfo =	"_priceInfo"
 					_size =			"SIZE.MEDIUM"
 				)
 			)
 		)
 	)
+)
 
-	(block
-		(style
-			(hitTest = false)
-			(width = 100%)
-		)
-		(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "_isSnowflakesModal && !_hideLowerDivider"))
+(def element ShipForExpConversionSelect(_shipId:number)
+	(scope
+		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, _shipId)")
+		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo")
+		(var isSelectedDH:bool =			"upgradableShipInfo.isSelectedForExpConversion"	(event "upgradableShipInfo.evIsSelectedForExpConversionChanged"))
+		(var upgradableShipInfoExp:number =		"upgradableShipInfo.exp ?: 0"	(event "upgradableShipInfo.evUpdate"))
 	)
+
+	(name = 'ShipExpConvertItemRenderer')
+	(style (width = 100%))
+
+	(element ShipRowSelectableElement
+		_shipId =				"_shipId"
+		_isSelected =			"isSelectedDH"
+		_hasPriceTag =			true
+		_hasMouseInstructions =	true
+		_priceInfo =			"{ finalPrice: upgradableShipInfoExp, currency: SC.Common.CURRENCIES.XP }"
+		_methods =				"[{ type: 'inputMapping.onAction',								name: 'selectShipForConvert',			args: { shipId: _shipId } }]"
+	)
+
 )
 
 (def element ShipsSelectTooltip (_priceInfo:dict, _showPrice:bool, _text:str, _instructionText:str)

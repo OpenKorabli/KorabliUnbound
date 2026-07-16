@@ -1,0 +1,240 @@
+(def struct PULL_SAGA_TIMER (_component:dhComponent)
+	(struct serverTime = SERVER_TIME())
+
+	(var finalStatsTime:number =	"_component.finalStatsTime ?: 0"	(event "_component.evChanged"))
+	(var finishTime:number =		"_component.finishTime ?: 0"		(event "_component.evChanged"))
+
+	(var rewardsClaimTimeLeft:number =		"finishTime - serverTime.value")
+	(var progressionTimeLeft:number =		"finalStatsTime - serverTime.value")
+	(var isLastProgressionDay:bool =		"progressionTimeLeft > 0 && progressionTimeLeft < DAY_IN_SEC")
+	(var isLastRewardsClaimDay:bool =		"rewardsClaimTimeLeft > 0 && rewardsClaimTimeLeft < DAY_IN_SEC")
+	(var isFinalStatsTimeReached:bool =		"progressionTimeLeft <= 0")
+
+	(struct progressionFinishTime =			COUNTDOWN(_time = "finalStatsTime" _serverTime = "serverTime.value" _format = "isLastProgressionDay ? 'hh:mm:ss' : 'HIGHEST,WITH_DAYS'"))
+	(struct countdownRewardsClaimUntil =	COUNTDOWN(_time = "finishTime" _serverTime = "serverTime.value" _format = "isLastRewardsClaimDay ? 'hh:mm:ss' : 'HIGHEST,WITH_DAYS'"))
+)
+
+(def struct EXTRACT_SAGA_ID ()
+	(var sagaRouteEntity:dhEntity =			"getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.SAGA)")
+	(var routeDataComponent:dhComponent =	"sagaRouteEntity.dataComponent")
+	(var data:dict =						"routeDataComponent.data ?: {}"		(event "routeDataComponent.evDataChanged"))
+	(var value:str =						"data.sagaID")
+)
+
+(def element SagaHeader (_header:str, _route:str)
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(struct windowQueue =		PULL_WINDOW_QUEUE())
+		(var isInOnboarding:bool =	"isIn('ModalWindowSagaOnboarding', windowQueue.queue)")
+
+		(struct sagaID = EXTRACT_SAGA_ID())
+		(var sagaEntity:dhEntity =			"getPrimaryEntity(CC.saga, sagaID.value)")
+		(var saga:dhComponent =				"sagaEntity.saga")
+
+		(struct sagaTimer = PULL_SAGA_TIMER(_component = "saga"))
+	)
+
+	(macro DEFAULT_MODAL_WINDOW_ANIMATION_EXPRESSION "isInOnboarding ? 0 : 1")
+
+	(style
+		(position = "absolute")
+		(width = 100%)
+		(height = { 720: 50px, 1080: 100px })
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = "SAGA_TEXTURES.SERVICE_KIT.GRADIENTS.TOP")
+			(backgroundSize = "fill")
+			(alpha = 0.75)
+		)
+	)
+
+	(block
+		(class $Fullsize)
+		(style
+			(align = "center")
+			(paddingLeft = "L")
+			(paddingRight = "L")
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(flow = "reverse_horizontal")
+				(top = "{ 720: MS, 1080: L }")
+				(right = 0px)
+				(hgap = "M")
+			)
+
+			(block
+				(element SagaDefaultButton
+					_name =			'btn_close'
+					_type =			"SAGA_BUTTON_TYPE.ICON"
+					_icon =			'close'
+					_methods =		"isInOnboarding		? [{ type: 'inputMapping.onRequest',	name: 'goBack',		args: {} }]
+														: [{ type: 'inputMapping.onRequest',	name: 'goToPort',	args: {} }]"
+				)
+
+				(controller $Tooltip
+					(renderer = 'SimpleStatusTooltip')
+					(args
+						_text =				'IDS_SAGA_WINDOW_CLOSE'
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(block
+				(controller $Instance renderer='SagaDefaultButton'
+					(bind enabled "!isInOnboarding")
+					(args
+						_name =			'btn_about'
+						_width =		108px
+						_height =		32px
+						_type =			"SAGA_BUTTON_TYPE.SECONDARY"
+						_label =		'IDS_SAGA_BUTTON_ABOUT'
+						_methods =		"[{ type: 'inputMapping.onRequest',	name: 'showSagaOnboarding',	args: {} }]"
+					)
+				)
+			)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(top = "{ 720: S, 1080: L }")
+			)
+
+			(controller $Instance renderer='SagaServiceStatesContainer'
+				(bind enabled "!isInOnboarding && !sagaTimer.isFinalStatsTimeReached")
+				(args
+					_route = "_route"
+				)
+			)
+		)
+
+		(tf
+			(class $TextDefaultBold26NM)
+			(style
+				(marginTop = "{ 720: M, 1080: LM }")
+				(alpha = "TA")
+			)
+
+			(bind text "_header ? toUpper(tr(_header)) : ''")
+		)
+	)
+)
+
+(def element SagaServiceStatesContainer (_route:str)
+	(scope
+		(struct routeNarrativeData =	ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.SAGA_NARRATIVE"))
+		(struct routeArchiveData =		ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.SAGA_ARCHIVE"))
+	)
+
+	(style
+		(flow = "horizontal")
+		(hgap = "M")
+	)
+
+	(element SagaScrollButton
+		_isActive =		"_route == SC.Ui_windows.ROUTE.SAGA_NARRATIVE"
+		_type =			"SAGA_SCROLL_BUTTON_TYPE.STORY"
+		_methods =		"[{ type: 'inputMapping.onAction',	name: 'navigateTo',	args: { route: SC.Ui_windows.ROUTE.SAGA_NARRATIVE } }]"
+		_isDisabled =	"!routeNarrativeData.isEnabled"
+	)
+
+	(element SagaScrollButton
+		_isActive =		"_route == SC.Ui_windows.ROUTE.SAGA_ARCHIVE"
+		_type =			"SAGA_SCROLL_BUTTON_TYPE.ARCHIVE"
+		_methods =		"[{ type: 'inputMapping.onAction',	name: 'navigateTo',	args: { route: SC.Ui_windows.ROUTE.SAGA_ARCHIVE } }]"
+		_isDisabled =	"!routeArchiveData.isEnabled"
+	)
+
+	(element SagaScrollButton
+		_isActive =		"_route == SC.Ui_windows.ROUTE.SAGA_JOURNEY"
+		_type =			"SAGA_SCROLL_BUTTON_TYPE.JOURNEY"
+		_methods =		"[{ type: 'inputMapping.onAction',	name: 'navigateTo',	args: { route: SC.Ui_windows.ROUTE.SAGA_JOURNEY } }]"
+	)
+)
+
+(def element SagaActingCharacterNarrativeWidget (_image:str, _name:str)
+	(style (flow = "horizontal"))
+
+	(block
+		(style
+			(align = "center|middle")
+			(width = "SAGA_ELEMS.EPISODE.PORTRAIT.CONTAINER.WIDTH")
+			(height = "SAGA_ELEMS.EPISODE.PORTRAIT.CONTAINER.HEIGHT")
+			(backgroundImage = "SAGA_TEXTURES.PANELS.PORTRAIT.EPISODE_AND_FORK_BG")
+		)
+
+		(block
+			(style
+				(width = "SAGA_ELEMS.EPISODE.PORTRAIT.SELF.WIDTH")
+				(height = "SAGA_ELEMS.EPISODE.PORTRAIT.SELF.HEIGHT")
+				(bind backgroundImage "_image")
+				(backgroundSize = "contain")
+			)
+		)
+	)
+
+	(hblock
+		(style
+			(height = 50px)
+			(borderRadiusTopRight = 25px)
+			(backgroundColor = "SAGA_COLORS.MAIN.UP")
+		)
+
+		(block
+			(style
+				(align = "center|middle")
+				(width = 50px)
+				(height = 100%)
+			)
+
+			(element SagaPlayVoiceButton)
+		)
+
+		(block
+			(style
+				(width = 1px)
+				(height = 100%)
+				(backgroundColor = "SAGA_COLORS.PAPER")
+				(alpha = 0.1)
+			)
+		)
+
+		(block
+			(style
+				(height = 100%)
+				(paddingTop = 18px)
+				(paddingLeft = "MS")
+				(paddingRight = 52px)
+			)
+
+			(tf
+				(class $TextDefaultBold22NMWithoutShadow)
+				(style (alpha = "TA"))
+
+				(bind text "toUpper(tr(_name))")
+			)
+		)
+	)
+)
+
+(def element SagaCurrencyWithTooltip (_finalPrice:number = 0)
+	(element PriceTag
+		_priceInfo = "{ finalPrice: _finalPrice, currency: SC.Common.CURRENCIES.SAGA_PROGRESS }"
+	)
+
+	(controller $Tooltip
+		(renderer = 'SimpleStatusTooltip')
+		(args
+			_text = 'IDS_SAGA_PROGRESS_CURRENCY_TITLE'
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)

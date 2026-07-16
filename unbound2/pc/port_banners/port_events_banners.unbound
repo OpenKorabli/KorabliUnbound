@@ -136,6 +136,7 @@
 				(width = 100%)
 				(gap = "S")
 			)
+
 			(controller $Repeat renderer='EventBannerTileRenderer'
 				(bind count "tiles.length")
 				(args
@@ -393,10 +394,10 @@
 		(event evDeclareScrollTargetIndex)
 
 		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
-		(var isMotivator:bool = "tileContentInfo.contentId == SC.Common.TILE_CONTENT.MOTIVATOR")
-		(var bannerRenderer:str = "	tileContentInfo.contentId in BANNERS_CONFIG	? 'EventBannerContentCommon' :
-									isMotivator									? 'EventBannerMotivator'
-																				: 'EventBannerContentCustom'")
+		(var isMotivator:bool = "tileContentInfo.contentType == SC.Common.TILE_CONTENT.MOTIVATOR")
+		(var bannerRenderer:str = "	tileContentInfo.contentType in BANNERS_CONFIG	? 'EventBannerContentCommon' :
+									isMotivator										? 'EventBannerMotivator'
+																					: 'EventBannerContentCustom'")
 
 		(var bannerBounds:array =		"$globalLayoutBounds" (event "$evLayoutBoundsChanged"))
 		(var bannerTopPoint:number =	"bannerBounds[1]")
@@ -435,7 +436,7 @@
 
 		(struct tileContent = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
 
-		(var commonBannerRenderer:str = "tileContent.contentId in BANNERS_CONFIG ? BANNERS_CONFIG[tileContent.contentId].bannerContent : ''")
+		(var commonBannerRenderer:str = "tileContent.contentType in BANNERS_CONFIG ? BANNERS_CONFIG[tileContent.contentType].bannerContent : ''")
 	)
 	(class $Fullsize)
 
@@ -455,6 +456,7 @@
 			_guidingOffsets = "_guidingOffsets"
 			_screenOffsetRight = "_screenOffsetRight"
 			_bannerHeight = "EVENT_BANNER_SIZE[tileContent.tileSize].bannerHeight"
+			_entityContentId = "_entityContentId"
 		)
 	)
 
@@ -577,16 +579,14 @@
 		(var unclaimedRewardsCollection:dhCollection = "getCollectionByPath(CC.battlePassReward, 'unclaimedRewards')")
 		(var hasReward:bool = "unclaimedRewardsCollection.length > 0")
 
-		(var battlePassCurrentLevelEntity:dhEntity = "getSingleEntity(CC.battlePassCurrentLevel)")
-		(var battlePassLevel:dhComponent = "battlePassCurrentLevelEntity.battlePassLevel")
-		(var curLevel:number = "battlePassLevel.level" (event "battlePassLevel.evChanged"))
+		(struct battlePassCurrentLevel = PULL_BATTLEPASS_CURRENT_LEVEL())
 
 		(var mainProgressionCollection:dhCollection = "getCollectionByPath(CC.battlePassLevel, 'mainProgression')")
 		(var mainProgressionLength:number = "mainProgressionCollection.length ?: 0")
 
-		(var battlePassPostProgressionLevelComponent:dhComponent = "battlePassCurrentLevelEntity.battlePassPostProgressionLevel")
+		(var battlePassPostProgressionLevelComponent:dhComponent = "battlePassCurrentLevel.entity.battlePassPostProgressionLevel")
 		(var countCompleted:number = "battlePassPostProgressionLevelComponent.countCompleted" (event "battlePassPostProgressionLevelComponent.evChanged"))
-		(var level:number = "countCompleted ? curLevel + countCompleted : curLevel")
+		(var level:number = "countCompleted ? battlePassCurrentLevel.level + countCompleted : battlePassCurrentLevel.level")
 		(var isPostProgression:bool = "battlePassPostProgressionLevelComponent != null")
 
 
@@ -625,7 +625,7 @@
 			(controller $Instance renderer = 'DefaultDividedCounter'
 				(bind enabled "!hasReward && !isPostProgression")
 				(args
-					_curValue = "curLevel-1"
+					_curValue = "battlePassCurrentLevel.level-1"
 					_maxValue = "mainProgressionLength"
 					_doNotAlphaOnZeroCurValue = true
 					_curValueTextClass = '$TextDefaultBold22NM'
@@ -694,7 +694,7 @@
 
 		(var state:number = "strategicActionsEventComponent.state" (event "strategicActionsEventComponent.evStateChanged"))
 
-		(var isAnyRewardClaim:bool = "strategicActionsEventComponent.isAnyRewardClaim" (event "strategicActionsEventComponent.evChanged"))
+		(var isAnyRewardClaim:bool = "strategicActionsEventComponent.isAnyRewardClaim" (event "strategicActionsEventComponent.evIsAnyRewardClaimChanged"))
 
 		(var isActive:bool =				"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.ACTIVE")
 		(var isCompleted:bool =				"state == SC.Common.STRATEGIC_ACTIONS_EVENT_STATE.COMPLETED")
@@ -2451,5 +2451,83 @@
 			_isNewMarker = "markerData.isVisible"
 			_size = "_size"
 		)
+	)
+)
+
+(def element EventBannerSaga (_entityContentId:number = 0)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(struct tileContentInfo = GET_TILE_CONTENT_INFO(_entityContentId="_entityContentId"))
+
+		(var sagaID:str =			"tileContentInfo.tileContent.contentId")
+		(var sagaEntity:dhEntity =	"getPrimaryEntity(CC.saga, sagaID)")
+		(var saga:dhComponent =		"sagaEntity.saga")
+
+		(var sagaName:str =					"saga.name"					(event "saga.evChanged"))
+		(var areRewardsAvailable:bool =		"saga.rewardsAvailable"		(event "saga.evChanged"))
+
+		(var bgPostfix:str = "SC.Ui_common.TILE_SIZE.VALUE_TO_NAME[tileContentInfo.tileSize]")
+		(var bgImage:str = "tileContentInfo.tileSize != SC.Ui_common.TILE_SIZE.S ? 'img://gui/events/banners/saga/' + toLower(sagaName) + '/banner_' + bgPostfix + '.png' : ''")
+
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.SAGA_BANNER"))
+
+		(var isNewMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW")
+
+	)
+
+	(class $Fullsize)
+	(style
+		(bind backgroundImage "bgImage")
+		(backgroundSize = "contain")
+	)
+
+	(macro DEFAULT_CONTROL_STATE_ANIMATION_CT " mouseHandler.mouseDown	? COLOR_TRANSFORM_MOUSE_DOWN :
+												mouseHandler.rollOver	? COLOR_TRANSFORM_MOUSE_OVER
+																		: CT_NONE")
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+	(macro STRUCT_SOUND_HANDLER
+		_mouseHandler =	"mouseHandler"
+		_soundSet =		"'button_banner'"
+	)
+	(macro STRUCT_CLICK_HANDLER
+		_mouseHandler =	"mouseHandler"
+		_methods =		"[	{ type: 'inputMapping.onAction',	name: 'navigateTo',							args: {	route:	SC.Ui_windows.ROUTE.SAGA,
+																												data:	{ sagaID: sagaID } } },
+							{ type: 'inputMapping.onAction',	name: isNewMarkerVisible ? 'makeSeen' : '',	args: {	entityId: sagaEntity.id } } ]"
+	)
+
+	(controller $Instance renderer='EventBannerMarkers'
+		(bind enabled "markerData.isVisible")
+		(args
+			_isActionMarker =	"markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION"
+			_isRewardMarker =	"markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.REWARD"
+			_isNewMarker =		"isNewMarkerVisible"
+			_size =				"tileContentInfo.tileSize"
+			_text =				"markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION ? 'IDS_SAGA_BANNER_MARKER_NEW_CHAPTER' : ''"
+		)
+	)
+
+	(block
+		(class $EventBannerReward)
+		(controller $Instance renderer='EventBannerIcon'
+			(bind enabled "areRewardsAvailable")
+			(args
+				_icon =			'url:../service_kit/port_banner/icon_banner_reward.png'
+				_isAnimated =	"areRewardsAvailable"
+				_size =			"tileContentInfo.tileSize"
+			)
+		)
+	)
+
+	(controller $Tooltip
+		(bind renderer "SAGA_BANNERS_TOOLTIP_RENDERERS[sagaName]")
+		(args
+			_sagaID = "sagaID"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )

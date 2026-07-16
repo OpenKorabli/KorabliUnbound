@@ -40,11 +40,11 @@
 		(var countCompletedMissions:number = "isMainTaskDone ? allMissionsCount : activeMissionIndex")
 
 		(var missionsAndTasksCounterData:array = "[	{	title: 'IDS_MISSIONS',
-														isCampaignViewed: campaignParams.isViewed,
+														isProgressVisible: toBool(countCompletedTasks),
 														currentCount: countCompletedMissions,
 														maxCount: allMissionsCount},
 													{	title: 'IDS_CAMPAIGN_TASKS',
-														isCampaignViewed: campaignParams.isViewed,
+														isProgressVisible: toBool(countCompletedTasks),
 														currentCount: countCompletedTasks,
 														maxCount: countTasks}
 													]")
@@ -145,6 +145,11 @@
 		(var campaignMissionParams:dhComponent =	"campaignMissionEntity.campaignMissionParams")
 		(var campaignMissionPlayer:dhComponent =	"campaignMissionEntity.campaignMissionPlayer")
 
+		(var missionStartTime:number = "campaignMissionParams.startTime")
+		(struct serverTime =			SERVER_TIME())
+		(struct formattedTimeLeft =		COUNTDOWN(_time = "missionStartTime" _serverTime = "serverTime.value" _format = 'HIGHEST'))
+		(var isMissionNotStarted:bool = "(missionStartTime - serverTime.value) > 0")
+
 		(var campaignEntity:dhEntity = "getPrimaryEntity(CC.campaignParams, campaignMissionParams.campaignID)")
 		(var campaignParams:dhComponent = "campaignEntity.campaignParams")
 		(var campaignAllMissionsLen:number = "campaignParams.allMissions.length ?: 0")
@@ -208,7 +213,8 @@
 									isTaskLocked										? { text: 'IDS_TASK_LOCKED',				unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.LOCK }
 																						: { text: 'IDS_TASK_NOT_DONE',				unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DEFAULT }")
 
-		(var mouseInstructionData:dict = "	missionState == SC.Ui_common.CAMPAIGN_STATE.LOCKED	? { text: 'IDS_LOCKED_MISSION_TOOLTIP',		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION } :
+		(var mouseInstructionData:dict = "	missionState == SC.Ui_common.CAMPAIGN_STATE.LOCKED	? isMissionNotStarted	? { text: subst('IDS_LOCKED_MISSION_TIME_LEFT_TOOLTIP', [], {_timeLeft: formattedTimeLeft.value}), unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION }
+																														: { text: 'IDS_LOCKED_MISSION_TOOLTIP', unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION } :
 											!haveFreeSlot && isTaskOpened						? { text: 'IDS_TOOLTIP_NEED_FREE_SLOT',		unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION } :
 											isTaskOpened 	  									? { text: 'IDS_TASK_ACTIVATE',				unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT } :
 											isTaskSelected && !hasTaskProgress					? { text: 'IDS_TASK_CANCEL',				unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT } :
@@ -434,13 +440,13 @@
 			_title = "_data[$index].title"
 			_currentCount = "_data[$index].currentCount"
 			_maxCount = "_data[$index].maxCount"
-			_isCampaignViewed = "_data[$index].isCampaignViewed"
+			_isProgressVisible = "_data[$index].isProgressVisible"
 		)
 	)
 )
 
 
-(def element CampaignCounterLine (_title:str, _currentCount:number, _maxCount:number, _isCampaignViewed:bool)
+(def element CampaignCounterLine (_title:str, _currentCount:number, _maxCount:number, _isProgressVisible:bool)
 	(style
 		(width = 100%)
 		(flow = "horizontal")
@@ -464,16 +470,16 @@
 		(style (marginBottom = "-XXS"))
 
 		(tf
-			(bind visible "_isCampaignViewed")
+			(bind visible "_isProgressVisible")
 			(class $TextDefaultNM)
-			(style (bind alpha "_currentCount == 0 ? TS : TC"))
+			(style (alpha = "TC"))
 			(bind text "_currentCount")
 		)
 
 		(tf
 			(class $TextDefaultNM)
-			(style (bind alpha "_isCampaignViewed ? TS : TC"))
-			(bind text "_isCampaignViewed	? ' /' + _maxCount
+			(style (bind alpha "_isProgressVisible ? TS : TC"))
+			(bind text "_isProgressVisible	? ' /' + _maxCount
 											: _maxCount")
 		)
 	)
@@ -488,9 +494,9 @@
 		(var campaignMissionEntity:dhEntity = "getPrimaryEntity(CC.campaignMissionParams, _curCampaignMissionId)")
 
 		(var missionStartTime:number = "campaignMissionEntity.campaignMissionParams.startTime")
-		(var serverTime:number = "currentServerSeconds()" (event "evInfrequent"))
-		(var missionTimeToStart:number = "missionStartTime - serverTime")
-		(var formatStartTime:str = "formatTime(missionTimeToStart, 'HIGHEST')")
+		(struct serverTime =			SERVER_TIME())
+		(struct formattedTimeLeft =		COUNTDOWN(_time = "missionStartTime" _serverTime = "serverTime.value" _format = 'HIGHEST'))
+		(var isMissionNotStarted:bool = "(missionStartTime - serverTime.value) > 0")
 
 		(var missionProgress:number = "campaignMissionEntity.progress.value" (event "campaignMissionEntity.progress.evChanged"))
 		(var missionProgressMax:number = "campaignMissionEntity.progress.max" (event "campaignMissionEntity.progress.evChanged"))
@@ -513,16 +519,16 @@
 		(var showFinalTask:bool = "stateMission != SC.Ui_common.CAMPAIGN_STATE.LOCKED && stateMission != SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS && stateMission != SC.Ui_common.CAMPAIGN_STATE.COMPLETED")
 		(var showProgressCompleteMission:bool = "stateMission != SC.Ui_common.CAMPAIGN_STATE.LOCKED && stateMission != SC.Ui_common.CAMPAIGN_STATE.COMPLETED && starsToMainTask >= costUnlock")
 
-		(var statusMission:dict = "	stateMission == SC.Ui_common.CAMPAIGN_STATE.LOCKED && missionTimeToStart > 0	?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
-																															text: subst('IDS_LOCKED_MISSION_TIME_LEFT_TOOLTIP', [], {_timeLeft: formatStartTime})} :
-									stateMission == SC.Ui_common.CAMPAIGN_STATE.LOCKED								?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
-																															text: 'IDS_LOCKED_MISSION_TOOLTIP'} :
-									stateMission == SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS && isMainTaskDone		?	hasFinalTaskCampaign	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
-																																					text: 'IDS_TOOLTIP_CAMPAIGN_FINAL_TASK_DONE'}
-																																				: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
-																																					text: 'IDS_TOOLTIP_MISSION_FINAL_TASK_DONE'} :
-									stateMission == SC.Ui_common.CAMPAIGN_STATE.COMPLETED							?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
-																															text: 'IDS_MISSION_STATE_COMPLETED'}
+		(var statusMission:dict = "	stateMission == SC.Ui_common.CAMPAIGN_STATE.LOCKED && isMissionNotStarted	?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.DATE_ATTENTION,
+																														text: subst('IDS_LOCKED_MISSION_TIME_LEFT_TOOLTIP', [], {_timeLeft: formattedTimeLeft.value})} :
+									stateMission == SC.Ui_common.CAMPAIGN_STATE.LOCKED							?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																														text: 'IDS_LOCKED_MISSION_TOOLTIP'} :
+									stateMission == SC.Ui_common.CAMPAIGN_STATE.OPENED_BOSS && isMainTaskDone	?	hasFinalTaskCampaign	? {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
+																																				text: 'IDS_TOOLTIP_CAMPAIGN_FINAL_TASK_DONE'}
+																																			: {	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
+																																				text: 'IDS_TOOLTIP_MISSION_FINAL_TASK_DONE'} :
+									stateMission == SC.Ui_common.CAMPAIGN_STATE.COMPLETED						?	{	unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.CHECK,
+																														text: 'IDS_MISSION_STATE_COMPLETED'}
 																													:	null")
 	)
 	(name = 'mission_tooltip')

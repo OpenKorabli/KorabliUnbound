@@ -1,8 +1,8 @@
 (def constant DOGTAG_BINDING	{	CONFIRM_WATCH_BATTLE: 	{	title:			"'IDS_CONFIRM_WATCH_BATTLE'",
-																values:			"[Cmd.CMD_SWITCH_CAMERA_SPECTATE]"
+																list:			"[Cmd.CMD_SWITCH_CAMERA_SPECTATE]"
 															},
 									CONFIRM_OUT_BATTLE: 	{	title:			"'IDS_CONFIRM_OUT_BATTLE'",
-																values:			"[Cmd.CMD_ESC]"
+																list:			"[Cmd.CMD_ESC]"
 															}
 })
 
@@ -10,41 +10,48 @@
 										DOGTAG_BINDING.CONFIRM_OUT_BATTLE
 									]")
 
-(def element KillerInfoContainer (_killerId:number)
+(def element KillerInfoContainer (_killerId:number, _isShow:bool, _isTacticalMap:bool)
 	(scope
 		(macro IS_SPECTATOR_MODE)
 		(var killerIsPlayer:bool = "_killerId != 0")
-
-		(var cameraComponent:gfx = "$datahub.getSingleComponent(CC.camera)") 
-		(var isTacticalMap:bool = "cameraComponent ? cameraComponent.isTactical : false" (event "cameraComponent.evTacticalStateChanged"))
 	)
 
 	(controller $Animation
-		(bindcall play to={alpha:0} duration=0.2 action="killAll" easing="Easing.sine_in" watch=false (bind enabled "isTacticalMap"))
-		(bindcall play to={alpha:1} duration=0.2 action="killAll" easing="Easing.sine_in" watch=false (bind enabled "!isTacticalMap"))
+		(bindcall play to={ alpha:0 } duration=0.2 action="kill" easing="Easing.sine_in" (bind enabled "_isTacticalMap"))
+		(bindcall play to={ alpha:1 } duration=0.2 action="kill" easing="Easing.sine_in" (bind enabled "!_isTacticalMap"))
 	)
+
 	(controller $Instance renderer='KillerPlayerInfo'
 		(bind enabled "killerIsPlayer && _killerId != null")
 		(args
 			_killerId = "_killerId"
+			_isShow = "_isShow"
 		)
 	)
 	
 	(controller $Instance renderer='KillerEventInfo'
 		(bind enabled "!killerIsPlayer && _killerId != null")
+		(args
+			_isShow = "_isShow"
+		)
 	)
 )
 
-(def element KillerPlayerInfo (_killerId:number) 
+(def element KillerPlayerInfo (_killerId:number, _isShow:bool) 
 	(scope
-		(macro SELF_AVATAR_ID)
-		(var timeToRespawn:number = "selfAvatarEntity ? selfAvatarEntity.playerAvatar.respawnEndTime : null" (event "selfAvatarEntity.playerAvatar.evRespawnEndTimeChanged"))
+		(event evDogTagAnimationWhoosh)
+		(event evDogTagAnimationHotkeys)
+
+		(var selfAvatarEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var selfAvatarId:number = "selfAvatarEntity ? selfAvatarEntity.avatar.id : INVALID_PLAYER_AVATAR_ID")
 
 		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
 		(var battleType:str = "battleInfoComponent.battleType")
 
-		(var killerEntity:gfx = "_killerId != 0 ? $datahub.getPrimaryEntity(CC.avatar, _killerId) : null")
-		(var killerRelation:number = "killerEntity ? killerEntity.relation.value : 0")
+		
+		(var killerEntityOld:gfx = "_killerId != 0 ? $datahub.getPrimaryEntity(CC.avatar, _killerId) : null")
+
+		(var killerEntity:dhEntity = "_killerId != 0 ? getPrimaryEntity(CC.avatar, _killerId) : null")
 		(var playerDbId:number = "killerEntity ? killerEntity.accountSimple.dbId : INVALID_PLAYER_AVATAR_ID")
 
 		(var isShipMasteryVisible:bool = "	battleType == SC.Common.BATTLE_TYPES.TRAINING_BATTLE ||
@@ -52,94 +59,186 @@
 											battleType == SC.Common.BATTLE_TYPES.RANDOM_BATTLE ||
 											battleType == SC.Common.BATTLE_TYPES.BRAWL_BATTLE")
 
-		(var isSelfTeamKiller:bool = "selfAvatarEntity ? selfAvatarEntity.avatar.isAbuser : false"  (event "selfAvatarEntity.avatar.evIsAbuserStatusChanged"))
+		(var isSelfTeamKiller:bool = "selfAvatarEntity.avatar.isAbuser" (event "selfAvatarEntity.avatar.evIsAbuserStatusChanged"))
 		(var isSuicide:bool = "_killerId == selfAvatarId")
-		(var avatarInfo:gfx = "selfAvatarEntity.accountInfo")
-		(var abuseStatus:number = "avatarInfo.abuseStatus" (event "avatarInfo.evAbuseStatusChanged"))
-		(var killerColorPresetName:str = "isSuicide && isSelfTeamKiller ?	'teamkiller'	
+
+		(var killerColorPresetName:str = "isSuicide && isSelfTeamKiller ?	'teamkiller'
 																		:	isSuicide		?	'division' 
 																							:	'enemy'")
-		(var dogTagViewComponent:gfx = "killerEntity ? killerEntity.dogTagView : null")
-		(var dogTagIdList:array = "dogTagViewComponent ? dogTagViewComponent.components : []" (event "dogTagViewComponent.evComponentsChanged"))
-	)
 
-	(style (height = "DOG_TAG_SIZE.MEDIUM") (flow = "horizontal") (align = "middle"))
-	
-	(block
-		(style (width = "DOG_TAG_SIZE.MEDIUM") (height = "DOG_TAG_SIZE.MEDIUM"))
-		(bind visible "dogTagIdList.length > 0")
-		
-		(controller $Instance renderer='PlayerDogTag'
-			(args
-				_playerId	= "playerDbId"
-				_size		= "DOG_TAG_SIZE.MEDIUM"
-			)
-		)
+		(var animatedDogTagSizeDir:str = "SC.Battle.DOG_TAG_SIZE.BIG")
+
+		(struct stageSize = STAGE_SIZE())
+		(var isSmallResolution:bool = "stageSize.width <= 1300 || stageSize.height < 960")
+		(var initDogTagScale:number = "isSmallResolution ? 1 : 0.7")
 	)
+	(bindcall externalCall "!isSmallResolution ? 'sound.playSetSoundDirect' : ''" "['dogtag_panel_dead', 'whoosh']" watch=false (event "evDogTagAnimationWhoosh"))
+
+	(style (align = "center"))
+
 	(block
-		(tf
-			(class $TextDefault18NM)
-			(style
-				(alpha = "TA")
-				(marginBottom = "XS")
+		(style
+			(align = "center")
+			(alpha = 0)
+			(visualOffsetY = -25px)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration = 0.25
+				delay = 2
+				from = "{ alpha: 0, visualOffsetY: -25px }"
+				to = "{ alpha: 1, visualOffsetY: 0px }"
+				easing = "Easing.quad_in"
+				action = "kill"
+				init = true
+				(bind enabled "_isShow")
 			)
+
+			(bindcall externalCall 'sound.playSetSoundDirect' "['dogtag_panel_dead', 'appear']" on='evAnimStarted')
+			(dispatch evDogTagAnimationWhoosh delay=2 dir="EventDirection.NONE" on='evAnimEnded')
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (marginBottom = "S"))
 			(text = 'IDS_DOGTAG_HUD_SHIP_IS_DEAD_OF_PLAYER') 
 		)
 
 		(element ShipBlock
-			_entity="killerEntity"
-			_textColor="TWO_TEAMS_COLOR[killerColorPresetName]"
-			_colorTransformation="TWO_TEAMS_COLOR_TRANSFORMS[killerColorPresetName]"
-			_textClass='$TextDefaultBold18NM'
+			_entity = "killerEntityOld"
+			_textColor = "TWO_TEAMS_COLOR[killerColorPresetName]"
+			_colorTransformation = "TWO_TEAMS_COLOR_TRANSFORMS[killerColorPresetName]"
+			_textClass = '$TextDefaultBold18NM'
 			_isShipMasteryVisible = "isShipMasteryVisible"
 		)
 
 		(block
-			(style (marginTop = "S"))
-			(controller $Repeat renderer='HotKeysDogTag'
-				(bind count "DOGTAG_BIND_LIST.length")
-				(args "DOGTAG_BIND_LIST[$index]")
+			(style
+				(bind scaleX "initDogTagScale")
+				(bind scaleY "initDogTagScale")
+			)
+	
+			(controller $Animation
+				(bindcall play
+					duration = 0.25
+					from = "{ scaleX: initDogTagScale, scaleY: initDogTagScale }"
+					to = "{ scaleX: 0.37, scaleY: 0.37 }"
+					easing = "Easing.quad_in"
+					action = "kill"
+					watch = false
+					(event "evDogTagAnimationWhoosh")
+					(bind enabled "!isSmallResolution")
+				)
+				(bind animatedDogTagSizeDir "SC.Battle.DOG_TAG_SIZE.MEDIUM" init=false on='evAnimEnded')
+			)
+	
+			(element PlayerDogTag
+				_playerId = "playerDbId"
+				_size = "isSmallResolution ? DOG_TAG_SIZE.MEDIUM : DOG_TAG_SIZE.BIG"
+				_forceAssetDir = "animatedDogTagSizeDir"
 			)
 		)
-	)
-)
 
-(def element KillerEventInfo () 
-	(style (height = "190px") (align = "middle"))
-	(block
-		(style (marginBottom = "SXS") (width = "190px") (align = "center"))
-		(tf
-			(class $TextDefaultBold18NM)
-			(style (alpha = "TA"))
-			(text = 'IDS_DOGTAG_HUD_SHIP_IS_DEAD') 
-		)
-	)
-	(block
-		(controller $Repeat renderer='HotKeysDogTag'
-			(bind count "DOGTAG_BIND_LIST.length")
-			(args "DOGTAG_BIND_LIST[$index]")
-		)
-	)
-)
-
-(def element HotKeysDogTag (data:dict)
-	(style (align = "middle") (alpha = "TA") (marginBottom = "S") (marginTop = "S") (flow = "horizontal"))
 		(block
-			(style (height = "1px") (width = "45px") (align = "right|middle"))
+			(style
+				(alpha = 0)
+				(marginTop = "M")
+			)
 
-			(controller $Repeat renderer='HotkeyIndicator'
-				(bind count "data.values.length")
-				(args 
-					_commandId="data.values[$index]"
-					_fxOnDown=false
-					_active=true
-					_size = "SIZE.LARGE"
+			(controller $Animation
+				(bindcall play
+					duration = 0.2
+					delay = 0.05
+					from = "{ alpha: 0 }"
+					to = "{ alpha: 1 }"
+					easing = "Easing.quad_in"
+					action = "kill"
+					(event "evDogTagAnimationWhoosh")
 				)
 			)
+
+			(element DogTagDeadBindList)
 		)
-		(tf
-			(style (align = "middle") (marginLeft = "SXS"))
-			(class $TextDefault18NM)
-			(bind text "data.title")
+	)
+)
+
+(def element KillerEventInfo (_isShow:bool) 
+	(style
+		(height = 190px)
+		(align = "middle")
+		(alpha = 0)
+		(visualOffsetY = -25px)
+	)
+
+	(controller $Animation
+		(bindcall play
+			duration = 0.25
+			delay = 2
+			from = "{ alpha: 0, visualOffsetY: -25px }"
+			to = "{ alpha: 1, visualOffsetY: 0px }"
+			easing = "Easing.quad_in"
+			action = "kill"
+			init = true
+			(bind enabled "_isShow")
 		)
+		(bindcall externalCall 'sound.playSetSoundDirect' "['dogtag_panel_dead', 'appear']" on='evAnimStarted')
+	)
+
+	(tf
+		(class $TextDefaultBold18NM)
+		(style
+			(width = 100%)
+			(textAlign = "center")
+			(marginBottom = "SXS")
+		)
+		(text = 'IDS_DOGTAG_HUD_SHIP_IS_DEAD') 
+	)
+
+	(element DogTagDeadBindList)
+)
+
+(def element DogTagDeadBindList ()
+	(style (vgap = "M"))
+
+	(controller $Repeat renderer='HotKeysDogTag'
+		(bind count "DOGTAG_BIND_LIST.length")
+		(args
+			_data = "DOGTAG_BIND_LIST[$index]"
+		)
+	)
+)
+
+(def element HotKeysDogTag (_data:dict)
+	(style
+		(flow = "horizontal")
+		(align = "middle")
+	)
+
+	(block
+		(style
+			(height = 1px)
+			(width = 45px)
+			(align = "right|middle")
+		)
+
+		(controller $Repeat renderer='HotkeyIndicator'
+			(bind count "_data.list.length")
+			(args 
+				_commandId = "_data.list[$index]"
+				_fxOnDown = false
+				_active = true
+				_size = "SIZE.LARGE"
+			)
+		)
+	)
+
+	(tf
+		(class $TextDefaultBold18NM)
+		(style
+			(marginLeft = "S")
+			(alpha = "TA")
+		)
+		(bind text "_data.title")
+	)
 )

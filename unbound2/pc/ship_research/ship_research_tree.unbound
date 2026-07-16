@@ -11,18 +11,18 @@
 (def constant MIN_NODES_FOR_PARAGON_DROPS 10)
 (def constant INFO_ICON_SIZE 24)
 
-(def constant RESEARCH_TREE_SLOT_THUMB_STATE_ALPHA {	SC.Ui_styles.BUTTON_STATE.SELECTED:	0.15,
-														SC.Ui_styles.BUTTON_STATE.OVER: 	0.1,
-														SC.Ui_styles.BUTTON_STATE.DOWN: 	0.05,
-														SC.Ui_styles.BUTTON_STATE.UP: 		0 })
+(def constant SHIP_SLOT_STATE_ALPHA "{	SC.Ui_styles.BUTTON_STATE.UP:				TA,
+										SC.Ui_styles.BUTTON_STATE.DOWN:				0.5,
+										SC.Ui_styles.BUTTON_STATE.SELECTED:			1,
+										SC.Ui_styles.BUTTON_STATE.SELECTED_OVER:	1,
+										SC.Ui_styles.BUTTON_STATE.OVER:				1
+}")
 
-(def constant RESEARCH_TREE_SLOT_STATE_ALPHA {	DEFAULT:	1,
-												DISABLED:	0.3
-})
-
-(def constant RESEARCH_TREE_CONTENT_STATE_ALPHA {	DEFAULT:	1,
-													DISABLED:	0.3
-})
+(def constant RESEARCH_TREE_OVERLAY_SLOT_STATE_ALPHA {	SC.Ui_styles.BUTTON_STATE.SELECTED:			0,
+														SC.Ui_styles.BUTTON_STATE.OVER: 			1,
+														SC.Ui_styles.BUTTON_STATE.SELECTED_OVER: 	1,
+														SC.Ui_styles.BUTTON_STATE.DOWN: 			0,
+														SC.Ui_styles.BUTTON_STATE.UP: 				0 })
 
 (def constant RESEARCH_TREE_ARROW_STATE_ALPHA {		DISABLED:		0,
 													HIDDEN:			0.04,
@@ -57,7 +57,7 @@
 			id = 'ship_card_state_anim'
 			duration = 0.2
 			to = "{alpha: _alpha}"
-			easing = "Easing.quad_in"
+			easing = "Easing.quart_in"
 			action = "kill"
 			
 			(bind trigger "_alpha")
@@ -65,20 +65,48 @@
 	)
 )
 
+(def element SelectedShipEffect ()
+	(style
+		(hitTest = false)
+		(width = 200px)
+		(height = 104px)
+		(backgroundImage = 'url:../animations/spine/research/ship_selected_effect/ship_selected_effect.skel')
+		(backgroundSize = "cover")
+	)
+	(controller $Spine)
+)
+
+(def element ShipReadyResearchEffect ()
+	(scope
+		(event evStepGeneralAnimCycleStart)
+	)
+	(style
+		(hitTest = false)
+		(width = 200px)
+		(height = 104px)
+		(backgroundSize = "cover")
+		(backgroundImage = 'url:../animations/spine/research/ship_ready_research_effect/ship_ready_research_effect.skel')
+	)
+	(controller $Spine
+		(bindcall stop init=true)
+		(bindcall play sequence="{name: 'animation'}" (event "evStepGeneralAnimCycleStart"))
+	)
+)
+
 (def element ShipResearchMainInset(_previousRoute:str)
 	(scope
+		(event evStepGeneralAnimCycleStart)
 		(event evFirstNationChanged)
-		(macro STAGE_SIZE)
 
-		(macro GET_PREF 'isBlurOptionEnabled'		"'graphics.GUI.blur'")
-		(macro GET_PREF 'isUIContrastOptionEnabled'	"'graphics.GUI.contrast'")
-		(var isHighContrast:bool = "isUIContrastOptionEnabled || !isBlurOptionEnabled")
+		(struct isBlurOptionEnabledPref = GET_PREF_BOOL(_option="'graphics.GUI.blur'"))
+		(struct isContrastEnabledPref = GET_PREF_BOOL(_option="'graphics.GUI.contrast'"))
+
+		(var isHighContrast:bool = "isContrastEnabledPref.value || !isBlurOptionEnabledPref.value")
 
 		(struct skipBGAnimationData = SKIP_SHOW_ANIMATION(_previousRoute = "_previousRoute"))
 
 		(var researchRouteEntity:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.RESEARCH)")
 		(var researchRoute:dhComponent = "researchRouteEntity.route")
-		(var isInResearch:bool = "researchRoute.isActive" (event "researchRoute.evIsActiveChanged"))
 		(var currentActiveChild:str = "researchRoute.activeChild" (event "researchRoute.evActiveChildChanged"))
 
 		(var currentNationName:str = "null" watch=false)
@@ -91,6 +119,18 @@
 
 	(class $Fullsize)
 	(class $DockInsetPageSecondaryTabOffset)
+
+	
+	(controller $Animation
+		(bindcall play
+			duration = 1.75  
+			to = { alpha: 1 }
+			action = "kill"
+			repeatCount = -1
+			on='addedToStage'
+		)
+		(dispatch evStepGeneralAnimCycleStart dir="EventDirection.DOWN" on='evAnimRepeatCycleEnded')
+	)
 
 	(block
 		(class $DockInsetPageHeaderOffset)
@@ -129,7 +169,13 @@
 
 		
 		(block
-			(style (position = "absolute") (width = 100%) (height = 37px) (bottom = 0px) (hitTest = false))
+			(style
+				(hitTest = false)
+				(position = "absolute")
+				(width = 100%)
+				(height = 37px)
+				(bottom = 0px)
+			)
 			(block
 				(class $Fullsize)
 				(controller $Instance renderer='BlurMap'
@@ -168,7 +214,6 @@
 					(bind enabled "toBool(currentNationName)")
 					(args
 						_currentNationName = "currentNationName"
-						_isHighContrast = "isHighContrast"
 					)
 				)
 			)
@@ -179,20 +224,20 @@
 		
 		(block
 			(style
+				(hitTest = false)
 				(width = 100%)
 				(height = 40px)
-				(hitTest = false)
 			)
 			(element HorizontalDividerTwoPx)
 		)
 	)
 )
 
-(def element ShipResearchTree (_currentNationName:str, _isHighContrast:bool)
+(def element ShipResearchTree (_currentNationName:str)
 	(scope
 		(event evScrollToBottom)
-		(macro STAGE_SIZE)
 		(macro PULL_SHIP_ID)
+		(struct stageSize = STAGE_SIZE())
 
 		(var nationResearchArrows:dhComponent = "getPrimaryEntity(CC.nationResearchArrows, _currentNationName).nationResearchArrows")
 
@@ -209,7 +254,7 @@
 		(var paragonInfoEntity:dhEntity = "getSingleEntity(CC.paragonInfo)")
 		(var isDropNationAvailable:bool = "paragonInfoEntity.paragonInfo.dropNationAvailable" (event "paragonInfoEntity.paragonInfo.evUpdate"))
 
-		(var useClassGap:bool = "stageWidth > 1900")
+		(var useClassGap:bool = "stageSize.width > 1900")
 		(var maxNodesHorizonalWithGaps:number = "useClassGap	? maxNodesHorizontal + researchTreeElements.types.length
 																: maxNodesHorizontal + 1")
 		(var contentWidth:number = "maxNodesHorizonalWithGaps * SHIP_TREE_BLOCK_WIDTH + SHIP_TREE_TTX_RIGHT_PADDING + LM")
@@ -217,7 +262,7 @@
 		(var nodesHeight:number = "maxNodesVertical * SHIP_TREE_BLOCK_HEIGHT + L + XS")
 		(var contentHeight:number = "isParagonEnabled && isDropNationAvailable ? nodesHeight + LS : nodesHeight")
 
-		(var leftOffset:number = "LM + (contentWidth < stageWidth ? (stageWidth - contentWidth) / 2 : 0)")
+		(var leftOffset:number = "LM + (contentWidth < stageSize.width ? (stageSize.width - contentWidth) / 2 : 0)")
 
 		(var maxSessionShipLen:number = "researchTreeElements.shipIds.length" watch=false)
 		(bind maxSessionShipLen "max(researchTreeElements.shipIds.length, maxSessionShipLen)" init=false watch=false (bind trigger "researchTreeElements.shipIds.length"))
@@ -307,25 +352,110 @@
 			)
 
 			(block
-				(style (bind width "max(stageWidth, contentWidth + leftOffset)") (hitTest = false) (marginTop = "MS") (marginBottom = "LS"))
-				(controller $Instance renderer='HorizontalDividerTwoPx' (bind enabled "isParagonDropsEnabled"))
+				(style
+					(hitTest = false)
+					(marginTop = "MS")
+					(marginBottom = "LS")
+					(bind width "max(stageSize.width, contentWidth + leftOffset)")
+				)
+				(element HorizontalDividerTwoPx)
 			)
 
-			(block
-				(style (width = 100%) (paddingLeft = "LM"))
+			(hblock
+				(style
+					(width = 100%)
+					(paddingLeft = "XL")
+					(marginBottom = "XL")
+					(hgap = "{ 1280:XL, 1920:140px }")
+				)
 
-				(controller $Instance renderer='ParagonsResearchTreeFooter'
-					(bind enabled "isParagonDropsEnabled")
-					(args
-						_currentNationName = "_currentNationName"
+				(block
+					(controller $Instance renderer='ParagonsResearchTreeFooter'
+						(bind enabled "isParagonDropsEnabled")
+						(args
+							_currentNationName = "_currentNationName"
+						)
 					)
 				)
+
+				(element VehicleRestorationResearchTreeFooter)
 			)
 		)
 
 		(bindcall scrollToDirection horDir="ScrollDirection.LEFT" vertDir="ScrollDirection.TOP"		animated=false	on='addedToStage'	(bind enabled "_currentNationName != SC.Common.NATION.COMMONWEALTH") (bind trigger "_currentNationName"))
 		(bindcall scrollToDirection horDir="ScrollDirection.LEFT" vertDir="ScrollDirection.BOTTOM"	animated=false	on='addedToStage'	(bind enabled "_currentNationName == SC.Common.NATION.COMMONWEALTH") (bind trigger "_currentNationName"))
 		(bindcall scrollToDirection horDir="ScrollDirection.LEFT" vertDir="ScrollDirection.BOTTOM"	animated=true	maxAnimatedDistance=100	(event "evScrollToBottom"))
+	)
+)
+
+(def element ProgressShipResearch (_shipExp:number, _playersExp:number, _expCost:number)
+	(scope
+		(event evChangedPlayerExpWithDelay)
+
+		(var changedPlayersExp:bool = false)
+		(bind changedPlayersExp true init=false (bind trigger "_playersExp"))
+		(bind changedPlayersExp false init=false (event "evChangedPlayerExpWithDelay"))
+
+		(var widthFreeXpProgress:number = "_expCost > 0 ? toPercent((_playersExp / _expCost) * 100) : 0" watch=false)
+		(bind widthFreeXpProgress "changedPlayersExp	? widthFreeXpProgress
+														: _expCost > 0	? toPercent((_playersExp / _expCost) * 100)
+																		: 0" init=false watch=false (bind trigger "changedPlayersExp"))
+		(var widthShipXpProgress:number = "_expCost > 0 ? toPercent((_shipExp/ _expCost) * 100) : 0")
+	)
+	(dispatch evChangedPlayerExpWithDelay delay=0.15 reset=true (bind trigger "_playersExp"))
+
+	(style
+		(flow = horizontal)
+		(width = 100%)
+		(height = 3px)
+		(backgroundColor = 0x1affffff)
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(borderRadiusBottomLeft = "XS")
+			(borderRadiusBottomRight = "XS")
+		)
+		(isMask = true)
+	)
+
+	(block
+		(style
+			(bind width "widthShipXpProgress")
+			(height = 100%)
+			(backgroundColor = 0xbfffffff)
+		)
+		(macro CONTROL_VISIBLE_STATE_ANIMATION
+			_isTrigger="_shipExp > 0"
+			_duration = "0.2"
+		)
+	)
+
+	
+	(block
+		(style
+			(width = 2px)
+			(height = 100%)
+			(backgroundColor = 0x1affffff)
+		)
+		(macro CONTROL_VISIBLE_STATE_ANIMATION
+			_isTrigger="widthFreeXpProgress && _shipExp > 0"
+			_duration = "0.2"
+		)
+	)
+
+	(block
+		(style
+			(bind width "widthFreeXpProgress")
+			(height = 100%)
+			(backgroundColor = 0xffccff99)
+		)
+		(macro CONTROL_VISIBLE_STATE_ANIMATION
+			_isTrigger="widthFreeXpProgress"
+			_duration = "0.2"
+		)
 	)
 )
 
@@ -359,8 +489,10 @@
 
 (def element ShipTreeCard (_shipId:number, _useClassGap:bool=false, _gapCoords:array=[], _isNotShipTree:bool=false, _isNewMarker:bool=false, _isRelative:bool=false)
 	(scope
+		(event evChangedHighlightedWithDelay)
+		(event evContentLoadedWithDelay)
 		(event evMenuItemClicked)
-		(macro MOUSE_HANDLER_SCOPE)
+		(struct mouseHandler = MOUSE_HANDLER())
 
 		(var shipId:number = "_shipId" watch=false)
 		(bind shipId "_shipId != null ? _shipId : shipId" init=false watch=false (bind trigger "_shipId"))
@@ -375,7 +507,7 @@
 
 		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, shipId)")
 		(var shipInfo:dhComponent = "shipEntity.ship")
-		(var giftCounterComponent:dhComponent = "shipEntity.giftCounterComponent")
+
 		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo")
 		(var shipResearchTreeParams:dhComponent = "shipEntity.shipResearchTreeParams")
 		(var highlightState:number = "shipEntity.highlight.state" (event "shipEntity.highlight.evStateUpdated"))
@@ -412,7 +544,6 @@
 		(var expMultiply:number = "ownShipInfo.expMultiply ?: 0" (event "ownShipInfo.evExpMultiplyChanged"))
 		(var isBonusTagsVisible:bool = "!_isNotShipTree && (shipInfo.bonusTags.length > 0 || expMultiply > 1)" (event "shipInfo.evBonusTagsChanged"))
 
-
 		
 		(struct activeTip =			PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId =		SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.RESEARCH_SHIP,
@@ -429,7 +560,7 @@
 
 		(struct nationTreeFeature = FEATURES(_state = "SC.Common.ACCOUNT_FEATURE.NATIONS_TREE"))
 		(var isShipTreeMenuEnabled:bool = "!_isNotShipTree && isManagementAvailable && nationTreeFeature.state != 'locked'")
-		(var isContextMenuVisible:bool = "false")
+		(var isContextMenuVisible:bool = false)
 
 		(var priceInfo:dict = "	!isOwned && isResearchAvailable	?	isUpgradeableExclOrUlt	?	{	finalPrice: upgradableShipInfo.costFreeXP,
 																									currency: SC.Common.CURRENCIES.FREE_XP }
@@ -445,48 +576,80 @@
 		(var isActiveSale:bool = "	shipBuyPrice.info.finalPrice != shipBuyPrice.info.basePrice && !isOwned ||
 									shipExplorePrice.info.finalPrice != shipExplorePrice.info.basePrice && !isExplored")
 
-		(var expDeficit:number = "upgradableShipInfo.expDeficit" (event "upgradableShipInfo.evUpdate"))
-		(var creditsDeficit:number = "upgradableShipInfo.creditsDeficit ?: 0" (event "upgradableShipInfo.evUpdate"))
-
 		(var isHighlighted:bool = "highlightState == SC.Common.HIGHLIGHT.HIGHLIGHTED")
 		(var isHidden:bool = "highlightState == SC.Common.HIGHLIGHT.HIDDEN")
 
-		(var isActiveState:bool = "isResearchAvailable || isExplored || isEventLike || isEarlyAccess")
+		(var shipProgressEntity:dhEntity = "getPrimaryEntity(CC.shipResearchProgress, shipId)")
+		(var shipResearchProgress:dhComponent = "shipProgressEntity.shipResearchProgress")
+		(var isResearchReady:bool = "shipResearchProgress.isResearchReady" (event "shipResearchProgress.evChanged"))
+		(var hasMarkerReadyResearch:bool = "shipProgressEntity.hasComponent(CC.newItem)")
+		(var isNewResearchReady:bool = "hasMarkerReadyResearch && !isSelected")
 
-		(var isHighFrameAlphaShipGroup:bool = "	shipInfo.group != SC.Ships.SHIP_GROUPS.START &&
-												shipInfo.group != SC.Ships.SHIP_GROUPS.UPGRADEABLE &&
-												shipInfo.group != SC.Ships.SHIP_GROUPS.SUPER_SHIP")
+		(var newEarlyAccessShipEntity:dhEntity = "getPrimaryEntity(CC.newEarlyAccessShip, shipId)")
+		(var isNew:bool = "newEarlyAccessShipEntity.hasComponent(CC.newItem)")
+
+		(var hoverShipResearchEntity:dhEntity = "getPrimaryEntity(CC.interactionShipResearch, shipId)")
+		(var hoverShipResearch:dhComponent = "hoverShipResearchEntity.interactionShipResearch")
+
+		(var expCost:number = "hoverShipResearch.expCost ?: shipResearchProgress.expCost" (event "hoverShipResearch.evChanged") (event "shipResearchProgress.evChanged"))
+		(var shipExp:number = "hoverShipResearch.shipExp ?: shipResearchProgress.clampedShipExp" (event "hoverShipResearch.evChanged") (event "shipResearchProgress.evChanged"))
+		(var playersExp:number = "hoverShipResearch.playersExp" (event "hoverShipResearch.evChanged"))
+		(var isActiveShipCard:bool = "isOwned || isExplored || !isExplored && expCost - shipExp == 0 || isEventLike || isEarlyAccess")
+		(var hasProgress:bool = "(shipExp > 0 || playersExp > 0) && !isHidden && !isHighlighted")
 		
+		(var hasContentWithDelay:bool = false watch=false)
+		(bind hasContentWithDelay true init=false watch=false (event "evContentLoadedWithDelay"))
 		
-		(var slotAlpha:number = "isHidden 	?	RESEARCH_TREE_SLOT_STATE_ALPHA.DISABLED
-											:	RESEARCH_TREE_SLOT_STATE_ALPHA.DEFAULT")
+		(var slotState:number = "	_isNotShipTree									? SC.Ui_styles.BUTTON_STATE.UP :
+									isContextMenuVisible || mouseHandler.mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
+									isSelected && mouseHandler.rollOver				? SC.Ui_styles.BUTTON_STATE.SELECTED_OVER :
+									isSelected										? SC.Ui_styles.BUTTON_STATE.SELECTED :
+									mouseHandler.rollOver || hoverShipResearch		? SC.Ui_styles.BUTTON_STATE.OVER
+																					: SC.Ui_styles.BUTTON_STATE.UP")
 
-		(var contentAlpha:number = "isHighlighted || rollOver || isActiveState || isSelected || isContextMenuVisible	? RESEARCH_TREE_CONTENT_STATE_ALPHA.DEFAULT
-																														: RESEARCH_TREE_CONTENT_STATE_ALPHA.DISABLED")
+		(var slotAlpha:number = "	isHidden ? 0.3 : SHIP_SLOT_STATE_ALPHA[slotState]")
 
-		(var borderAlpha:number = "	isHighlighted								? TA :
-									isContextMenuVisible						? 0.7 :
-									isSelected									? 1 :
-									isOwned										? TA :
-									isHighFrameAlphaShipGroup					? 0.3 :
-									isEventLike || isEarlyAccess				? 0.3 :
-									isResearchAvailable && expDeficit <= 0		? 0.3 :
-									isBuyAvailable && creditsDeficit <= 0		? 0.3
-																				: 0.1")
+		(var textAlpha:number = "	isFarming || isSpecial											? 1 :
+									isHighlighted || isContextMenuVisible || isSelected || isOwned	? TA :
+									isExplored || isEventLike || isEarlyAccess						? TA :
+									hoverShipResearch || mouseHandler.rollOver						? TA :
+								 	!isExplored && shipExp > 0										? TA
+																									: 0.3")
+
+		(var shipImageAlpha:number = "	isHighlighted || isContextMenuVisible || isSelected || isOwned	? 1 :
+										isExplored || isEventLike || isEarlyAccess || isResearchReady	? TA :
+										!isExplored && hoverShipResearch								? 1 :
+										!isExplored && mouseHandler.rollOver							? 1
+																										: 0.3")
+
+		(var borderImage:str = "'url:../service_kit/panel_backgrounds/stroke_' + (isSelected || isHighlighted ? 'two' : 'one') + '_px_with_br4' + (hasProgress ? '_no_bottom' : '') + '.png'")
+		
+		(var changedBorderAfterHighlight:bool = false)
+		(bind changedBorderAfterHighlight true init=false (bind trigger "isHighlighted"))
+		(bind changedBorderAfterHighlight false init=false (event "evChangedHighlightedWithDelay"))
+
+		(var borderAlpha:number = "	changedBorderAfterHighlight							? 0 :
+								  	isHighlighted || isContextMenuVisible || isSelected	? 1 :
+									isActiveShipCard									? 	hoverShipResearch		? 0.8 :
+																							mouseHandler.rollOver	? 0.8 :
+																							mouseHandler.mouseDown	? 0.7
+																													: 0.6 :
+									!isExplored											? 	hoverShipResearch		? 0.5 :
+																							mouseHandler.rollOver	? 0.5 :
+																							mouseHandler.mouseDown	? 0.5
+																													: 0.05
+																						: 0.1")
 
 		(var branchTypeLabelAlpha:number = "isHidden ? 0.3 : 1")
-
-		(var thumbAlphaState:number = "	_isNotShipTree						? SC.Ui_styles.BUTTON_STATE.UP :
-										isContextMenuVisible || mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
-										isSelected							? SC.Ui_styles.BUTTON_STATE.SELECTED :
-										rollOver							? SC.Ui_styles.BUTTON_STATE.OVER
-																			: SC.Ui_styles.BUTTON_STATE.UP")
-
-		(var thumbAlpha:number = "RESEARCH_TREE_SLOT_THUMB_STATE_ALPHA[thumbAlphaState]")
+		(var progressAlpha:number = "hasProgress ? 1 : 0")
+		(var bgAlpha:number = "isOwned || isSelected || isHighlighted ? 1 : 0")
+		(var overlayAlpha:number = "isHighlighted ? 1 : RESEARCH_TREE_OVERLAY_SLOT_STATE_ALPHA[slotState]")
 		
 	)
 	(bind visible "_shipId != null")
 	(bind name "'upgradeTree_' + shipInfo.fullName")
+	(dispatch evChangedHighlightedWithDelay delay=0.15 reset=true (bind trigger "isHighlighted"))
+	(dispatch evContentLoadedWithDelay delay=0.15 reset=true on='addedToStage' (bind enabled "!hasContentWithDelay"))
 
 	(style
 		(bind position "_isRelative ? relative : absolute")
@@ -505,7 +668,7 @@
 		(macro SHIP_CARD_STATE_ALPHA _alpha="branchTypeLabelAlpha")
 
 		(controller $Instance renderer='BranchTypeLabel'
-			(bind enabled "hasClassName")
+			(bind enabled "hasClassName && hasContentWithDelay")
 			(args
 				_shipType = "shipInfo.subtype"
 				_nation = "shipInfo.country"
@@ -519,9 +682,16 @@
 			(height = "SHIP_TREE_BLOCK_HEIGHT")
 			(padding = "SHIP_TREE_BLOCK_MARGIN")
 		)
-		(macro MOUSE_EVENTS_DISPATCHER)
-		(macro SOUND_HANDLER _soundSet = "!_isNotShipTree ? 'button_ship' : ''")
+		(macro STRUCT_MOUSE_DISPATCHER _mouseHandler = "mouseHandler")
+		(macro STRUCT_SOUND_HANDLER
+			_mouseHandler = "mouseHandler"
+			_soundSet = "!_isNotShipTree ? 'button_ship' : ''"
+		)
 		(bindcall externalCall "!isSelected ? 'inputMapping.onAction' : ''" "[ 'viewShip', { shipId: shipId }]" watch=false on='click')
+		(bindcall externalCall 'inputMapping.onAction' "['overShip', { shipId: shipId }]" watch=false on='rollOver')
+		(bindcall externalCall "hasMarkerReadyResearch ? 'inputMapping.onAction' : ''" "['shipResearchReadySeen', { shipId: shipId }]" watch=false on='rollOver')
+		(bindcall externalCall "isNew ? 'inputMapping.onAction' : ''" "['earlyAccessShipSeen',	{ shipId: shipId }]" watch=false on='rollOver')
+		(bindcall externalCall 'inputMapping.onAction' "['rolloutShip',	{ shipId: shipId}]" watch=false on='rollOut')
 		(bindcall externalCall "isEnableForWatchModules && isSelected && !isContextMenuVisible ? 'inputMapping.onAction' : ''" "['selectShip',	{ shipId: shipId }]" watch=false on='leftClick')
 		(bindcall externalCall "isEnableForWatchModules && isSelected && !isContextMenuVisible ? 'inputMapping.onAction' : ''" "['navigateTo',	{ route: SC.Ui_windows.ROUTE.UPGRADES }]" watch=false on='leftClick')
 
@@ -532,22 +702,62 @@
 			(class $FullsizeAbsolute)
 			(style (hitTest = false))
 
+			
 			(block
 				(class $FullsizeAbsolute)
 				(style
-					(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
-					(scale9grid = 5)
+					(bind backgroundImage "borderImage")
+					(scale9grid = 4)
 				)
 				(macro SHIP_CARD_STATE_ALPHA _alpha="borderAlpha")
 			)
+			
+			(block
+				(style
+					(position ="absolute")
+					(width = 100%)
+					(bottom = 0px)
+				)
 
+				(macro SHIP_CARD_STATE_ALPHA _alpha="progressAlpha")
+				(controller $Instance renderer='ProgressShipResearch'
+					(bind enabled "hasContentWithDelay")
+					(args
+						_shipExp = "shipExp ?: 0"
+						_playersExp = "playersExp ?: 0"
+						_expCost = "expCost ?: 0"
+					)
+				)
+			)
+			
 			(block
 				(class $FullsizeAbsolute)
 				(style
-					(backgroundColor = 0xFFFFFFFF)
+					(backgroundColor = 0x26FFFFFF)
 					(borderRadius = "XS")
 				)
-				(macro SHIP_CARD_STATE_ALPHA _alpha="thumbAlpha")
+				(macro SHIP_CARD_STATE_ALPHA _alpha="overlayAlpha")
+			)
+
+			
+			(block
+				(class $MiddleVHAbsolutely)
+				(controller $Instance renderer='SelectedShipEffect'
+					(bind enabled "hasContentWithDelay && isSelected")
+				)
+			)
+
+			
+			(block
+				(class $MiddleVHAbsolutely)
+				(style
+					(hitTest = false)
+					(width = "(SHIP_TREE_BLOCK_WIDTH - SHIP_TREE_BLOCK_MARGIN) * 2")
+					(height = "SHIP_TREE_BLOCK_HEIGHT - SHIP_TREE_BLOCK_MARGIN * 2")
+					(backgroundColor = 0x26FFFFFF)
+					(borderRadius = "XS")
+				)
+				(macro SHIP_CARD_STATE_ALPHA _alpha="bgAlpha")
 			)
 		)
 
@@ -574,6 +784,7 @@
 			)
 
 			(controller $Tooltip
+				(bind enabled "hasContentWithDelay")
 				(renderer = 'ShipExtendedTooltip')
 				(args
 					_shipId = "shipId"
@@ -583,7 +794,7 @@
 			)
 
 			(controller $Tooltip
-				(bind enabled "isShipTreeMenuEnabled")
+				(bind enabled "isShipTreeMenuEnabled && hasContentWithDelay")
 				(renderer = 'ShipTreeMenu')
 				(args
 					_shipId = "shipId"
@@ -600,19 +811,20 @@
 		(block
 			(class $FullsizeAbsolute)
 			(style (padding = "XS"))
-			(macro SHIP_CARD_STATE_ALPHA _alpha="contentAlpha")
 
 			(block
 				(style
 					(position = "absolute")
+					(hitTest = false)
 					(left = "XXS")
 					(top = 5px)
-					(hitTest = false)
 				)
+				(macro SHIP_CARD_STATE_ALPHA _alpha="shipImageAlpha")
 
 				(block
 					(style
-						(bind scaleX "SHIP_SCALE_MAP[SIZE.SMALL]") (bind scaleY "SHIP_SCALE_MAP[SIZE.SMALL]")
+						(bind scaleX "SHIP_SCALE_MAP[SIZE.SMALL]")
+						(bind scaleY "SHIP_SCALE_MAP[SIZE.SMALL]")
 						(bind backgroundImage "'url:' + pathPreview")
 						(backgroundSize = "autosize")
 					)
@@ -622,11 +834,12 @@
 			
 			(hblock
 				(style
+					(hitTest = false)
 					(marginLeft = 5px)
 					(marginTop = 5px)
 					(align = "middle")
-					(hitTest = false)
 				)
+				(macro SHIP_CARD_STATE_ALPHA _alpha="textAlpha")
 
 				(block
 					(style
@@ -635,11 +848,15 @@
 						(marginLeft = -5px)
 						(marginRight = 3px)
 					)
-					(element ShipIcon
-						_shipType = "shipType"
-						_isSpecial = "isSpecial"
-						_isFarming = "isFarming"
-						_isElite = "isElite"
+
+					(controller $Instance renderer='ShipIcon'
+						(bind enabled "hasContentWithDelay")
+						(args
+							_shipType = "shipType"
+							_isSpecial = "isSpecial"
+							_isFarming = "isFarming"
+							_isElite = "isElite"
+						)
 					)
 				)
 
@@ -649,12 +866,15 @@
 						(bind marginLeft "levelIcon.length > 0 ? -XS : 0")
 						(bind marginRight "levelIcon.length > 0 ? -1 : 0")
 					)
-					(element ShipLevelNM
-						_levelIcon =		"levelIcon"
-						_colorTransform =	"isFarming || isSpecial	? COLOR_TRANSFORM_WHITE_TO_YELLOW : {}"
-						_levelRome =		"levelRome"
-						_alpha =			"isFarming || isSpecial ? 1 : TA"
-						_textColor =		"isFarming || isSpecial	? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE"
+					(controller $Instance renderer='ShipLevelNM'
+						(bind enabled "hasContentWithDelay")
+						(args
+							_levelIcon =		"levelIcon"
+							_colorTransform =	"isFarming || isSpecial	? COLOR_TRANSFORM_WHITE_TO_YELLOW : {}"
+							_levelRome =		"levelRome"
+							_alpha =			1
+							_textColor =		"isFarming || isSpecial	? SC.Ui_styles.SERVICE_COLORS.YELLOW : SC.Ui_styles.SERVICE_COLORS.WHITE"
+						)
 					)
 				)
 			)
@@ -668,7 +888,10 @@
 
 				(hblock
 					(block
-						(style (marginTop = "XS") (hitTest = false))
+						(style
+							(hitTest = false)
+							(marginTop = "XS")
+						)
 						(controller $Instance renderer='PriceTag'
 							(bind enabled "isPriceVisible")
 							(args
@@ -681,9 +904,10 @@
 					(block
 						(bind visible "isOwned && rentUntil == 0")
 						(style
-							(width = 19px) (height = 19px)
-							(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
 							(hitTest = false)
+							(width = 19px)
+							(height = 19px)
+							(backgroundImage = 'url:../service_kit/unified_status_icons/icon_check.png')
 						)
 					)
 				)
@@ -700,31 +924,39 @@
 				(block
 					(bind visible "isEarlyAccess")
 					(style
+						(hitTest = false)
 						(height = 21px)
 						(width = 21px)
 						(backgroundImage = 'swf:../service_kit/icons_svg/icons_svg.swf:early_access')
-						(hitTest = false)
 					)
 				)
 			)
 
 			
 			(block
-				(style (position = "absolute") (right = 6px) (bottom = 6px) (hitTest = false))
+				(style
+					(hitTest = false)
+					(position = "absolute")
+					(right = 6px)
+					(bottom = 6px)
+				)
 				(tf
 					(class $TextDefaultBoldNM)
 					(style
 						(bind textColor "isFarming || isSpecial	? SC.Ui_styles.SERVICE_COLORS.YELLOW
 																: SC.Ui_styles.SERVICE_COLORS.WHITE")
-						(bind alpha "isFarming || isSpecial ? 1 : TA")
 					)
+					(macro SHIP_CARD_STATE_ALPHA _alpha="textAlpha")
 					(bind text "toUpper(tr(shipInfo.nameIDS))")
 				)
 			)
 
 			
 			(block
-				(style (position = "absolute") (bottom = 1px))
+				(style
+					(position = "absolute")
+					(bottom = 1px)
+				)
 
 				(controller $Instance renderer='ShipBonusTags'
 					(bind enabled "isBonusTagsVisible")
@@ -738,7 +970,10 @@
 			
 			(block
 				(class $FullsizeAbsolute)
-				(style (hitTest = false) (align = "middle|center") (hitTest = false))
+				(style
+					(hitTest = false)
+					(align = "middle|center")
+				)
 
 				(controller $Instance renderer='IssuedStamp'
 					(bind enabled "isEventLike && !isOwned")
@@ -749,22 +984,34 @@
 					)
 				)
 			)
+
+			
+			(block
+				(class $MiddleVHAbsolutely)
+				(controller $Instance renderer='ShipReadyResearchEffect'
+					(bind enabled "isResearchReady && hasContentWithDelay")
+				)
+			)
 		)
 
 		
 		(block
-			(macro DEFAULT_CONTROL_MARKER_ANIMATION "_isNewMarker")
-			(class $MarkerNewButtonPosition)
+			(macro DEFAULT_CONTROL_MARKER_ANIMATION "_isNewMarker || isNew || isNewResearchReady")
+			(bind class "isNewResearchReady ? '$MarkerReadyResearchPosition' : '$MarkerNewButtonPosition'")
 
-			(element MarkerNew)
+			(controller $Instance
+				(bind enabled "_isNewMarker || isNew || isNewResearchReady")
+				(bind renderer "isNewResearchReady ? 'MarkerShipResearchReady' : 'MarkerNew'")
+			)
 		)
 	)
+
 )
 
 (def element TreeArrow (_arrowId:number, _gapCoords:array, _useClassGap:bool)
 	(scope
 		(var arrowComponent:dhComponent = "getEntity(_arrowId).researchArrow")
-		(var arrowData:dict = "arrowComponent.arrow")
+		(var arrowData:dhStruct = "arrowComponent.arrow")
 		(var isOverlayArrow:bool = "arrowComponent.isOverlayArrow")
 
 		(var highlightState:number = "arrowComponent.highlighted" (event "arrowComponent.evHighlightedChanged"))
@@ -797,11 +1044,10 @@
 (def element TreeArrowInfo (_arrowId:number, _gapCoords:array, _useClassGap:bool)
 	(scope
 		(var arrowComponent:dhComponent = "getEntity(_arrowId).infoResearchArrow")
-		(var arrowData:dict = "arrowComponent.arrow")
+		(var arrowData:dhStruct = "arrowComponent.arrow")
 		
 		(var shipEntity:dhEntity = "getPrimaryEntity(CC.ship, arrowData.shipIdTo)")
 		(var shipInfo:dhComponent = "shipEntity.ship")
-		(var upgradableShipInfo:dhComponent = "shipEntity.upgradableShipInfo")
 		(var shipResearchTreeParams:dhComponent = "shipEntity.shipResearchTreeParams")
 
 		(var researchTreeElementsEntity:dhEntity = "getPrimaryEntity(CC.researchTreeElements, shipInfo.nation)")

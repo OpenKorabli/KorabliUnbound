@@ -8,7 +8,7 @@
 		(var gameData:dict = "battleResultsStructuredEntity.dataComponent.data.game_data")
 
 		(var isWinner:bool = "private.team_id == gameData.winner_team_id")
-		(var secondaryTasks:array = "gameData.secondaryTasks ?: []")
+		(var tasks:array = "gameData.tasksSorted ?: []")
 
 		(var operationStatusIDS:str = "isWinner ? 'IDS_PVE_OPERATION_RESULTS_DONE' : 'IDS_PVE_OPERATION_RESULTS_UNDONE'")
 		(var iconPath:str = "isWinner ? 'url:../pve/result_screen_bg/pve_victory.png' : 'url:../pve/result_screen_bg/pve_loss.png'")
@@ -17,7 +17,6 @@
 
 	(style (align = "center"))
 
-	
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
 		(style
@@ -44,13 +43,13 @@
 
 		(block
 			(class $Fullsize)
-			(style				
+			(style
 				(backgroundImage = "iconPath")
 				(backgroundSize = "fill")
 			)
 		)
 	)
-	
+
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
 		(style (marginBottom = "LS"))
@@ -60,29 +59,26 @@
 		)
 	)
 
-	(block
+	(scrollArea
 		(style
 			(width = 600px)
 			(height = 100%)
 		)
 
-		(scrollArea
-			(class $Fullsize)
+		(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+			_singleStep = "160px"
+		)
 
-			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
-				_singleStep = "REWARD_DEFAULT_CARD_SIZE"
+		(content
+			(style
+				(width = 100%)
+				(vgap = "SXS")
 			)
 
-			(content
-				(style (width = 100%))
-
-				(controller $Repeat renderer='PVETaskResultElement'
-					(bind count "secondaryTasks.length")
-					(args
-						_text="secondaryTasks[$index].text"
-						_category="secondaryTasks[$index].category"
-						_taskStatus="secondaryTasks[$index].status"
-					)
+			(controller $Repeat renderer='TaskItemScenarioContentForResult'
+				(bind count "tasks.length")
+				(args
+					_taskData = "tasks[$index]"
 				)
 			)
 		)
@@ -107,42 +103,43 @@
 	)
 )
 
-(def element PVETaskResultElement	(	_text:str,
-										_taskStatus:number,
-										_category:number
-									)
+(def element TaskItemScenarioContentForResult (_taskData:dict)
 	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
 	(scope
-		(var isTaskCompleted:bool = "_taskStatus == SC.Battle.PVE_TASK_STATUS.SUCCESS")
-		(var taskStatusIcon:str = "isTaskCompleted ? 'icon_pve_task_completed' : 'icon_pve_task_not_completed'")
-		(var animDelay:number = "1.5 + 1.2*$index")
+		(var isPrimaryTask:bool = "_taskData.category == SC.Battle.PVE_TASK_CATEGORY.PRIMARY")
+
+		(var isTaskSuccess:bool = "_taskData.status == SC.Battle.PVE_TASK_STATUS.SUCCESS")
+
+		(var taskCategory:str = 	"isPrimaryTask ? 'main' : 'secondary'")
+		(var taskStatusStr:str = 	"isTaskSuccess ? 'done' : 'failure'")
+
+		(var isDefaultIcon:bool = "_taskData.bulletIcon == SC.Battle.PVE_TASK_BULLET_ICON.DEFAULT")
+
+		(var taskIcon:str = "	isDefaultIcon && isPrimaryTask 	? 'main_task_' + taskStatusStr
+																: taskCategory + '_task_' + SCENARIO_TASK_ICON[_taskData.bulletIcon]")
+
+		(var taskIconCT:dict = "	isDefaultIcon && isPrimaryTask 	? CT_NONE :
+									isTaskSuccess 					? CT_ALLY
+																	: CT_ENEMY")
+
+		(var progressText:str = "_taskData.type == SC.Battle.PVE_TASK_TYPE.DIGIT 		? '(' + _taskData.currentValue + '/' + _taskData.targetValue + ')' :
+								 _taskData.type == SC.Battle.PVE_TASK_TYPE.DIGIT_SINGLE ? '(' + _taskData.currentValue + ')'
+																						: ''")
+
+		(var taskDuration:number = "_taskData.type == SC.Battle.PVE_TASK_TYPE.TIMER 			? _taskData.closeTime - _taskData.startTime :
+								 	_taskData.type == SC.Battle.PVE_TASK_TYPE.REVERSED_TIMER 	? _taskData.currentValue
+								 																: 0")
 	)
+	(style (width = 100%))
 
-	(macro DEFAULT_MODAL_WINDOW_ANIMATION_EXPRESSION "animDelay")
+	(macro DEFAULT_MODAL_WINDOW_ANIMATION_EXPRESSION "1.5 + 1.2 * $index")
 
-	(style
-		(width = 100%)
-		(flow = "horizontal")
-		(marginBottom = "M")
-	)
-
-	(block
-		(style
-			(width = 24px)
-			(height = 24px)
-			(marginRight = "SXS")
-			(backgroundImage = "'swf:../pve/service_icons/service_icons.swf:icon_pve_task_status'")
-		)
-		(colorTransform = "isTaskCompleted ? CT_ALLY : CT_ENEMY")
-	)
-
-	(tf
-		(class $TextDefault20NM)
-		(style
-			(width = 100%)
-			(marginTop = 5px)
-			(bind alpha "isTaskCompleted ? TC : TS")
-		)
-		(text = "_text")
+	(element TaskItemScenarioContentInTab
+		_taskIcon 		= "taskIcon"
+		_isTaskFailure 	= "!isTaskSuccess"
+		_taskIds 		= "_taskData.text"
+		_progressText 	= "progressText"
+		_countdownText 	= "taskDuration > 0 ? formatTime(taskDuration, 'mm:ss', true) : ''"
+		_taskIconCT 	= "taskIconCT"
 	)
 )

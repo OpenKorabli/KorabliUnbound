@@ -1,0 +1,377 @@
+(def element ModalShipRestoration ()
+	(macro MODAL_WINDOW_INIT)
+	(macro MODAL_WINDOW_BG)
+	(scope
+		(event ItemChooser_sortTypeChanged)  
+		(event evSetScrollToFirstItem)
+		(var restorableShipCollection:dhCollection = "getCollectionByPath(CC.restorableShip, 'sorted')")
+
+		(var shipRestorationComponent:dhComponent = "getSingleComponent(CC.shipRestoration)")
+		(var selectedEntityId:number = "shipRestorationComponent.selectedEntityId" (event "shipRestorationComponent.evSelectedEntityIdChanged"))
+		(var isShipSelected:bool = "selectedEntityId != SC.Common.SHIP_RESTORATION.DEFAULT_ENTITY_ID")
+
+		(var restorableShip:dhComponent = "getEntity(selectedEntityId).restorableShip")
+		(var shipId:number = "restorableShip.shipId")
+		(var shipPrice:number = "restorableShip.cost")
+		(var currency:str = "restorableShip.currency")
+
+		
+		(var accountResourceComponent:dhComponent = "getSingleComponent(CC.accountResource)")
+		(var accountSlotsNum:number =	"accountResourceComponent.slotsNum"		(event "accountResourceComponent.evChangedSlotsNum"))
+		(var accountGold:number =		"accountResourceComponent.gold"			(event "accountResourceComponent.evChangedGold"))
+		(var accountCredits:number =	"accountResourceComponent.credits"		(event "accountResourceComponent.evChangedCredit"))
+
+		(struct slotPrice = PULL_PRICE(_entityId = "'SLOT_COST'"				_actionId = "SC.Common.PRICE_ACTION.BUY"))
+		(struct switchPurchaseShipBuySlots = GET_PREF_BOOL(_option="'ui.vehicleRestoration.switchBuySlots'"))
+		(var isNotEnoughSlots:bool =	"accountSlotsNum == 0")
+		(var buySlotSwitchState:bool =	"switchPurchaseShipBuySlots.value || isNotEnoughSlots")
+		(var slotCost:number =			"buySlotSwitchState ? slotPrice.info.finalPrice : 0")
+
+		(var isShipPriceInGold:bool = "currency == SC.Common.CURRENCIES.GOLD")
+		(var isShipPriceInCredits:bool = "currency == SC.Common.CURRENCIES.CREDITS")
+		(var shipGoldCost:number = "isShipPriceInGold ? shipPrice : 0")
+		(var totalGoldCost:number = "shipGoldCost + slotCost")
+		(var totalCreditsCost:number = "isShipPriceInCredits ? shipPrice : 0")
+
+		(var totalGoldAfterPurchase:number =	"accountGold - totalGoldCost")
+		(var totalCreditsAfterPurchase:number =	"accountCredits - totalCreditsCost")
+		(var isEnoughGold:bool =				"totalGoldAfterPurchase >= 0")
+		(var isEnoughCredits:bool =				"totalCreditsAfterPurchase >= 0")
+
+		(var remainingResAfterShipCost:number = "isShipPriceInCredits	? accountCredits - totalCreditsCost
+																		: accountGold - shipGoldCost")
+		(var isNotEnoughResourcesForShip:bool = "remainingResAfterShipCost < 0")
+
+		(var remainingSlotCost:number = "isShipPriceInGold	? isNotEnoughResourcesForShip	? slotCost
+																							: remainingResAfterShipCost - slotCost < 0	? slotCost - remainingResAfterShipCost
+																																		: 0
+															: accountGold - slotCost < 0	? slotCost - accountGold
+																							: 0")
+
+		(var isNotEnoughGoldButSlotSwitchIsOn:bool = "isShipSelected && !isEnoughGold && buySlotSwitchState")
+		(var isNotEnoughFunds:bool = "isShipSelected && (!isEnoughGold || !isEnoughCredits)")
+
+		(var priceInfo:dict = "{ finalPrice: isShipPriceInGold ? totalGoldCost : totalCreditsCost, currency: currency }")
+		(var optionalPriceInfo:dict = "isShipPriceInCredits && buySlotSwitchState ? { finalPrice: slotCost, currency: SC.Common.CURRENCIES.GOLD } : {}")
+
+		
+		(struct shipsSortingIndexPref =		GET_PREF_NUMBER(_option="'ui.vehicleRestoration.sorting.sortIndex'"))
+		(var selectedSortingType:number =	"shipsSortingIndexPref.value")
+		(struct shipsSortingReversedPref =	GET_PREF_BOOL(_option="'ui.vehicleRestoration.sorting.isReversed'"))
+		(var isSortingReversed:bool =		"shipsSortingReversedPref.value")
+		(var currenciesPanelPrices:array = "[	{ currency: SC.Common.CURRENCIES.GOLD,		finalPrice: -totalGoldCost },
+												{ currency: SC.Common.CURRENCIES.CREDITS,	finalPrice: -totalCreditsCost } ]")
+	)
+
+	(bindcall externalCall "'direct.action'"	"['option.set',		[ 'ui.vehicleRestoration.sorting.sortIndex',	$event.selectedIndex ]]"	(event "ItemChooser_sortTypeChanged"))
+	(bindcall externalCall "'direct.action'"	"['option.set',		[ 'ui.vehicleRestoration.sorting.isReversed',	$event.direction ]]"		(event "ItemChooser_sortTypeChanged"))
+
+	(dispatch evSetScrollToFirstItem (bind trigger "selectedSortingType"))
+	(dispatch evSetScrollToFirstItem (bind trigger "isSortingReversed"))
+
+	(style (align = "center|middle"))
+
+	(block
+		(style (width = "MODAL_WINDOW_WITH_LIST_WIDTH"))
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginBottom = "XS")
+				)
+
+				(element ModalWindowShortHeader
+					_header =		'IDS_SHIP_RESTORATION_HEADER'
+					_hasDivider =	false
+				)
+			)
+
+			(element CurrenciesPanel
+				_priceInfo =	"currenciesPanelPrices"
+				_width =		"MODAL_WINDOW_WITH_LIST_WIDTH"
+			)
+		)
+
+		
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style
+				(align = "left|middle")
+				(width = 100%)
+				(marginBottom = "XS")
+			)
+
+			(block
+				(style (marginRight = "XXS"))
+
+				(element ImageButton
+					_width =			24px
+					_height =			24px
+					_backgroundImage =	"isSortingReversed ? 'url:../service_kit/buttons/icons/sort_up.png' : 'url:../service_kit/buttons/icons/sort_down.png'"
+					_methods =			"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.vehicleRestoration.sorting.isReversed', !isSortingReversed ] }]"
+				)
+
+				(controller $Tooltip
+					(renderer='SimpleStatusTooltip')
+					(args
+						_unifiedStatus =	"SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+						_text =				'IDS_HINT_SHIP_FILTERING_SORT_SET_REVERSE'
+					)
+					(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+				)
+			)
+
+			(element ItemChooser
+				_items = "SHIP_LIST_SORTING_OPTIONS"
+				_choosedItemRenderer = 'DefaultItemChooserPickedItemRenderer'
+				_listItemRenderer = 'TextListItemRenderer'
+				_curIndex = "selectedSortingType"
+				_onItemSelectedEvent = 'sortTypeChanged'
+				_itemChooserTooltipUnifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT"
+				_itemChooserTooltipText = 'IDS_HINT_SHIP_FILTERING_SORT'
+				_dropDownWidth = 180
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(style
+				(width = 100%)
+				(marginBottom = "SXS")
+			)
+
+			(scrollArea
+				(style
+					(width = 100%)
+					(maxHeight = "{ 720: 165px, 1080: 428px }")
+				)
+
+				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+					_singleStep = "SHIP_ROW_HEIGHT"
+					_wheelScrollAcceleration = "0.8"
+					_maxScrollingAnimatedDistance = "280"
+				)
+
+				(repeatController = 'restorableShipItemRenderer')
+				(scrollPerItem = true)
+
+				(content
+					(style
+						(width = 100%)
+						(vgap = "XS")
+					)
+
+					(controller $DynamicRepeat renderer='ShipForRestorationSelect' name='restorableShipItemRenderer'
+						(bind items "restorableShipCollection")
+						(args
+							_shipEntity = "$item"
+							_isSelected = "selectedEntityId == $item.id"
+						)
+						(itemHeight = "SHIP_ROW_HEIGHT")
+						(itemOffset = "SHIP_ROW_HEIGHT * 2")
+					)
+				)
+				(bindcall scrollToBegin animated=false (event "evSetScrollToFirstItem"))
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+			(style (width = 100%))
+			(element HorizontalDividerTwoPx)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+
+			(style
+				(align = "middle")
+				(width = 100%)
+				(paddingLeft = "M")
+				(paddingRight = "M")
+				(paddingTop = "isNotEnoughGoldButSlotSwitchIsOn ? S : M")
+				(paddingBottom = "isNotEnoughGoldButSlotSwitchIsOn ? S : M")
+			)
+
+			(controller $Animation
+				(bindcall play
+					duration = 0.15
+					from	 = "{ paddingTop: M, paddingBottom: M }"
+					to		 = "{ paddingTop: S, paddingBottom: S }"
+					easing	 = "Easing.quad_out"
+					action	 = "kill"
+					reverse	 = "!isNotEnoughGoldButSlotSwitchIsOn"
+					(bind trigger "isNotEnoughGoldButSlotSwitchIsOn")
+				)
+			)
+
+			(hblock
+				(style (width = 100%))
+
+				(block
+					(style (width = 100%))
+
+					(element SwitchWithRightLabel
+						_enabled =		"!isNotEnoughSlots"
+						_state =		"buySlotSwitchState"
+						_textClass =	'$TextDefault18NM'
+						_label =		'IDS_PURCHASE_SLOT'
+						_methods =		"[{ type: 'direct.action', name: 'option.set', args: [ 'ui.vehicleRestoration.switchBuySlots', !buySlotSwitchState ] }]"
+					)
+
+					(controller $Tooltip
+						(renderer = 'SimpleStatusTooltip')
+						(args
+							_unifiedStatus =	"!isNotEnoughSlots	? SC.Ui_styles.UNIFIED_STATUS.DEFAULT : SC.Ui_styles.UNIFIED_STATUS.NEGATIVE"
+							_text =				"!isNotEnoughSlots	? buySlotSwitchState	? 'IDS_BUY_SLOT_SWITCH_OFF_TOOLTIP'
+																							: 'IDS_BUY_SLOT_SWITCH_ON_TOOLTIP'
+																	: 'IDS_NO_FREE_SLOTS'"
+						)
+						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+					)
+				)
+
+				(block
+					(bind visible "buySlotSwitchState")
+
+					(style
+						(marginTop = 1px)
+						(marginRight = "-XXS")
+					)
+
+					(controller $Instance renderer='PriceTag'
+						(bind enabled "buySlotSwitchState")
+						(args
+							_priceInfo =		"slotPrice.info"
+							_showDiscountTag =	true
+						)
+					)
+				)
+			)
+
+			(block
+				(visible = "isNotEnoughGoldButSlotSwitchIsOn")
+
+				(style
+					(width = 100%)
+					(marginTop = "S")
+					(paddingRight = "-XXS")
+					(paddingLeft = 44px)
+					(alpha = "isNotEnoughGoldButSlotSwitchIsOn ? 1 : 0")
+					(ubScaleY = "isNotEnoughGoldButSlotSwitchIsOn ? 1 : 0")
+				)
+
+				(controller $Animation
+					(bindcall play
+						duration = 0.15
+						from	 = "{ alpha: 0, ubScaleY: 0, visible: false }"
+						to		 = "{ alpha: 1, ubScaleY: 1, visible: true }"
+						easing	 = "Easing.quad_out"
+						action	 = "kill"
+						reverse	 = "!isNotEnoughGoldButSlotSwitchIsOn"
+						(bind trigger "isNotEnoughGoldButSlotSwitchIsOn")
+					)
+				)
+
+				(element PriceTagWithDeficitAndLabelRow
+					_priceInfo =	"{ finalPrice: remainingSlotCost, currency: SC.Common.CURRENCIES.GOLD }"
+					_title =		'IDS_NOT_ENOUGH'
+				)
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginTop = "MS")
+				(marginBottom = "MS")
+			)
+
+			(controller $Instance renderer='ModalWindowSystemPurchaseItemPriceAndInfo'
+				(bind enabled "isShipSelected")
+				(args
+					_priceInfo =			"priceInfo"
+					_optionalPriceInfo =	"optionalPriceInfo"
+					_questionString =		'IDS_QUESTION_RESTORE_FOR'
+					_isWarningText =		"isNotEnoughFunds"
+				)
+			)
+			(tf
+				(bind visible "!isShipSelected")
+				(class $TextDefault26NM)
+				(style
+					(alpha = "TA")
+				)
+				(text = 'IDS_RESTORE_SHIP_NOT_SELECTED')
+			)
+		)
+
+		
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3)
+			(style
+				(align = "center")
+				(width = 100%)
+			)
+
+			(element ModalWindowSystemYesNoButtons
+				_isBtnOkEnabled =			"!isNotEnoughFunds && isShipSelected"
+				_btnOkName =				'btn_ok'
+				_btnOkLabel =				'IDS_RESTORE_UPPER_CASE'
+				_btnOkMethods =				"[{	type: 'inputMapping.onRequest',
+												name: 'showModalShipRestorationConfirmation',
+												args: {	_shipId: shipId,
+														_needBuySlot: buySlotSwitchState,
+														_priceInfo: priceInfo,
+														_optionalPriceInfo: optionalPriceInfo}
+											}]"
+				_btnOkFocusIndex =			2
+				_isBtnOkDefaultFocused =	false
+				_btnOkWidth =				160px
+				_btnNoLabel =				'IDS_CLOSE_UPPER_CASE'
+				_btnNoFocusIndex =			3
+				_btnNoWidth =				160px
+			)
+		)
+	)
+)
+
+(def element ShipForRestorationSelect(_shipEntity:dhEntity, _isSelected:bool)
+	(scope
+		(var restorableShip:dhComponent = "_shipEntity.restorableShip")
+		(var shipId:number = "restorableShip.shipId")
+		(var currency:str = "restorableShip.currency ?: ''")
+		(var cost:number = "restorableShip.cost ?: 0")
+	)
+
+	(name = 'ShipForRestorationItemRenderer')
+	(style (width = 100%))
+
+	(element ShipRowSelectableElement name='shipForRestorationItemRenderer'
+		_shipId =						"shipId"
+		_isSelected =					"_isSelected"
+		_hasPriceTag =					true
+		_hasMouseInstructions =			true
+		_mouseInstructionsSelect =		'IDS_HINT_LEFT_SELECT_SHIP_TO_RESTORE'
+		_mouseInstructionsDeselect =	'IDS_HINT_LEFT_DESELECT_SHIPS'
+		_hideLowerDivider =				true
+		_priceInfo =					"{ finalPrice: cost, currency: currency }"
+		_methods =						"[{	type: 'inputMapping.onAction',
+											name: 'changeShipForRestorationSelection',
+											args: { entityId: _isSelected ? SC.Common.SHIP_RESTORATION.DEFAULT_ENTITY_ID : _shipEntity.id }
+										}]"
+	)
+)

@@ -1,0 +1,497 @@
+(def css $ExteriorItemSizeLarge ()
+	(width = 80px)
+	(height = 80px)
+)
+
+(def constant DECAL_ITEM_SIZE 80px)
+
+(def element DecalItem (_decalGroupType:str, _subGroupName:str, _decalEntity:dhEntity, _groupLength:number)
+	(scope
+		(event evPreviewDecal)
+
+		(macro PULL_SHIP_ID)
+
+		
+		(struct mouseHandler = MOUSE_HANDLER())
+		
+		(struct mouseHandlerClickArea = MOUSE_HANDLER())
+
+		(var ownShipComponent:dhComponent =	"getPrimaryComponent(CC.ownShip, playerShipId)")
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isActionsAvailable:bool =		"!isShipInBalancer && !isShipReadyForBattle")
+		(var decalPreviewId:number =		"ownShipComponent.decalPreviewedId" (event "ownShipComponent.evPreviewDecalIdChanged"))
+
+		(var decalComponent:dhComponent =	"_decalEntity.exteriorDecal")
+		(var decalId:number =				"decalComponent.id")
+		(var isInstalled:bool =				"decalComponent.isInstalled"	(event "decalComponent.evUpdated"))
+		(var isLinkedToShip:bool =			"decalComponent.isLinkedToShip"	(event "decalComponent.evUpdated"))
+		(var isPreviewed:bool =				"decalId == decalPreviewId")
+
+		(var isNew:bool = "_decalEntity.hasComponent(CC.newItem)")
+
+		(var decalsInStorage:number =		"_decalEntity.countComponent.value ?: 0"	(event "_decalEntity.countComponent.evChanged"))
+		(var hasInStorage:bool =			"decalsInStorage > 0")
+
+		(var clickAction:str = "!isActionsAvailable									?	'' :
+								(!hasInStorage || !isLinkedToShip) && isPreviewed	?	SC.Ui_methods.EXTERIOR_DECALS.DISABLE_PREVIEW :
+								isInstalled	&& decalPreviewId != 0					?	SC.Ui_methods.EXTERIOR_DECALS.DISABLE_PREVIEW :
+								isInstalled											?	SC.Ui_methods.EXTERIOR_DECALS.UNINSTALL :
+								isLinkedToShip										?	SC.Ui_methods.EXTERIOR_DECALS.INSTALL :
+								(!hasInStorage || !isLinkedToShip) && !isPreviewed	?	SC.Ui_methods.EXTERIOR_DECALS.PREVIEW
+																					:	''")
+
+
+		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
+		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId" _validValues = "[ SC.Context_guiding_tip.TIP_TYPE.DECALS_FINAL ]"))
+
+		(var isFirstRollOverActive:bool = false)
+		(bind isFirstRollOverActive "true" init=false watch=false on='rollOver')
+	)
+
+	(bind name "'DecalItem_' + decalComponent.index")
+
+	(style
+		(height = "SHIP_EXTERIOR_ITEM_SIZE")
+		(width = "SHIP_EXTERIOR_ITEM_SIZE")
+	)
+
+	(bindcall externalCall "'inputMapping.onAction'" "['makeSeen', { entityId: _decalEntity.id }]" init=false watch=false (bind enabled "isNew && mouseHandler.rollOver"))
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		(controller $Instance renderer='ControlBackground'
+			(bind enabled "isFirstRollOverActive || isInstalled || isPreviewed")
+			(args
+				_mouseDown = "mouseHandlerClickArea.mouseDown"
+				_mouseOver = "mouseHandler.rollOver"
+				_selected = "isInstalled"
+				_isSelectedStateInteractive = true
+			)
+		)
+	)
+
+	(block
+		(bind visible "isPreviewed")
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame_rounded.png')
+			(scale9grid = 5)
+			(alpha = 0.7)
+		)
+	)
+
+	
+	(controller $Instance renderer='GuidingTipHub'
+		(bind enabled "_decalGroupType == SC.Common.EXTERIOR_DECAL_GROUPS.SYMBOLS && _subGroupName == SC.Common.DECALS_SYMBOLS.FOR_SILVER && (_groupLength <= 5 ? _groupLength - 2 : 5) == $index && checkedTipId.value")
+		(args
+			_tipId =			"checkedTipId.value"
+			_tipPositioning =	"TIP_POSITION_RIGHT"
+			_offsetX =			"MS"
+			_pointerOffset =	-68px
+			_modalWindowName =	"SC.Ui_windows.WINDOWS.DOCK"
+			_hasAssistant =		true
+			_isHideOnBounds =	true
+			_screenOffsetTop =	90px
+		)
+	)
+
+	
+	(element DecalItemView
+		_decalName =	"decalComponent.index"
+		_amount =		"decalsInStorage"
+		_isUnlinked =	"!isLinkedToShip"
+		_hasInStorage =	"hasInStorage"
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+		(style (padding = "-XS"))
+
+		(block
+			(class $Fullsize)
+			(style (backgroundColor = "NO_COLOR"))
+
+			(macro STRUCT_MOUSE_DISPATCHER
+				_mouseHandler = "mouseHandlerClickArea"
+			)
+
+			(macro STRUCT_SOUND_HANDLER
+				_mouseHandler = "mouseHandler"
+				_soundSet = "'button_camouflage'"
+			)
+
+			(macro STRUCT_DISPATCH_HANDLER
+				_enabled = "!isLinkedToShip || !hasInStorage"
+				_mouseHandler = "mouseHandlerClickArea"
+				_dispatchedEv = "'evPreviewDecal'"
+			)
+
+			(macro STRUCT_CLICK_HANDLER
+				_mouseHandler = "mouseHandlerClickArea"
+				_methods = "[{ type: 'inputMapping.onAction', name: clickAction, args: { decalId: decalId } }]"
+			)
+
+			(controller $Tooltip
+				(renderer = 'DecalTooltip')
+				(args
+					_id = "decalId"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+		)
+	)
+
+	
+	(block
+		(style
+			(position = "absolute")
+			(width = 100%)
+			(bottom = "-S")
+			(visualOffsetY = "S")
+			(alpha = 0)
+		)
+
+		(controller $Animation
+			(bindcall play
+				from = "{alpha: 0, visualOffsetY: -S}"
+				to = "{alpha: 1, visualOffsetY: 0px}"
+				reverse = "!mouseHandler.rollOver"
+				duration = 0.12
+				easing = "Easing.quad_in"
+				action = "killAndContinue"
+				(bind trigger "mouseHandler.rollOver")
+			)
+		)
+
+		(block
+			(style (width = 100%))
+
+			(controller $Instance renderer='DecalPriceButton'
+				(bind enabled "(!hasInStorage || !isLinkedToShip) && isFirstRollOverActive")
+				(args
+					_decalId =			"decalId"
+					_hasInStorage =		"hasInStorage"
+					_isLinkedToShip =	"isLinkedToShip"
+					_isCanBuy =			"decalComponent.canBuy"
+				)
+			)
+		)
+	)
+
+	
+	(block
+		(macro DEFAULT_CONTROL_MARKER_ANIMATION "isNew")
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(top = "-XXS")
+			(right = "LS")
+		)
+		(element MarkerNew)
+	)
+)
+
+(def element DecalPriceButton (_decalId:number, _hasInStorage:bool, _isLinkedToShip:bool, _isCanBuy:bool)
+	(scope
+		(macro PULL_SHIP_ID)
+		(struct decalPrice = PULL_PRICE(_entityId = "_decalId" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var accountResource:dhComponent = "getSingleComponent(CC.accountResource)")
+		(var isDeficit:bool = "decalPrice.info.finalPrice > accountResource[decalPrice.info.currency]" (event "accountResource.evChangedGold") (event "accountResource.evChangedCredit"))
+		(var isPriceVisible:bool = "isDeficit && !_hasInStorage && _isCanBuy")
+
+		(var ownShipComponent:dhComponent =	"getPrimaryComponent(CC.ownShip, playerShipId)")
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+		(var isActionsAvailable:bool =		"!isShipInBalancer && !isShipReadyForBattle")
+
+		(var isBuyable:bool = "!_hasInStorage && _isCanBuy")
+		(var isLinkable:bool = "_hasInStorage && !_isLinkedToShip")
+
+		(var isBuyLinkButtonVisible:bool =	"!isPriceVisible && isActionsAvailable && (isBuyable || isLinkable)")
+	)
+
+	(style
+		(align = "center")
+		(width = 100%)
+		(height = 24px)
+	)
+
+	(block
+		(bind visible "isPriceVisible")
+		
+		(style
+			(hitTest = false)
+			(marginTop = 18px)
+			(marginLeft = "XXS")
+			(marginBottom = "XXS")
+		)
+
+		(controller $Instance renderer='PriceTag'
+			(bind enabled "isPriceVisible")
+			(args
+				_priceInfo = "decalPrice.info"
+				_showDiscountTag = true
+			)
+		)
+	)
+
+	(controller $Instance renderer='DefaultButton'
+		(bind enabled "isBuyLinkButtonVisible")
+		(args
+			_width = 80px
+			_size = "SIZE.SMALL"
+			_isTransactionBtn = true
+			_label = "isBuyable ? 'IDS_BUY_UPPER_CASE' : 'IDS_LINK_MSKIN_UPPER_CASE'"
+			_methods = "[	{	type: 'inputMapping.onRequest',
+								name: 'showModalBuyDecal',
+								args: { _decalId: _decalId, _isBuyAction: !_hasInStorage && _isCanBuy } }]"
+		)
+	)
+)
+
+(def element DecalItemStatic (_id:number, _amount:number=0, _isReward:bool=false, _params:dict={}, _isAmountVisible:bool=true)
+	(scope
+		(var decalComponent:dhComponent = "getPrimaryComponent(CC.exteriorDecal, _id)")
+		(var isLinkedToShip:bool = "decalComponent ? decalComponent.isLinkedToShip : false" (event "decalComponent.evUpdated"))
+		(var isUnlinked:bool = "(_isReward && !('shipId' in _params)) || (!_isReward && !isLinkedToShip)")
+		(var decalName:str = "decalComponent ? decalComponent.index : _params.itemIndex")
+	)
+
+	(bind name "'DecalItemDock_' + decalName")
+
+	(class $ExteriorItemSizeLarge)
+
+	(element DecalItemView
+		_decalName =		"decalName"
+		_amount =			"_amount"
+		_isAmountVisible =	"_isAmountVisible"
+		_isUnlinked =		"isUnlinked"
+		_isReward =			"_isReward"
+	)
+
+	(controller $Tooltip
+		(renderer = 'DecalTooltip')
+		(args
+			_id =					"_id"
+			_isReward =				"_isReward"
+			_noMouseInstructions =	true
+			_amount =				"_amount"
+			_params =				"_params"
+		)
+		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+	)
+)
+
+(def element DecalItemView (_decalName:str, _amount:number = 0, _isAmountVisible:bool = true, _isUnlinked:bool = true,
+							_isReward:bool = false, _hasInStorage:bool = false, _forceShowIcon:bool=false)
+	(scope
+		(var isAmountVisible:bool = "_isAmountVisible && ((_amount > 0 && _isUnlinked) || _amount < 0)")
+	)
+
+	(bind name "'DecalWithAmount_' + _decalName")
+
+	(class $ExteriorItemSizeLarge)
+
+	(block
+		(class $Fullsize)
+		(style
+			(backgroundSize = "fill")
+			(bind backgroundImage "_decalName ? 'img://gui/exteriors/decals_dds_scale/' + _decalName + '.dds' : ''")
+		)
+		(bind alpha "!_hasInStorage && !_isReward && !_forceShowIcon ? 0.3 : 1")
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(left = "XXS")
+			(top = "XXS")
+		)
+
+		(controller $Instance renderer='LinkableItemIcon'
+			(bind enabled "_isUnlinked && _hasInStorage")
+		)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(right = "XXS")
+			(bottom = "XXS")
+		)
+
+		(controller $Instance renderer='ImageItemsCounter'
+			(bind enabled "isAmountVisible")
+			(args
+				_amount = "_amount"
+			)
+		)
+	)
+)
+
+(def element DecalTooltip (_id:number, _amount:number, _params:dict, _isReward:bool=false, _noMouseInstructions:bool=false)
+	(scope
+		(struct decalPrice = PULL_PRICE(_entityId = "_id" _actionId = "SC.Common.PRICE_ACTION.BUY"))
+
+		(var decalEntity:dhEntity =			"getPrimaryEntity(CC.exteriorDecal, _id)")
+		(var decalComponent:dhComponent =	"decalEntity.exteriorDecal")
+		(var decalsInStorage:number =		"_amount ?: decalEntity.countComponent.value"	(event "decalEntity.countComponent.evChanged"))
+		(var decalName:str =				"decalComponent ? decalComponent.index : _params.itemIndex")
+
+		(var hasInStorage:bool =			"decalsInStorage > 0")
+		(var isInstalled:bool =				"decalComponent.isInstalled" (event "decalComponent.evUpdated"))
+		(var isLinkedToShip:bool =			"decalComponent.isLinkedToShip" (event "decalComponent.evUpdated"))
+		(var canBuy:bool =					"decalComponent.canBuy")
+
+		(var isAmountShown:bool =			"_isReward || (hasInStorage && !isLinkedToShip)")
+
+		(macro PULL_SHIP_ID)
+		(var shipEntity:dhEntity =			"getPrimaryEntity(CC.ship, playerShipId)")
+		(var ownShipComponent:dhComponent =	"shipEntity.ownShip" (event "shipEntity.ship.evUpdate") (event "shipEntity.ship.evCurrentSkinChanged"))
+		(var decalPreviewId:number =		"ownShipComponent.decalPreviewedId" (event "ownShipComponent.evPreviewDecalIdChanged"))
+		(var isPreviewed:bool =				"decalPreviewId == _id")
+
+		(var isShipInBalancer:bool =		"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.BALANCER"				(event "ownShipComponent.evUpdateLock"))
+		(var isShipReadyForBattle:bool =	"ownShipComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY"	(event "ownShipComponent.evUpdateLock"))
+
+		(var isStoragePricesVisible:bool =	"isAmountShown || (!decalsInStorage && !_isReward) || (canBuy && !isLinkedToShip && !_isReward) || (!canBuy && !isLinkedToShip)")
+
+		(var mouseInstructionText:str = "	(!hasInStorage || !isLinkedToShip) && !isPreviewed	?	'IDS_MOUSE_INSTRUCTION_FIT_DECAL' :
+											isPreviewed											?	'IDS_MOUSE_INSTRUCTION_UNINSTALL_DECAL' :
+											isInstalled	&& decalPreviewId != 0					?	'IDS_MOUSE_INSTRUCTION_FIT_DECAL' :
+											isInstalled											?	'IDS_MOUSE_INSTRUCTION_UNINSTALL_DECAL'
+																								:	'IDS_MOUSE_INSTRUCTION_INSTALL_DECAL'")
+
+		(var statusLineInfo:dict = "	_noMouseInstructions	?	null :
+										isShipInBalancer		?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,
+																		_text: 'IDS_UNABLE_TO_SET_WHILE_IN_BALANCER' } :
+										isShipReadyForBattle	?	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.ATTENTION,
+																		_text: 'IDS_SET_UNREADY_DIVISION_FIRST_TO_OPERATE_EXTERIORS' }
+																:	{	_unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.MOUSE_LEFT,
+																		_text: mouseInstructionText }")
+	)
+
+	(style (width = "DEFAULT_TOOLTIP_WIDTH"))
+	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
+
+	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
+		(element TooltipSystemHeaderWithIconAndText
+			_imageUrl =			"'img://gui/exteriors/decals_dds_scale/' + decalName + '.dds'"
+			_imageWidth =		60px
+			_imageHeight =		60px
+			_headerText =		"'IDS_DECAL_' + decalName + '_NAME'"
+			_subheaderText =	'IDS_EXTERIOR_TYPE_DECAL'
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isInstalled && !_isReward"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "isInstalled && !_isReward")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.CHECK"
+					_text = 'IDS_INSTALLED_DECAL'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "isStoragePricesVisible"))
+		)
+		(element TOOLTIP_SYSTEM_ELEMENTS_GROUP
+			(bind visible "isStoragePricesVisible")
+
+			
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="isAmountShown"
+				(controller $Instance renderer='TooltipSystemCounterLine'
+					(bind enabled "isAmountShown")
+					(args
+						_title = "_isReward ? 'IDS_COUNT' : 'IDS_IN_WAREHOUSE'"
+						_count = "decalsInStorage"
+						_isAutoWidth = true
+					)
+				)
+			)
+
+			
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="!decalsInStorage && !_isReward"
+				(controller $Instance renderer='TooltipSystemDescriptionText'
+					(bind enabled "!decalsInStorage && !_isReward")
+					(args
+						_descriptionText = 'IDS_OUT_OF_STOCK'
+					)
+				)
+			)
+
+			
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="canBuy && !isLinkedToShip && !_isReward"
+				(controller $Instance renderer='TooltipSystemPriceTagLine'
+					(bind enabled "canBuy && !isLinkedToShip && !_isReward")
+					(args
+						_title = 'IDS_COST_COLON'
+						_priceInfo = "decalPrice.info"
+						_isAutoWidth = true
+					)
+				)
+			)
+
+			
+			(element TOOLTIP_SYSTEM_GROUP_ELEMENT _isEnabled="!canBuy && !isLinkedToShip && !_isReward"
+				(style (width = 100%))
+				(controller $Instance renderer='TooltipSystemDescriptionText'
+					(bind enabled "!canBuy && !isLinkedToShip && !_isReward")
+					(args
+						_descriptionText = 'IDS_SHIP_DECAL_UNIQUE_INFO'
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "hasInStorage && !isLinkedToShip && !_isReward"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "hasInStorage && !isLinkedToShip && !_isReward")
+				(args
+					_unifiedStatus = "SC.Ui_styles.UNIFIED_STATUS.LINKED"
+					_text = 'IDS_LINK_INFO_DECAL'
+				)
+			)
+		)
+
+		
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "statusLineInfo"))
+		)
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='TooltipSystemStatusLine'
+				(bind enabled "statusLineInfo")
+				(args
+					_unifiedStatus = "statusLineInfo._unifiedStatus"
+					_text = "statusLineInfo._text"
+				)
+			)
+		)
+	)
+)

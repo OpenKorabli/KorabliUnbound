@@ -1,0 +1,944 @@
+(def element SagaJourney (_selectedRewardId:number = "SAGA_INVALID_THRESHOLD_ID") 
+	(macro DEFAULT_MODAL_WINDOW_SCOPE_EVENTS)
+	(scope
+		(struct sagaID = EXTRACT_SAGA_ID())
+		(var sagaEntity:dhEntity =		"getPrimaryEntity(CC.saga, sagaID.value)")
+		(var saga:dhComponent =			"sagaEntity.saga")
+
+		(struct sagaTimer = PULL_SAGA_TIMER(_component = "saga"))
+
+		(var sagaPointerEntity:dhEntity =	"getSingleEntity(CC.sagaPointer)")
+		(var sagaPointer:dhComponent =		"sagaPointerEntity.sagaPointer")
+		(var sagaPath:array =				"sagaPointer.path ?: []"				(event "sagaPointer.evChanged"))
+		(var lastPathParentID:str =			"sagaPath[sagaPath.length - 1]")
+
+		(var lastCurrentSagaElemEntity:dhEntity =	"getPrimaryEntity(CC.sagaElement, lastPathParentID)")
+		(var lastCurrentSagaElement:dhComponent =	"lastCurrentSagaElemEntity.sagaElement")
+		(var lastCurrentSagaElementType:number =	"lastCurrentSagaElement.elementType ?: 0"	(event "lastCurrentSagaElement.evChanged"))
+
+
+		(var sagaCurrentProgressBarEntity:dhEntity =	"getSingleEntity(CC.sagaCurrentProgressBarElement)")
+		(var sagaCurrentProgressBar:dhComponent =		"sagaCurrentProgressBarEntity.sagaCurrentProgressBarElement")
+		(var nearestUnreachedReward:number =			"sagaCurrentProgressBar.nextElementIDWithReward"	(event "sagaCurrentProgressBar.evChanged"))
+
+		(var nearestUnreachedRewardEntity:dhEntity =		"getPrimaryEntity(CC.sagaProgressBarElement, nearestUnreachedReward)")
+		(var nearestUnreachedRewardComponent:dhComponent =	"nearestUnreachedRewardEntity.sagaProgressBarElement")
+		(var rewardEntityID:number =						"nearestUnreachedRewardComponent.rewardID"		(event "nearestUnreachedRewardComponent.evChanged"))
+
+		(var isJourneyActive:bool =		"lastCurrentSagaElementType == SC.Sagas.ELEMENT_TYPE.JOURNEY")
+		(var isFinalActive:bool =		"lastCurrentSagaElementType == SC.Sagas.ELEMENT_TYPE.FINAL")
+
+		(var isFinalScreen:bool =		"isFinalActive || sagaTimer.isFinalStatsTimeReached")
+
+		(var rewardEntity:dhEntity =	"getEntity(rewardEntityID)")
+		(var previewedRewardId:number =	"isFinalScreen ? SAGA_INVALID_THRESHOLD_ID : rewardEntity.id")
+
+		(var areAnyRewardsAvailable:bool =	"saga.rewardsAvailable"		(event "saga.evChanged"))
+		(var isJourneyCompleted:bool =		"saga.journeyCompleted"		(event "saga.evChanged"))
+	)
+
+	(dispatch evUpdateViewedReward 	dir="EventDirection.UP"		args="{ value: SAGA_INVALID_THRESHOLD_ID }"	delay=0.2	(bind enabled "sagaTimer.isFinalStatsTimeReached") (bind trigger "sagaTimer.isFinalStatsTimeReached"))
+	(dispatch evUpdateViewedReward 	dir="EventDirection.UP"		args="{ value: previewedRewardId }"			delay=0.2	on='addedToStage'	(bind trigger "nearestUnreachedReward"))
+	(dispatch startShow				dir="EventDirection.DOWN"															on='addedToStage')
+
+	(class $Fullsize)
+	(style (align = "center"))
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 0)
+
+		(class $FullsizeAbsolute)
+		(element ModalWindowAnimatedBackground
+			_selectedCategory =		'eteria'
+			_type =					"SC.Ui_styles.ANIMATED_BG.SAGAS"
+			_hideTime =				0.2
+			_hideDelay =			0.3
+			_modalWindowName =		'ModalWindowSagaMain'
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+		(class $MiddleVHAbsolutely)
+
+		(element SagaJourneyRewardContainerBig
+			_rewardId = "_selectedRewardId"
+		)
+	)
+
+	(block
+		(bind visible "isJourneyActive && !sagaTimer.isFinalStatsTimeReached")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+		(style
+			(position = "absolute")
+			(top = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.TOP_OFFSET")
+			(left = "L")
+		)
+
+		(controller $Instance renderer='SagaTasksNarrative'
+			(bind enabled "isJourneyActive && !sagaTimer.isFinalStatsTimeReached")
+			(args
+				_journeyID =	"lastPathParentID"
+				_sagaPointer =	"sagaPointer"
+			)
+		)
+	)
+
+	(block
+		(bind visible "!isFinalScreen")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+		(style
+			(position = "absolute")
+			(top = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.TOP_OFFSET")
+			(right = "L")
+		)
+
+		(controller $Instance renderer='SagaTasksContainer'
+			(bind enabled "!isFinalScreen")
+			(args
+				_isJourneyActive =		"isJourneyActive"
+				_isJourneyCompleted =	"isJourneyCompleted"
+				_journeyID =			"lastPathParentID"
+			)
+		)
+	)
+
+	(block
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+
+		(style
+			(position = "absolute")
+			(bottom = 0px)
+			(width = 100%)
+		)
+
+		(element SagaMainProgressBarContainer
+			_isFinalActive =			"isFinalActive"
+			_isFinalStatsTimeReached =	"sagaTimer.isFinalStatsTimeReached"
+		)
+	)
+
+	(block
+		(bind visible "isFinalScreen")
+		(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+
+		(class $MiddleVHAbsolutely)
+		(style
+			(align = "center")
+			(width = 100%)
+		)
+
+		(element SagaJourneyFinalTextBox
+			_areAnyRewardsAvailable =	"areAnyRewardsAvailable"
+			_isFinalStatsTimeReached =	"sagaTimer.isFinalStatsTimeReached"
+		)
+	)
+)
+
+(def element SagaTasksNarrative (_journeyID:str, _sagaPointer:dhComponent)
+	(scope
+		(struct stageSize = STAGE_SIZE())
+		(struct portraitSize = ADAPTIVE_VERTICAL_SIZE (	_minStageHeight =	765px
+														_minValue =			"SAGA_ELEMS.JOURNEY.NARRATOR.PORTRAIT_HEIGHT.MIN"
+														_maxStageHeight =	1080px
+														_maxValue =			"SAGA_ELEMS.JOURNEY.NARRATOR.PORTRAIT_HEIGHT.MAX"
+														_stageHeight =		"stageSize.height"))
+
+		(var isBottomArcVisible:bool = "stageSize.height >= SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.BOTTOM_ARC.SCREEN_HEIGHT_THRESHOLD")
+
+
+		(var journeyEntity:dhEntity =	"getPrimaryEntity(CC.sagaJourney, _journeyID)")
+		(var journey:dhComponent =		"journeyEntity.sagaJourney")
+		(var characterID:str =			"journey.characterID"		(event "journey.evChanged"))
+		(var characterSpeech:str =		"journey.text"				(event "journey.evChanged"))
+
+		(var isVoicePlaying:bool =		"_sagaPointer.isJourneyVoicePlaying"	(event "_sagaPointer.evIsJourneyVoicePlayingChanged"))
+
+		(var actorsPortrait:str =	"'img://gui/saga/characters/portrait/650/' + characterID + '.png'")
+		(var actorsName:str =		"tr('IDS_ETERIA_CHARACTER_' + toUpper(characterID))")
+	)
+
+	(style
+		(align = "center")
+		(width = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.WIDTH")
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		(element SagaAsideContainerBackground
+			_isBottomArcVisible =	"isBottomArcVisible"
+		)
+
+		(element SagaAsideContainerBackground
+			_isTexturePattern =		true
+			_isBottomArcVisible =	"isBottomArcVisible"
+		)
+	)
+	
+
+	
+	(block
+		(style
+			(width = 100%)
+			(bind height "portraitSize.value")
+			(align = "center|bottom")
+			(paddingLeft = "S")
+			(paddingRight = "S")
+			(marginBottom = "M")
+			(marginTop = "S")
+			(backgroundColor = "SAGA_COLORS.PAPER")
+		)
+
+		(block
+			(class $FullsizeAbsolute)
+			(style (backgroundColor = "NO_COLOR"))
+
+			(isMask = true)
+		)
+
+		(element TextureCentrified
+			_image =			"SAGA_TEXTURES.PATTERN.MEDIUM_UNCOLORIZED"
+			_width =			"SAGA_ELEMS.TEXTURES.MEDIUM_PATTERN.WIDTH"
+			_height =			"SAGA_ELEMS.TEXTURES.MEDIUM_PATTERN.HEIGHT"
+			_offset =			-380px
+			_colorTransform =	"SAGA_COLORS.COLOR_TRANSFORM.MAIN.UP"
+			_alpha =			0.3
+		)
+
+		(block
+			(style
+				(bind width "portraitSize.value")
+				(bind height "portraitSize.value")
+				(bind backgroundImage "actorsPortrait")
+				(backgroundSize = "contain")
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(paddingLeft = "M")
+			(paddingRight = "M")
+		)
+
+		(tf
+			(class $TextDefaultBoldNMWithoutShadow)
+			(style
+				(width = 100%)
+				(textColor = "SAGA_COLORS.BRIGHT")
+				(marginBottom = "SXS")
+			)
+
+			(bind text "actorsName")
+		)
+
+		(scrollArea
+			(style
+				(width = 100%)
+				(maxHeight = 100px)
+				(marginBottom = "SXS")
+				(backgroundColor = "SAGA_COLORS.MAIN.UP")
+			)
+
+			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+				_wheelScrollAcceleration =	"0.8"
+				_isDrag =					"false"
+				_thumbColor =				"SAGA_COLORS.BRIGHT"
+			)
+
+			(content
+				(style
+					(width = 100%)
+					(paddingBottom = "XS")
+				)
+
+				(tf
+					(class $TextDefaultNMWithoutShadow)
+					(style
+						(width = 100%)
+						(textColor = "SAGA_COLORS.BRIGHT")
+					)
+
+					(bind text "characterSpeech")
+				)
+			)
+		)
+
+		(hblock
+			(style
+				(width = 100%)
+				(height = 36px)
+				(marginBottom = "MS")
+			)
+
+			(block
+				(style (marginTop = -1px))
+
+				(element PlayButton
+					_methods =			"isVoicePlaying	? [{ type: 'direct.action',	name: 'stopJourneyVoicePlaying',	args: {} }]
+														: [{ type: 'direct.action',	name: 'startJourneyVoicePlaying',	args: {} }]"
+					_isSoundPlaying =	"isVoicePlaying"
+				)
+			)
+
+			(block
+				(class $Fullsize)
+				(style (paddingLeft = "S"))
+
+				(element SoundWaveHistogram
+					_sagaPointer =		"_sagaPointer"
+					_width =			290px
+					_isSoundPlaying =	"isVoicePlaying"
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "isBottomArcVisible")
+
+			(style
+				(width = 100%)
+				(height = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.BOTTOM_ARC.HEIGHT")
+			)
+		)
+		
+	)
+	
+)
+
+(def element SagaTasksContainer (_isJourneyActive:bool, _isJourneyCompleted:bool, _journeyID:str)
+	(scope
+		(struct stageSize = STAGE_SIZE())
+		(var isBottomArcVisible:bool = "stageSize.height >= SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.BOTTOM_ARC.SCREEN_HEIGHT_THRESHOLD")
+
+		(var journeyEntity:dhEntity =	"getPrimaryEntity(CC.sagaJourney, _journeyID)")
+		(var journey:dhComponent =		"journeyEntity.sagaJourney")
+		(var tasksSectionName:str =		"journey.tasksSectionName"	(event "journey.evChanged"))
+
+		(var sagaTaskCollection:dhCollection = "getCollectionByPath(CC.sagaTask, 'byJourneyID.' + _journeyID)")
+
+		(var journeyName:str = "tasksSectionName ?: 'IDS_SAGA_JOURNEY_TASKS_TITLE'")
+	)
+
+	(style
+		(align = "center")
+		(width = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.WIDTH")
+	)
+
+	
+	(block
+		(class $FullsizeAbsolute)
+
+		(element SagaAsideContainerBackground
+			_isBottomArcVisible =	"isBottomArcVisible"
+		)
+
+		(element SagaAsideContainerBackground
+			_isTexturePattern =		true
+			_isBottomArcVisible =	"isBottomArcVisible"
+		)
+	)
+	
+
+	
+	(block
+		(style
+			(width = 100%)
+			(maxHeight = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.HEIGHT")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(padding = "SAGA_ELEMS.JOURNEY.TASKS_CONTAINER.SIDE_PADDING")
+				(backgroundColor = "NO_COLOR")
+			)
+
+			(tf
+				(class $TextDefaultBold18NM)
+				(style
+					(width = 100%)
+					(alpha = "TA")
+				)
+
+				(bind text "journeyName")
+			)
+		)
+
+		(element HorizontalDividerTwoPx)
+
+		(block
+			(bind visible "_isJourneyCompleted || !_isJourneyActive")
+
+			(style
+				(align = "center")
+				(width = 100%)
+				(marginBottom = "SXS")
+				(paddingTop = "L")
+				(paddingLeft = "SAGA_ELEMS.JOURNEY.TASKS_CONTAINER.SIDE_PADDING")
+				(paddingRight = "SAGA_ELEMS.JOURNEY.TASKS_CONTAINER.SIDE_PADDING")
+			)
+
+			(tf
+				(class $TextDefaultBold18NM)
+				(style
+					(marginBottom = "M")
+					(alpha = "TA")
+				)
+
+				(text = 'IDS_SAGA_JOURNEY_ALL_TASKS_COMPLETED')
+			)
+
+			(element SagaDefaultButton
+				_name =			'btn_to_story'
+				_width =		192px
+				_type =			"SAGA_BUTTON_TYPE.SECONDARY"
+				_label =		'IDS_SAGA_BUTTON_TO_STORY'
+				_methods =		"[{ type: 'direct.action',	name: _isJourneyCompleted ? 'onTurnNarrativeForward' : 'onRewindNarrativeForward',	args: {} }]"
+			)
+		)
+
+		(block
+			(bind visible "!_isJourneyCompleted && _isJourneyActive")
+
+			(style
+				(width = 100%)
+				(maxHeight = 100%)
+				(paddingTop = "M")
+				(paddingLeft = "S")
+				(paddingRight = "S")
+			)
+
+			(scrollArea
+				(style
+					(width = 100%)
+					(maxHeight = 100%)
+					(backgroundColor = "SAGA_COLORS.MAIN.UP")
+				)
+
+				(macro DEFAULT_VERTICAL_SCROLL_PARAMS
+					_wheelScrollAcceleration =	"0.8"
+					_isDrag =					"false"
+					_thumbColor =				"SAGA_COLORS.BRIGHT"
+				)
+
+				(content
+					(style
+						(width = 100%)
+						(vgap = "XS")
+					)
+
+					(controller $Repeat renderer='SagaTaskItem'
+						(bind count "sagaTaskCollection.length")
+						(args
+							_entityId = "sagaTaskCollection[$index].id"
+						)
+					)
+				)
+			)
+		)
+
+		
+		(block
+			(style (marginBottom = "M"))
+		)
+		
+
+		
+		(block
+			(bind visible "isBottomArcVisible")
+
+			(style
+				(width = 100%)
+				(height = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.BOTTOM_ARC.HEIGHT")
+			)
+		)
+		
+	)
+	
+)
+
+(def element SagaTaskItem (_entityId:number)
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var sagaTask:dhComponent =	"getEntity(_entityId).sagaTask")
+
+		(var conditionsID:number =			"sagaTask.conditionsID ?: 0"	(event "sagaTask.evChanged"))
+		(var sseConditionEntity:dhEntity =	"getEntity(conditionsID)")
+		(var sseTask:dhComponent =			"sseConditionEntity.sseConditions")
+		(var isSingleBattle:bool =			"sseTask.isSingleBattle"		(event "sseTask.evConditionSetChanged"))
+
+		(var taskProgress:number =	"sagaTask.progress ?: 0"		(event "sagaTask.evChanged"))
+		(var isTaskDone:bool =		"sagaTask.isDone"				(event "sagaTask.evChanged"))
+	)
+
+	(bindcall externalCall "isTaskDone ? '' : 'direct.action'"	"['onHighlightProgressElements',	{ highlightedProgress: taskProgress }]"		init=false watch=false		(event "mouseHandler.evRollOver"))
+	(bindcall externalCall "isTaskDone ? '' : 'direct.action'"	"['onHighlightProgressElements',	{ highlightedProgress: 0 }]"				init=false watch=false		(event "mouseHandler.evRollOut"))
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+
+	(style
+		(width = 100%)
+		(backgroundColor = "NO_COLOR")
+	)
+
+	(block
+		(class $FullsizeAbsolute)
+		(style
+			(backgroundImage = "SAGA_TEXTURES.SERVICE_KIT.BUTTON.SECONDARY")
+			(scale9grid = 3)
+			(alpha = 0.2)
+		)
+		(colorTransform = "SAGA_COLORS.COLOR_TRANSFORM.BRIGHT.UP")
+
+		(controller $Animation
+			(bindcall play
+				from =			"{ alpha: 0.2 }"
+				to =			"{ alpha: 0.6 }"
+				duration =		0.2
+				action =		"kill"
+				trigger =		"mouseHandler.rollOver"
+				reverse =		"!mouseHandler.rollOver"
+				(bind enabled "!isTaskDone")
+			)
+		)
+	)
+
+	(block
+		(style
+			(width = 100%)
+			(paddingTop = "{ 720: S, 1080: SXS }")
+			(paddingBottom = "{ 720: XS, 1080: S }")
+			(paddingLeft = "SXS")
+			(paddingRight = "SXS")
+			(bind alpha "isTaskDone ? 0.5 : 1")
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(minHeight = 41px)
+			)
+
+			(block
+				(style
+					(width = 100%)
+					(marginBottom = "S")
+				)
+
+				(element SseTaskDescription
+					_conditionId =			"sseConditionEntity.id"
+					_isShipMasteryTask =	true
+					_isThirdLevel =			true
+					_isHeader =				true
+					_textClass =			'$TextDefaultNM'
+				)
+			)
+
+			(tf
+				(bind visible "isSingleBattle")
+				(class $TextDefaultNM)
+				(style
+					(width = 100%)
+					(marginTop = "S")
+					(alpha = "TA")
+				)
+				(text = 'IDS_SINGLE_BATTLE_TASK')
+			)
+
+			(block
+				(style (width = 100%))
+				(controller $Instance renderer='SseProgress'
+					(bind enabled "!isSingleBattle")
+					(args
+						_sseId =		"sseConditionEntity.id"
+						_conditionId =	"sseConditionEntity.id"
+					)
+				)
+			)
+		)
+
+		(block
+			(style
+				(width = 100%)
+				(marginTop = "M")
+			)
+
+			(element SseConditions
+				_conditionId = "sseConditionEntity.id"
+			)
+		)
+
+		(hblock
+			(style
+				(width = 100%)
+				(height = 24px)
+				(marginTop = "{ 720: XS, 1080: SXS }")
+				(align = "middle")
+			)
+
+			(block
+				(style (width = 100%))
+
+				(element SagaCurrencyWithTooltip
+					_finalPrice = "taskProgress"
+				)
+			)
+		)
+	)
+)
+
+(def element SagaAsideContainerBackground (_isTexturePattern:bool = false, _isBottomArcVisible:bool = true)
+	(class $FullsizeAbsolute)
+
+	(block
+		(class $Fullsize)
+		(isMask = "_isTexturePattern")
+
+		(block
+			(class $Fullsize)
+			(style
+				(borderRadiusBottomRight = 20px)
+				(borderRadiusBottomLeft = 20px)
+				(backgroundColor = "_isTexturePattern ? NO_COLOR : SAGA_COLORS.MAIN.UP")
+			)
+		)
+
+		(block
+			(bind visible "_isBottomArcVisible")
+
+			(style
+				(width = 100%)
+				(height = "SAGA_ELEMS.JOURNEY.ASIDE_CONTAINER.BOTTOM_ARC.HEIGHT")
+			)
+
+			(block
+				(style
+					(position = "absolute")
+					(bottom = 100px)
+					(left = 50%)
+				)
+
+				(controller $Instance renderer='SagaJourneySideContainerBottomArc'
+					(bind enabled "_isBottomArcVisible")
+					(args
+						_isTexturePattern = "_isTexturePattern"
+					)
+				)
+			)
+		)
+	)
+
+	(element TextureCentrified
+		_image =			"SAGA_TEXTURES.PATTERN.MEDIUM_UNCOLORIZED"
+		_width =			"SAGA_ELEMS.TEXTURES.MEDIUM_PATTERN.WIDTH"
+		_height =			"SAGA_ELEMS.TEXTURES.MEDIUM_PATTERN.HEIGHT"
+		_offset =			-320px
+		_colorTransform =	"SAGA_COLORS.COLOR_TRANSFORM.PAPER.UP"
+		_alpha =			0.25
+		_enabled =			"_isTexturePattern"
+	)
+)
+
+(def element SagaJourneySideContainerBottomArc (_isTexturePattern:bool)
+	(controller $Sector
+		(bind offset "0")
+		(bind arc "180")
+		(bind radius "100")
+		(bind color " _isTexturePattern	? NO_COLOR : SAGA_COLORS.MAIN.UP")
+	)
+)
+
+(def element PlayButton (_methods:array = [], _isSoundPlaying:bool = false, _ctDict:dict = "SAGA_COLORS.COLOR_TRANSFORM.BRIGHT")
+	(scope
+		(struct mouseHandler = MOUSE_HANDLER())
+
+		(var colorTransform:dict = "mouseHandler.rollOver && !mouseHandler.mouseDown	? _ctDict.OVER :
+									mouseHandler.mouseDown								? _ctDict.DOWN
+																						: _ctDict.UP")
+	)
+
+	(style
+		(width = 36px)
+		(height = 36px)
+		(backgroundSize = "align")
+		(bind backgroundImage "_isSoundPlaying ? SAGA_TEXTURES.SERVICE_KIT.STOP : SAGA_TEXTURES.SERVICE_KIT.PLAY")
+	)
+
+	(bind colorTransform "colorTransform")
+
+	(macro STRUCT_MOUSE_HANDLER
+		_mouseHandler =		"mouseHandler"
+		_soundSet =			"'button_default'"
+		_methods =			"_methods"
+	)
+)
+
+(def element SoundWaveHistogram (_sagaPointer:dhComponent, _width:number, _isSoundPlaying:bool = false)
+	(class $FullsizeAbsolute)
+	(style (hitTest = false))
+
+	(block
+		(style
+			(position = "absolute")
+			(bind width "_width")
+			(height = 100%)
+			(backgroundColor = "NO_COLOR")
+		)
+		(isMask = true)
+	)
+
+	(block
+		(style
+			(position = "absolute")
+			(top = 5px)
+			(left =	0px)
+			(alpha = 1.6)
+			(backgroundImage = "SAGA_TEXTURES.SERVICE_KIT.SOUNDWAVE")
+		)
+
+		(controller $Spine
+			(bindcall play sequence='animation_stop'	init=true	(bind enabled "!_isSoundPlaying"))
+			(bindcall play sequence='animation_play'				(bind enabled "_isSoundPlaying"))
+		)
+	)
+)
+
+(def element SagaJourneyFinalTextBox (_areAnyRewardsAvailable:bool = true, _isFinalStatsTimeReached:bool = false)
+	(scope
+		(var title:str =	"_isFinalStatsTimeReached ? 'IDS_SAGA_FINAL_STATS_REACHED_TITLE' : 'IDS_SAGA_FINAL_TITLE'")
+		(var caption:str =	"_isFinalStatsTimeReached ? 'IDS_SAGA_FINAL_ETERIA_FINAL_STATS_TIME_DESCRIPTION' : 'IDS_SAGA_FINAL_DESCRIPTION'")
+	)
+
+	(style
+		(width = "SAGA_ELEMS.FORK.CONFIRM_POPUP.NARRATIVE.WIDTH")
+		(paddingTop = "-SAGA_ELEMS.SERVICE_KIT.BOTTOM_ARC.HEIGHT")
+	)
+
+	(block
+		(style (width = 100%))
+
+		(element SagaTextBoxTexture)
+
+		(block
+			(style
+				(align = "center")
+				(width = 100%)
+				(paddingLeft = "SAGA_ELEMS.FORK.CONFIRM_POPUP.SIDE_PADDING")
+				(paddingRight = "SAGA_ELEMS.FORK.CONFIRM_POPUP.SIDE_PADDING")
+				(paddingTop = "LS")
+				(paddingBottom = "LS")
+			)
+
+			(tf
+				(class $TextDefaultBold24NMWithoutShadow)
+				(style
+					(width = 100%)
+					(marginBottom = "L")
+					(textAlign = "center")
+					(textColor = "SAGA_COLORS.COMMON_TEXT")
+				)
+
+				(bind text "toUpper(tr(title))")
+			)
+
+			(tf
+				(class $TextDefault22NMWithoutShadow)
+				(style
+					(width = 100%)
+					(marginBottom = "L")
+					(textAlign = "center")
+					(textColor = "SAGA_COLORS.COMMON_TEXT")
+				)
+
+				(bind text "caption")
+			)
+
+			(hblock
+				(style
+					(align = "center")
+					(width = 100%)
+					(marginBottom = "SXS")
+				)
+
+				(element SagaDefaultButton
+					_name =			"_isFinalStatsTimeReached ? 'btn_finalstatstime_close' : 'btn_to_archive'"
+					_width =		190px
+					_label =		"_isFinalStatsTimeReached ? 'IDS_CLOSE_BTN' : 'IDS_SAGA_BUTTON_ARCHIVE'"
+					_focusIndex =	0
+					_methods =		"_isFinalStatsTimeReached ?		[{ type: 'inputMapping.onRequest',	name: 'goToPort',	args: {} }] :
+																	[{ type: 'inputMapping.onAction',	name: 'navigateTo',	args: { route: SC.Ui_windows.ROUTE.SAGA_ARCHIVE } }]"
+				)
+
+				(block
+					(bind visible "_areAnyRewardsAvailable")
+
+					(style (marginLeft = "M"))
+
+					(controller $Instance renderer='SagaDefaultButton'
+						(bind enabled "_areAnyRewardsAvailable")
+						(args
+							_width =		190px
+							_name =			'btn_collect_rewards'
+							_label =		'IDS_SAGA_BUTTON_COLLECT_REWARDS'
+							_focusIndex =	1
+							_methods =		"[{ type: 'direct.action',	name: 'onClaimSagaRewards',	args: {} }]"
+						)
+					)
+				)
+			)
+		)
+	)
+)
+
+(def element SagaJourneyRewardContainerBig (_rewardId:number)
+	(scope
+		(struct qualityGraphicsPref = GET_PREF_STR(_option="'graphics.preset'"))
+		(var qualityGraphics:str = "qualityGraphicsPref.value")
+		(var isStatic:bool = "isIn(qualityGraphics, [SC.Ui_prefs.GRAPHICS_PRESET.LOW, SC.Ui_prefs.GRAPHICS_PRESET.MINIMUM])")
+	)
+
+	(style
+		(width = "SAGA_ELEMS.JOURNEY.MAIN_REWARD.REWARD_ITEM.WIDTH")
+		(height = "SAGA_ELEMS.JOURNEY.MAIN_REWARD.REWARD_ITEM.HEIGHT")
+	)
+
+	(block
+		(style
+			(hitTest = false)
+			(position = "absolute")
+			(top = -200px)
+			(left = -200px)
+		)
+
+		(element SagaMainRewardSpineEffect)
+	)
+
+	(block
+		(style
+			(pivotX = 50%)
+			(pivotY = 50%)
+			(scaleX = 0.7)
+			(scaleY = 0.7)
+			(alpha = 0)
+		)
+
+		(colorTransform = "CT_NONE")
+
+		(controller $Instance renderer='SagaMainRewardView'
+			(bind enabled "_rewardId != SAGA_INVALID_THRESHOLD_ID")
+			(args
+				_rewardId = "_rewardId"
+			)
+		)
+
+		(controller $Animation
+			(bindcall play
+				duration =	0.4
+				keyframes =	"SAGA_FINAL_REWARD_APPEAR_ANIMATION_KEYFRAMES"
+				easing =	"Easing.expo_in_out"
+				action =	"killAll"
+				trigger =	"_rewardId"
+			)
+			(bindcall play
+				duration =	0.4
+				keyframes =	"SAGA_FINAL_REWARD_APPEAR_ANIMATION_KEYFRAMES"
+				easing =	"Easing.expo_in_out"
+				action =	"killAll"
+				on =		'addedToStage'
+				(bind enabled "_rewardId != SAGA_INVALID_THRESHOLD_ID")
+			)
+		)
+	)
+)
+
+(def element SagaMainRewardView (_rewardId:number = 0)
+	(scope
+		(var isFinalReward:bool = "_rewardId == SAGA_FINAL_THRESHOLD_ID")
+
+		(var rewardEntity:dhEntity =		"getEntity(_rewardId)")
+		(var rewardComponent:dhComponent =	"rewardEntity.rewardComponent")
+
+		(var reward:dict = "{	id:				rewardComponent.id,
+								type:			rewardComponent.type,
+								subtype:		rewardComponent.subtype,
+								name:			rewardComponent.name,
+								amount:			rewardComponent.amount,
+								params:			rewardComponent.params,
+								rarity:			rewardComponent.rarity}" (event "rewardComponent.evUpdate"))
+
+		(var isCrew:bool =				"reward.type == SC.Common.REWARD_TYPE.CREW")
+		(var isExterior:bool =			"reward.type == SC.Common.REWARD_TYPE.EXTERIOR")
+		(var isResource:bool =			"reward.type == SC.Common.REWARD_TYPE.RESOURCE")
+		(var isDogTag:bool =			"reward.type == SC.Common.REWARD_TYPE.DOGTAG")
+		(var isDecal:bool =				"reward.subtype == SC.Common.REWARD_SUBTYPE.DECAL")
+
+		(var rendererData:dict =		"!(isExterior || isResource) && (reward.type in REWARD_ELEMENT_BY_TYPE) ? REWARD_ELEMENT_BY_TYPE[reward.type] : null")
+		(var rewardViewStylized:str =	"rendererData && 'rewardViewStylized' in rendererData ? rendererData['rewardViewStylized'] : ''")
+
+		(var exteriorData:dict =		"isExterior && (reward.subtype in RENDER_REWARD_EXTERIOR_ITEMS) ? RENDER_REWARD_EXTERIOR_ITEMS[reward.subtype] : null")
+		(var exteriorViewStylized:str =	"exteriorData && 'rewardViewStylized' in exteriorData ? exteriorData['rewardViewStylized'] : ''")
+
+		(var resourceData:dict =		"isResource && (reward.subtype in REWARD_RESOURCE_ELEMENT) ? REWARD_RESOURCE_ELEMENT[reward.subtype] : null")
+		(var resourceViewStylized:str =	"resourceData && 'rewardViewStylized' in resourceData ? resourceData['rewardViewStylized'] : ''")
+
+		(var crewId:number =		"reward.params.primaryKey ?: 0")
+		(var decalId:str =			"reward.params.itemIndex ?: ''")
+
+		(var dogTagEntity:dhEntity =	"getPrimaryEntity(CC.dogTagComponent, reward.id)")
+		(var dogTag:dhComponent =		"dogTagEntity.dogTagComponent")
+		(var dogTagGPName:str =			"dogTag.gpName ?: ''"		(event "dogTag.evUpdate"))
+
+		(var renderer:str = "isExterior			? exteriorViewStylized :
+							 isResource			? resourceViewStylized
+												: rewardViewStylized")
+		(var imagePath:str = "	isCrew			? null :
+								isDogTag		? 'url:../dogTags/big/' + dogTagGPName + '.png' :
+								reward.subtype	? 'url:../reward_icons/big/' + reward.subtype + '.png'
+												: ''")
+	)
+
+	(controller $Instance
+		(bind renderer "renderer")
+		(bind enabled "!isFinalReward")
+		(args
+			_imagePath =	"imagePath"
+			_data =			"isCrew		? { crewHistoryId:	crewId } :
+							 isDecal	? { rewardSubtype:	SC.Common.REWARD_SUBTYPE.DECAL,
+											index:			decalId }
+										: null"
+			_size =			"SC.Ui_styles.SIZE.EXTRA_LARGE"
+		)
+	)
+
+	(controller $Instance renderer='RewardCrewWithBackView'
+		(bind enabled "isFinalReward")
+		(args
+			_size =						"SC.Ui_styles.SIZE.EXTRA_LARGE"
+			_data =						"{ crewRarity: SC.Common.UNIFIED_ITEM_RARITY.RARE }"
+			_isCategoryStereotype =		true
+		)
+	)
+)
+
+(def element SagaMainRewardSpineEffect (_maxAlpha:number = 1)
+	(style
+		(hitTest = false)
+		(width = "SAGA_ELEMS.JOURNEY.MAIN_REWARD.EFFECT_ITEM.WIDTH")
+		(height = "SAGA_ELEMS.JOURNEY.MAIN_REWARD.EFFECT_ITEM.HEIGHT")
+		(backgroundImage = "SAGA_TEXTURES.SERVICE_KIT.MAIN_REWARD_VIEW_EFFECT.BACKGROUND")
+		(alpha = "_maxAlpha")
+	)
+
+	(controller $Spine)
+)

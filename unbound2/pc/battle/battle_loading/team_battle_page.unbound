@@ -1,23 +1,34 @@
 
 
-(def constant COLUMN_DIVISIONS_WIDTH 36px)
-(def constant COLUMN_PLAYER_WIDTH 176px)
-(def constant COLUMN_PLAYER_WIDTH_ONE_TEAM 437px)
-(def constant COLUMN_SHIP_WIDTH 180px)
-(def constant COLUMN_SHIP_WIDTH_ONE_TEAM 409px)
-(def constant COLUMN_FRAGS_WIDTH 46px)
+(def constant COLUMN_DIVISIONS_WIDTH 39px)
+(def constant COLUMN_PLAYER_WIDTH 168px)
+(def constant COLUMN_PLAYER_WIDTH_ONE_TEAM 427px)
+(def constant COLUMN_SHIP_WIDTH 168px)
+(def constant COLUMN_SHIP_WIDTH_ONE_TEAM 400px)
+(def constant COLUMN_FRAGS_WIDTH 42px)
+(def constant COLUMN_ASSIST_WIDTH 42px)
 (def constant COLUMN_EMOJI_WIDTH 52px)
 (def constant KEY_TARGET_ICON_SIZE 19px)
 
-(def constant HALF_TABLE_WIDTH "COLUMN_DIVISIONS_WIDTH + COLUMN_PLAYER_WIDTH + COLUMN_SHIP_WIDTH + COLUMN_FRAGS_WIDTH + COLUMN_EMOJI_WIDTH")
-(def constant TABLE_WIDTH "COLUMN_DIVISIONS_WIDTH + COLUMN_PLAYER_WIDTH_ONE_TEAM + COLUMN_SHIP_WIDTH_ONE_TEAM + COLUMN_FRAGS_WIDTH + COLUMN_EMOJI_WIDTH")
+(def constant HALF_TABLE_WIDTH "COLUMN_DIVISIONS_WIDTH + COLUMN_PLAYER_WIDTH + COLUMN_SHIP_WIDTH + COLUMN_FRAGS_WIDTH + COLUMN_ASSIST_WIDTH + COLUMN_EMOJI_WIDTH")
+(def constant TABLE_WIDTH "COLUMN_DIVISIONS_WIDTH + COLUMN_PLAYER_WIDTH_ONE_TEAM + COLUMN_SHIP_WIDTH_ONE_TEAM + COLUMN_FRAGS_WIDTH + COLUMN_ASSIST_WIDTH + COLUMN_EMOJI_WIDTH")
 (def constant LINE_HEIGHT 32px)
 
+(def constant C_DARK_PANEL 0x27000000)
 (def constant C_ENEMY_HEADER 0x77F25755)
 (def constant C_ALLY_HEADER 0x775EDABB)
 (def constant CT_DIVISION "{ redMultiplier:1, greenMultiplier:0.81, blueMultiplier:0.44 }")
 
-(def constant CAN_DRUM_AMMO "['ap', 'cs', 'he', 'ss']")
+(def constant CAN_DRUM_AMMO [
+	'ap',
+	'cs',
+	'he',
+	'ss',
+	'ap_sec',
+	'cs_sec',
+	'he_sec',
+	'ss_sec',
+])
 
 
 (def css $LineBackgroundStyle ()
@@ -25,12 +36,6 @@
 	(height = "LINE_HEIGHT")
 	(width = 100%)
 )
-
-(def element BackgroundBlack()
-	(class $FullsizeAbsolute)
-	(style (backgroundColor = "C_DARK") (alpha = "0.15"))
-)
-
 
 (def element TeamBattlePage (_isDynamicDivisionsEnabled:bool, _isBattleLoading:bool, _isBattleStats:bool)
 	(scope
@@ -81,15 +86,11 @@
 			)
 		)
 
-		(block
-			(controller $Instance renderer='UIListTeamStructureLeft'
-				(args
-					_isBattleLoading 			= "_isBattleLoading"
-					_isBattleStats 				= "_isBattleStats"
-					_isDynamicDivisionsEnabled 	= "_isDynamicDivisionsEnabled"
-					_isOnlyTeam 				= "isOnlyTeam"
-				)
-			)
+		(element UIListTeamStructureLeft
+			_isBattleLoading = "_isBattleLoading"
+			_isBattleStats = "_isBattleStats"
+			_isDynamicDivisionsEnabled = "_isDynamicDivisionsEnabled"
+			_isOnlyTeam = "isOnlyTeam"
 		)
 
 		
@@ -105,9 +106,9 @@
 			(controller $Instance renderer='UIListTeamStructureRight'
 				(bind enabled "!isOnlyTeam")
 				(args
-					_isBattleLoading 	= "_isBattleLoading"
-					_isBattleStats 		= "_isBattleStats"
-					_isFogOfWar 		= "isFogOfWar"
+					_isBattleLoading = "_isBattleLoading"
+					_isBattleStats = "_isBattleStats"
+					_isFogOfWar = "isFogOfWar"
 				)
 			)
 		)
@@ -137,10 +138,10 @@
 		(controller $Repeat renderer='SimpleUIListTeamStructureRight'
 			(bind count "avatarCollection.length")
 			(args
-				_avatarEntity 		= "avatarCollection[$index]"
-				_isBattleLoading 	= "_isBattleLoading"
-				_isBattleStats 		= "_isBattleStats"
-				_isFogOfWar 		= "_isFogOfWar"
+				_avatarEntity = "avatarCollection[$index]"
+				_isBattleLoading = "_isBattleLoading"
+				_isBattleStats = "_isBattleStats"
+				_isFogOfWar = "_isFogOfWar"
 			)
 		)
 	)
@@ -198,6 +199,23 @@
 					(width = 21px)
 					(height = 21px)
 					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_stat_frag')
+				)
+			)
+		)
+
+		
+		(block
+			(style
+				(width = "COLUMN_ASSIST_WIDTH")
+				(height = 100%)
+				(align = "middle|center")
+			)
+
+			(block
+				(style
+					(width = 21px)
+					(height = 21px)
+					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_stat_assist')
 				)
 			)
 		)
@@ -307,7 +325,10 @@
 	
 	(block
 		(class $LineBackgroundStyle)
-		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE") (alpha = 0))
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = 0)
+		)
 		(controller $Animation
 			(bindcall play duration=0.02 from={alpha: 0} to={alpha: 0.05} action="killAll" reverse="!rollOver" (bind trigger "rollOver") )
 		)
@@ -421,11 +442,29 @@
 		)
 
 		
+		(block
+			(bind visible "!_isBattleLoading")
+			(style
+				(hitTest = false)
+				(width = "COLUMN_ASSIST_WIDTH")
+				(height = 100%)
+				(align = "middle|center")
+				
+			)
+			(tf
+				(bind visible "_isBattleStats && assistsCount != 0 && !isDetectionInfoHidden")
+				(bind class "isSelected ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+				(style (alpha = "TA"))
+				(bind text "assistsCount")
+			)
+		)
+
+		
 		(hblock
 			(style
 				(hitTest = false)
 				(paddingLeft = "XS")
-				(width = "_isBattleLoading ? COLUMN_SHIP_WIDTH + COLUMN_EMOJI_WIDTH : COLUMN_SHIP_WIDTH")
+				(width = "_isBattleLoading ? COLUMN_SHIP_WIDTH + COLUMN_EMOJI_WIDTH + COLUMN_ASSIST_WIDTH : COLUMN_SHIP_WIDTH")
 				(height = 100%)
 				(align = "middle")
 				
@@ -620,6 +659,25 @@
 			(bind visible "!_isChallenge")
 
 			(style
+				(width = "COLUMN_ASSIST_WIDTH")
+				(height = 100%)
+				(align = "middle|center")
+			)
+
+			(block
+				(style
+					(width = 21px)
+					(height = 21px)
+					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_stat_assist')
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "!_isChallenge")
+
+			(style
 				(width = "COLUMN_FRAGS_WIDTH")
 				(height = 100%)
 				(align = "middle|center")
@@ -742,7 +800,10 @@
 	(dispatch evAvatarSelected on='leftClick' (bind enabled "isAvatarSelectionEnabled"))
 	(bindcall externalCall 'direct.action' "['action.onAvatarSelected', {selectedAvatarId: id}]" init=false watch=false (event "evAvatarSelected"))
 	(bind visible "!hidden")
-	(style (height = "LINE_HEIGHT") (width = 100%))
+	(style
+		(height = "LINE_HEIGHT")
+		(width = 100%)
+	)
 
 	
 	(block 
@@ -758,7 +819,10 @@
 	
 	(block 
 		(class $LineBackgroundStyle)
-		(style (backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE") (alpha = 0))
+		(style
+			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(alpha = 0)
+		)
 		(controller $Animation
 			(bindcall play duration=0.02 from={alpha: 0} to={alpha: 0.05} action="killAll" reverse="!rollOver" (bind trigger "rollOver") )
 		)
@@ -887,9 +951,9 @@
 				(paddingLeft = "XS")
 				(height = 100%)
 				(align = "middle")
-				(bind width "_isOnlyTeam 	? _isBattleLoading 	? COLUMN_SHIP_WIDTH_ONE_TEAM + COLUMN_EMOJI_WIDTH
+				(bind width "_isOnlyTeam 	? _isBattleLoading 	? COLUMN_SHIP_WIDTH_ONE_TEAM + COLUMN_EMOJI_WIDTH + COLUMN_ASSIST_WIDTH
 																: COLUMN_SHIP_WIDTH_ONE_TEAM
-											: _isBattleLoading 	? COLUMN_SHIP_WIDTH + COLUMN_EMOJI_WIDTH
+											: _isBattleLoading 	? COLUMN_SHIP_WIDTH + COLUMN_EMOJI_WIDTH + COLUMN_ASSIST_WIDTH
 																: COLUMN_SHIP_WIDTH"
 				)
 				
@@ -937,6 +1001,27 @@
 				_isInSameDivision =	"isInSameDivision"
 				_alpha =			"alphaOfShip"
 				_playerShipColor =	"playerShipColor"
+			)
+		)
+
+		
+		(block
+			(bind visible "!_isBattleLoading")
+			(style
+				(hitTest = false)
+				(width = "COLUMN_ASSIST_WIDTH")
+				(height = 100%)
+				(align = "middle|center")
+				
+			)
+			(tf
+				(bind visible "_isBattleStats && assistsCount != 0")
+				(bind class "isSelected || isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+				(style
+					(alpha = "TA")
+					(bind textColor "playerStatsAndFragsColor")
+				)
+				(bind text "assistsCount")
 			)
 		)
 
@@ -1036,7 +1121,10 @@
 )
 
 (def element WonPosition (_wonPosition:number)
-	(style (height = 100%) (align = "middle|center"))
+	(style
+		(height = 100%)
+		(align = "middle|center")
+	)
 	(block
 		(style
 			(width = 19px)
@@ -1053,7 +1141,9 @@
 	(block
 		(bind visible "_isBattleLoading")
 		(style
-			(width = 10px) (height = 10px) (align = "middle|center")
+			(width = 10px)
+			(height = 10px)
+			(align = "middle|center")
 			(bind backgroundImage "'swf:../service_kit/markers_svg/markers_svg.swf:' + (_isReady ? 'online' : 'offline')")
 		)
 	)
@@ -1063,8 +1153,12 @@
 		(tf
 			(bind class "_isSelected || _isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
 			(style
-				(textAlign = "center") (width = 100%) (marginText = 0) (wordWrap = false)
-				(bind textColor "_playerShipColor") (alpha = "TA")
+				(textAlign = "center")
+				(width = 100%)
+				(marginText = 0)
+				(wordWrap = false)
+				(bind textColor "_playerShipColor")
+				(alpha = "TA")
 			)
 			(bind text "_fragsCount")
 		)
@@ -1163,11 +1257,22 @@
 	(block
 		(bind visible "_isShipHidedByFogOfWar")
 		(class $Fullsize)
-		(style (marginLeft = "XS") (marginRight = "XS") (align = "middle") (alpha = "TS"))
+		(style
+			(marginLeft = "XS")
+			(marginRight = "XS")
+			(align = "middle")
+			(alpha = "TS")
+		)
 		(tf
 			(bind name "'player_tab_ship_' + _name")
 			(class $TextDefaultNM)
-			(style (width = 100%) (textAlign = "left") (wordWrap = false) (letterSpacing = 0) (marginTextLeft = 1))
+			(style
+				(width = 100%)
+				(textAlign = "left")
+				(wordWrap = false)
+				(letterSpacing = 0)
+				(marginTextLeft = 1)
+			)
 			(text = 'IDS_FOG_OF_WAR_FOR_NOTDETECTED_SHIP')
 		)
 	)
@@ -1290,7 +1395,7 @@
 
 		(var isShipMasteryVisible:bool = "masteryRank && isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE)")
 
-		(var shipTTX:dict = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+		(var shipTTX:dhStruct = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
 		(var hasAtbaArtillery:bool = "toBool(shipTTX.artillery.atba)")
 		(var hasAirDefense:bool = "toBool(shipTTX.airDefense.averageAura.maxDist)")
 
@@ -1315,38 +1420,47 @@
 	)
 
 	
-	(block
+	(hblock
 		(style
 			(width = "HALF_TABLE_WIDTH")
 			(height = 100%)
+			(backgroundColor = "C_DARK_PANEL")
 		)
-		(hblock
+
+		(block
 			(style
-				(width = 100%)
+				(height = 100%)
+				(width = 6px)
+				(bind backgroundColor "isEnemy ? C_ENEMY_HEADER : C_ALLY_HEADER")
+			)
+		)
+
+		(block
+			(style
+				(height = 100%)
 				(align = "middle")
-			)
-
-			(element BackgroundBlack)
-
-			(block
-				(style
-					(height = 100%)
-					(width = 6px)
-					(bind backgroundColor "isEnemy ? C_ENEMY_HEADER : C_ALLY_HEADER")
-				)
+				(paddingLeft = "S")
+				(paddingRight = "SXS")
 			)
 
 			(block
 				(style
-					(marginLeft = 6px)
-					(marginTop = 6px)
-					(marginRight = "SXS")
-					(marginBottom = 6px)
+					(scaleX = 0.8)
+					(scaleY = 0.8)
 				)
 				(element PlayerDogTag
 					_playerId = "playerEntityDbId"
-					_size =	 "DOG_TAG_SIZE.SMALL"
+					_size =	 "DOG_TAG_SIZE.MEDIUM"
 				)
+			)
+		)
+
+		(block
+			(class $Fullsize)
+			(style
+				(paddingRight = "M")
+				(paddingTop = "M")
+				(paddingBottom = "M")
 			)
 
 			(block
@@ -1363,9 +1477,15 @@
 
 				(hblock
 					(bind visible "!isDetectionInfoHidden")
-					(style (width = 100%) (marginTop = "S") (align = "middle"))
+					(style
+						(width = 100%)
+						(marginTop = "S")
+						(align = "middle")
+					)
+
 					(block
 						(style (bind marginRight "isShipMasteryVisible ? 6px : 0"))
+
 						(controller $Instance renderer='ShipMasteryIcon'
 							(bind enabled "isShipMasteryVisible")
 							(args
@@ -1380,7 +1500,8 @@
 
 					(block
 						(class $Fullsize)
-						(style (marginLeft = "XXS"))
+						(style (paddingLeft = "XXS"))
+
 						(element ShipIconAndLevelAndName
 							_shipIDS = 			"shipIDS"
 							_shipLevelRome = 	"shipLevelRome"
@@ -1417,40 +1538,33 @@
 					)
 				)
 			)
-		)
-
-		(element BattlePageTableDivider)
-
-		(block
-			(class $Fullsize)
-
-			(element BackgroundBlack)
 
 			(block
-				(bind visible "!isShipInfoVisible")
 				(style
 					(width = 100%)
 					(paddingTop = "SXS")
-					(paddingLeft = "M")
-					(paddingRight = "M")
+					(paddingBottom = "XS")
+					(paddingLeft = "-XS")
+					(paddingRight = "-XS")
+				)
+				(element HorizontalDividerTwoPx)
+			)
+
+			(tf
+				(bind visible "!isShipInfoVisible")
+				(name = 'lbl_reason_of_empty_container')
+				(class $TextDefaultNM)
+				(style
+					(marginTop = "S")
+					(width = 100%)
 					(alpha = "TS")
 				)
-				(tf
-					(name = 'lbl_reason_of_empty_container')
-					(class $TextDefaultNM)
-					(style (width = 100%))
-					(bind text "reasonOfEmptyContainer")
-				)
+				(bind text "reasonOfEmptyContainer")
 			)
 
 			(block
 				(bind visible "isShipInfoVisible")
-				(style
-					(width = 100%)
-					(paddingLeft = "M")
-					(paddingRight = "M")
-					(paddingTop = "XS")
-				)
+				(style (width = 100%))
 
 				(block
 					(style (width = 100%))
@@ -1459,7 +1573,7 @@
 						(args _visibilityTTX = "shipTTX.visibility")
 						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 					)
-					(element ShipParameter_Number
+					(element ShipParameterNumber
 						_title = 'IDS_SHIP_PARAM_VISIBILITY_DIST_BY_SHIP'
 						_value = "shipTTX.visibility.visibilityByShip.normal"
 						_valueConfig = "VALUE_CONFIG.KILOMETER_NEGATIVE"
@@ -1475,7 +1589,7 @@
 						(args _atbaArray= "shipTTX.artillery.atba")
 						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 					)
-					(controller $Instance renderer='ShipParameter_Number'
+					(controller $Instance renderer='ShipParameterNumber'
 						(bind enabled "hasAtbaArtillery")
 						(args
 							_title = 'IDS_SHIP_PARAM_ATBA_GUN'
@@ -1494,7 +1608,7 @@
 						(args _airDefenseTTX = "shipTTX.airDefense")
 						(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 					)
-					(controller $Instance renderer='ShipParameter_Number'
+					(controller $Instance renderer='ShipParameterNumber'
 						(bind enabled "hasAirDefense")
 						(args
 							_title = 'IDS_SHIP_PARAM_AIR_DEFENSE'
@@ -1508,11 +1622,18 @@
 	)
 
 	
-	(block (style (width = 1px) (height = 100%)))
+	(block 
+		(style
+			(width = 1px)
+			(height = 100%)
+		))
 
 	
 	(block
-		(style (width = "HALF_TABLE_WIDTH") (height = 100%))
+		(style
+			(width = "HALF_TABLE_WIDTH")
+			(height = 100%)
+		)
 
 		
 		(block
@@ -1520,16 +1641,12 @@
 			(name = 'lbl_visible_ship_info')
 			(class $Fullsize)
 
-			(block
-				(style (width = 100%) (height = 100%))
-
-				(controller $Instance
-					(bind enabled "isShipInfoVisible")
-					(bind renderer "isAircarrier	? 'ShipEquipmentOnTeamBattlePageAirCarrier'
-													: 'ShipEquipmentOnTeamBattlePageDefault'")
-					(args
-						_selectedAvatarId = "selectedAvatarId"
-					)
+			(controller $Instance
+				(bind enabled "isShipInfoVisible")
+				(bind renderer "isAircarrier	? 'ShipEquipmentOnTeamBattlePageAirCarrier'
+												: 'ShipEquipmentOnTeamBattlePageDefault'")
+				(args
+					_selectedAvatarId = "selectedAvatarId"
 				)
 			)
 		)
@@ -1538,9 +1655,10 @@
 		(block
 			(bind visible "!isShipInfoVisible")
 			(class $Fullsize)
-			(style (align = "right"))
-			
-			(element BackgroundBlack)
+			(style
+				(align = "right")
+				(backgroundColor = "C_DARK_PANEL")
+			)
 
 			(block
 				(style
@@ -1582,18 +1700,20 @@
 	)
 	(style (width = 100%))
 
-	(macro TTX_AMMO_ROW "title" "ammoTTX")
+	(element TTX_AMMO_ROW
+		_title="title"
+		_ammoTTX="ammoTTX"
+	)
 	(element TOOLTIP_SYSTEM_PARAMS_WRAPPER
 		(element TOOLTIP_SYSTEM_PARAMS_BLOCK
-			(element ShipParameter_Number
+			(element ShipParameterNumber
 				_title = 'IDS_SHIP_PARAM_ARTILLERY_MAX_DAMAGE'
 				_value = "ammoTTX.damage"
 			)
 			(block
 				(style (width = 100%))
-				(controller $Instance
+				(controller $Instance renderer='ShipParameterPercent'
 					(bind enabled "_atbaGunTTX.ammoHE != null")
-					(renderer = 'ShipParameter_Percent')
 					(args
 						_title = 'IDS_SHIP_PARAM_ARTILLERY_BURN_PROB'
 						_value = "ammoTTX.burnChance"
@@ -1633,7 +1753,7 @@
 
 (def element ShipInfoArDefenseTTX (_airDefenseAura:dict)
 	(style (width = 100%))
-	(element ShipParameter_Number
+	(element ShipParameterNumber
 		_title = "'IDS_SHIP_PARAM_AA_AVERAGE_DAMAGE_' + toUpper(_airDefenseAura.type)"
 		_value = "_airDefenseAura.damage"
 	)
@@ -1648,19 +1768,19 @@
 		(element TooltipSystemHorizontalDivider)
 		(element TOOLTIP_SYSTEM_PARAMS_WRAPPER
 			(element TOOLTIP_SYSTEM_PARAMS_BLOCK
-				(element ShipParameter_Number
+				(element ShipParameterNumber
 					_title = 'IDS_SHIP_PARAM_VISIBILITY_DIST_BY_GK_IN_SMOKE'
 					_value = "_visibilityTTX.visibilityByShip.smoke"
 					_valueConfig = "VALUE_CONFIG.KILOMETER_NEGATIVE"
 					_zeroValueHidden = true
 				)
-				(element ShipParameter_Range
+				(element ShipParameterRange
 					_title = 'IDS_SHIP_PARAM_VISIBILITY_DIST_FROM_DEPTH'
 					_valueMin = "_visibilityTTX.visibilityFromDepth.min"
 					_valueMax = "_visibilityTTX.visibilityFromDepth.max"
 					_valueConfig = "VALUE_CONFIG.KILOMETER_NEGATIVE"
 				)
-				(element ShipParameter_Number
+				(element ShipParameterNumber
 					_title = 'IDS_SHIP_PARAM_VISIBILITY_DIST_BY_PLANE'
 					_value = "_visibilityTTX.visibilityByPlane.normal"
 					_valueConfig = "VALUE_CONFIG.KILOMETER_NEGATIVE"
@@ -1679,10 +1799,8 @@
 		(var byAvatarIdAndSquadronOwnerPath:str = "'byAvatarIdAndSquadronOwner.' + _selectedAvatarId + '_' + DEFAULT_SQUADRON_OWNER_ID")
 		(var consumableBySelectedAvatar:dhCollection = "getCollectionByPath(CC.battleConsumable, byAvatarIdAndSquadronOwnerPath)")
 	)
-
-	(element BackgroundBlack)
-
 	(class $Fullsize)
+	(style (backgroundColor = "C_DARK_PANEL"))
 
 	(block
 		(class $Fullsize)
@@ -1735,9 +1853,8 @@
 		(style
 			(width = 100%)
 			(height = 92px)
+			(backgroundColor = "C_DARK_PANEL")
 		)
-
-		(element BackgroundBlack)
 
 		(hblock
 			(style
@@ -1760,9 +1877,8 @@
 		(style
 			(width = 100%)
 			(height = 92px)
+			(backgroundColor = "C_DARK_PANEL")
 		)
-
-		(element BackgroundBlack)
 
 		(block
 			(class $FullsizeAbsolute)
@@ -1868,12 +1984,14 @@
 		(var consumableName:str = "equipmentSlotComponent.ident")
 		(var consumePostfix:str = "numConsumablesBaseValue == 0 ? '_empty' : ''")
 		(var iconPath:str = "consumableName ? 'img://gui/consumables_dds_scale/' + consumableName + consumePostfix + '.dds' : equipmentSlotComponent.iconPath")
+		(var weaponType:number = "equipmentSlotComponent.weaponType != null ? equipmentSlotComponent.weaponType : SC.Ships.SHIP_WEAPON_TYPES.NONE")
 
 		(var selectedShipInfoEntity:dhEntity = "getSingleEntity(CC.selectedShipInfo)")
-		(var shipTTX:dict = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+		(var shipTTX:dhStruct = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+		(var isSecondaryArtilleryWithFireMode:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.SECONDARY_ARTILLERY && toBool(shipTTX.secondaryArtillery.drumFireMode)")
 		(var isChargeableDrum:bool = "shipTTX.artillery.drumFireMode.isChargeable.value")
 		(var isSwitchableDrum:bool = "shipTTX.artillery.drumFireMode.isSwitchable.value")
-		(var isShowDrumMode:bool = "shipTTX.artillery.drumFireMode && (isChargeableDrum || !isSwitchableDrum)")
+		(var isShowDrumMode:bool = "(shipTTX.artillery.drumFireMode && (isChargeableDrum || !isSwitchableDrum)) || isSecondaryArtilleryWithFireMode")
 		(var showSlot:bool = "equipmentSlotComponent.id != SC.Ships.SHIP_INFO_WEAPON_TYPE.VALUE_TO_NAME[SC.Ships.SHIP_INFO_WEAPON_TYPE.FIRE_MODE] || isSwitchableDrum")
 	)
 
@@ -1915,13 +2033,14 @@
 (def element ShipEquipmentOnTeamBattlePageItemTooltip (_slotEntity:dhEntity, _isShowDrumMode:bool, _isZeroConsumables:bool)
 	(scope
 		(macro SELECTED_AVATAR_ID)
-		(var shipTTX:dict = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+		(var shipTTX:dhStruct = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
 
 		(var equipmentSlotComponent:dhComponent = "_slotEntity.visualSlotData ?: _slotEntity.battleConsumable")
 		(var paramsDescriptor:str = "_slotEntity.hasComponent(CC.visualSlotData) ? equipmentSlotComponent.id : ''")
 		(var title:str = 			"equipmentSlotComponent.title")
 		(var subheader:str = 		"equipmentSlotComponent.subheader")
 		(var iconPath:str = 		"equipmentSlotComponent.iconPath")
+		(var weaponType:number = 	"equipmentSlotComponent.weaponType != null ? equipmentSlotComponent.weaponType : SC.Ships.SHIP_WEAPON_TYPES.NONE")
 
 		(var attributesComponent:dhComponent = "_slotEntity.attributes")
 		(var attributesNegative:array = "attributesComponent.negative 	?: []" (event "attributesComponent.evChanged"))
@@ -1973,9 +2092,16 @@
 					_avatarId = "selectedAvatarId"
 				)
 			)
-			(controller $Instance renderer = 'WeaponTooltipBurstFire'
-				(args _prefix = '_ForBattleTab')
+		)
+
+		(block
+			(style (width = 100%))
+			(controller $Instance renderer='WeaponTooltipBurstFire'
 				(bind enabled "_isShowDrumMode && isIn(paramsDescriptor, CAN_DRUM_AMMO)")
+				(args
+					_weaponType = "weaponType"
+					_prefix 	= 'ForBattleTab'
+				)
 			)
 		)
 
