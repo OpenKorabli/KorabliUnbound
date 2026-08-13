@@ -8,33 +8,41 @@
 	'minebomber',
 	'emptybomber',
 	'auxiliary',
-	'auxiliary', 
+	'auxiliary',
 ])
 
-(def element MapSquadronMarker (_markerEntity:gfx, _mapScale:number, _itemScale:number, _scaleRatio:number)
+(def element MapSquadronMarker (_markerEntity:dhEntity, _mapScale:number, _itemScale:number)
 	(scope
-		(var markerYaw:number = "radToGrad(_markerEntity.mapPosition.yaw)" (event "evEnterFrame"))
-		(var markerScale:number = "_itemScale / _mapScale")
+		(var planeComponent:dhComponent = "_markerEntity.plane")
+
+		(var planeTypeInt:number = "planeComponent.planeType")
+		(var isMissile:bool = "planeComponent.ammoType == SC.Common.PLANE_AMMO_TYPES.MISSILE")
+
+		(var markerYaw:number = "_markerEntity.mapPosition.yaw != null ? radToGrad(_markerEntity.mapPosition.yaw) : 0" (event "evEnterFrame"))
 
 		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
-		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+
+		(var controlledSquadronId:number = "aircarrierComponent ? aircarrierComponent.controlledSquadronId
+																: DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+
 		(var isControllingSquadron:bool = "controlledSquadronId != DEFAULT_SQUADRON_ID")
+		(var isCurrentSquadronControlled:bool = "controlledSquadronId == _markerEntity.squadron.id")
 
-		(var planeTypeInt:number = "_markerEntity.plane.planeType")
-		(var markerElement:gfx = "planeTypeInt == SC.Battle.PLANES_TYPES.AIRSHIP ? 'MapMarkerAirshipicon' : 'MapMarkerSquadronIcon'")
-		(macro SCOPE_HIGHLIGHT_MARKER_ON_MAP_MOUSE_OVER "_markerEntity")
+		(var markerElement:str = "planeTypeInt == SC.Battle.PLANES_TYPES.AIRSHIP ? 'MapMarkerAirShipIcon' : 'MapMarkerSquadronIcon'")
 
-		(var minimapEntity:gfx = "$datahub.getSingleEntity(CC.minimap)")
-		(var minimapComponent:gfx = "minimapEntity.minimap")
+		(var minimapComponent:dhComponent = "getSingleComponent(CC.minimap)")
 		(var angleToRotate:number = "minimapComponent && !isControllingSquadron ? minimapComponent.rotationAngleDeg : 0" (event "minimapComponent.evRotationAngleDegChanged"))
 
-		(macro GET_MARKER_ENTITY_COMPONENT 'squadron')
-		(var isCurrentSquadronControlled:bool = "controlledSquadronId == squadronComponent.id")
-
-		(var isMissile:bool = "_markerEntity.plane.ammoType == SC.Common.PLANE_AMMO_TYPES.MISSILE")
 		(var isEnabled:bool = "isCurrentSquadronControlled || !isMissile")
-	)
 
+		
+		(var healthComponent:dhComponent = "getSingleEntity(CC.playerAvatar).health")
+		(var isPlayerAlive:bool = "healthComponent.isAlive" (event "healthComponent.evIsAliveChanged"))
+		(var selectedMouseHandlerComponent:dhComponent = "_markerEntity.selectedMouseHandler")
+		(var minimapOptionComponent:dhComponent = "getPrimaryEntity(CC.minimapOption, SC.Battle.MINIMAP_OPTION.mouseCommandsEnabled).minimapOption")
+		(var isMouseCommandsEnabled:bool = "minimapOptionComponent.value > 0" (event "minimapOptionComponent.evValueChanged"))
+		(var isMouseOverMarker:bool = "isPlayerAlive && isMouseCommandsEnabled && selectedMouseHandlerComponent != null")
+	)
 	(style (bind rotation "-angleToRotate"))
 
 	(controller $Instance renderer='MapMarkerRanges'
@@ -46,72 +54,68 @@
 	)
 
 	(block
-		(macro BIND_FAIR_SCALE "markerScale")
-		(macro EFFECT_HIGHLIGHT_MARKER_ON_MOUSE_OVER)
+		(style
+			(bind scaleX "_itemScale / _mapScale")
+			(bind scaleY "_itemScale / _mapScale")
+		)
+		(bind colorTransform "isMouseOverMarker ? SHIP_HP_TRANSFORM_COLORS.WHITE : CT_NONE")
+
 		(controller $Instance
 			(bind renderer "markerElement")
-			(args "_markerEntity" "markerYaw")
 			(bind enabled "_markerEntity != null && isEnabled")
+			(args
+				_markerEntity = "_markerEntity"
+				_rotation = "markerYaw")
 		)
 	)
 )
 
-(def element MapMarkerAirshipicon (_markerEntity:gfx, _rotation:number)
+(def element MapMarkerAirShipIcon (_markerEntity:dhEntity)
 	(scope
-		(macro GET_MARKER_ENTITY_COMPONENT 'relation')
-		(var relationStr:str = "toLower(SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationComponent.value])" (event "relationComponent.evChanged"))
+		(var relationStr:str = "toLower(SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[_markerEntity.relation.value])" (event "_markerEntity.relation.evChanged"))
 		(var markerIcon:str = "'swf:../battle_hud/markers/convoy_airships_svg/convoy_airships_svg.swf:marker_' + relationStr")
 	)
 	(style
-		(width = "24")
-		(height = "24")
-	)
-	(block
-		(style
-			(width = 0) (height = 0)
-			(align = "center|middle")
-			(bind rotation "_rotation")
-		)
-
-		(block
-			(style
-				(bind backgroundImage "markerIcon")
-				(backgroundSize = "autosize")
-			)
-		)
+		(position = "absolute")
+		(width = 14px)
+		(height = 14px)
+		(pivotX = 50%)
+		(pivotY = 50%)
+		(bind backgroundImage "markerIcon")
 	)
 )
 
-(def element MapMarkerSquadronIcon (_markerEntity:gfx, _rotation:number)
+(def element MapMarkerSquadronIcon (_markerEntity:dhEntity, _rotation:number)
 	(scope
-		(macro GET_MARKER_ENTITY_COMPONENT 'squadron')
-		(macro GET_MARKER_ENTITY_COMPONENT 'plane')
-		(var planeTypeInt:number = "planeComponent.planeType")
-		(var ammoType:number = "planeComponent.ammoType")
-		(var ammoTypeName:str = "SC.Common.PLANE_AMMO_TYPES.VALUE_TO_NAME[ammoType]")
-		(var isConsumable:bool = "planeComponent.isConsumable && !planeComponent.isAirSupport")
-		(var isModified:bool = "planeComponent.isModified")
-		(var isSmokePlane:bool = "planeComponent.isSmokePlane")
-		(var isSpyPlane:bool = "planeComponent.isSpyPlane")
+		(var planeComponent:dhComponent = 		"_markerEntity.plane")
+		(var relationComponent:dhComponent = 	"_markerEntity.relation")
+
+		(var planeTypeInt:number = 	"planeComponent.planeType")
+		(var ammoType:number = 		"planeComponent.ammoType")
+		(var isModified:bool = 		"planeComponent.isModified")
+		(var isSmokePlane:bool = 	"planeComponent.isSmokePlane")
+		(var isSpyPlane:bool = 		"planeComponent.isSpyPlane")
+		(var isConsumable:bool = 	"planeComponent.isConsumable && !planeComponent.isAirSupport")
+
 		(var postfix:str = "isModified		? '_upgrade' :
 							isSmokePlane	? '_smoker' :
 							isSpyPlane 		? '_spy'
 											: ''"
 		)
 
-		(var ammoPostfix:str = "ammoTypeName in SC.Common.PLANE_AMMO_TYPES.SHORT_NAMES && !isConsumable	? SC.Common.PLANE_AMMO_TYPES.SHORT_NAMES[ammoTypeName]
-																										: ''"
-		)
+		(var ammoTypeName:str = "SC.Common.PLANE_AMMO_TYPES.VALUE_TO_NAME[ammoType]")
 
-		(var healthComponent:gfx = "_markerEntity.health" (event "_markerEntity.evAdded"))
+		(var ammoPostfix:str = "ammoTypeName in SC.Common.PLANE_AMMO_TYPES.SHORT_NAMES && !isConsumable ? SC.Common.PLANE_AMMO_TYPES.SHORT_NAMES[ammoTypeName] : ''")
 
-		(var relationComponent:gfx = "_markerEntity.relation")
 		(var isSelf:bool = "relationComponent.value == SC.Battle.DIPLOMACY_RELATIONS.SELF" (event "relationComponent.evChanged"))
 		(var relationName:str = "SC.Battle.PLAYER_RELATION.NAMES[SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationComponent.value]]" (event "relationComponent.evChanged"))
 
 		(var aircarrierComponent:dhComponent = "getSingleComponent(CC.aircarrier)")
-		(var controlledSquadronId:number = "aircarrierComponent != null ? aircarrierComponent.controlledSquadronId : DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
-		(var isCurrentSquadronControlled:bool = "controlledSquadronId == squadronComponent.id")
+
+		(var controlledSquadronId:number = "aircarrierComponent ? aircarrierComponent.controlledSquadronId
+																: DEFAULT_SQUADRON_ID" (event "aircarrierComponent.evControlledSquadronIdChanged"))
+
+		(var isCurrentSquadronControlled:bool = "controlledSquadronId == _markerEntity.squadron.id")
 
 		(var planeTypeName:str = "PLANE_TYPE_TO_STR[planeTypeInt]")
 		(var planeFullName:str = "planeTypeName + ammoPostfix + postfix + '_' + relationName")

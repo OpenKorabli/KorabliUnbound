@@ -461,8 +461,8 @@
 	)
 
 	(controller $Tooltip
-		(bind enabled "toBool(BANNERS_CONFIG[tileContent.contentId].tooltip) && commonBannerRenderer != ''")
-		(bind renderer "BANNERS_CONFIG[tileContent.contentId].tooltip")
+		(bind enabled "toBool(BANNERS_CONFIG[tileContent.contentType].tooltip) && commonBannerRenderer != ''")
+		(bind renderer "BANNERS_CONFIG[tileContent.contentType].tooltip")
 		(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 	)
 )
@@ -482,12 +482,13 @@
 		(var skipURLTranslation:bool = "!isIn(url, SC.Ui_windows.GUI_URL.ALL)")
 		(var mainText:str = "tileContentInfo.tileContent.mainText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
 		(var tooltipText:str = "tileContentInfo.tileContent.tooltipText ?: ''" (event "tileContentInfo.tileContent.evChanged"))
+		(var countdown:number = "tileContentInfo.tileContent.countdown ?: 0" (event "tileContentInfo.tileContent.evChanged"))
 		(var isNewTileContent:bool = "tileContentInfo.tileContentEntity.hasComponent(CC.newItem)")
 
 		(var metashopCategoryEntity:dhEntity =	"getPrimaryEntity(CC.metashopCategory, tileContentInfo.contentId)")
 		(var isRewardMarker:bool = "metashopCategoryEntity.metashopCategory.isRewardAvailable" (event "metashopCategoryEntity.metashopCategory.evChanged"))
 		(var timeStamp:number = "metashopCategoryEntity.metashopCategory.activeUntil ?: 0" (event "metashopCategoryEntity.metashopCategory.evChanged"))
-		(var isTimeStampMarker:bool = "timeStamp > 0 && timeStamp - DAY_IN_SEC * 7 < serverTime.value")
+		(var isTimeStampMarker:bool = "countdown > 0 && timeStamp > 0 && timeStamp - DAY_IN_SEC * countdown < serverTime.value")
 		(var isNewMetashopCategory:bool = "metashopCategoryEntity.hasComponent(CC.newItem)")
 
 		(var isNew:bool = "isNewTileContent || isNewMetashopCategory")
@@ -1077,8 +1078,11 @@
 		(var initialQualificationBattlesResults:array = "ratingBattlesSeasonProgress.initialQualificationBattlesResults ?: []" (event "ratingBattlesSeasonProgress.evInitialQualificationBattlesResultsChanged"))
 		(var isQualification:bool = "ratingBattlesSeasonProgress != null && initialQualificationBattlesResults.length < SC.Common.RATING_BATTLES_CONSTANTS.INITIAL_QUALIFICATION_LENGTH")
 
-		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.RATING_PASSED"))
-		(var isCallToActionMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION")
+		(struct ratingMarkerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.RATING"))
+		(struct ratingPassedMarkerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.RATING_PASSED"))
+		(var isNewMarkerVisible:bool = "ratingMarkerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW")
+		(var isCallToActionMarkerVisible:bool = "ratingPassedMarkerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.CALL_TO_ACTION")
+		(var isMarkerVisible:bool = "isNewMarkerVisible || isCallToActionMarkerVisible")
 	)
 	(class $Fullsize)
 	(style (backgroundColor = "NO_COLOR"))
@@ -1114,8 +1118,9 @@
 	)
 
 	(controller $Instance renderer='EventBannerMarkers'
-		(bind enabled "markerData.isVisible")
+		(bind enabled "isMarkerVisible")
 		(args
+			_isNewMarker = "isNewMarkerVisible"
 			_isActionMarker = "isCallToActionMarkerVisible"
 			_text = 'IDS_RATING_BATTLES_ACTION_MARKER_QUALIFICATION'
 			_size = "_size"
@@ -1131,19 +1136,13 @@
 
 		(struct routeEventsData = ROUTE_MENU_DATA(_route = "SC.Ui_windows.ROUTE.EVENTS"))
 
-		(var bonustagSeasonEntity:dhEntity = "getSingleEntity(CC.bonusTagSeason, 'snowflakeSeasonCollection')")
-		(var bonusTagSeasonComponent:dhComponent = "bonustagSeasonEntity.bonusTagSeason")
+		(struct snowflakes = PULL_SNOWFLAKES_COMMON_INFO())
 
-		(var bonusSnowflakesCount:number = "bonusTagSeasonComponent.bonusSnowflakes" (event "bonusTagSeasonComponent.evChanged"))
-		(var bannerState:number = "bonusTagSeasonComponent.bannerState" (event "bonusTagSeasonComponent.evBannerStateChanged"))
-
-		(var isInactive:bool = "bonusSnowflakesCount == 0 || bannerState == SC.Ui_common.SNOWFLAKES_BANNER_STATE.INACTIVE")
-
-		(var isNewMarkerVisible:bool = "bonustagSeasonEntity.hasComponent(CC.newItem)")
-
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.SNOWFLAKES"))
+		(var isNewMarkerVisible:bool = "markerData.markerType == SC.Ui_common.CONTENT_MARKER_TYPE.NEW")
+		(var isInactive:bool = "snowflakes.bonusSnowflakesCount == 0 || isIn(snowflakes.bannerState, SC.Ui_common.SNOWFLAKES_STATE.INACTIVE)")
 		(var isSmallBanner:bool = "_size == SC.Ui_common.TILE_SIZE.S")
-		(var isDisableState:bool = "isSmallBanner && !isNewMarkerVisible && isInactive")
-
+		(var isDisableState:bool = "isSmallBanner && isInactive")
 
 		(struct activeTip =		PULL_ACTIVE_GUIDING_TIP())
 		(struct checkedTipId =	SAFE_CHECK_ACTIVE_TIP_ID(_tipId = "activeTip.tipId"		_validValues = "[	SC.Context_guiding_tip.TIP_TYPE.SNOWFLAKES_EVENT_START,
@@ -1171,7 +1170,7 @@
 			{
 				type: 'inputMapping.onAction',
 				name: isNewMarkerVisible ? 'makeSeen' : '',
-				args: { entityId: bonustagSeasonEntity.id }
+				args: { entityId: snowflakes.bonusTagSeasonEntity.id }
 			}
 		]"
 	)
@@ -1180,15 +1179,15 @@
 		(class $EventBanner)
 
 		(element EventBannerTitle
-			_title = 'IDS_DOCK_BANNER_SNOWFLAKES'
+			_title = 'IDS_SNOWFLAKES_COMMON_TITLE'
 			_size = "_size"
 		)
 
 		(block
 			(controller $Instance renderer='EventBannerCounter'
-				(bind enabled "bonusSnowflakesCount > 0")
+				(bind enabled "snowflakes.bonusSnowflakesCount > 0")
 				(args
-					_count = "bonusSnowflakesCount"
+					_count = "snowflakes.bonusSnowflakesCount"
 				)
 			)
 		)
@@ -1746,8 +1745,10 @@
 		(var isClaimed:bool = "sseCore.isClaimed" (event "sseCore.evChanged"))
 		(var isActive:bool = "isIn(SC.Sse.SSE_STATUSES.ACTIVE, statusesCore)")
 
-		(var isNewbieQuest:bool = "sseEntity.newbieQuest != null")
-		
+		(var newbieQuestEntity:dhEntity = "getPrimaryEntity(CC.newbieQuest, sseTaskId)")
+		(var isNewbieQuest:bool = "newbieQuestEntity != null")
+		(var taskId:number = "isNewbieQuest ? newbieQuestEntity.id : _sseId")
+
 		(var isManualRewardClaim:bool = "	sseEntity.sseChain.claimRewards ||
 											sseEntity.sseEpic.claimRewards ||
 											sseEntity.sseTask.claimRewards")
@@ -1854,7 +1855,7 @@
 		(controller $Instance
 			(bind renderer "elementName")
 			(args
-				_sseId = "_sseId"
+				_sseId = "taskId"
 				_isMotivatorDoneStateView = "_isMotivatorDoneStateView"
 				_guidingOffsets = "_guidingOffsets"
 				_isClaimButtonVisible = "isClaimButtonVisible"
@@ -1871,7 +1872,7 @@
 			(renderer = 'NewbieQuestMotivatorBannerTooltip')
 			(bind enabled "isNewbieQuest")
 			(args
-				_questId = "_sseId"
+				_questId = "taskId"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -1880,7 +1881,7 @@
 			(renderer = 'SseMotivatorBannerTooltip')
 			(bind enabled "!isNewbieQuest && !isTaskCompletedBlock")
 			(args
-				_sseId = "_sseId"
+				_sseId = "taskId"
 				_isRewardChoice = "isManualRewardClaim"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
@@ -1936,7 +1937,7 @@
 		(controller $Instance renderer='ShowHintButton'
 			(bind enabled "isNewbieQuest")
 			(args
-				_questId = "_sseId"
+				_questId = "taskId"
 			)
 		)
 	)
@@ -2290,6 +2291,8 @@
 		(var accountLevelPointsComponent:dhComponent = "accountLevelPointsEntity.accountLevelPoints")
 		(var currentPoints:number = "accountLevelPointsComponent.currentLevelPoints" (event "accountLevelPointsComponent.evCurrentLevelPointsChanged"))
 		(var battlesToPromoReward:number = "(promoRewardBattles - currentPoints) ?: 0")
+
+		(struct markerData = PULL_MARKER_NEW(_groupName = "SC.Ui_common.CONTENT_MARKER_GROUPS.ACCOUNT_LEVELING"))
 	)
 	(name = 'promoRewardBannerImage')
 
@@ -2325,6 +2328,13 @@
 			(class $TextDefaultBoldNM)
 			(style (alpha = "TA"))
 			(bind text "subst('IDS_BATTLES_TO_NEXT_STEP', [], { battles: battlesToPromoReward }, battlesToPromoReward)")
+		)
+	)
+
+	(controller $Instance renderer='EventBannerMarkers'
+		(bind enabled "markerData.isVisible")
+		(args
+			_isNewMarker = "markerData.isVisible"
 		)
 	)
 )

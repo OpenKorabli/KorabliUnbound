@@ -1,22 +1,26 @@
 
+(def constant TABLE_DIVIDER_WIDTH 1px)
 
 (def constant COLUMN_DIVISIONS_WIDTH 39px)
+(def constant COLUMN_PLACE_WIDTH 32px)
 (def constant COLUMN_PLAYER_WIDTH 168px)
 (def constant COLUMN_PLAYER_WIDTH_ONE_TEAM 427px)
 (def constant COLUMN_SHIP_WIDTH 168px)
 (def constant COLUMN_SHIP_WIDTH_ONE_TEAM 400px)
 (def constant COLUMN_FRAGS_WIDTH 42px)
 (def constant COLUMN_ASSIST_WIDTH 42px)
+(def constant COLUMN_SCORE_WIDTH 42px)
 (def constant COLUMN_EMOJI_WIDTH 52px)
 (def constant KEY_TARGET_ICON_SIZE 19px)
 
 (def constant HALF_TABLE_WIDTH "COLUMN_DIVISIONS_WIDTH + COLUMN_PLAYER_WIDTH + COLUMN_SHIP_WIDTH + COLUMN_FRAGS_WIDTH + COLUMN_ASSIST_WIDTH + COLUMN_EMOJI_WIDTH")
-(def constant TABLE_WIDTH "COLUMN_DIVISIONS_WIDTH + COLUMN_PLAYER_WIDTH_ONE_TEAM + COLUMN_SHIP_WIDTH_ONE_TEAM + COLUMN_FRAGS_WIDTH + COLUMN_ASSIST_WIDTH + COLUMN_EMOJI_WIDTH")
+(def constant TABLE_WIDTH "HALF_TABLE_WIDTH * 2 + TABLE_DIVIDER_WIDTH")
 (def constant LINE_HEIGHT 32px)
 
 (def constant C_DARK_PANEL 0x27000000)
 (def constant C_ENEMY_HEADER 0x77F25755)
 (def constant C_ALLY_HEADER 0x775EDABB)
+(def constant C_EVENT_HEADER 0x777E5DA3)
 (def constant CT_DIVISION "{ redMultiplier:1, greenMultiplier:0.81, blueMultiplier:0.44 }")
 
 (def constant CAN_DRUM_AMMO [
@@ -37,13 +41,15 @@
 	(width = 100%)
 )
 
-(def element TeamBattlePage (_isDynamicDivisionsEnabled:bool, _isBattleLoading:bool, _isBattleStats:bool)
+(def element TeamBattlePage (	_isDynamicDivisionsEnabled:bool,
+								_isBattleLoading:bool,
+								_isBattleStats:bool)
 	(scope
-		(macro CUSTOM_ELEMENT_VISIBILITY_SCOPE)
+		(var customElementsVisibilityComponent:dhComponent = "getSingleComponent(CC.customElementsVisibility)")
+		(var disabledElements:number = "customElementsVisibilityComponent.disabledElements" (event "customElementsVisibilityComponent.evChanged"))
 		(var isOnlyTeam:bool = "(disabledElements & SC.Battle.CUSTOM_BATTLE_ELEMENTS.TEAM_STRUCTURE_RIGHT) > 0")
 
-		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
-		(var isFogOfWar:bool = "battleInfoComponent.isFogOfWar")
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
 	)
 
 	(name = 'team_battle_page')
@@ -86,577 +92,131 @@
 			)
 		)
 
-		(element UIListTeamStructureLeft
-			_isBattleLoading = "_isBattleLoading"
-			_isBattleStats = "_isBattleStats"
-			_isDynamicDivisionsEnabled = "_isDynamicDivisionsEnabled"
-			_isOnlyTeam = "isOnlyTeam"
+		(element UIListTeamStructure
+			_isBattleLoading 			= "_isBattleLoading"
+			_isBattleStats 				= "_isBattleStats"
+			_isDynamicDivisionsEnabled 	= "_isDynamicDivisionsEnabled"
+			_isOnlyTeam 				= "isOnlyTeam"
 		)
 
 		
 		(block
 			(bind visible "!isOnlyTeam")
 			(style
-				(width = 1px)
+				(width = "TABLE_DIVIDER_WIDTH")
 				(height = 100%)
 			)
 		)
 
 		(block
-			(controller $Instance renderer='UIListTeamStructureRight'
+			(controller $Instance renderer='UIListTeamStructure'
 				(bind enabled "!isOnlyTeam")
 				(args
-					_isBattleLoading = "_isBattleLoading"
-					_isBattleStats = "_isBattleStats"
-					_isFogOfWar = "isFogOfWar"
+					_isBattleLoading 	= "_isBattleLoading"
+					_isBattleStats 		= "_isBattleStats"
+					_isFogOfWar 		= "battleInfoComponent.isFogOfWar"
+					_isReversed 		= true
 				)
 			)
 		)
 	)
 )
 
-
-(def element UIListTeamStructureRight (	_isBattleLoading:bool,
-										_isFogOfWar:bool,
-										_isBattleStats:bool)
+(def element UIListTeamStructure (	_isBattleStats:bool,
+									_isBattleLoading:bool,
+									_isFogOfWar:bool,
+									_isDynamicDivisionsEnabled:bool = false,
+									_isOnlyTeam:bool = false,
+									_isReversed:bool = false)
 	(scope
-		(var avatarCollection:dhCollection = "getCollection(CC.avatar).getChildByPath('team.enemy.byTeamsSortedAlive.0')")
-	)
+		(var avatarCollection:dhCollection = "getCollectionByPath(CC.avatar, 'team.' + (_isReversed ? 'enemy.byTeamsSortedAlive.0' : 'ally.sortedAlive'))")
 
-	(style (width = "HALF_TABLE_WIDTH"))
-
-	(element UIlistTeamStructureHeaderRight
-		_isBattleStats = "_isBattleStats"
-	)
-
-	(block
-		(style
-			(right = 0px)
-			(width = 100%)
-		)
-
-		(controller $Repeat renderer='SimpleUIListTeamStructureRight'
-			(bind count "avatarCollection.length")
-			(args
-				_avatarEntity = "avatarCollection[$index]"
-				_isBattleLoading = "_isBattleLoading"
-				_isBattleStats = "_isBattleStats"
-				_isFogOfWar = "_isFogOfWar"
-			)
-		)
-	)
-)
-
-(def element UIlistTeamStructureHeaderRight (_isBattleStats:bool=false)
-	(scope
-		(struct teamName = GET_TEAM_NAME())
-	)
-
-	(style
-		(width = 100%)
-		(height = "LINE_HEIGHT")
-		(flow = "horizontal")
-		(backgroundColor = "C_ENEMY_HEADER")
-	)
-
-	
-	(hblock
-		(bind visible "_isBattleStats")
-
-		(style
-			(align = "middle|center")
-			(height = 100%)
-		)
-
-		
-		(block
-			(style
-				(width = "COLUMN_EMOJI_WIDTH")
-				(height = 100%)
-				(align = "middle")
-				(paddingLeft = 6px)
-			)
-
-			(block
-				(style
-					(width = 21px)
-					(height = 21px)
-					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_emoji')
-				)
-			)
-		)
-
-		
-		(block
-			(style
-				(width = "COLUMN_FRAGS_WIDTH")
-				(height = 100%)
-				(align = "middle|center")
-			)
-
-			(block
-				(style
-					(width = 21px)
-					(height = 21px)
-					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_stat_frag')
-				)
-			)
-		)
-
-		
-		(block
-			(style
-				(width = "COLUMN_ASSIST_WIDTH")
-				(height = 100%)
-				(align = "middle|center")
-			)
-
-			(block
-				(style
-					(width = 21px)
-					(height = 21px)
-					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_stat_assist')
-				)
-			)
-		)
-	)
-
-	(block
-		(style
-			(width = 100%)
-			(paddingRight = 20px)
-			(paddingTop = 10px)
-		)
-
-		(tf
-			(class $TextDefaultBold18NM)
-			(style
-				(width = 100%)
-				(textAlign = "right")
-				(alpha = "TA")
-			)
-			(bind text "teamName.bravoTeamName")
-		)
-	)
-)
-
-(def element SimpleUIListTeamStructureRight (	_avatarEntity:dhEntity,
-												_isBattleStats:bool,
-												_isBattleLoading:bool,
-												_isFogOfWar:bool)
-	(scope
-		(event evContextMenuShowed)
-		(event evContextMenuHidden)
-		(event evMenuItemClicked)
-		(event evBattleStatsHidden)
-		(event evEmojiSelectorRollOver)
-		(event evEmojiSelectorRollOut)
-		(event evAvatarSelected)
-
-		(macro MOUSE_HANDLER_SCOPE)
-
-		(macro AVATAR_DATA_SCOPE "_avatarEntity")
-		(macro DIVISION_MEMBER_SCOPE "_avatarEntity")
-		(macro PLAYER_CLAN_SCOPE "_avatarEntity")
-		(macro PLAYER_VOICE_STATE "pureName")
-		(macro SHIP_DATA_SCOPE "shipId")
-		(macro PULL_INFO_ABOUT_SHIP_DETECTION "avatarEntityId" "_isFogOfWar")
-		(macro SELECTED_AVATAR_ID)
-
-		(var isSelected:bool = "id == selectedAvatarId")
-
-		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
-		(var selfDivisionId:number = "selfPlayerEntity.preBattlePlayerSimple.preBattleId" (event "selfPlayerEntity.preBattlePlayerSimple.evPreBattleIdChanged"))
-
-		(macro FEATURES "9")
-		(var rawKeyTargetValue:dhComponent = "_avatarEntity.keyTargetMarkerBattle")
-		(var isKeyTargetVisible:bool = "rawKeyTargetValue && feature_9 != 'locked'")
-
-		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
-		(var battleType:str = "battleInfoComponent.battleType")
-
-		(var isShipMasteryVisible:bool = "masteryRank && isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE)")
-
-		(struct playerComplainPraiseData = PULL_PLAYER_COMPLAIN_PRAISE_DATA(_battleType = "battleType"
-																			_isComplaintsAvailable = true
-																			_isReplayPlaying = "battleInfoComponent.isReplayPlaying")
-		)
-		(var isEmojiDisabledReason:bool = "toBool(playerComplainPraiseData.reactionsDisabledReason)")
-
-		(var emojiByOwnerCollection:dhCollection = "getCollectionByPath(CC.emoji, 'byOwnerId')")
-		(var emojiByOwnerIdCollection:dhCollection = "emojiByOwnerCollection.child(playerEntityDbId)")
-		(var firstEmojiComponent:dhComponent = "emojiByOwnerIdCollection.getEntityAtIndex(0).emoji")
-
-		(var emojiPlayerInfoComponent:dhComponent = "getPrimaryEntity(CC.accountSimple, playerEntityDbId).emojiPlayerInfo")
-		(var emojiTotalCount:number = "emojiPlayerInfoComponent.totalCount ?: 0" (event "emojiPlayerInfoComponent.evTotalCountChanged"))
-
-		(var isAvatarSelectionEnabled:bool = true)
-		(bind isAvatarSelectionEnabled "false" init=false (event "evEmojiSelectorRollOver"))
-		(bind isAvatarSelectionEnabled "true" init=false (event "evEmojiSelectorRollOut"))
-
-		
-		(macro PULL_PLAYER_COLOR)
-		(var alphaOfText:number = "isAlive 	? playerNameColor == SC.Ui_styles.SERVICE_COLORS.WHITE 	? TA 
-																									: 1
-											: TS"
-		)
-	)
-
-	(macro MOUSE_EVENTS_DISPATCHER)
-
-	(dispatch evAvatarSelected on='leftClick' (bind enabled "isAvatarSelectionEnabled"))
-	(bindcall externalCall 'direct.action' "['action.onAvatarSelected', {selectedAvatarId: id}]" init=false watch=false (bind trigger "isDetectionInfoHidden") (event "evAvatarSelected"))
-	(bind visible "!hidden")
-
-	(style
-		(height = "LINE_HEIGHT")
-		(width = 100%)
-	)
-
-	
-	(block
-		(class $LineBackgroundStyle)
-		(style
-			(backgroundColor = "C_DARK")
-			(bind alpha "isAlive ? 0 : 0.15")
-		)
-	)
-
-	
-	(block
-		(class $LineBackgroundStyle)
-		(style
-			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
-			(alpha = 0)
-		)
-		(controller $Animation
-			(bindcall play duration=0.02 from={alpha: 0} to={alpha: 0.05} action="killAll" reverse="!rollOver" (bind trigger "rollOver") )
-		)
-
-		(controller $Tooltip
-			(renderer = 'BattlePlayerTooltip')
-			(args
-				_playerEntity = "_avatarEntity"
-				_isInStats = true
-				_isBot = "isBot"
-				_isSelected = "isSelected"
-				_checkForAbuse = false
-			)
-			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
-		)
-
-		(controller $Tooltip
-			(renderer = 'ContextMenuPlayer')
-			(args
-				_playerEntity =	"_avatarEntity"
-				_selfPlayer =	"selfPlayerEntity"
-			)
-			(macro DEFAULT_MENU_BEHAVIOUR "1")
-			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
-			(macro TOOLTIP_HIDE_ON_EVENT "evBattleStatsHidden")
-			(dispatch evContextMenuShowed dir="EventDirection.DOWN" on='evStartShow')
-			(dispatch evContextMenuHidden dir="EventDirection.DOWN" on='evHide')
-		)
-	)
-
-	
-	(block
-		(bind visible "isSelected")
-		(class $LineBackgroundStyle)
-		(style
-			(hitTest = false)
-			(alpha = 0.4)
-			(backgroundImage = 'url:../service_kit/frames/one_pixel_frame.png')
-			(scale9grid = 2)
-		)
-	)
-
-	(hblock
-		(class $Fullsize)
-
-		
-		(hblock
-			(bind visible "!_isBattleLoading")
-
-			(style
-				(align = "left|middle")
-				(width = "COLUMN_EMOJI_WIDTH")
-				(height = 100%)
-				
-			)
-
-			(block
-				(dispatch evEmojiSelectorRollOver on='rollOver')
-				(dispatch evEmojiSelectorRollOut on='rollOut')
-
-				(style
-					(width = 32px)
-					(height = 100%)
-					(align = "center|middle")
-				)
-
-				(controller $Instance renderer='EmojiSelector'
-					(bind enabled "!_isBattleLoading && (!isEmojiDisabledReason || (isEmojiDisabledReason && firstEmojiComponent != null))")
-					(args
-						_ownerId 					= "playerEntityDbId"
-						_reactionsDisabledReason 	= "playerComplainPraiseData.reactionsDisabledReason"
-						_evaluationLimits 			= "playerComplainPraiseData.evaluationLimits"
-						_emojiByOwnerIdCollection 	= "emojiByOwnerIdCollection"
-					)
-				)
-			)
-
-			
-			(tf
-				(bind visible "emojiTotalCount > 1")
-
-				(class $TextDefaultBold14NM)
-				(style
-					(hitTest = false)
-					(width = 20px)
-					(alpha = "TA")
-				)
-				(bind text "emojiTotalCount")
-			)
-		)
-
-		
-		(block
-			(bind name "'player_tab_state_' + name")
-			(style
-				(hitTest = false)
-				(width = "COLUMN_FRAGS_WIDTH")
-				(height = 100%)
-				
-			)
-
-			(element LoadingIndicatorAndFrags
-				_isBattleLoading =			"_isBattleLoading"
-				_isBattleStats =			"_isBattleStats"
-				_isReady =					"isReady"
-				_fragsCount =				"fragsCount"
-				_isSelected =				"isSelected"
-				_playerNameColor =			"playerNameColor"
-				_isShipHidedByFogOfWar =	"isDetectionInfoHidden"
-			)
-		)
-
-		
-		(block
-			(bind visible "!_isBattleLoading")
-			(style
-				(hitTest = false)
-				(width = "COLUMN_ASSIST_WIDTH")
-				(height = 100%)
-				(align = "middle|center")
-				
-			)
-			(tf
-				(bind visible "_isBattleStats && assistsCount != 0 && !isDetectionInfoHidden")
-				(bind class "isSelected ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
-				(style (alpha = "TA"))
-				(bind text "assistsCount")
-			)
-		)
-
-		
-		(hblock
-			(style
-				(hitTest = false)
-				(paddingLeft = "XS")
-				(width = "_isBattleLoading ? COLUMN_SHIP_WIDTH + COLUMN_EMOJI_WIDTH + COLUMN_ASSIST_WIDTH : COLUMN_SHIP_WIDTH")
-				(height = 100%)
-				(align = "middle")
-				
-			)
-
-			
-			(block
-				(style
-					(align = "middle")
-					(marginRight = "XS")
-					(width = "KEY_TARGET_ICON_SIZE")
-					(height = 100%)
-				)
-
-				(controller $Instance renderer='KeyTargetIcon'
-					(bind enabled "isKeyTargetVisible")
-				)
-			)
-
-			(block
-				(style
-					(align = "middle")
-					(height = 100%)
-					(width = 19px)
-					(marginRight = "XXS")
-					(bind alpha "isAlive ? 1 : 0.45")
-				)
-
-				(controller $Instance renderer='ShipMasteryIcon'
-					(bind enabled "!isDetectionInfoHidden && isShipMasteryVisible")
-					(args
-						_rank = "masteryRank"
-					)
-				)
-			)
-
-			(element ShipIconAndLevelAndName
-				_shipIDS =					"shipIDS"
-				_shipLevelRome =			"shipLevelRome"
-				_shipLevelIcon =			"shipLevelIcon"
-				_shipType =					"subType ? toLower(subType): ''"
-				_name =						"name"
-				_isDead =					"!isAlive"
-				_alpha =					"alphaOfText"
-				_isShipHidedByFogOfWar =	"isDetectionInfoHidden"
-			)
-		)
-
-		
-		(hblock
-			(bind name "'player_tab_name_' + name")
-
-			(style
-				(hitTest = false)
-				(paddingLeft = "XS")
-				(paddingRight = "XS")
-				(height = 100%)
-				(width = "COLUMN_PLAYER_WIDTH")
-				(bind alpha "alphaOfText")
-				(align = "center|middle")
-				
-			)
-
-			
-			(block
-				(class $Fullsize)
-				(style
-					(marginRight = "XS")
-					(marginLeft = "S")
-					(align = "middle")
-				)
-
-				(element PlayerNameAndClanTag
-					_isAbuser =		false  
-					_playerName =	"pureName"
-					_clanTag =		"clanTag"
-					_isBot =		"isBot"
-					_isTextBold =	"isSelected"
-				)
-			)
-		)
-
-		(hblock
-			(style
-				(hitTest = false)
-				(width = "COLUMN_DIVISIONS_WIDTH")
-				(height = 100%)
-				(align = "middle")
-				
-			)
-
-			
-			(block
-				(style
-					(bind alpha "division > 0 && !divisionHidden ? 1 : 0")
-					(width = 19px)
-					(height = 19px)
-					(marginTop = 2px)
-					(marginLeft = 2px)
-					(bind backgroundImage "'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_another_' + DIVISION_LETTERS_ARRAY[divisionSign]")
-				)
-			)
-
-			
-			(element UIListVoiceTextChatIcons
-				_playerId = "id"
-				_selfPlayerDivisionId = "selfDivisionId"
-				_isSpeaking = "isSpeaking"
-				_isVoiceChatMuted = "isMuted"
-				_isInVoiceChat = "playerVoiceStateEntity != null"
-			)
-		)
-	)
-)
-
-
-
-(def element UIListTeamStructureLeft (	_isBattleStats:bool,
-										_isBattleLoading:bool,
-										_isDynamicDivisionsEnabled:bool = false,
-										_isOnlyTeam:bool = false)
-	(scope
-		(var avatarCollection:dhCollection = "getCollection(CC.avatar).getChildByPath('team.ally.sortedAlive')")
-
-		(var challengeParticipantCollection:dhCollection = "getCollection(CC.challengeParticipant).getChildByPath('sortedByWonPosition')")
+		(var challengeParticipantCollection:dhCollection = "getCollectionByPath(CC.challengeParticipant, 'sortedByWonPosition')")
 		(var challengeEntity:dhEntity = "getSingleEntity(CC.challenge)")
 		(var isChallenge:bool = "challengeEntity != null")
+
+		(var deathmatchPlayerCollection:dhCollection = "getCollectionByPath(CC.deathmatchPlayer, 'sortedByPlace')")
+		(var isDeathmatch:bool = "toBool(deathmatchPlayerCollection.length)")
 	)
 
 	(style (bind width "_isOnlyTeam ? TABLE_WIDTH : HALF_TABLE_WIDTH"))
 
-	(element UIListTeamStructureHeaderLeft
-		_isBattleStats = "_isBattleStats"
-		_isChallenge = "isChallenge"
+	(element UIListTeamStructureHeader
+		_isBattleStats 	= "_isBattleStats"
+		_isChallenge 	= "isChallenge"
+		_isDeathmatch 	= "isDeathmatch"
+		_isReversed 	= "_isReversed"
 	)
 
 	(block
 		(style (width = 100%))
-		(controller $Repeat renderer='SimpleUIListTeamStructureLeft'
-			(bind count "isChallenge ? challengeParticipantCollection.length : avatarCollection.length")
+
+		(controller $Repeat renderer='UIListTeamStructureItem'
+			(bind items "	isDeathmatch 	? deathmatchPlayerCollection :
+							isChallenge 	? challengeParticipantCollection
+											: avatarCollection"
+			)
 			(args
-				_avatarEntity 				= "isChallenge ? challengeParticipantCollection[$index] : avatarCollection[$index]"
+				_avatarEntity 				= "$item"
 				_isBattleLoading 			= "_isBattleLoading"
 				_isBattleStats 				= "_isBattleStats"
 				_isDynamicDivisionsEnabled 	= "_isDynamicDivisionsEnabled"
 				_isOnlyTeam 				= "_isOnlyTeam"
 				_isChallenge 				= "isChallenge"
+				_isFogOfWar 				= "_isFogOfWar"
+				_isReversed 				= "_isReversed"
 			)
 		)
 	)
 )
 
-(def element UIListTeamStructureHeaderLeft (_isBattleStats:bool=false, _isChallenge:bool=false)
+(def element UIListTeamStructureHeader (_isBattleStats:bool = false,
+										_isChallenge:bool = false,
+										_isDeathmatch:bool = false,
+										_isReversed:bool = false)
 	(scope
-		(struct teamName = GET_TEAM_NAME(_isChallenge="_isChallenge"))
+		(struct teamName = GET_TEAM_NAME(_isParticipants="_isChallenge || _isDeathmatch"))
 	)
 
 	(style
+		(flow = "_isReversed ? reverse_horizontal : horizontal")
 		(width = 100%)
 		(height = "LINE_HEIGHT")
-		(backgroundColor = "C_ALLY_HEADER")
-		(flow = "horizontal")
-	)
-
-	(block
-		(style
-			(width = 100%)
-			(marginLeft = "MS")
-			(marginTop = 10px)
-			(alpha = "TA")
-		)
-
-		(tf
-			(class $TextDefaultBold18NM)
-			(bind text "teamName.alphaTeamName")
+		(bind backgroundColor "	_isDeathmatch 	? C_EVENT_HEADER :
+								_isReversed 	? C_ENEMY_HEADER
+												: C_ALLY_HEADER"
 		)
 	)
 
 	
-	(hblock
+	(block
+		(style
+			(align = "_isReversed ? right : left")
+			(width = 100%)
+			(paddingTop = 10px)
+			(paddingLeft = "_isReversed ? 0px : MS")
+			(paddingRight = "_isReversed ? MS : 0px")
+		)
+
+		(tf
+			(class $TextDefaultBold18NM)
+			(style (alpha = "TA"))
+			(bind text "_isReversed ? teamName.bravoTeamName : teamName.alphaTeamName")
+		)
+	)
+
+	
+	(block
 		(bind visible "_isBattleStats")
 
 		(style
-			(position = "absolute")
-			(right = 0px)
-			(align = "middle|center")
+			(flow = "_isReversed ? reverse_horizontal : horizontal")
 			(height = 100%)
 		)
 
 		
 		(block
-			(bind visible "!_isChallenge")
+			(bind visible "!_isChallenge && !_isDeathmatch")
 
 			(style
 				(width = "COLUMN_ASSIST_WIDTH")
@@ -669,6 +229,25 @@
 					(width = 21px)
 					(height = 21px)
 					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:icon_stat_assist')
+				)
+			)
+		)
+
+		
+		(block
+			(bind visible "_isDeathmatch")
+
+			(style
+				(width = "COLUMN_SCORE_WIDTH")
+				(height = 100%)
+				(align = "middle|center")
+			)
+
+			(block
+				(style
+					(width = 21px)
+					(height = 21px)
+					(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:deathmatch_score')
 				)
 			)
 		)
@@ -697,8 +276,9 @@
 			(style
 				(width = "COLUMN_EMOJI_WIDTH")
 				(height = 100%)
-				(align = "middle|right")
-				(paddingRight = 6px)
+				(align = "_isReversed ? middle|left : middle|right")
+				(paddingRight = "_isReversed ? 0px : 6px")
+				(paddingLeft = "_isReversed ? 6px : 0px")
 			)
 
 			(block
@@ -712,14 +292,14 @@
 	)
 )
 
-(def element SimpleUIListTeamStructureLeft (_avatarEntity:dhEntity,
-											_isBattleLoading:bool,
-											_isBattleStats:bool,
-											_isDynamicDivisionsEnabled:bool,
-											_isOnlyTeam:bool)
+(def element UIListTeamStructureItem (	_avatarEntity:dhEntity,
+										_isBattleLoading:bool,
+										_isBattleStats:bool,
+										_isDynamicDivisionsEnabled:bool,
+										_isFogOfWar:bool,
+										_isOnlyTeam:bool,
+										_isReversed:bool = false)
 	(scope
-		(event evRevokeInvitationToDivision)
-
 		(event evContextMenuShowed)
 		(event evContextMenuHidden)
 		(event evMenuItemClicked)
@@ -728,66 +308,79 @@
 		(event evEmojiSelectorRollOut)
 		(event evAvatarSelected)
 
-		(macro MOUSE_HANDLER_SCOPE)
+		(struct mouseHandler = MOUSE_HANDLER())
 
-		(macro AVATAR_DATA_SCOPE "_avatarEntity")
-		(macro DIVISION_MEMBER_SCOPE "_avatarEntity")
-		(macro PLAYER_CLAN_SCOPE "_avatarEntity")
-		(macro PLAYER_VOICE_STATE "pureName")
-		(macro SHIP_DATA_SCOPE "shipId")
-		(macro SELECTED_AVATAR_ID)
-		
-		(var isSelected:bool = "id == selectedAvatarId")
-		
+		(struct avatarDataStruct = AVATAR_DATA_SCOPE(_avatarEntity="_avatarEntity"))
+		(struct divisionMemberStruct = DIVISION_MEMBER_SCOPE(_avatarEntity="_avatarEntity"))
+		(struct playerClanStruct = PLAYER_CLAN_SCOPE(_avatarEntity="_avatarEntity"))
+		(struct playerVoiceStateStruct = PLAYER_VOICE_STATE(_pureName="avatarDataStruct.pureName"))
+		(struct shipDataStruct = SHIP_DATA_SCOPE(_shipId="avatarDataStruct.shipId"))
+		(struct shipDetectionStruct = PULL_INFO_ABOUT_SHIP_DETECTION(
+			_entityId = "avatarDataStruct.entityId"
+			_isFogOfWar = "_isFogOfWar"
+		))
+
+		(var selectedShipInfoComponent:dhComponent = "getSingleComponent(CC.selectedShipInfo)")
+		(var selectedAvatarId:number = "selectedShipInfoComponent.selectedAvatarId" (event "selectedShipInfoComponent.evChanged"))
+
+		(var isSelected:bool = "avatarDataStruct.id == selectedAvatarId")
+
 		(var relation:number = "_avatarEntity.relation.value" (event "_avatarEntity.relation.evChanged"))
 		(var isSelf:bool = "relation == SC.Battle.DIPLOMACY_RELATIONS.SELF")
 
 		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
-		(var divisionId:number = "	selfPlayerEntity.divisionMember.divisionId" (event "selfPlayerEntity.divisionMember.evDivisionChanged"))
-		
-		(var preBattlePlayerSimpleCollection:gfx = "$datahub.getCollection(CC.preBattlePlayerSimple)")
-		(var preBattlePlayerSimpleEntity:gfx = "$datahub.getPrimaryEntity(CC.preBattlePlayerSimple, id)" (event "preBattlePlayerSimpleCollection.evAdded"))
-		(var isInvited:bool = "preBattlePlayerSimpleEntity.hasComponent(CC.playerInvitedToPrebattleInfo)" (event "preBattlePlayerSimpleEntity.evAdded") (event "preBattlePlayerSimpleEntity.evRemoved"))
+		(var selfDivisionId:number = "selfPlayerEntity.divisionMember.divisionId" (event "selfPlayerEntity.divisionMember.evDivisionChanged"))
 
-		(macro FEATURES "9")
+		(var preBattlePlayerSimpleCollection:dhCollection = "getCollection(CC.preBattlePlayerSimple)")
+		(var preBattlePlayerSimpleEntity:dhEntity = "getPrimaryEntity(CC.preBattlePlayerSimple, avatarDataStruct.id)" autoUpdate=false (event "preBattlePlayerSimpleCollection.evAdded"))
+		(var isInvited:bool = "preBattlePlayerSimpleEntity.hasComponent(CC.playerInvitedToPrebattleInfo)")
+
+		(struct sseFeature = FEATURES(_state="SC.Common.ACCOUNT_FEATURE.ACTIONS_USE"))
 		(var rawKeyTargetValue:dhComponent = "_avatarEntity.keyTargetMarkerBattle")
-		(var isKeyTargetVisible:bool = "rawKeyTargetValue && feature_9 != 'locked'")
+		(var isKeyTargetVisible:bool = "rawKeyTargetValue && sseFeature.state != 'locked'")
 
-		(var challengeParticipant:dhComponent= "_avatarEntity.challengeParticipant" (event "_avatarEntity.evAdded"))
-		(var isChallengeParticipant:bool= "challengeParticipant != null")
-		(var wonPosition:number= "challengeParticipant.wonPosition ?: 0" (event "challengeParticipant.evWonPositionChanged"))
+		(var challengeParticipant:dhComponent = "_avatarEntity.challengeParticipant")
+		(var isChallengeParticipant:bool = "challengeParticipant != null")
+		(var wonPosition:number = "challengeParticipant.wonPosition ?: 0" (event "challengeParticipant.evWonPositionChanged"))
 
-		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
 		(var battleType:str = "battleInfoComponent.battleType")
 
-		(var isShipMasteryVisible:bool = "masteryRank && isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE)")
+		(var deathmatchPlayerComponent:dhComponent = "_avatarEntity.deathmatchPlayer")
+		(var isDeathmatchPlayer:bool = "deathmatchPlayerComponent != null")
+		(var deathmatchScore:number = "deathmatchPlayerComponent.score" (event "deathmatchPlayerComponent.evScoreChanged"))
 
-		
-		(macro PULL_PLAYER_COLOR
+		(var isShipMasteryVisible:bool = "avatarDataStruct.masteryRank && (isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE) || isDeathmatchPlayer)")
+
+		(struct playerColorStruct = PULL_PLAYER_COLOR(
 			_isSelf = "isSelf"
-			_isAbuser = "isAbuser"
-			_isInSameDivision = "isInSameDivision"
+			_isAbuser = "avatarDataStruct.isAbuser"
+			_isInSameDivision = "divisionMemberStruct.isInSameDivision"
+		))
+		(var playerStatsAndFragsColor:number = "!isSelf && divisionMemberStruct.isInSameDivision 	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																									: SC.Ui_styles.SERVICE_COLORS.WHITE"
 		)
-		(var playerStatsAndFragsColor:number = "!isSelf && isInSameDivision	? SC.Ui_styles.SERVICE_COLORS.YELLOW
-																	: SC.Ui_styles.SERVICE_COLORS.WHITE")
-		(var playerShipColor:number = "isAlive && !isSelf && isInSameDivision	? SC.Ui_styles.SERVICE_COLORS.YELLOW
-																				: SC.Ui_styles.SERVICE_COLORS.WHITE")
-		(var alphaOfShip:number = "isAlive	? playerNameColor == SC.Ui_styles.SERVICE_COLORS.WHITE 	? TA
-																									: 1
-											: TS")
-		(var alphaOfPlayerName:number = "isAbuser && !isInSameDivision ? 1 : alphaOfShip")
+		(var playerShipColor:number = "avatarDataStruct.isAlive && !isSelf && divisionMemberStruct.isInSameDivision ? SC.Ui_styles.SERVICE_COLORS.YELLOW
+																													: SC.Ui_styles.SERVICE_COLORS.WHITE"
+		)
+		(var alphaOfShip:number = "avatarDataStruct.isAlive ? playerColorStruct.value == SC.Ui_styles.SERVICE_COLORS.WHITE 	? TA
+																															: 1
+															: TS"
+		)
+		(var alphaOfPlayerName:number = "!_isReversed && avatarDataStruct.isAbuser && !divisionMemberStruct.isInSameDivision ? 1 : alphaOfShip")
 
-		(struct playerComplainPraiseData = PULL_PLAYER_COMPLAIN_PRAISE_DATA(_battleType = "battleType"
-																			_isComplaintsAvailable = true
-																			_isReplayPlaying = "battleInfoComponent.isReplayPlaying")
-		)
+		(struct playerComplainPraiseData = PULL_PLAYER_COMPLAIN_PRAISE_DATA(
+			_battleType = "battleType"
+			_isComplaintsAvailable = true
+			_isReplayPlaying = "battleInfoComponent.isReplayPlaying"
+		))
 		(var isEmojiDisabledReason:bool = "toBool(playerComplainPraiseData.reactionsDisabledReason)")
 
 		(var emojiByOwnerCollection:dhCollection = "getCollectionByPath(CC.emoji, 'byOwnerId')")
-		(var emojiByOwnerIdCollection:dhCollection = "emojiByOwnerCollection.child(playerEntityDbId)")
-		(var firstEmojiComponent:dhComponent = "emojiByOwnerIdCollection.getEntityAtIndex(0).emoji")
+		(var emojiByOwnerIdCollection:dhCollection = "emojiByOwnerCollection.child(avatarDataStruct.playerEntityDbId)")
+		(var firstEmojiComponent:dhComponent = "emojiByOwnerIdCollection.firstEntity.emoji")
 
-		(var emojiPlayerInfoComponent:dhComponent = "getPrimaryEntity(CC.accountSimple, playerEntityDbId).emojiPlayerInfo")
+		(var emojiPlayerInfoComponent:dhComponent = "getPrimaryEntity(CC.accountSimple, avatarDataStruct.playerEntityDbId).emojiPlayerInfo")
 		(var emojiTotalCount:number = "emojiPlayerInfoComponent.totalCount ?: 0" (event "emojiPlayerInfoComponent.evTotalCountChanged"))
 
 		(var isAvatarSelectionEnabled:bool = true)
@@ -795,45 +388,64 @@
 		(bind isAvatarSelectionEnabled "true" init=false (event "evEmojiSelectorRollOut"))
 	)
 
-	(macro MOUSE_EVENTS_DISPATCHER)
+	(bind visible "!avatarDataStruct.hidden")
+
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
 
 	(dispatch evAvatarSelected on='leftClick' (bind enabled "isAvatarSelectionEnabled"))
-	(bindcall externalCall 'direct.action' "['action.onAvatarSelected', {selectedAvatarId: id}]" init=false watch=false (event "evAvatarSelected"))
-	(bind visible "!hidden")
+	(bindcall externalCall 'direct.action'
+		"['action.onAvatarSelected', {selectedAvatarId: avatarDataStruct.id}]"
+		init = false
+		watch = false
+		(bind trigger "_isReversed && shipDetectionStruct.isDetectionInfoHidden")
+		(event "evAvatarSelected")
+	)
+
 	(style
 		(height = "LINE_HEIGHT")
 		(width = 100%)
 	)
 
 	
-	(block 
+	(block
 		(class $LineBackgroundStyle)
 		(style
-			(bind backgroundColor "isSelf ? SC.Ui_styles.SERVICE_COLORS.WHITE: C_DARK")
-			(bind alpha "isSelf 	? 0.17 :
-						!isAlive 	? 0.15
-									: 0")
+			(bind backgroundColor "isSelf ? SC.Ui_styles.SERVICE_COLORS.WHITE : C_DARK")
+			(bind alpha "isSelf 					? 0.17 :
+						!avatarDataStruct.isAlive 	? 0.15
+													: 0"
+			)
 		)
 	)
 
 	
-	(block 
+	(block
 		(class $LineBackgroundStyle)
 		(style
 			(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
 			(alpha = 0)
 		)
 		(controller $Animation
-			(bindcall play duration=0.02 from={alpha: 0} to={alpha: 0.05} action="killAll" reverse="!rollOver" (bind trigger "rollOver") )
+			(bindcall play
+				duration = 0.02
+				from = {alpha: 0}
+				to = {alpha: 0.05}
+				action = "killAndContinue"
+				reverse = "!mouseHandler.rollOver"
+				(bind trigger "mouseHandler.rollOver")
+			)
 		)
 
 		(controller $Tooltip
 			(renderer = 'BattlePlayerTooltip')
 			(args
-				_playerEntity = "_avatarEntity"
-				_isInStats = true
-				_isBot = "isBot"
-				_isSelected = "isSelected"
+				_playerEntity 	= "_avatarEntity"
+				_isInStats 		= true
+				_isBot 			= "avatarDataStruct.isBot"
+				_isSelected 	= "isSelected"
+				_checkForAbuse 	= "!_isReversed"
 			)
 			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
 		)
@@ -842,12 +454,18 @@
 			(renderer = 'ContextMenuPlayer')
 			(bind enabled "!isSelf")
 			(args
-				_playerEntity =	"_avatarEntity"
-				_selfPlayer =	"selfPlayerEntity"
+				_playerEntity 	= "_avatarEntity"
+				_selfPlayer 	= "selfPlayerEntity"
 			)
-			(macro DEFAULT_MENU_BEHAVIOUR "1")
-			(macro TOOLTIP_HIDE_ON_EVENT "evMenuItemClicked")
-			(macro TOOLTIP_HIDE_ON_EVENT "evBattleStatsHidden")
+			(macro DEFAULT_MENU_BEHAVIOUR
+				_priority = "1"
+			)
+			(macro TOOLTIP_HIDE_ON_EVENT
+				_evHide = "evMenuItemClicked"
+			)
+			(macro TOOLTIP_HIDE_ON_EVENT
+				_evHide = "evBattleStatsHidden"
+			)
 			(dispatch evContextMenuShowed dir="EventDirection.DOWN" on='evStartShow')
 			(dispatch evContextMenuHidden dir="EventDirection.DOWN" on='evHide')
 		)
@@ -865,92 +483,119 @@
 		)
 	)
 
-	(hblock
+	(block
 		(class $Fullsize)
+		(style (flow = "_isReversed ? reverse_horizontal : horizontal"))
 
 		
-		(hblock
+		(block
+			(bind visible "!isDeathmatchPlayer")
 			(style
 				(hitTest = false)
+				(flow = "_isReversed ? reverse_horizontal : horizontal")
+				(align = "middle")
 				(width = "COLUMN_DIVISIONS_WIDTH")
 				(height = 100%)
-				(align = "middle")
 				
 			)
 
 			(element UIListVoiceTextChatIcons
-				_playerId = "id"
-				_selfPlayerDivisionId = "divisionId"
-				_isInSameDivision = "isInSameDivision"
-				_isSpeaking = "isSpeaking"
-				_isVoiceChatMuted = "isMuted"
-				_isInVoiceChat = "playerVoiceStateEntity != null"
+				_playerId 				= "avatarDataStruct.id"
+				_selfPlayerDivisionId 	= "selfDivisionId"
+				_isInSameDivision 		= "divisionMemberStruct.isInSameDivision"
+				_isSpeaking 			= "playerVoiceStateStruct.isSpeaking"
+				_isVoiceChatMuted 		= "playerVoiceStateStruct.isMuted"
+				_isInVoiceChat 			= "playerVoiceStateStruct.playerVoiceStateComponent != null"
 			)
 
 			
 			(block
-				(bind visible "division > 0 && !divisionHidden")
-
+				(bind visible "divisionMemberStruct.division > 0 && !divisionMemberStruct.divisionHidden")
 				(style
 					(width = 19px)
 					(height = 19px)
-					(marginTop = 2px)
-					(bind backgroundImage "	isDivisionCommander && isInSameDivision ? 'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_your_commander' :
-											isInSameDivision 						? 'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_your_' + DIVISION_LETTERS_ARRAY[divisionSign]
-																					: 'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_another_' + DIVISION_LETTERS_ARRAY[divisionSign]")
+					(marginTop = "XXS")
+					(bind backgroundImage "	divisionMemberStruct.isDivisionCommander && divisionMemberStruct.isInSameDivision 	? 'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_your_commander' :
+											divisionMemberStruct.isInSameDivision 												? 'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_your_' + DIVISION_LETTERS_ARRAY[divisionMemberStruct.divisionSign]
+																																: 'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_another_' + DIVISION_LETTERS_ARRAY[divisionMemberStruct.divisionSign]"
+					)
 				)
 			)
 
 			
-
 			(block
-				(bind visible "division == 0 && !isSelf && _isDynamicDivisionsEnabled && isInvited")
+				(bind visible "divisionMemberStruct.division == 0 && !isSelf && _isDynamicDivisionsEnabled && isInvited")
 				(style
 					(width = 19px)
 					(height = 19px)
-					(marginTop = 2px)
+					(marginTop = "XXS")
 					(backgroundImage = 'swf:../service_kit/divisions_icons_svg/divisions_icons_svg.swf:division_invited')
 				)
 			)
 		)
 
 		
-		(hblock
-			(bind name "'player_tab_name_' + name")
-
+		(block
+			(bind visible "isDeathmatchPlayer")
 			(style
 				(hitTest = false)
-				(paddingLeft = "XS")
-				(paddingRight = "XS")
+				(width = "COLUMN_PLACE_WIDTH")
 				(height = 100%)
-				(bind width "_isOnlyTeam ? COLUMN_PLAYER_WIDTH_ONE_TEAM : COLUMN_PLAYER_WIDTH")
-				(bind alpha "alphaOfPlayerName")
 				(align = "center|middle")
+				(marginRight = "COLUMN_DIVISIONS_WIDTH - COLUMN_PLACE_WIDTH")
 				
 			)
-			
-			
 
-			(element PlayerNameAndClanTag
-				_isSelf =			"isSelf"
-				_isAbuser =			"isAbuser"
-				_isInSameDivision =	"isInSameDivision"
-				_playerName =		"pureName"
-				_clanTag =			"clanTag"
-				_isBot =			"isBot"
-				_isTextBold =		"isSelf || isSelected"
-				_isDead =			"!isAlive"
+			(block
+				(bind visible "_isBattleStats")
+				(class $FullsizeAbsolute)
+				(style
+					(alpha = 0.1)
+					(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.BLACK")
+				)
+			)
+
+			(tf
+				(bind visible "_isBattleStats && $index <= 2")
+				(class $TextDefaultBold20NM)
+				(bind text "$index + 1")
 			)
 		)
 
+		
+		(hblock
+			(bind name "'player_tab_name_' + avatarDataStruct.name")
+
+			(style
+				(hitTest = false)
+				(height = 100%)
+				(align = "center|middle")
+				(paddingLeft = "XS")
+				(paddingRight = "XS")
+				(bind width "_isOnlyTeam ? COLUMN_PLAYER_WIDTH_ONE_TEAM : COLUMN_PLAYER_WIDTH")
+				(bind alpha "alphaOfPlayerName")
+				
+			)
+
+			(element PlayerNameAndClanTag
+				_isSelf 			= "isSelf"
+				_isAbuser 			= "!_isReversed && avatarDataStruct.isAbuser"  
+				_isInSameDivision 	= "divisionMemberStruct.isInSameDivision"
+				_playerName 		= "avatarDataStruct.pureName"
+				_clanTag 			= "playerClanStruct.clanTag"
+				_isBot 				= "avatarDataStruct.isBot"
+				_isTextBold 		= "isSelf || isSelected"
+				_isDead 			= "!avatarDataStruct.isAlive"
+			)
+		)
 
 		
 		(hblock
 			(style
 				(hitTest = false)
-				(paddingLeft = "XS")
 				(height = 100%)
 				(align = "middle")
+				(paddingLeft = "XS")
 				(bind width "_isOnlyTeam 	? _isBattleLoading 	? COLUMN_SHIP_WIDTH_ONE_TEAM + COLUMN_EMOJI_WIDTH + COLUMN_ASSIST_WIDTH
 																: COLUMN_SHIP_WIDTH_ONE_TEAM
 											: _isBattleLoading 	? COLUMN_SHIP_WIDTH + COLUMN_EMOJI_WIDTH + COLUMN_ASSIST_WIDTH
@@ -962,51 +607,58 @@
 			
 			(block
 				(style
-					(align = "middle")
-					(height = 100%)
 					(width = "KEY_TARGET_ICON_SIZE")
+					(height = 100%)
+					(align = "middle")
 					(marginRight = "XS")
 				)
 				(controller $Instance renderer='KeyTargetIcon'
 					(bind enabled "isKeyTargetVisible")
 				)
 			)
+
+			
 			(block
+				(bind name "'mastery_icon_' + avatarDataStruct.pureName")
+
 				(style
-					(align = "middle")
 					(height = 100%)
 					(width = 19px)
+					(align = "middle")
 					(marginRight = "XXS")
-					(bind alpha "isAlive ? 1 : 0.45")
+					(bind alpha "avatarDataStruct.isAlive ? 1 : 0.45")
 				)
 
-				(bind name "'mastery_icon_' + pureName")
-
 				(controller $Instance renderer='ShipMasteryIcon'
-					(bind enabled "isShipMasteryVisible")
+					(bind enabled "isShipMasteryVisible && (!_isReversed || !shipDetectionStruct.isDetectionInfoHidden)")
 					(args
-						_rank = "masteryRank"
+						_rank = "avatarDataStruct.masteryRank"
 					)
 				)
 			)
 
 			(element ShipIconAndLevelAndName
-				_shipIDS =			"shipIDS"
-				_shipLevelRome =	"shipLevelRome"
-				_shipLevelIcon =	"shipLevelIcon"
-				_shipType =			"subType ? toLower(subType): ''"
-				_name =				"name"
-				_isSelf =			"isSelf"
-				_isDead =			"!isAlive"
-				_isInSameDivision =	"isInSameDivision"
-				_alpha =			"alphaOfShip"
-				_playerShipColor =	"playerShipColor"
+				_shipIDS 				= "shipDataStruct.shipIDS"
+				_shipLevelRome 			= "shipDataStruct.shipLevelRome"
+				_shipLevelIcon 			= "shipDataStruct.shipLevelIcon"
+				_shipType 				= "avatarDataStruct.subType ? toLower(avatarDataStruct.subType): ''"
+				_name 					= "avatarDataStruct.name"
+				_isSelf 				= "isSelf"
+				_isDead 				= "!avatarDataStruct.isAlive"
+				_isInSameDivision 		= "divisionMemberStruct.isInSameDivision"
+				_alpha 					= "alphaOfShip"
+				_playerShipColor 		= "playerShipColor"
+				_isShipHidedByFogOfWar 	= "_isReversed && shipDetectionStruct.isDetectionInfoHidden"
 			)
+		)
+
+		(block 
+			(style (width = 100%))
 		)
 
 		
 		(block
-			(bind visible "!_isBattleLoading")
+			(bind visible "!_isBattleLoading && !isDeathmatchPlayer")
 			(style
 				(hitTest = false)
 				(width = "COLUMN_ASSIST_WIDTH")
@@ -1014,20 +666,44 @@
 				(align = "middle|center")
 				
 			)
+
 			(tf
-				(bind visible "_isBattleStats && assistsCount != 0")
+				(bind visible "_isBattleStats && avatarDataStruct.assistsCount != 0 && (!_isReversed || !shipDetectionStruct.isDetectionInfoHidden)")
 				(bind class "isSelected || isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
 				(style
 					(alpha = "TA")
 					(bind textColor "playerStatsAndFragsColor")
 				)
-				(bind text "assistsCount")
+				(bind text "avatarDataStruct.assistsCount")
 			)
 		)
 
 		
 		(block
-			(bind name "'player_tab_state_' + name")
+			(bind visible "_isBattleStats && isDeathmatchPlayer")
+
+			(style
+				(hitTest = false)
+				(width = "COLUMN_SCORE_WIDTH")
+				(height = 100%)
+				(align = "middle|center")
+				
+			)
+
+			(tf
+				(bind visible "deathmatchScore != 0")
+				(bind class "isSelected || isSelf ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+				(style
+					(alpha = "TA")
+					(bind textColor "playerStatsAndFragsColor")
+				)
+				(bind text "deathmatchScore")
+			)
+		)
+
+		
+		(block
+			(bind name "'player_tab_state_' + avatarDataStruct.name")
 			(style
 				(hitTest = false)
 				(width = "COLUMN_FRAGS_WIDTH")
@@ -1035,22 +711,26 @@
 				
 			)
 
-			(class $Fullsize)
 			(controller $Instance renderer='LoadingIndicatorAndFrags'
 				(bind enabled "!isChallengeParticipant")
 				(args
-					_isBattleLoading =	"_isBattleLoading"
-					_isBattleStats =	"_isBattleStats"
-					_isReady =			"isReady"
-					_fragsCount =		"fragsCount"
-					_isSelected =		"isSelected"
-					_playerShipColor =	"playerStatsAndFragsColor"
-					_isSelf =			"isSelf"
+					_isBattleLoading 		= "_isBattleLoading"
+					_isBattleStats 			= "_isBattleStats"
+					_isReady 				= "avatarDataStruct.isReady"
+					_fragsCount 			= "avatarDataStruct.fragsCount"
+					_isSelected 			= "isSelected"
+					_playerShipColor 		= "playerStatsAndFragsColor"
+					_isSelf 				= "isSelf"
+					_playerNameColor 		= "playerColorStruct.value"
+					_isShipHidedByFogOfWar 	= "_isReversed && shipDetectionStruct.isDetectionInfoHidden"
 				)
 			)
+
 			(controller $Instance renderer='WonPosition'
 				(bind enabled "isChallengeParticipant")
-				(args _wonPosition = "wonPosition")
+				(args
+					_wonPosition = "wonPosition"
+				)
 			)
 		)
 
@@ -1059,10 +739,10 @@
 			(bind visible "!_isBattleLoading")
 
 			(style
-				(flow = "horizontal")
-				(align = "right|middle")
+				(flow = "_isReversed ? reverse_horizontal : horizontal")
 				(width = "COLUMN_EMOJI_WIDTH")
 				(height = 100%)
+				(align = "_isReversed ? middle|left : middle|right")
 				
 			)
 
@@ -1074,7 +754,7 @@
 				(style
 					(hitTest = false)
 					(width = 20px)
-					(textAlign = "right")
+					(textAlign = "_isReversed ? left : right")
 					(alpha = "TA")
 				)
 				(bind text "emojiTotalCount")
@@ -1093,7 +773,7 @@
 				(controller $Instance renderer='EmojiSelector'
 					(bind enabled "!isSelf && !_isBattleLoading && (!isEmojiDisabledReason || (isEmojiDisabledReason && firstEmojiComponent != null))")
 					(args
-						_ownerId 					= "playerEntityDbId"
+						_ownerId 					= "avatarDataStruct.playerEntityDbId"
 						_reactionsDisabledReason 	= "playerComplainPraiseData.reactionsDisabledReason"
 						_evaluationLimits 			= "playerComplainPraiseData.evaluationLimits"
 						_emojiByOwnerIdCollection 	= "emojiByOwnerIdCollection"
@@ -1264,7 +944,6 @@
 			(alpha = "TS")
 		)
 		(tf
-			(bind name "'player_tab_ship_' + _name")
 			(class $TextDefaultNM)
 			(style
 				(width = 100%)
@@ -1292,14 +971,14 @@
 		(var isIgnored:bool = "				playerEntity.contact.isIgnored" (event "playerEntity.contact.evIsIgnoredChanged"))
 		(var isSelf:bool = "relation == 0")
 
-		(macro GET_PREF 'voiceChatEnabled' "'sound.voice.chat.enabled'")
+		(struct voiceChatEnabledPref = GET_PREF_BOOL(_option="'sound.voice.chat.enabled'"))
 
-		(var battleInfoComponent:dhComponent = "getSingleEntity(CC.battleData).battleInfo")
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
 		(var battleType:str = "battleInfoComponent.battleType")
 		(var isClanBattle:bool = "battleType == SC.Common.BATTLE_TYPES.CLAN_BATTLE")
 		(var isChatAvailableBattle:bool = "battleType in SC.Common.BATTLE_TYPES.CHAT_AVAILABLE")
 
-		(var playerCanBeInChat:bool = "voiceChatEnabled && (isClanBattle || isChatAvailableBattle && _isInSameDivision)")
+		(var playerCanBeInChat:bool = "voiceChatEnabledPref.value && (isClanBattle || isChatAvailableBattle && _isInSameDivision)")
 		(var selfCanBeInChat:bool = "isSelf && (isClanBattle || isChatAvailableBattle && _selfPlayerDivisionId)")
 		(var canBeInChat:bool = "playerCanBeInChat || selfCanBeInChat")
 		(var state:str = "	!_isInVoiceChat		? 'disabled' :
@@ -1367,39 +1046,45 @@
 
 (def element ShipInfoOnTeamBattlePage (_isBattleStats:bool)
 	(scope
-		(macro SELECTED_AVATAR_ID)
+		(var selectedShipInfoComponent:dhComponent = "getSingleComponent(CC.selectedShipInfo)")
+		(var selectedAvatarId:number = "selectedShipInfoComponent.selectedAvatarId" (event "selectedShipInfoComponent.evChanged"))
 		(var selectedAvatarEntity:dhEntity = "getPrimaryEntity(CC.avatar, selectedAvatarId)")
-		(macro AVATAR_DATA_SCOPE "selectedAvatarEntity")
-		(macro PLAYER_CLAN_SCOPE "selectedAvatarEntity")
-		(macro SHIP_DATA_SCOPE "shipId")
+
+		(struct avatarDataStruct = AVATAR_DATA_SCOPE(_avatarEntity="selectedAvatarEntity"))
+		(struct playerClanStruct = PLAYER_CLAN_SCOPE(_avatarEntity="selectedAvatarEntity"))
+		(struct shipDataStruct = SHIP_DATA_SCOPE(_shipId="avatarDataStruct.shipId"))
+
 		(var relation:number = "selectedAvatarEntity.relation.value" (event "selectedAvatarEntity.relation.evChanged"))
 		(var isEnemy:bool = "relation == SC.Battle.PLAYER_RELATION.ENEMY")
 
-		(var battleDataEntity:dhEntity = "getSingleEntity(CC.battleData)")
-		(var isViewShipInfoDisabled:bool = "battleDataEntity.battleInfo.isViewShipInfoDisabled ?: false")
-		(var battleType:str = "battleDataEntity.battleInfo.battleType ?: ''")
+		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
+		(var isViewShipInfoDisabled:bool = "battleInfoComponent.isViewShipInfoDisabled ?: false")
+		(var battleType:str = "battleInfoComponent.battleType ?: ''")
 		(var isViewEnemyShipInfoDisabled:bool = "isViewShipInfoDisabled && isEnemy")
-		(var isFogOfWar:bool = "battleDataEntity.battleInfo.isFogOfWar ?: false")
-		(macro PULL_INFO_ABOUT_SHIP_DETECTION "avatarEntityId" "isFogOfWar")
-		(macro IS_SPECTATOR_MODE)
+		(var isFogOfWar:bool = "battleInfoComponent.isFogOfWar ?: false")
+		(var isDeathmatch:bool = "battleInfoComponent.gameModeId == SC.Battle.GAME_MODE.DEATHMATCH")
+		(struct shipDetectionStruct = PULL_INFO_ABOUT_SHIP_DETECTION(
+			_entityId = "avatarDataStruct.entityId"
+			_isFogOfWar = "isFogOfWar"
+		))
 
-		(var isShipInfoVisible:bool = "!(isDetectionInfoHidden || isViewEnemyShipInfoDisabled) || isSpectatorTrainingMode")
-		(var reasonOfEmptyContainer:str = "	isDetectionInfoHidden && isViewEnemyShipInfoDisabled 	? 'IDS_FOG_OF_WAR_AND_VIEW_SHIP_INFO_DISABLED' :
-											isViewEnemyShipInfoDisabled								? 'IDS_VIEW_SHIP_INFO_DISABLED' :
-											isDetectionInfoHidden									? 'IDS_FOG_OF_WAR_TIPS'
-																									: ''")
+		(var specratorStateComponent:dhComponent = "getSingleComponent(CC.spectatorState)")
+		(var spectatorState:number = "specratorStateComponent.state" (event "specratorStateComponent.evStateChanged"))
 
-		(var isAircarrier:bool = "subType == ShipTypes.AIRCARRIER")
+		(var isShipInfoVisible:bool = "(!shipDetectionStruct.isDetectionInfoHidden && !isViewEnemyShipInfoDisabled) || spectatorState == SC.Common.SPECTATOR_STATE.TRAINING_SPECTATOR")
+		(var reasonOfEmptyContainer:str = "	shipDetectionStruct.isDetectionInfoHidden && isViewEnemyShipInfoDisabled 	? 'IDS_FOG_OF_WAR_AND_VIEW_SHIP_INFO_DISABLED' :
+											isViewEnemyShipInfoDisabled													? 'IDS_VIEW_SHIP_INFO_DISABLED' :
+											shipDetectionStruct.isDetectionInfoHidden									? 'IDS_FOG_OF_WAR_TIPS'
+																														: ''"
+		)
 
-		(macro FEATURES "9")
+		(var isShipMasteryVisible:bool = "avatarDataStruct.masteryRank && (isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE) || isDeathmatch)")
 
-		(var isShipMasteryVisible:bool = "masteryRank && isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE)")
-
-		(var shipTTX:dhStruct = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+		(var shipTTX:dhStruct = "selectedShipInfoComponent.shipTTX" (event "selectedShipInfoComponent.evChanged"))
 		(var hasAtbaArtillery:bool = "toBool(shipTTX.artillery.atba)")
 		(var hasAirDefense:bool = "toBool(shipTTX.airDefense.averageAura.maxDist)")
 
-		(var shipRole:str = "shipEntity.ship.shipRole ?: ''")
+		(var shipRole:str = "shipDataStruct.shipComponent.shipRole ?: ''")
 		(var hasShipRole:bool = "!shipRole.empty")
 	)
 
@@ -1431,7 +1116,10 @@
 			(style
 				(height = 100%)
 				(width = 6px)
-				(bind backgroundColor "isEnemy ? C_ENEMY_HEADER : C_ALLY_HEADER")
+				(bind backgroundColor "	isDeathmatch 	? C_EVENT_HEADER :
+										isEnemy 		? C_ENEMY_HEADER
+														: C_ALLY_HEADER"
+				)
 			)
 		)
 
@@ -1449,7 +1137,7 @@
 					(scaleY = 0.8)
 				)
 				(element PlayerDogTag
-					_playerId = "playerEntityDbId"
+					_playerId = "avatarDataStruct.playerEntityDbId"
 					_size =	 "DOG_TAG_SIZE.MEDIUM"
 				)
 			)
@@ -1466,17 +1154,22 @@
 			(block
 				(style (width = 100%))
 
-				(element PlayerNameAndClanTag
-					_playerName =	"pureName"
-					_clanTag =		"clanTag"
-					_isBot =		"isBot"
-					_isTextBold =	true
-					_fontSize =		18
-					(style (alpha = "TA"))
+				(block
+					(style
+						(width = 100%)
+						(alpha = "TA")
+					)
+					(element PlayerNameAndClanTag
+						_playerName = "avatarDataStruct.pureName"
+						_clanTag 	= "playerClanStruct.clanTag"
+						_isBot 		= "avatarDataStruct.isBot"
+						_isTextBold = true
+						_fontSize 	= 18
+					)
 				)
 
 				(hblock
-					(bind visible "!isDetectionInfoHidden")
+					(bind visible "!shipDetectionStruct.isDetectionInfoHidden")
 					(style
 						(width = 100%)
 						(marginTop = "S")
@@ -1489,13 +1182,13 @@
 						(controller $Instance renderer='ShipMasteryIcon'
 							(bind enabled "isShipMasteryVisible")
 							(args
-								_rank = "masteryRank"
+								_rank = "avatarDataStruct.masteryRank"
 							)
 						)
 					)
 
 					(element NationFlagsTiny
-						_shipCountry =	"flagName"
+						_shipCountry = "shipDataStruct.flagName"
 					)
 
 					(block
@@ -1503,11 +1196,11 @@
 						(style (paddingLeft = "XXS"))
 
 						(element ShipIconAndLevelAndName
-							_shipIDS = 			"shipIDS"
-							_shipLevelRome = 	"shipLevelRome"
-							_shipLevelIcon =	"shipLevelIcon"
-							_shipType = 		"subType ? toLower(subType): ''"
-							_name = 			"name"
+							_shipIDS 		= "shipDataStruct.shipIDS"
+							_shipLevelRome 	= "shipDataStruct.shipLevelRome"
+							_shipLevelIcon 	= "shipDataStruct.shipLevelIcon"
+							_shipType 		= "avatarDataStruct.subType ? toLower(avatarDataStruct.subType): ''"
+							_name 			= "avatarDataStruct.name"
 						)
 					)
 				)
@@ -1567,6 +1260,7 @@
 				(style (width = 100%))
 
 				(block
+					(name = 'visibility')
 					(style (width = 100%))
 					(controller $Tooltip
 						(renderer='ShipInfoParamVisibilityTooltip')
@@ -1581,6 +1275,7 @@
 				)
 
 				(block
+					(name = 'AtbaArtillery')
 					(bind visible "hasAtbaArtillery")
 					(style (width = 100%))
 					(controller $Tooltip
@@ -1600,6 +1295,7 @@
 				)
 
 				(block
+					(name = 'AirDefense')
 					(bind visible "hasAirDefense")
 					(style (width = 100%))
 					(controller $Tooltip
@@ -1643,8 +1339,8 @@
 
 			(controller $Instance
 				(bind enabled "isShipInfoVisible")
-				(bind renderer "isAircarrier	? 'ShipEquipmentOnTeamBattlePageAirCarrier'
-												: 'ShipEquipmentOnTeamBattlePageDefault'")
+				(bind renderer "avatarDataStruct.subType == SC.Common.SHIP_TYPE.AIRCARRIER	? 'ShipEquipmentOnTeamBattlePageAirCarrier'
+																							: 'ShipEquipmentOnTeamBattlePageDefault'")
 				(args
 					_selectedAvatarId = "selectedAvatarId"
 				)
@@ -1687,16 +1383,18 @@
 	)
 )
 
-(def element ShipInfoAtbaTTX (_atbaGunTTX:gfx)
+(def element ShipInfoAtbaTTX (_atbaGunTTX:dhStruct)
 	(scope
-		(var ammoTTX:gfx = "_atbaGunTTX.ammoHE	? _atbaGunTTX.ammoHE :
-							_atbaGunTTX.ammoCS	? _atbaGunTTX.ammoCS :
-							_atbaGunTTX.ammoAP	? _atbaGunTTX.ammoAP
-												: null")
-		(var title:str = 	"_atbaGunTTX.ammoHE	? 'IDS_SHIP_PARAM_AMMO_HE_FULL_NAME' :
-							_atbaGunTTX.ammoCS	? 'IDS_SHIP_PARAM_AMMO_CS_FULL_NAME' :
-							_atbaGunTTX.ammoAP	? 'IDS_SHIP_PARAM_AMMO_AP_FULL_NAME'
-												: ''")
+		(var ammoTTX:dhStruct = "	_atbaGunTTX.ammoHE	? _atbaGunTTX.ammoHE :
+									_atbaGunTTX.ammoCS	? _atbaGunTTX.ammoCS :
+									_atbaGunTTX.ammoAP	? _atbaGunTTX.ammoAP
+														: null"
+		)
+		(var title:str = "	_atbaGunTTX.ammoHE 	? 'IDS_SHIP_PARAM_AMMO_HE_FULL_NAME' :
+							_atbaGunTTX.ammoCS 	? 'IDS_SHIP_PARAM_AMMO_CS_FULL_NAME' :
+							_atbaGunTTX.ammoAP 	? 'IDS_SHIP_PARAM_AMMO_AP_FULL_NAME'
+												: ''"
+		)
 	)
 	(style (width = 100%))
 
@@ -1726,7 +1424,7 @@
 	)
 )
 
-(def element ShipInfoParamAirDefenseTooltip (_airDefenseTTX:gfx)
+(def element ShipInfoParamAirDefenseTooltip (_airDefenseTTX:dhStruct)
 	(scope
 		(var airDefenseAuras:array = "_airDefenseTTX.auras")
 	)
@@ -1734,16 +1432,20 @@
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemHeaderSubheaderText _headerText='IDS_SHIP_PARAM_AIR_DEFENSE')
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_SHIP_PARAM_AIR_DEFENSE'
+		)
 		(element TooltipSystemHorizontalDivider)
 		(element TOOLTIP_SYSTEM_PARAMS_WRAPPER
 			(element TOOLTIP_SYSTEM_PARAMS_BLOCK
 				(block
 					(style (width = 100%))
 					(controller $Repeat
-						(renderer = 'ShipInfoArDefenseTTX')
+						(renderer = 'ShipInfoAirDefenseTTX')
 						(bind count "airDefenseAuras.length")
-						(args _airDefenseAura = "airDefenseAuras[$index]")
+						(args
+							_airDefenseAura = "airDefenseAuras[$index]"
+						)
 					)
 				)
 			)
@@ -1751,25 +1453,27 @@
 	)
 )
 
-(def element ShipInfoArDefenseTTX (_airDefenseAura:dict)
+(def element ShipInfoAirDefenseTTX (_airDefenseAura:dict)
 	(style (width = 100%))
 	(element ShipParameterNumber
-		_title = "'IDS_SHIP_PARAM_AA_AVERAGE_DAMAGE_' + toUpper(_airDefenseAura.type)"
+		_title = "'IDS_SHIP_PARAM_AA_AVERAGE_DAMAGE_' + _airDefenseAura.type"
 		_value = "_airDefenseAura.damage"
 	)
 )
 
-(def element ShipInfoParamVisibilityTooltip (_visibilityTTX:gfx)
+(def element ShipInfoParamVisibilityTooltip (_visibilityTTX:dhStruct)
 	(style (width = "TTX_TOOLTIP_WIDTH"))
 	(macro TOOLTIP_SYSTEM_DEFAULT_BACKGROUND)
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
-		(element TooltipSystemHeaderSubheaderText _headerText='IDS_SHIP_PARAM_VISIBILITY_DIST_BY_SHIP')
+		(element TooltipSystemHeaderSubheaderText
+			_headerText = 'IDS_SHIP_PARAM_VISIBILITY_DIST_BY_SHIP'
+		)
 		(element TooltipSystemHorizontalDivider)
 		(element TOOLTIP_SYSTEM_PARAMS_WRAPPER
 			(element TOOLTIP_SYSTEM_PARAMS_BLOCK
 				(element ShipParameterNumber
-					_title = 'IDS_SHIP_PARAM_VISIBILITY_DIST_BY_GK_IN_SMOKE'
+					_title = 'IDS_SHIP_PARAM_VISIBILITY_DIST_BY_ARTILLERY_IN_SMOKE'
 					_value = "_visibilityTTX.visibilityByShip.smoke"
 					_valueConfig = "VALUE_CONFIG.KILOMETER_NEGATIVE"
 					_zeroValueHidden = true
@@ -1811,19 +1515,20 @@
 
 		(hblock
 			(controller $Repeat renderer='ShipEquipmentOnTeamBattlePageItem'
-				(bind count "ammoBySelectedAvatar.length")
+				(bind items "ammoBySelectedAvatar")
 				(args
-					_slotEntity = "ammoBySelectedAvatar[$index]"
+					_slotEntity = "$item"
 				)
 			)
 		)
 
 		(hblock
 			(style (marginTop = 25px))
+
 			(controller $Repeat renderer='ShipEquipmentOnTeamBattlePageItem'
-				(bind count "consumableBySelectedAvatar.length")
+				(bind items "consumableBySelectedAvatar")
 				(args
-					_slotEntity = "consumableBySelectedAvatar[$index]"
+					_slotEntity = "$item"
 				)
 			)
 		)
@@ -1861,11 +1566,12 @@
 				(marginLeft = 10px)
 				(marginTop = 20px)
 			)
+
 			(controller $Repeat renderer='ShipEquipmentOnTeamBattlePageItemWithTab'
-				(bind count "ammoBySelectedAvatar.length")
+				(bind items "ammoBySelectedAvatar")
 				(args
-					_isSelected = "selectedSquadronType == ammoBySelectedAvatar[$index].visualSlotData.squadType"
-					_weaponSlotEntity = "ammoBySelectedAvatar[$index]"
+					_isSelected = "selectedSquadronType == $item.visualSlotData.squadType"
+					_weaponSlotEntity = "$item"
 				)
 			)
 		)
@@ -1890,19 +1596,20 @@
 				(marginLeft = 10px)
 				(marginTop = 12px)
 			)
+
 			(hblock
 				(controller $Repeat renderer='ShipEquipmentOnTeamBattlePageItem'
-					(bind count "selectedSquadronAmmoCollection.length")
+					(bind items "selectedSquadronAmmoCollection")
 					(args
-						_slotEntity = "selectedSquadronAmmoCollection[$index]"
+						_slotEntity = "$item"
 					)
 				)
 			)
 			(hblock
 				(controller $Repeat renderer='ShipEquipmentOnTeamBattlePageItem'
-					(bind count "consumableBySelectedAvatar.length")
+					(bind items "consumableBySelectedAvatar")
 					(args
-						_slotEntity = "consumableBySelectedAvatar[$index]"
+						_slotEntity = "$item"
 					)
 				)
 			)
@@ -1920,12 +1627,13 @@
 
 (def element ShipEquipmentOnTeamBattlePageItemWithTab (_weaponSlotEntity:dhEntity, _isSelected:bool=false)
 	(scope
-		(macro MOUSE_HANDLER_SCOPE)
+		(struct mouseHandler = MOUSE_HANDLER())
 
-		(var state:number = "	_isSelected	? SC.Ui_styles.BUTTON_STATE.SELECTED :
-								mouseDown	? SC.Ui_styles.BUTTON_STATE.DOWN :
-								rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
-											: SC.Ui_styles.BUTTON_STATE.UP")
+		(var state:number = "	_isSelected 			? SC.Ui_styles.BUTTON_STATE.SELECTED :
+								mouseHandler.mouseDown 	? SC.Ui_styles.BUTTON_STATE.DOWN :
+								mouseHandler.rollOver	? SC.Ui_styles.BUTTON_STATE.OVER
+														: SC.Ui_styles.BUTTON_STATE.UP"
+		)
 
 
 
@@ -1940,18 +1648,24 @@
 		(var isSlotInteractive:bool = "_weaponSlotEntity.visualSlotData.weaponType == SC.Ships.SHIP_WEAPON_TYPES.AIRPLANES")
 
 		(var isTabClickable:bool = "!_isSelected && isSlotInteractive")
-		(var soundEventName:str = "isTabClickable ? 'button_tab' : ''")
 	)
 
 	(style (backgroundColor = "NO_COLOR"))
 
-	(macro MOUSE_EVENTS_DISPATCHER)
-	(macro SOUND_HANDLER "soundEventName")
+	(macro STRUCT_MOUSE_DISPATCHER
+		_mouseHandler = "mouseHandler"
+	)
+	(macro STRUCT_SOUND_HANDLER
+		_enabled 		= "isTabClickable"
+		_mouseHandler 	= "mouseHandler"
+		_soundSet 		= "'button_tab'"
+	)
 
 	(dispatch evSelectAircarrierAmmo
-		args="{_selectedSquadronType: _weaponSlotEntity.visualSlotData.squadType, _selectedSquadronIndex: _weaponSlotEntity.visualSlotData.squadId}"
-		dir="EventDirection.UP"
-		(event "evClicked") (bind enabled "isTabClickable")
+		args = "{_selectedSquadronType: _weaponSlotEntity.visualSlotData.squadType, _selectedSquadronIndex: _weaponSlotEntity.visualSlotData.squadId}"
+		dir = "EventDirection.UP"
+		(event "mouseHandler.evClicked")
+		(bind enabled "isTabClickable")
 	)
 
 	(element ShipEquipmentOnTeamBattlePageItem
@@ -1969,7 +1683,11 @@
 			(height = 1px)
 			(backgroundColor = 0xFFFFFFFF)
 		)
-		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA _trigger="state" _alpha="lineAlpha")
+
+		(macro DEFAULT_CONTROL_STATE_ANIMATION_ALPHA
+			_trigger 	= "state"
+			_alpha 		= "lineAlpha"
+		)
 	)
 )
 
@@ -1986,15 +1704,15 @@
 		(var iconPath:str = "consumableName ? 'img://gui/consumables_dds_scale/' + consumableName + consumePostfix + '.dds' : equipmentSlotComponent.iconPath")
 		(var weaponType:number = "equipmentSlotComponent.weaponType != null ? equipmentSlotComponent.weaponType : SC.Ships.SHIP_WEAPON_TYPES.NONE")
 
-		(var selectedShipInfoEntity:dhEntity = "getSingleEntity(CC.selectedShipInfo)")
-		(var shipTTX:dhStruct = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+		(var selectedShipInfoComponent:dhComponent = "getSingleComponent(CC.selectedShipInfo)")
+		(var shipTTX:dhStruct = "selectedShipInfoComponent.shipTTX" (event "selectedShipInfoComponent.evChanged"))
 		(var isSecondaryArtilleryWithFireMode:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.SECONDARY_ARTILLERY && toBool(shipTTX.secondaryArtillery.drumFireMode)")
 		(var isChargeableDrum:bool = "shipTTX.artillery.drumFireMode.isChargeable.value")
 		(var isSwitchableDrum:bool = "shipTTX.artillery.drumFireMode.isSwitchable.value")
 		(var isShowDrumMode:bool = "(shipTTX.artillery.drumFireMode && (isChargeableDrum || !isSwitchableDrum)) || isSecondaryArtilleryWithFireMode")
 		(var showSlot:bool = "equipmentSlotComponent.id != SC.Ships.SHIP_INFO_WEAPON_TYPE.VALUE_TO_NAME[SC.Ships.SHIP_INFO_WEAPON_TYPE.FIRE_MODE] || isSwitchableDrum")
 	)
-
+	(bind name "consumableName ?: 'weapon_' + paramsDescriptor")
 	(bind visible "showSlot")
 	(style
 		(marginLeft = 3px)
@@ -2032,8 +1750,9 @@
 
 (def element ShipEquipmentOnTeamBattlePageItemTooltip (_slotEntity:dhEntity, _isShowDrumMode:bool, _isZeroConsumables:bool)
 	(scope
-		(macro SELECTED_AVATAR_ID)
-		(var shipTTX:dhStruct = "selectedShipInfoEntity.selectedShipInfo.shipTTX" (event "selectedShipInfoEntity.selectedShipInfo.evChanged"))
+		(var selectedShipInfoComponent:dhComponent = "getSingleComponent(CC.selectedShipInfo)")
+		(var selectedAvatarId:number = "selectedShipInfoComponent.selectedAvatarId" (event "selectedShipInfoComponent.evChanged"))
+		(var shipTTX:dhStruct = "selectedShipInfoComponent.shipTTX" (event "selectedShipInfoComponent.evChanged"))
 
 		(var equipmentSlotComponent:dhComponent = "_slotEntity.visualSlotData ?: _slotEntity.battleConsumable")
 		(var paramsDescriptor:str = "_slotEntity.hasComponent(CC.visualSlotData) ? equipmentSlotComponent.id : ''")
@@ -2054,11 +1773,11 @@
 
 	(element TOOLTIP_SYSTEM_DEFAULT_CONTAINER
 		(element TooltipSystemHeaderWithIconAndText
-			_imageUrl =			"iconPath"
-			_imageWidth =		60px
-			_imageHeight =		60px
-			_headerText =		"title"
-			_subheaderText =	"subheader"
+			_imageUrl 		= "iconPath"
+			_imageWidth 	= "SLOT_SIZE"
+			_imageHeight 	= "SLOT_SIZE"
+			_headerText 	= "title"
+			_subheaderText 	= "subheader"
 		)
 
 		(block
@@ -2079,7 +1798,9 @@
 
 		(block
 			(style (width = 100%))
-			(controller $Instance renderer='TooltipSystemHorizontalDivider' (bind enabled "paramsDescriptor"))
+			(controller $Instance renderer='TooltipSystemHorizontalDivider'
+				(bind enabled "paramsDescriptor")
+			)
 		)
 
 		(block

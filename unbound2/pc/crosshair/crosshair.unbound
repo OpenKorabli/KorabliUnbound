@@ -37,12 +37,10 @@
 
 (def element PlayerCrosshair ()
 	(scope
-		(var crosshairComponent:dhComponent = "getSingleComponent(CC.crosshair)")
-
 		(var cameraComponent:dhComponent = "getSingleComponent(CC.camera)")
 		(var cameraMode:number = "cameraComponent.mode" (event "cameraComponent.evModeChanged"))
 		(var isBinocular:bool = "cameraComponent.isBinocular" (event "cameraComponent.evIsBinocularChanged"))
-		(var isCameraTracking:bool = "cameraMode == SC.Battle.CAMERA_MODE.PLANETRACKER || cameraMode == SC.Battle.CAMERA_MODE.SHELLTRACKER")
+		(var isCameraTracking:bool = "isIn(cameraMode, [SC.Battle.CAMERA_MODE.PLANETRACKER, SC.Battle.CAMERA_MODE.SHELLTRACKER])")
 		(var isCameraTrackingShell:bool = "cameraMode == SC.Battle.CAMERA_MODE.SHELLTRACKER")
 
 		(macro IS_ALIVE)
@@ -53,21 +51,22 @@
 
 		(var battleStateComponent:dhComponent =	"getSingleComponent(CC.battleState)")
 		(var battleState:number = "battleStateComponent.battleState" (event "battleStateComponent.evBattleStateChanged"))
-		(var countDownState:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN")
+		(var isBattleCountDown:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.COUNTDOWN")
 		(var isBattleStarted:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.STARTED")
 		(var isBattleEnded:bool = "battleState == SC.Common.CLIENT_BATTLE_STATE.END_BATTLE_IDLING")
 
-		(macro SCOPE_SELF_WEAPON_TYPE)
-		(var forceHideBinocular:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.AIR_SUPPORT")
+		(var weaponControllerComponent:dhComponent = "getSingleComponent(CC.weaponController)")
+		(var weaponType:number = "weaponControllerComponent ? weaponControllerComponent.selectedWeapon : SC.Ships.SHIP_WEAPON_TYPES.NONE" (event "weaponControllerComponent.evSelectedWeaponChanged"))
+
+		(var isAirSupportWeapon:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.AIR_SUPPORT")
 		(var isAirplaneWeapon:bool = "weaponType == SC.Ships.SHIP_WEAPON_TYPES.AIRPLANES")
 
 		(var activeSquadronIndex:number = "aircarrierComponent.activeSquadronIndex" (event "aircarrierComponent.evStateChanged"))
 		(var ownSquadronEntity:dhEntity = "getPrimaryEntity(CC.ownSquadron, activeSquadronIndex)")
-		(var ammoType:number = "ownSquadronEntity ? ownSquadronEntity.plane.ammoType : 0")
+		(var ammoType:number = "ownSquadronEntity ? ownSquadronEntity.plane.ammoType : SC.Common.PLANE_AMMO_TYPES.NONE")
 		(var isActiveMissiles:bool = "ammoType == SC.Common.PLANE_AMMO_TYPES.MISSILE")
 
-		(var isCrosshairVisible:bool = "isAlive && !isCameraTrackingShell && !isLastLookCamera")
-		(var isArrowCrosshairVisible:bool = "!isBinocular && isAlive && !countDownState && !isCameraTracking && !isAirplaneWeapon && !forceHideBinocular")
+		(var isArrowCrosshairVisible:bool = "isAlive && !isBinocular && !isBattleCountDown && !isCameraTracking && !isAirplaneWeapon && !isAirSupportWeapon")
 		(var centralMarkerImage:str = " isArrowCrosshairVisible		? 'crosshair_arrow_center.png'
 																	: 'spectator.png'"
 		)
@@ -75,41 +74,43 @@
 		
 		(var isBattleStartAnimationTriggered:bool = "isBattleStarted")
 
-		(var posX:number = "floor(crosshairComponent ? crosshairComponent.posX : 0)" (event "evEnterFrame"))
-		(var posY:number = "floor(crosshairComponent ? crosshairComponent.posY : 0)" (event "evEnterFrame"))
+		(var crosshairComponent:dhComponent = "getSingleComponent(CC.crosshair)")
+
+		(var posX:number = "floor(crosshairComponent.posX ?: 0)" (event "evEnterFrame"))
+		(var posY:number = "floor(crosshairComponent.posY ?: 0)" (event "evEnterFrame"))
 	)
 
 	(class $FullsizeAbsolute)
 
 	(block
-		(style (position = "absolute"))
-		(macro CROSS_SHOW_ANIMATION "0" "isBattleStartAnimationTriggered")
+		(bind visible "isAlive && !isCameraTracking && !isLastLookCamera && (isBattleStarted || isBattleEnded)")
+		(style
+			(position = "absolute")
+			(bind left "posX")
+			(bind top "posY")
+		)
+
+		(macro CROSS_SHOW_ANIMATION
+			_index = "0"
+			_startCondition = "isBattleStartAnimationTriggered"
+		)
 
 		(controller $Instance renderer='CrosshairGunMarkersContainer'
 			(bind enabled "isAlive")
-			(exprs
-				(style
-					(position = "absolute")
-					(bind left "posX")
-					(bind top "posY")
-				)
-				(bind visible "(isBattleStarted || isBattleEnded) && isCrosshairVisible")
-			)
 		)
 	)
 
 	
 	(block
-		(class $FullsizeAbsolute)
 		(style
-			(position = "absolute") (top = 50%) (left = 50%)
-		)
-		(block
-			(style
-				(position = "absolute")
-				(top = -15) (left = -15)
-				(bind backgroundImage "'url:../crosshairs/' + centralMarkerImage")
-			)
+			(position = "absolute")
+			(top = 50%)
+			(left = 50%)
+			(visualOffsetX = -50%)
+			(visualOffsetY = -50%)
+			(width = 30px)
+			(height = 30px)
+			(bind backgroundImage "'url:../crosshairs/' + centralMarkerImage")
 		)
 	)
 
@@ -117,8 +118,8 @@
 	(block
 		(bind visible "isActiveMissiles")
 
-		(class $FullsizeAbsolute)
 		(style
+			(position = "absolute")
 			(top = 50%)
 			(left = 50%)
 			(visualOffsetX = -50%)
@@ -129,25 +130,36 @@
 		)
 	)
 
-	(controller $Instance renderer='CrosshairIndicators'
-		(bind enabled "isAlive && crosshairComponent")
-		(exprs
-			(style (position = "absolute") (left = 50%) (top = 50%))
-			(bind visible "isCrosshairVisible")
+	(block
+		(bind visible "isAlive && !isCameraTrackingShell && !isLastLookCamera")
+		(style
+			(position = "absolute")
+			(left = 50%)
+			(top = 50%)
+		)
+
+		(controller $Instance renderer='CrosshairIndicators'
+			(bind enabled "isAlive && crosshairComponent")
 		)
 	)
 
-	(controller $Instance renderer='CrosshairBinocular'
-		(bind enabled "isAlive && crosshairComponent")
-		(exprs
-			(bind visible "isBinocular && !(forceHideBinocular)")
+	(block
+		(bind visible "isBinocular && !isAirSupportWeapon")
+
+		(controller $Instance renderer='CrosshairBinocular'
+			(bind enabled "isAlive && crosshairComponent")
 		)
 	)
 
-	(controller $Instance renderer='CrosshairGunLockedIndicator'
-		(bind enabled "isAlive && crosshairComponent")
-		(exprs
-			(style (position = "absolute") (left = 50%) (top = 50%))
+	(block
+		(style
+			(position = "absolute")
+			(left = 50%)
+			(top = 50%)
+		)
+
+		(controller $Instance renderer='CrosshairGunLockedIndicator'
+			(bind enabled "isAlive && crosshairComponent")
 		)
 	)
 )

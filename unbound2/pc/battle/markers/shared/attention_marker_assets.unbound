@@ -12,141 +12,126 @@
 })
 
 
-(def element AttentionMarker (_markerEntity:gfx, _markerType:str) layout=true
+(def element AttentionMarker (_markerEntity:dhEntity, _markerType:str)
 	(scope
-		(var targetEntity:gfx = "_markerEntity ? $datahub.getEntity(_markerEntity.minimapAttentionPoint.avatarId) : null")
+		(var dotAlpha:number = 0)
 
-		(var relationComponent:gfx = "targetEntity.relation")
-		(var isSelf:bool = "relationComponent && relationComponent.value == SC.Battle.PLAYER_RELATION.SELF" (event "relationComponent.evChanged"))
-		(var isAlly:bool = "relationComponent && isIn(relationComponent.value, SC.Battle.PLAYER_RELATION.ALLIES)" (event "relationComponent.evChanged"))
+		(var targetEntity:dhEntity = "getEntity(_markerEntity.minimapAttentionPoint.avatarId)")
+
+		(var relationComponent:dhComponent = "targetEntity.relation")
+
+		(var isSelf:bool = 		"relationComponent.value == SC.Battle.PLAYER_RELATION.SELF" 				(event "relationComponent.evChanged"))
 		(var relationName:str = "toLower(SC.Battle.PLAYER_RELATION.VALUE_TO_NAME[relationComponent.value])" (event "relationComponent.evChanged"))
-
-		(var isAlive:bool = "targetEntity.health.isAlive" (event "targetEntity.health.evIsAliveChanged") (event "targetEntity.evAdded"))
-
-		(var divisionMemberComponent:gfx = "targetEntity.divisionMember")
-		(var isInSameDivision:bool = "divisionMemberComponent && divisionMemberComponent.isInSameDivision" (event "divisionMemberComponent.evDivisionChanged"))
 
 		(var isReversedAnim:bool = "!isSelf")
 
-		(var timeToLiveComponent:gfx = "_markerEntity.timeToLive ?: null" (event "_markerEntity.evAdded") (event "_markerEntity.evRemoved"))
-		(var lifeTime:number = "timeToLiveComponent.lifeTime ?: 1")
+		(var timeToLiveComponent:dhComponent = "_markerEntity.timeToLive")
+		(var lifeTime:number = 	"timeToLiveComponent.lifeTime ?: 1")
 		(var deathTime:number = "timeToLiveComponent.deathTime ?: 1")
-		(var repeatCount:number = "lifeTime / (SHORT_ATTENTION_DURATION / 2)")
 
-		(var dotAlpha:number = "0" watch=false)
 		(var dotRadius:number = "MARKER_CONFIG_MAP[_markerType].dotSize" watch=false)
+
+		(var markerColorTransform:dict = "relationName 	? TWO_TEAMS_COLOR_TRANSFORMS[relationName]
+														: TWO_TEAMS_COLOR_TRANSFORMS['white']")
+
 		(controller $Animation
-			(bindcall play	duration="SHORT_ATTENTION_DURATION / CIRCLE_EFFECT_COUNT"
-							from="{dotRadius: 0, dotAlpha: 0}"
-							to="{dotRadius: MARKER_CONFIG_MAP[_markerType].dotSize, dotAlpha: 1}"
-							action="append"
-							on='addedToStage'
+			(bindcall play
+				duration = "SHORT_ATTENTION_DURATION / CIRCLE_EFFECT_COUNT"
+				to = "{ dotRadius: MARKER_CONFIG_MAP[_markerType].dotSize, dotAlpha: 1 }"
+				watch = false
+				on = 'addedToStage'
 			)
-			(bindcall play	delay="lifeTime + deathTime - SHORT_ATTENTION_DURATION"
-							duration="deathTime"
-							to="{dotAlpha: 0}"
-							action="append"
+			(bindcall play
+				delay = "lifeTime + deathTime - SHORT_ATTENTION_DURATION"
+				duration = "deathTime"
+				to = "{ dotAlpha: 0 }"
+				watch = false
+				(bind enabled "dotAlpha == 1")
 			)
 		)
-
-		(var markerColorTransform:dict = "relationName ? TWO_TEAMS_COLOR_TRANSFORMS[relationName] : TWO_TEAMS_COLOR_TRANSFORMS['white']
-		")
 	)
-	(macro AttentionCircleFX "dotRadius" "MARKER_CONFIG_MAP[_markerType].effectSize" "SHORT_ATTENTION_DURATION" "isReversedAnim")
+
+	(macro ATTENTION_CIRCLE_FX
+		_beginRadius = "dotRadius"
+		_endRadius = "MARKER_CONFIG_MAP[_markerType].effectSize"
+		_duration = "SHORT_ATTENTION_DURATION"
+		_isReversed = "isReversedAnim"
+	)
+
 	(block
-		(bind colorTransform "markerColorTransform")
-		(block
-			(style (position = "absolute"))
+		(style
+			(position = "absolute")
 			(bind alpha "dotAlpha")
-			(controller $Sector
-				(bind arc "360")
-				(bind radius "dotRadius")
-				(color = "0xFFFFFFFF")
-			)
+		)
+		(bind colorTransform "markerColorTransform")
+
+		(controller $Sector
+			(arc = 360)
+			(color = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+			(bind radius "dotRadius")
 		)
 	)
 )
 
-(def macro AttentionCircleFX (_beginRadius:expression, _endRadius:expression, _duration:expression, _isReversed:expression) layout=true
+(def macro ATTENTION_CIRCLE_FX (_beginRadius:expression, _endRadius:expression, _duration:expression, _isReversed:expression)
 	(scope
-		(var customRad:number = "_isReversed ? _beginRadius : _endRadius" watch=false)
-		(var customAlpha:number = "0")
+		(var customAlpha:number = 0)
+		(var customAlphaSecond:number = 0)
 
-		(var customRad_second:number = "_isReversed ? _beginRadius : _endRadius" watch=false)
-		(var customAlpha_second:number = "0")
+		(var customRad:number = 		"_isReversed ? _beginRadius : _endRadius" watch=false)
+		(var customRadSecond:number = 	"_isReversed ? _beginRadius : _endRadius" watch=false)
 
 		(controller $Animation
 			(play
 				duration = "_duration"
-				repeatCount=4
-				from = "{ customRad: 0}"
-				to = "{ customRad: _endRadius}"
-				easing = "Easing.line"
-				watch=false
-				reverse = "_isReversed"
-			)
-			(play
-				duration = "_duration"
-				repeatCount=4
-				from = "{ customAlpha: 1}"
-				to = "{ customAlpha: 0}"
-				easing = "Easing.line"
-				watch=false
-				reverse = "_isReversed"
-			)
-		)
-		
-		(controller $Animation
-			(play
-				duration = "_duration"
-				delay = "_duration/2"
-				repeatCount=3
-				from = "{ customRad_second: 0}"
-				to = "{ customRad_second: _endRadius}"
-				easing = "Easing.line"
-				watch=false
+				repeatCount = 4
+				from = "{ customRad: 0, customAlpha: 1 }"
+				to = "{ customRad: _endRadius, customAlpha: 0 }"
 				reverse = "_isReversed"
 			)
 			(play
 				duration = "_duration"
 				delay = "_duration/2"
-				repeatCount=3
-				from = "{ customAlpha_second: 1}"
-				to = "{ customAlpha_second: 0}"
-				easing = "Easing.line"
-				watch=false
+				repeatCount = 3
+				from = "{ customRadSecond: 0, customAlphaSecond: 1 }"
+				to = "{ customRadSecond: _endRadius, customAlphaSecond: 0 }"
 				reverse = "_isReversed"
 			)
 		)
 	)
 
-
 	(block
+		(style
+			(position = "absolute")
+			(alpha = 0)
+			(bind alpha "customAlpha")
+		)
 		(bind colorTransform "markerColorTransform")
-		(style (position = "absolute"))
-		(alpha = 0)
-		(bind alpha "customAlpha") 
+
 		(controller $Sector
-			(arc="360")
+			(arc = 360)
 			(radius = 0)
+			(alphas = [0, 0.5, 0])
+			(ratios = [175, 215, 255])
+			(colors = [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF])
 			(bind radius "customRad")
-			(bind colors "[0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF]")
-			(alphas="[0, 0.5, 0]")
-			(ratios="[175, 215, 255]")
 		)
 	)
 	(block
+		(style
+			(position = "absolute")
+			(alpha = 0)
+			(bind alpha "customAlphaSecond")
+		)
 		(bind colorTransform "markerColorTransform")
-		(style (position = "absolute"))
-		(alpha = 0)
-		(bind alpha "customAlpha_second") 
+
 		(controller $Sector
-			(arc="360")
+			(arc = 360)
 			(radius = 0)
-			(bind radius "customRad_second")
-			(bind colors "[0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF]")
-			(alphas="[0, 0.75, 0]")
-			(ratios="[175, 215, 255]")
+			(alphas = [0, 0.75, 0])
+			(ratios = [175, 215, 255])
+			(colors = [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF])
+			(bind radius "customRadSecond")
 		)
 	)
 )

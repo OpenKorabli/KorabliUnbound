@@ -1,3 +1,28 @@
+(def constant BATTLE_RESULT_PLAYER_COLOR_IN_TABLE [
+	{ redMultiplier: 0,	greenMultiplier: 0,	blueMultiplier: 0,	redOffset: 255,	greenOffset: 204,	blueOffset: 102 },
+	{ redMultiplier: 0,	greenMultiplier: 0,	blueMultiplier: 0,	redOffset: 140,	greenOffset: 159,	blueOffset: 190 },
+	{ redMultiplier: 0,	greenMultiplier: 0,	blueMultiplier: 0,	redOffset: 173,	greenOffset: 106,	blueOffset: 83 }
+])
+
+(def constant INVALID_COMPETITION_LADDER_POSITION 0)
+(def constant LAST_PRIZE_PLACE_IN_DEATHMATCH 3)
+
+(def constant DEFAULT_BATTLE_RESULTS_TAB_NAMES [
+	'IDS_BATTLE_STATS_PERSONAL_REPORT',
+	'IDS_BATTLE_STATS_TEAM_REPORT',
+	'IDS_BATTLE_STATS_DETAILED_REPORT',
+	'IDS_BATTLE_STATS_CREDITS_AND_EXP',
+])
+
+(def constant BATTLE_RESULTS_TAB_NAMES_BY_GAME_MODE {
+	"SC.Battle.GAME_MODE.DEATHMATCH": [
+		'IDS_BATTLE_STATS_PERSONAL_REPORT',
+		'IDS_BATTLE_STATS_DEATHMATCH_REPORT',
+		'IDS_BATTLE_STATS_DETAILED_REPORT',
+		'IDS_BATTLE_STATS_CREDITS_AND_EXP',
+	],
+})
+
 (def element BattleResultsPlayersTable (_teamResults:dict, _gameData:dict, _personal:dict, _complaintsAvailable:bool)
 	(scope
 		(var isAsymmetricTeams:bool = "_teamResults.listEnemies.length > 0 && _teamResults.listAllied.length != _teamResults.listEnemies.length")
@@ -78,19 +103,45 @@
 	)
 )
 
-(def element BattleResultsPlayersTableHeader (_isReversed:bool = false, _isChallenge:bool = false)
+(def element BattleResultsPlayersWithoutTeamTable (_resultPlayers:array, _gameData:dict, _personal:dict, _complaintsAvailable:bool)
+	(element BattleResultsPlayersTableHeader
+		_isDeathmatch = "_gameData.game_mode == SC.Battle.GAME_MODE.DEATHMATCH"
+	)
+
+	(block
+		(controller $Repeat	renderer='BattleResultsPlayersTableRow'
+			(bind count "_resultPlayers.length")
+			(args
+				_data = "_resultPlayers[$index].playerData"
+				_personal = "_personal"
+				_gameData = "_gameData"
+				_complaintsAvailable = "_complaintsAvailable"
+				_isBigTable = true
+				_indexInTable = "$index"
+				_resultPlayers = "_resultPlayers"
+			)
+		)
+	)
+)
+
+(def element BattleResultsPlayersTableHeader (_isReversed:bool = false, _isChallenge:bool = false, _isDeathmatch:bool = false)
 	(scope
-		(struct teamName = GET_TEAM_NAME(_isChallenge="_isChallenge"))
+		(struct teamName = GET_TEAM_NAME(_isParticipants="_isChallenge || _isDeathmatch"))
 	)
 
 	(style
+		(flow = "_isReversed ? reverse_horizontal : horizontal")
 		(width = 100%)
 		(height = "LINE_HEIGHT")
 		(align = "middle")
-		(bind backgroundColor "_isReversed ? C_ENEMY_HEADER : C_ALLY_HEADER")
-		(bind flow "_isReversed ? reverse_horizontal : horizontal")
+
 		(borderRadiusTopLeft = "XS")
 		(borderRadiusTopRight = "XS")
+
+		(bind backgroundColor "	_isDeathmatch 	? C_EVENT_HEADER :
+								_isReversed 	? C_ENEMY_HEADER
+												: C_ALLY_HEADER"
+		)
 	)
 
 	(tf
@@ -134,11 +185,39 @@
 	)
 
 	(block 
+		(bind visible "_isDeathmatch")
+
 		(style
+			(align = "center|middle")
+			(width = "PBS_COLUMN_DEATHMATCH_SCORE_WIDTH")
+			(height = 100%)
+			(backgroundColor = "NO_COLOR")
+		)
+
+		(block
+			(style
+				(width = 21px)
+				(height = 21px)
+				(backgroundImage = 'swf:../service_kit/battle_results_svg/battle_results_svg.swf:deathmatch_score')
+			)
+		)
+		(controller $Tooltip
+			(renderer ='SimpleStatusTooltip')
+			(args
+				_text = 'IDS_DEATHMATCH_SCORE'
+			)
+			(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+		)
+	)
+
+	(block 
+		(bind visible "!_isDeathmatch")
+
+		(style
+			(align = "center|middle")
 			(width = "PBS_COLUMN_PLANE_FRAGS_WIDTH")
 			(height = 100%)
 			(backgroundColor = "NO_COLOR")
-			(align = "center|middle")
 		)
 		(block
 			(style
@@ -157,6 +236,7 @@
 	)
 
 	(block 
+		(bind visible "!_isDeathmatch")
 		(style
 			(width = "PBS_COLUMN_ASSISTS_WIDTH")
 			(height = 100%)
@@ -259,7 +339,14 @@
 	)
 )
 
-(def element BattleResultsPlayersTableRow (_data:dict, _gameData:dict, _personal:dict={}, _isReversed:bool = false, _complaintsAvailable:bool=true)
+(def element BattleResultsPlayersTableRow (	_data:dict,
+											_gameData:dict,
+											_personal:dict = {},
+											_isReversed:bool = false,
+											_complaintsAvailable:bool = true,
+											_isBigTable:bool = false,
+											_indexInTable:number = null,
+											_resultPlayers:array = [])
 	(scope
 		(event evMenuItemClicked)
 
@@ -293,19 +380,26 @@
 		(var rawKeyTargetValue:number = "_data.player.keyTargetMarkers ?: 0")
 		(var isKeyTargetVisible:bool = "rawKeyTargetValue != 0 && sseFeature.state != 'locked'")
 
-		(var battleType:str = "_gameData.battleType")
+		(var battleType:str = 		"_gameData.battleType")
+		(var isDeathmatch:bool = 	"_gameData.game_mode == SC.Battle.GAME_MODE.DEATHMATCH")
+
+		(var playerScore:number = "_resultPlayers[$index].score ?: 0")
+
 		(var isBotInRandom:bool = "_data.isBot && battleType == SC.Common.BATTLE_TYPES.RANDOM_BATTLE")
 		(var isContextMenuAvailable:bool = "!_data.player.is_self && !isPlayerDeletedByGDPR && !isReplayPlaying && !_data.isBot || isBotInRandom")
 
-		(var playerShipColor:number = "!_data.player.is_self && _data.isInSameDivision && _data.is_alive	? SC.Ui_styles.SERVICE_COLORS.YELLOW
+		(var isStateOfDeath:bool = "!_data.is_alive && !isDeathmatch")
+
+		(var playerShipColor:number = "!_data.player.is_self && _data.isInSameDivision && !isStateOfDeath	? SC.Ui_styles.SERVICE_COLORS.YELLOW
 																											: SC.Ui_styles.SERVICE_COLORS.WHITE")
 
-		(var alphaOfShip:number = "_data.is_alive	? playerShipColor == SC.Ui_styles.SERVICE_COLORS.WHITE	? TA
+		(var alphaOfShip:number = "!isStateOfDeath	? playerShipColor == SC.Ui_styles.SERVICE_COLORS.WHITE	? TA
 																											: 1
 													: TS")
+
 		(var alphaOfPlayerName:number = "_data.player.isAbuser && !_data.isInSameDivision ? 1 : alphaOfShip")
 
-		(var isShipMasteryVisible:bool = "_data.player.masteryRank && isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE)")
+		(var isShipMasteryVisible:bool = "_data.player.masteryRank && (isIn(battleType, SC.Common.BATTLE_TYPES.MASTERY_RANK_AVAILABLE) || isDeathmatch)")
 		(var isRankIconVisible:bool = "_personal.rankNew || _data.player.rank")
 		(var isRatingIconVisible:bool = "_personal.ratingInfo.newLeagueName != RATING_LEAGUE_NAME_NONE || _data.player.ratingBattlesLeagueName != RATING_LEAGUE_NAME_NONE")
 		(var personalRatingLeagueProgress:number = "_personal.ratingInfo.newLeagueProgress ?: 1")
@@ -329,6 +423,8 @@
 
 		(var emojiPlayerInfoComponent:dhComponent = "getPrimaryEntity(CC.accountSimple, playerEntity.accountSimple.dbId).emojiPlayerInfo")
 		(var emojiTotalCount:number = "emojiPlayerInfoComponent.totalCount ?: 0" (event "emojiPlayerInfoComponent.evTotalCountChanged"))
+
+		(var isVisiblePlaceInStandlings:bool = "isDeathmatch && _indexInTable < LAST_PRIZE_PLACE_IN_DEATHMATCH")
 	)
 
 	(macro STRUCT_MOUSE_DISPATCHER
@@ -340,13 +436,13 @@
 		(flow = "_isReversed ? reverse_horizontal : horizontal")
 	)
 
-	(block 
+	(block
 		(class $LineBackgroundStyle)
 		(style
 			(bind backgroundColor "_data.player.is_self ? SC.Ui_styles.SERVICE_COLORS.WHITE: C_DARK")
-			(bind alpha "_data.player.is_self	? 0.17 :
-						!_data.is_alive			? 0.25
-												: 0.15")
+			(bind alpha "	_data.player.is_self	? 0.17 :
+							isStateOfDeath			? 0.15
+													: 0.25")
 		)
 	)
 
@@ -385,6 +481,20 @@
 
 	
 	(block
+		(bind visible "isVisiblePlaceInStandlings")
+		(class $FullsizeAbsolute)
+		(style
+			(hitTest = false)
+			(alpha = "_indexInTable == 0 ? 0.95 : 0.75")
+			(backgroundImage = "_indexInTable == null ? '' : 'url:../service_kit/battle_results/focus_on_the_best/focus_on_the_best_'+ _indexInTable + '.png'")
+		)
+		(bind colorTransform "_indexInTable < LAST_PRIZE_PLACE_IN_DEATHMATCH ? BATTLE_RESULT_PLAYER_COLOR_IN_TABLE[_indexInTable] : CT_NONE")
+	)
+
+	
+	(block
+		(bind visible "!isDeathmatch")
+
 		(style
 			(hitTest = false)
 			(width = "PBS_COLUMN_DIVISIONS_WIDTH")
@@ -420,9 +530,54 @@
 		(style
 			(hitTest = false)
 			(flow = "_isReversed ? reverse_horizontal : horizontal")
-			(width = "{ 1280: PBS_COLUMN_NICKNAME_WIDTH_SM, 1920: PBS_COLUMN_NICKNAME_WIDTH }")
+			(width = "_isBigTable ? { 1280: PBS_COLUMN_NICKNAME_BIG_WIDTH_SM, 	1920: PBS_COLUMN_NICKNAME_BIG_WIDTH }
+								  : { 1280: PBS_COLUMN_NICKNAME_WIDTH_SM, 		1920: PBS_COLUMN_NICKNAME_WIDTH }")
 			(height = 100%)
 			(align = "middle")
+		)
+
+		
+		(block
+			(bind visible "isDeathmatch")
+			(style
+				(hitTest = false)
+				(height = 100%)
+				(marginRight = "S")
+			)
+
+			(block
+				(class $FullsizeAbsolute)
+				(style
+					(backgroundColor = "_indexInTable >= LAST_PRIZE_PLACE_IN_DEATHMATCH ? SC.Ui_styles.SERVICE_COLORS.BLACK : NO_COLOR")
+					(alpha = 0.1)
+				)
+			)
+
+			(block
+				(style
+					(width = "PBS_COLUMN_DEATHMATCH_PLACE_IN_STANDLINGS_WIDTH")
+					(height = 100%)
+					(align = "center|middle")
+				)
+
+				(block
+					(bind visible "isVisiblePlaceInStandlings")
+					(class $FullsizeAbsolute)
+					(style
+						(borderRadiusTopRight = "XS")
+						(borderRadiusBottomRight = "XS")
+						(alpha = 0.35)
+						(backgroundColor = "SC.Ui_styles.SERVICE_COLORS.WHITE")
+					)
+					(bind colorTransform "_indexInTable < LAST_PRIZE_PLACE_IN_DEATHMATCH ? BATTLE_RESULT_PLAYER_COLOR_IN_TABLE[_indexInTable] : CT_NONE")
+				)
+
+				(tf
+					(bind visible "isVisiblePlaceInStandlings")
+					(class $TextDefaultBold20NM)
+					(bind text "_indexInTable + 1")
+				)
+			)
 		)
 
 		(block
@@ -465,7 +620,7 @@
 			(element PlayerNameAndClanTag
 					_isSelf = "_data.player.is_self"
 					_isTextBold = "_data.player.is_self"
-					_isDead = "!_data.is_alive"
+					_isDead = "isStateOfDeath"
 					_fontSize = "18"
 					_isAbuser = "_data.player.isAbuser"
 					_isInPostBattle = true
@@ -483,7 +638,10 @@
 	(hblock
 		(style
 			(hitTest = false)
-			(width = "{ 1280: PBS_COLUMN_SHIP_WIDTH_SM, 1920: PBS_COLUMN_SHIP_WIDTH }")
+
+			(width = "_isBigTable ? { 1280: PBS_COLUMN_SHIP_BIG_WIDTH_SM, 	1920: PBS_COLUMN_SHIP_BIG_WIDTH }
+								  : { 1280: PBS_COLUMN_SHIP_WIDTH_SM, 		1920: PBS_COLUMN_SHIP_WIDTH }")
+
 			(height = 100%)
 			(align = "middle")
 			(paddingRight = "_isReversed ? 20px : 0px")
@@ -502,7 +660,7 @@
 				(width = 24px)
 				(marginLeft = "XS")
 				(marginRight = "XXS")
-				(bind alpha "_data.is_alive ? 1 : 0.45")
+				(bind alpha "isStateOfDeath ? 0.45 : 1")
 			)
 
 			(controller $Instance renderer='ShipMasteryIcon'
@@ -519,7 +677,7 @@
 			_shipLevelIcon =	"shipLevelIcon"
 			_shipType =			"subType ? toLower(subType): ''"
 			_name =				"_data.player.name"
-			_isDead =			"!_data.is_alive"
+			_isDead =			"isStateOfDeath"
 			_alpha =			"alphaOfShip"
 			_playerShipColor =	"playerShipColor"
 		)
@@ -544,6 +702,8 @@
 
 	
 	(block
+		(bind visible "!isDeathmatch")
+
 		(style
 			(hitTest = false)
 			(width = "PBS_COLUMN_PLANE_FRAGS_WIDTH")
@@ -560,6 +720,25 @@
 
 	
 	(block
+		(bind visible "isDeathmatch")
+
+		(style
+			(hitTest = false)
+			(width = "PBS_COLUMN_DEATHMATCH_SCORE_WIDTH")
+			(height = 100%)
+			(align = "center|middle")
+		)
+		(tf
+			(bind visible "playerScore != 0")
+			(bind class "_data.player.is_self ? '$TextDefaultBold18NM' : '$TextDefault18NM'")
+			(style (multiline = false))
+			(bind text "playerScore")
+		)
+	)
+
+	
+	(block
+		(bind visible "!isDeathmatch")
 		(style
 			(hitTest = false)
 			(width = "PBS_COLUMN_ASSISTS_WIDTH")

@@ -31,8 +31,8 @@
 
 (def struct ANIMATED_BG_SCOPE(_selectedCategory:str, _type:number, _customData:dict={}, _modalWindowName:str = null)
 	
-	(var customBgColor:dict = "'backgroundColor' in _customData	? _customData['backgroundColor'] : null")
-	(var customEffectColor:dict = "'effectColor' in _customData	? _customData['effectColor'] : null")
+	(var customBgColor:dict =		"'backgroundColor' in _customData	? _customData['backgroundColor'] : null")
+	(var customEffectColor:dict =	"'effectColor' in _customData		? _customData['effectColor'] : null")
 	
 
 	(var curConfig:dict = "ANIMATED_BG_CONFIG_MAP[_type]")
@@ -41,8 +41,10 @@
 
 	
 	(var hasBgPath:bool = "'backgroundPath' in configData")
-	(var currentBgPath:str = "hasBgPath									? configData['backgroundPath']
-																		: 'url:../bg/animated/sse/base/recolor.skel'")
+	(var hasBgSize:bool = "'backgroundSize' in configData")
+	(var offsetMap:dict = "'offsetMap' in configData ? configData['offsetMap'] : {}")
+	(var currentBgPath:str =	"hasBgPath ? configData['backgroundPath'] : 'url:../bg/animated/sse/base/recolor.skel'")
+	(var bgSize:number =		"hasBgSize ? toNumber(configData['backgroundSize']) : cover")
 
 	(var baseBackgroundColor:dict = "customBgColor						? customBgColor :
 									!hasBgPath							? HIDDEN_ANIMATED_BG_CT :
@@ -77,67 +79,143 @@
 																: ''")
 )
 
-(def element ModalWindowAnimatedBackground (	_selectedCategory:str = 'default',
-												_type:number = "SC.Ui_styles.ANIMATED_BG.DEFAULT",
-												_hideTime:number = 0.3,
-												_hideDelay:number = 0,
-												_modalWindowName:str = null)
+(def element ModalWindowAnimatedBackground (_selectedCategory:str = 'default',
+											_type:number = "SC.Ui_styles.ANIMATED_BG.DEFAULT",
+											_hideTime:number = 0.3,
+											_hideDelay:number = 0,
+											_isTinyScreen:bool = false,
+											_modalWindowName:str = null)
 	(scope
 		(event startShow)
 		(event startHide)
+		(event evReinitializeBackground)
 
-		(struct animBgData = ANIMATED_BG_SCOPE(_selectedCategory="_selectedCategory" _type="_type" _modalWindowName="_modalWindowName"))
+		(struct stage = STAGE_SIZE())
+		(struct animBgData = ANIMATED_BG_SCOPE(
+			_selectedCategory =		"_selectedCategory"
+			_type =					"_type"
+			_modalWindowName =		"_modalWindowName"
+		))
+
+		(var isBgTypeCover:bool = "animBgData.bgSize == cover")
 	)
+
 	(class $Fullsize)
 	(alpha = 0)
 
 	(controller $Animation
-		(bindcall play duration=0.3 to="{ alpha: 1 }" action="kill" (event "startShow"))
+		(bindcall play duration=0.3 to="{ alpha: 1 }" action="kill" (event "startShow") (event "evReinitializeBackground"))
 		(bindcall play delay="_hideDelay" duration="_hideTime" to="{ alpha: 0 }" action="kill" watch=false (event "startHide"))
 	)
 
-	
 	(block
-		(class $FullsizeAbsolute)
+		(bind visible "isBgTypeCover")
+		(class $Fullsize)
 
-		(element AnimatedBackgroundSubstrate
-			_curBgPath = "animBgData.currentBgPath"
-			_curBgColor = "animBgData.currentBackgroundColor.value"
-			_isStatic = "animBgData.isStaticBG"
+		
+		(block
+			(class $FullsizeAbsolute)
+
+			(controller $Instance renderer='AnimatedBackgroundSubstrate'
+				(bind enabled "isBgTypeCover")
+				(args
+					_curBgPath =		"animBgData.currentBgPath"
+					_curBgColor =		"animBgData.currentBackgroundColor.value"
+					_isStatic =			"animBgData.isStaticBG"
+				)
+			)
+		)
+
+		
+		(block
+			(class $FullsizeAbsolute)
+
+			(controller $Instance renderer='AnimatedBackgroundEffect'
+				(bind enabled "isBgTypeCover && animBgData.isEffectPath")
+				(args
+					_curEffectPath =	"animBgData.effectPath"
+					_curEffectColor =	"animBgData.currentEffectColor.value"
+					_isStatic =			"animBgData.isStatic"
+				)
+			)
 		)
 	)
 
-	
 	(block
-		(class $FullsizeAbsolute)
-		(controller $Instance renderer='AnimatedBackgroundEffect'
-			(bind enabled "animBgData.isEffectPath")
-			(args
-				_curEffectPath = "animBgData.effectPath"
-				_curEffectColor = "animBgData.currentEffectColor.value"
-				_isStatic = "animBgData.isStatic"
+		(bind visible "!isBgTypeCover")
+
+		(class $MiddleVHAbsolutely)
+		(style
+			(align = "center|middle")
+			(width = 0px)
+			(height = 0px)
+		)
+
+		(block
+			(style
+				(position = "absolute")
+				(width = "FULL_HD.WIDTH")
+				(height = "FULL_HD.HEIGHT")
+				(pivotX = 50%)
+				(pivotY = 50%)
+				(bind top	"!isBgTypeCover && toBool(animBgData.offsetMap)	? _isTinyScreen	 	? animBgData.offsetMap.small.top
+																								: animBgData.offsetMap.default.top
+																			: 0px")
+				(bind left	"!isBgTypeCover && toBool(animBgData.offsetMap)	? _isTinyScreen		? animBgData.offsetMap.small.left
+																								: animBgData.offsetMap.default.left
+																			: 0px")
+			)
+
+			
+			(block
+				(class $FullsizeAbsolute)
+
+				(controller $Instance renderer='AnimatedBackgroundSubstrate'
+					(bind enabled "!isBgTypeCover")
+					(args
+						_curBgPath =	"animBgData.currentBgPath"
+						_curBgColor =	"animBgData.currentBackgroundColor.value"
+						_isStatic =		"animBgData.isStaticBG"
+					)
+				)
+			)
+
+			
+			(block
+				(class $FullsizeAbsolute)
+
+				(controller $Instance renderer='AnimatedBackgroundEffect'
+					(bind enabled "!isBgTypeCover && animBgData.isEffectPath")
+					(args
+						_curEffectPath =	"animBgData.effectPath"
+						_curEffectColor =	"animBgData.currentEffectColor.value"
+						_isStatic =			"animBgData.isStatic"
+					)
+				)
 			)
 		)
 	)
 )
 
-(def element AnimatedBackground (	_selectedCategory:str = 'default',
-									_type:number = "SC.Ui_styles.ANIMATED_BG.DEFAULT",
-									_customData:dict = {}
-								)
+(def element AnimatedBackground (_selectedCategory:str = 'default', _type:number = "SC.Ui_styles.ANIMATED_BG.DEFAULT", _customData:dict = {})
 	(scope
-		(struct animBgData = ANIMATED_BG_SCOPE(_selectedCategory="_selectedCategory" _type="_type" _customData="_customData"))
+		(struct animBgData = ANIMATED_BG_SCOPE(
+			_selectedCategory =		"_selectedCategory"
+			_type =					"_type"
+			_customData =			"_customData"
+		))
 	)
+
 	(class $Fullsize)
 
 	
 	(block
 		(class $FullsizeAbsolute)
-	
+
 		(element AnimatedBackgroundSubstrate
-			_curBgPath = "animBgData.currentBgPath"
-			_curBgColor = "animBgData.currentBackgroundColor.value"
-			_isStatic = "animBgData.isStaticBG"
+			_curBgPath =		"animBgData.currentBgPath"
+			_curBgColor =		"animBgData.currentBackgroundColor.value"
+			_isStatic =			"animBgData.isStaticBG"
 		)
 	)
 
@@ -147,9 +225,9 @@
 		(controller $Instance renderer='AnimatedBackgroundEffect'
 			(bind enabled "animBgData.isEffectPath")
 			(args
-				_curEffectPath = "animBgData.effectPath"
-				_curEffectColor = "animBgData.currentEffectColor.value"
-				_isStatic = "animBgData.isStatic"
+				_curEffectPath =	"animBgData.effectPath"
+				_curEffectColor =	"animBgData.currentEffectColor.value"
+				_isStatic =			"animBgData.isStatic"
 			)
 		)
 	)

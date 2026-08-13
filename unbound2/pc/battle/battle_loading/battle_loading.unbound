@@ -17,6 +17,22 @@
 	SC.Battle.GAME_MODE.AWESOME
 ]")
 
+(def constant DEFAULT_BATTLE_LOADING_TAB_NAMES [
+	'IDS_TEAM_TASKS',
+	'IDS_TEAM_STRUCTURE',
+	'IDS_BATTLE_TIPS',
+	'IDS_DIVISIONS',
+])
+
+(def constant BATTLE_LOADING_TAB_NAMES_BY_GAME_MODE {
+	"SC.Battle.GAME_MODE.DEATHMATCH": [
+		'IDS_TEAM_TASKS',
+		'IDS_PARTICIPANTS_STRUCTURE',
+		'IDS_BATTLE_TIPS',
+		'IDS_DIVISIONS',
+	],
+})
+
 
 (def element BattleLoading ()
 	(macro MODAL_WINDOW_INIT)
@@ -51,8 +67,10 @@
 		(struct userPrefs = USER_PREF_DATA())
 		(var battleLoadingTabIndex:number = "userPrefs.prefs.battleLoadingTabIndex")
 
+		(var avatarAllyCollection:dhCollection = "getCollectionByPath(CC.avatar, 'team.ally')")
+
 		(var isFirstBattle:bool = "battleInfoComponent.scenario == SC.Common.FIRST_BATTLE_INFO.FIRST_BATTLE")
-		(var isDynamicDivisionsEnabled:bool = "isBattletypeWithDynamicDivisions && !isFirstBattle && maxDivisions > 0")
+		(var isDynamicDivisionsEnabled:bool = "isBattletypeWithDynamicDivisions && !isFirstBattle && avatarAllyCollection.length > 1 && maxDivisions > 0")
 
 		(var isFirstArmsRaceBattle:bool = "gameModeId == SC.Battle.GAME_MODE.ARMS_RACE && !userPrefs.prefs.armsRaceInstructionsSeen")
 
@@ -127,6 +145,7 @@
 			(element BattleLoadingMainTabButtons
 				_isTipsTabDisabled 			= "isTipsTabDisabled"
 				_isDynamicDivisionsEnabled 	= "isDynamicDivisionsEnabled"
+				_tabNames 					= "BATTLE_LOADING_TAB_NAMES_BY_GAME_MODE[gameModeId] ?: DEFAULT_BATTLE_LOADING_TAB_NAMES"
 			)
 		)
 
@@ -287,6 +306,9 @@
 									gameModeId in GAME_MODES_JUST_GOAL 	? 'IDS_JUST_GOAL'
 																		: 'IDS_TEAM_GOALS'"
 		)
+
+		(var isDeathmatch:bool = "gameModeId == SC.Battle.GAME_MODE.DEATHMATCH")
+
 		(var customElementsVisibilityComponent:dhComponent = "getSingleComponent(CC.customElementsVisibility)")
 		(var enabledElements:number = "customElementsVisibilityComponent.enabledElements" (event "customElementsVisibilityComponent.evChanged"))
 		(var customisedElements:number = "customElementsVisibilityComponent.customisedElements" (event "customElementsVisibilityComponent.evChanged"))
@@ -317,19 +339,22 @@
 																												: 0"
 		)
 
-		(var extraDescriptionItemsAmount:number = "	gameModeId == SC.Battle.GAME_MODE.ARMS_RACE 			? 4 :
-													gameModeId == SC.Battle.GAME_MODE.PORTAL_2021 			? 4 :
-													gameModeId == SC.Battle.GAME_MODE.CONVOY_EVENT 			? 2 :
-													gameModeId == SC.Battle.GAME_MODE.CONVOY_AIRSHIP 		? 4 :
-													gameModeId == SC.Battle.GAME_MODE.TEAM_BATTLE_ROYALE 	? 2 :
-													isDreadnoughtCustomisation 								? 6 :
-													isSubEventCustomization 								? 1
-																											: 0"
-		)
-		(var holdingPointsMessageCollection:dhCollection = "getCollection(CC.holdingPointsMessage)")
-		(var localWeatherEntity:dhEntity = "getSingleEntity(CC.localWeather)")
+		(struct extraDescriptionItemsAmount = GET_BATTLE_RULES_EXTRA_DESCRIPTION_ITEMS_AMOUNT(
+			_gameModeId = "gameModeId"
+			_isDreadnoughtCustomisation = "isDreadnoughtCustomisation"
+			_isSubEventCustomization = "isSubEventCustomization"
+		))
 
-		(var isGameModeRulesDescriptionWithIconsVisible:bool = "extraDescriptionItemsAmount > 0 && stageSize.height >= 900")
+		(var winPointsRewardCollection:dhCollection = "getCollectionByPath(CC.winPointsRewardForDestroyingEnemyShip, 'sorted')")
+		(var winPointsPenaltyCollection:dhCollection = "getCollectionByPath(CC.winPointsPenaltyForDestroyingAllyShip, 'sorted')")
+		(var holdingPointsMessageCollection:dhCollection = "getCollectionByPath(CC.holdingPointsMessage, 'sorted')")
+
+		(var isPointChargeVisible:bool = "holdingPointsMessageCollection.length > 0 || winPointsRewardCollection.length > 0 || winPointsPenaltyCollection.length > 0")
+
+		(var localWeatherEntity:dhEntity = "getSingleEntity(CC.localWeather)")
+		(var isLocalWeatherVisible:bool = "localWeatherEntity != null && !isDeathmatch")
+
+		(var isGameModeRulesDescriptionWithIconsVisible:bool = "extraDescriptionItemsAmount.value.length > 0 && (stageSize.height >= 900 || gameModeId != SC.Battle.GAME_MODE.ARMS_RACE)")
 	)
 	(style (width = 100%))
 
@@ -341,7 +366,7 @@
 			(class $TextDefaultBold28NM)
 			(style
 				(width = 100%)
-				(marginBottom = "MS")
+				(marginBottom = "{ 720:SXS, 1080:MS }")
 				(alpha = "TA")
 			)
 			(bind text "gameModeGoal")
@@ -356,7 +381,7 @@
 			(class $TextDefault20NM)
 			(style
 				(width = 100%)
-				(marginBottom = "LS")
+				(marginBottom = "{ 720:MS, 1080:LS }")
 				(leading = -3)
 				(alpha = "TC")
 			)
@@ -364,14 +389,14 @@
 		)
 	)
 
-
 	
 	(block
 		(bind visible "gameModeDescriptionItemsAmount > 0")
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 4.5)
 
 		(style
 			(width = 100%)
-			(marginBottom = "LS")
+			(marginBottom = "{ 720:MS, 1080:LS }")
 		)
 
 		(controller $Instance renderer='GameModeRulesDescription'
@@ -379,67 +404,85 @@
 			(args
 				_bulletsCount = "gameModeDescriptionItemsAmount"
 				_gameModeName = "gameModeName"
+				_isLoading = true
 			)
 		)
 	)
 
 	(block
 		(bind visible "isGameModeRulesDescriptionWithIconsVisible")
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 4.5)
 
 		(style
 			(width = 100%)
-			(marginBottom = "LS")
+			(marginBottom = "{ 720:MS, 1080:LS }")
+			(vgap = "{ 720:MS, 1080:LS }")
 		)
 
-		(controller $Instance renderer='GameModeRulesDescriptionWithIconsBlock'
-			(bind enabled "isGameModeRulesDescriptionWithIconsVisible")
+		(controller $Repeat renderer='GameModeRulesDescriptionWithIconsBlock'
+			(bind count "extraDescriptionItemsAmount.value.length")
 			(args
-				_bulletsCount = "extraDescriptionItemsAmount"
+				_bulletsCount = "extraDescriptionItemsAmount.value[$index]"
 				_gameModeName = "gameModeName"
+				_isIconSvg = "isDeathmatch"
+				_isRepeat = "isDeathmatch"
+				_isLoading = true
 			)
 		)
 	)
 
 	
 	(block
-		(bind visible "holdingPointsMessageCollection.length > 0")
+		(bind visible "isPointChargeVisible")
 
-		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 4)
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 5.5)
 
 		(style
 			(width = 100%)
-			(marginBottom = "LS")
+			(marginBottom = "{ 720:MS, 1080:LS }")
+		)
+
+		(tf
+			(class $TextDefaultBold28NM)
+			(style
+				(width = 100%)
+				(marginBottom = "{ 720:SXS, 1080:MS }")
+				(alpha = "TA")
+			)
+			(text = 'IDS_CHARGING_POINTS')
 		)
 
 		(block
-			(tf
-				(class $TextDefaultBold28NM)
-				(style
-					(width = 100%)
-					(marginBottom = "MS")
-					(alpha = "TA")
+			(controller $Instance renderer='PointsCharge'
+				(bind enabled "isPointChargeVisible")
+				(args
+					_winPointsRewardCollection = "winPointsRewardCollection"
+					_winPointsPenaltyCollection = "winPointsPenaltyCollection"
+					_holdingPointsMessageCollection = "holdingPointsMessageCollection"
 				)
-				(text = 'IDS_CHARGING_POINTS')
 			)
-
-			(element PointsCharge)
 		)
 	)
 
 	
 	(block
-		(bind visible "localWeatherEntity != null")
+		(bind visible "isLocalWeatherVisible")
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 6.5)
 
-		(style 
+		(style
 			(width = 100%)
-			(marginBottom = "LS")
+			(marginBottom = "{ 720:MS, 1080:LS }")
 		)
 
 		(controller $Instance renderer='LocalWeatherDescription'
-			(bind enabled "localWeatherEntity != null")
+			(bind enabled "isLocalWeatherVisible")
+			(args
+				_isLoading = true
+			)
 		)
 	)
 
+	
 	(block
 		(bind visible "gameModeId == SC.Battle.GAME_MODE.FORTS")
 
@@ -481,6 +524,20 @@
 		)
 	)
 
+	
+	(block
+		(macro DEFAULT_MODAL_WINDOW_CACHED_ANIMATION 5.5)
+		(style (width = 100%))
+
+		(controller $Instance renderer='SpaceAprilRulesForRespawn'
+			(bind enabled "isSpaceAprilRulesForRespawnVisible")
+			(args
+				_isLoading = true
+			)
+		)
+	)
+
+	
 	(block
 		(style (width = 100%))
 
@@ -489,19 +546,12 @@
 		)
 	)
 
+	
 	(block
 		(style (width = 100%))
 
 		(controller $Instance renderer='BattleTrialsDescriptionOnLoadingContainer'
 			(bind enabled "isTrialsDescriptionVisible")
-		)
-	)
-
-	
-	(controller $Instance renderer='SpaceAprilRulesForRespawn'
-		(bind enabled "isSpaceAprilRulesForRespawnVisible")
-		(args
-			_isLoading = true
 		)
 	)
 )
@@ -528,10 +578,10 @@
 	(element BattleGalleryViewer)
 )
 
-(def element GameModeRulesDescription (_bulletsCount:number=0, _gameModeName:str='')
+(def element GameModeRulesDescription (_bulletsCount:number=0, _gameModeName:str='', _isLoading:bool=false)
 	(style
 		(width = 100%)
-		(vgap = "MS")
+		(vgap = "_isLoading ? { 720:SXS, 1080:MS } : MS")
 	)
 
 	(tf
@@ -558,7 +608,7 @@
 	)
 )
 
-(def element SpaceAprilRulesForRespawn (_isLoading:bool)
+(def element SpaceAprilRulesForRespawn (_isLoading:bool=false)
 	(scope
 		(var points:array = [15, 20, 25, 35, 35, 85, 115, 400, 400, 600])
 
@@ -571,7 +621,7 @@
 		(class $TextDefaultBold28NM)
 		(style
 			(width = 100%)
-			(marginBottom = "MS")
+			(marginBottom = "_isLoading ? { 720:SXS, 1080:MS } : MS")
 			(alpha = "TA")
 		)
 		(text = 'IDS_SPACE_APRIL_POINTS_FOR_RESPAWN_TITLE')
@@ -581,7 +631,7 @@
 		(class $TextDefault20NM)
 		(style
 			(width = 100%)
-			(marginBottom = "MS")
+			(marginBottom = "_isLoading ? { 720:SXS, 1080:MS } : MS")
 			(alpha = "TC")
 		)
 		(text = 'IDS_SPACE_APRIL_POINTS_FOR_RESPAWN_DESCRIPTION')
@@ -590,7 +640,7 @@
 	(hblock
 		(style
 			(width = 100%)
-			(marginBottom = "MS")
+			(marginBottom = "_isLoading ? { 720:SXS, 1080:MS } : MS")
 			(hgap = "L")
 		)
 
@@ -667,34 +717,44 @@
 )
 
 (def element GameModeRulesDescriptionWithIconsBlock (	_gameModeName:str = '',
-														_bulletsCount:number = 0)
+														_bulletsCount:number = 0,
+														_isIconSvg:bool = false,
+														_isRepeat:bool = false,
+														_isLoading:bool = false
+													)
+	(scope
+		(var blockNumber:number = "_isRepeat ? $index : null")
+	)
+
 	(style (width = 100%))
 
 	(tf
 		(class $TextDefaultBold28NM)
 		(style
-			(marginBottom = "MS")
+			(marginBottom = "_isLoading ? { 720:SXS, 1080:MS } : MS")
 			(alpha = "TA")
 		)
-		(bind text "'IDS_' + toUpper(_gameModeName) + '_ICON_RULES_HEADER'")
+		(bind text "'IDS_' + toUpper(_gameModeName) + '_ICON_RULES_HEADER' + (_isRepeat ? '_' + blockNumber : '')")
 	)
 
 	(block
 		(style
 			(width = 100%)
-			(vgap = "SXS")
+			(vgap = "_isLoading ? { 720:XS, 1080:SXS } : SXS")
 		)
 
 		(controller $Repeat renderer='GameModeRulesDescriptionWithIcons'
 			(bind count "_bulletsCount")
 			(args
-				_gameModeName 	= "_gameModeName"
+				_gameModeName = "_gameModeName"
+				_isIconSvg = "_isIconSvg"
+				_blockNumber = "_isRepeat ? blockNumber : null"
 			)
 		)
 	)
 )
 
-(def element GameModeRulesDescriptionWithIcons (_gameModeName:str = '')
+(def element GameModeRulesDescriptionWithIcons (_gameModeName:str, _isIconSvg:bool, _blockNumber:number = null)
 	(scope
 		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
 		(var gameModeId:number = "battleInfoComponent.gameModeId")
@@ -702,12 +762,15 @@
 		(var selfPlayerEntity:dhEntity = "getSingleEntity(CC.accountSelf)")
 		(var teamId:number = "selfPlayerEntity.avatar.teamId")
 
+		(var blockNumberMorpheme:str = "_blockNumber == null ? '' : '_' + _blockNumber")
 		(var iconPostfix:str = "gameModeId == SC.Battle.GAME_MODE.CONVOY_EVENT ? '_' + teamId : ''")
+		(var iconName:str = "'icon_rules_' + toLower(_gameModeName) + blockNumberMorpheme + '_' + $index + iconPostfix")
 	)
 
 	(style
 		(flow = "horizontal")
 		(width = 100%)
+		(align = "middle")
 	)
 
 	
@@ -717,7 +780,9 @@
 			(height = 30px)
 			(marginRight = "S")
 			(backgroundSize = "cover")
-			(bind backgroundImage "'url:../battle_tasks/rules/icon_rules_' + toLower(_gameModeName) + '_' + $index + iconPostfix + '.png'")
+			(bind backgroundImage "_isIconSvg 	? 'swf:../battle_tasks/rules_svg/rules_svg.swf:' + iconName
+												: 'url:../battle_tasks/rules/' + iconName + '.png'"
+			)
 		)
 	)
 
@@ -725,10 +790,9 @@
 		(class $TextDefault20NM)
 		(style
 			(width = 100%)
-			(marginTop = "S")
 			(alpha = "TC")
 		)
-		(bind text "'IDS_GAMEMODE_' + toUpper(_gameModeName) + '_RULES_DESCRIPTION_TEXT_' + $index")
+		(bind text "'IDS_GAMEMODE_' + toUpper(_gameModeName) + '_RULES_DESCRIPTION_TEXT' + blockNumberMorpheme + '_' + $index")
 	)
 )
 

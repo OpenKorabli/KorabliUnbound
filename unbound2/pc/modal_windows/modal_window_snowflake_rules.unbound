@@ -1,24 +1,52 @@
 (def constant SNOWFLAKE_RULES [
-	{	_imagePath: 'url:../modal_battle_rules/snowflakes/icon_rules_how_to_get_rewards.png',
+	{	_imagePath: 'url:../modal_battle_rules/snowflakes/icon_rules_rewards_info.png',
 		_textTypes: [
 			{_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
 			{_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
 		]
 	},
-	{	_imagePath: 'url:../modal_battle_rules/snowflakes/icon_rules_more_rewards.png',
+	{	_imagePath: 'url:../modal_battle_rules/snowflakes/icon_rules_get_rewards.png',
 		_textTypes: [
-			{_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
-			{_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" },
+			{_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+		]
+	},
+	{	_imagePath: 'url:../modal_battle_rules/snowflakes/icon_rules_get_snowflakes.png',
+		_textTypes: [
+			{_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
+		]
+	},
+	{	_imagePath: 'url:../modal_battle_rules/snowflakes/icon_rules_more_snowflakes.png',
+		_textTypes: [
 			{_type: "SC.Ui_common.MODAL_RULES_TEXT_TYPE.PARAGRAPH" }
 		]
 	}
 ])
 
+
 (def element ModalWindowSnowflakeRules (_rulesType:str)
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
 	(scope
+
+		(var shipSnowflakesList:dhCollection = "getCollectionByPath(CC.ownShip, 'shipsHaveSnowflakes.filtered.sorted')")
+		(var bonusTagSeasonEntity:dhEntity = "getSingleEntity(CC.bonusTagSeason, 'snowflakeSeasonCollection')")
+		(var bonusTagSeason:dhComponent = "bonusTagSeasonEntity.bonusTagSeason")
+		(var bannerState:number = "bonusTagSeason.bannerState ?: SC.Ui_common.SNOWFLAKES_STATE.DISABLED" (event "bonusTagSeason.evBannerStateChanged"))
+		(var isEmptyContent:bool = "	shipSnowflakesList.length == 0 ||
+										bannerState == SC.Ui_common.SNOWFLAKES_STATE.DISABLED")
+
 		(var rulesCount:number = "SNOWFLAKE_RULES.length")
+
+		(macro PULL_SHIP_ID)
+		(var shipOwnComponent:dhComponent = "getPrimaryComponent(CC.ownShip, playerShipId)")
+		(var isShipReadyForBattle:bool = "shipOwnComponent.lock == SC.Common.OWN_SHIP_LOCK.DIVISION_IS_READY" (event "shipOwnComponent.evUpdateLock"))
+		(var isInBalancer:bool = "getSingleEntity(CC.balancerInfo) != null")
+
+		(var buttonShowTutorTooltipStatus:dict = "	isInBalancer 			? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,
+																				text: 'IDS_NEWBIE_QUESTS_WARNING_BALANCER' } :
+													isShipReadyForBattle	? { unifiedStatus: SC.Ui_styles.UNIFIED_STATUS.WARNING,
+																				text: 'IDS_NEWBIE_QUESTS_DIVISION_READY_BUTTON_HINT' }
+																			: null")
 	)
 
 	(name = 'ModalWindowSnowflakeRules')
@@ -39,12 +67,15 @@
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
 		(style
 			(align = "center")
-			(paddingTop = "{ 720:XL, 1080:XLL}")
-			(paddingBottom = "{ 720:XLM, 1080:XXL}")
+			(paddingTop = "{ 720:MS, 1080:XLL}")
+			(paddingBottom = "{ 720:MS, 1080:XL}")
 		)
 
 		(scrollArea
-			(style (width = 760px) (height = 100%) (backgroundColor = "NO_COLOR"))
+			(style
+				(width = 760px)
+				(height = 100%)
+			)
 
 			(macro DEFAULT_VERTICAL_SCROLL_PARAMS
 				_singleStep = "150"
@@ -63,11 +94,131 @@
 					(args
 						_rulesName = "_rulesType"
 						_rulesList = "SNOWFLAKE_RULES"
-						_rulesBgCardIcon =	'url:../animations/spine/snowflake/rules_glow_bonus.skel'
+						_rulesBgCardIcon = 'url:../animations/spine/snowflake/rules_glow_bonus.skel'
+						_rulesExtraItemRenderer = 'SnowflakesRulesTable'
+						_hasExtraItemRenderer = "$index == rulesCount-1"
 					)
 				)
 			)
 			(bindcall scrollToDirection horDir="ScrollDirection.LEFT" vertDir="ScrollDirection.TOP"	animated="false" on='addedToStage')
+		)
+
+		(block
+			(bind visible "!isEmptyContent")
+
+			(style (marginTop = "MS"))
+
+			(controller $Tooltip
+				(bind enabled "buttonShowTutorTooltipStatus != null")
+				(renderer = 'SimpleStatusTooltip')
+				(args
+					_unifiedStatus = "buttonShowTutorTooltipStatus.unifiedStatus"
+					_text = "buttonShowTutorTooltipStatus.text"
+				)
+				(macro DEFAULT_TOOLTIP_BEHAVIOUR)
+			)
+
+			(controller $Instance renderer = 'DefaultButton'
+				(bind enabled "!isEmptyContent")
+				(args
+					_name = 'btn_snowflakes_onboarding'
+					_width = 220px
+					_label = 'IDS_MODAL_WINDOW_SNOWFLAKES_RULES_BUTTON'
+					_enabled = "buttonShowTutorTooltipStatus == null"
+					_methods = "[
+						{
+							type: 'inputMapping.onAction',
+							name: 'activateTipChain',
+							args: { tip_chain_id : SC.Context_guiding_tip.TIP_CHAIN_ID.SNOWFLAKES_BONUS_ONBOARDING_REPEAT }
+						},
+						{
+							type: 'inputMapping.onAction',
+							name: 'deactivateTipChain',
+							args: { tip_chain_id : SC.Context_guiding_tip.TIP_CHAIN_ID.SNOWFLAKES_BONUS_ONBOARDING }
+						}
+					]"
+				)
+			)
+		)
+	)
+)
+
+(def element SnowflakesRulesTable ()
+	(scope
+		(var bonusTagSeasonEntity:dhEntity = "getSingleEntity(CC.bonusTagSeason, 'snowflakeSeasonCollection')")
+		(var bonusTagSeason:dhComponent = "bonusTagSeasonEntity.bonusTagSeason")
+		(var shipsCountIntervals:array = "bonusTagSeason.shipsCountIntervals ?: []" (event "bonusTagSeason.evChanged"))
+	)
+	(style
+		(width = 100%)
+		(vgap = "S")
+	)
+	(hblock
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 120px)
+				(marginRight = "S")
+				(alpha = "TA")
+			)
+			(text = 'IDS_MODAL_WINDOW_SNOWFLAKES_RULES_TABLE_ROW_1')
+		)
+		(tf
+			(class $TextDefaultNM)
+			(style
+				(width = 160px)
+				(alpha = "TA")
+			)
+			(text = 'IDS_MODAL_WINDOW_SNOWFLAKES_RULES_TABLE_ROW_2')
+		)
+	)
+	(controller $Repeat renderer='SnowflakesRulesTableItem'
+		(bind count "shipsCountIntervals.length")
+		(args
+			_interval = "shipsCountIntervals[$index]"
+		)
+	)
+)
+
+(def element SnowflakesRulesTableItem (_interval:array = [])
+	(scope
+		(var playerShipsCollection:dhCollection = "getCollection(CC.ownShip)")
+		(var shipsCount:number = "playerShipsCollection.length")
+		(var lowIntervalValue:number = "_interval[0]")
+		(var highIntervalValue:number = "_interval[1] ?: 0")
+		(var isSingleValue:bool = "_interval.length == 1")
+		(var intervalText:str = "isSingleValue	? lowIntervalValue + '+'
+												: lowIntervalValue + '-' + highIntervalValue")
+		(var isHightlighted:bool = "shipsCount >= lowIntervalValue && (isSingleValue || shipsCount <= highIntervalValue)")
+	)
+	(style
+		(height = 20px)
+		(align = "middle")
+		(flow = "horizontal")
+	)
+
+	(tf
+		(bind class "isHightlighted ? '$TextDefaultBoldNM' : '$TextDefaultNM'")
+		(style
+			(width = 120px)
+			(marginRight = "S")
+			(alpha = "TA")
+		)
+		(bind text "intervalText")
+	)
+
+	(block
+		(style
+			(width = 160px)
+			(height = 20px)
+			(align = "center|middle")
+			(borderRadius = "XS")
+			(bind backgroundColor "isHightlighted ? 0x1AFFFFFF : 0x05FFFFFF")
+		)
+		(tf
+			(class $TextDefaultBoldNM)
+			(style (alpha = "TA"))
+			(bind text "$index+1")
 		)
 	)
 )

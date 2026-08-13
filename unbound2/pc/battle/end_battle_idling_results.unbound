@@ -21,24 +21,25 @@
 })
 
 
-(def element EndBattleIdlingResults () layout=true
+(def element EndBattleIdlingResults ()
 	(scope
-		(macro IS_SPECTATOR_MODE)
-		(var avatar:gfx = "$datahub.getSingleEntity(CC.playerAvatar)")
-		(var isPlayer:bool = "avatar != null")
-		(var isReallySpectator:bool = "!isPlayer && isSpectator")
+		(var spectatorStateComponent:dhComponent = "getSingleComponent(CC.spectatorState)")
+		(var spectatorState:number = "spectatorStateComponent.state ?: INVALID_SPECTATOR_STATE" (event "spectatorStateComponent.evStateChanged"))
 
-		(var battleStateEntity:dhEntity = "getSingleEntity(CC.battleState)")
-		(var battleStateComponent:dhComponent = "battleStateEntity.battleState")
+		(var selfAvatarEntity:dhEntity = "getSingleEntity(CC.playerAvatar)")
+		(var isReallySpectator:bool = "selfAvatarEntity == null && !isIn(spectatorState, [SC.Common.SPECTATOR_STATE.PRE_SPECTATOR, INVALID_SPECTATOR_STATE])")
 
+		(var battleStateComponent:dhComponent = "getSingleComponent(CC.battleState)")
 		(var resultId:number = "battleStateComponent ? battleStateComponent.resultId : -1" (event "battleStateComponent.evBattleResultsChanged"))
 		(var winnerTeamText:str = "battleStateComponent.winnerTeamText" (event "battleStateComponent.evBattleResultsChanged"))
 
-		(var challengeParticipant:gfx= "avatar.challengeParticipant" (event "avatar.evAdded"))
-		(var isChallengeParticipant:bool= "challengeParticipant != null")
-		(var wonPosition:number= "challengeParticipant.wonPosition ?: 0" (event "challengeParticipant.evWonPositionChanged"))
+		(var challengeParticipantComponent:dhComponent = "selfAvatarEntity.challengeParticipant" autoUpdate=false (event "selfAvatarEntity.evAdded"))
+		(var isChallengeParticipant:bool = "challengeParticipantComponent != null")
+		(var wonPosition:number = "challengeParticipantComponent.wonPosition ?: INVALID_COMPETITION_LADDER_POSITION" (event "challengeParticipantComponent.evWonPositionChanged"))
 
-		(var challengeResultText:str = "isReallySpectator || wonPosition == 0 ? toUpper(tr('IDS_SYS_MSG_BATTLE_RESULTS')) : toUpper(subst('IDS_CHALLENGE_BATTLE_ENDED', [], { _position: wonPosition }))")
+		(var challengeResultText:str = "isReallySpectator || wonPosition == INVALID_COMPETITION_LADDER_POSITION ? toUpper(tr('IDS_SYS_MSG_BATTLE_RESULTS'))
+																												: subst('IDS_CHALLENGE_BATTLE_ENDED', [], { _position: wonPosition })"
+		)
 
 		(var trialComponent:dhComponent = "getSingleComponent(CC.trialScore)")
 		(var isTrialsEnabled:bool = "trialComponent != null")
@@ -50,61 +51,80 @@
 		(var isTargetScoreAchieved:bool = "scoresAchieved >= targetScore")
 		(var bestRound:number = "	isMultipleRounds && isTargetScoreAchieved		? trialRound :
 									isMultipleRounds && !isTargetScoreAchieved		? trialRound - 1
-																					: 0")
+																					: 0"
+		)
 		(var trialsResultText:str = "toUpper(subst('IDS_TRIAL_ROUND_RESULTS', [], { _bestRound: bestRound, _totalRounds: trialRoundsCount}))")
 
-		(var resultAnimName:str = "	isReallySpectator		? RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.DRAW] :
-									isChallengeParticipant	? wonPosition == 1 	? RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.VICTORY]
-																				: RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.DRAW]
-															: RESULT_ANIMATION_NAME[resultId]")
+		(var deathmatchPlayerComponent:dhComponent = "selfAvatarEntity.deathmatchPlayer")
+		(var selfPlace:number = "deathmatchPlayerComponent.place ?: INVALID_COMPETITION_LADDER_POSITION" (event "deathmatchPlayerComponent.evPlaceChanged"))
 
-		(var resultText:str = "	isChallengeParticipant 	? challengeResultText :
-								isReallySpectator 		? toUpper(tr(winnerTeamText)) :
-								isTrialsEnabled			? trialsResultText
-														: toUpper(tr(RESULT_TEXT_IDS[resultId]))")
+		(var deathmatchResultText:str = "isReallySpectator || selfPlace == INVALID_COMPETITION_LADDER_POSITION 	? toUpper(tr('IDS_SYS_MSG_BATTLE_RESULTS'))
+																												: subst('IDS_DM_BATTLE_ENDED', [], { _position: selfPlace })"
+		)
 
-		(var resultColorText:number = "	isReallySpectator		? RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.DRAW] :
-										isChallengeParticipant	? wonPosition == 1 	? RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.VICTORY]
-																					: RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.DRAW]
-																: RESULT_TEXT_COLOR[resultId]")
+		(var resultAnimName:str = "	isReallySpectator									? RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.DRAW] :
+									isChallengeParticipant								? wonPosition == 1 	? RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.VICTORY]
+																											: RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.DRAW] :
+									selfPlace == 1 										? RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.VICTORY] :
+									selfPlace != INVALID_COMPETITION_LADDER_POSITION 	? RESULT_ANIMATION_NAME[SC.Battle.BATTLE_RESULT.DRAW]
+																						: RESULT_ANIMATION_NAME[resultId]"
+		)
+
+		(var resultText:str = "	isChallengeParticipant 								? challengeResultText :
+								selfPlace != INVALID_COMPETITION_LADDER_POSITION 	? deathmatchResultText :
+								isReallySpectator 									? toUpper(tr(winnerTeamText)) :
+								isTrialsEnabled										? trialsResultText
+																					: toUpper(tr(RESULT_TEXT_IDS[resultId]))"
+		)
+
+		(var resultColorText:number = "	isReallySpectator									? RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.DRAW] :
+										isChallengeParticipant								? wonPosition == 1 	? RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.VICTORY]
+																												: RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.DRAW] :
+										selfPlace == 1 										? RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.VICTORY] :
+										selfPlace != INVALID_COMPETITION_LADDER_POSITION 	? RESULT_TEXT_COLOR[SC.Battle.BATTLE_RESULT.DRAW]
+																							: RESULT_TEXT_COLOR[resultId]"
+		)
 	)
+
 	(class $FullsizeAbsolute)
 
 	(block
 		(class $FullsizeAbsolute)
 		(style
-			(bind backgroundImage "'url:../animations/spine/end_of_battle/' + resultAnimName + '.skel'")
-			(backgroundSize = "cover")
-			(height = 400px)
 			(hitTest = false)
+			(height = 400px)
+			(backgroundSize = "cover")
+			(bind backgroundImage "'url:../animations/spine/end_of_battle/' + resultAnimName + '.skel'")
 		)
 		(controller $Spine)
 	)
 
 	(block
 		(class $MiddleAlignedAbsolutely)
-		(style (top = 206px) (pivotX = 50%) (pivotY = 50%))
+		(style
+			(top = 206px)
+			(pivotX = 50%)
+			(pivotY = 50%)
+			(alpha = 0)
+			(scaleX = 2)
+			(scaleY = 2)
+		)
 
 		(controller $Animation
 			(bindcall play
-				from="{scaleX: 2, scaleY: 2}"
-				to="{scaleX: 1, scaleY: 1}"
-				duration=0.35
-				easing="Easing.quint_out"
-				action="kill"
-				on='addedToStage'
+				to = { scaleX: 1, scaleY: 1 }
+				duration = 0.35
+				easing = "Easing.quint_out"
+				on = 'addedToStage'
 			)
-		)
-		(controller $Animation
 			(bindcall play
-				from="{alpha:0}"
-				to="{alpha:1}"
-				duration=0.65
-				easing="Easing.quint_out"
-				action="kill"
-				on='addedToStage'
+				to = { alpha: 1 }
+				duration = 0.65
+				easing = "Easing.quint_out"
+				on = 'addedToStage'
 			)
 		)
+
 		(tf
 			(name = 'result_text')
 			(class $TextDefaultBold64NMWithoutShadow)

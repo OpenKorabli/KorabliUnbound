@@ -1,36 +1,54 @@
+(def constant SNOWFLAKES_CONFIRMATION_CONTENT_WIDTH 520px)
+(def constant SNOWFLAKES_CONFIRMATION_CONTENT_SHIP_WIDTH 153px)
+(def constant SNOWFLAKES_CONFIRMATION_CONTENT_SHIP_HEIGHT 28px)
+
 (def element ModalWindowSnowflakesConfirmChoice ()
 	(macro MODAL_WINDOW_INIT)
 	(macro MODAL_WINDOW_BG)
 
 	(scope
 		(var bonusTagSeasonEntity:dhEntity = "getSingleEntity(CC.bonusTagSeason, 'snowflakeSeasonCollection')")
+		(var currentSnowflakeRewardsCount:number = "bonusTagSeasonEntity.bonusTagSeason.bonusSnowflakes ?: 0" (event "bonusTagSeasonEntity.bonusTagSeason.evChanged"))
 		(var selectedShips:array = "bonusTagSeasonEntity.rewardsStack.ships" (event "bonusTagSeasonEntity.rewardsStack.evShipsChanged"))
-
-		
 		(var rewards:array = "bonusTagSeasonEntity.rewardsStack.rewards" (event "bonusTagSeasonEntity.rewardsStack.evChanged"))
-
-		(var isAnyBonusesPicked:bool = "selectedShips.length > 0")
 	)
 
 	(class $Fullsize)
 	(style (align = "center|middle"))
 
 	(block
-		(style (width = 560px))
-
-		
-		(block
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
-			(style
-				(width = 100%)
-				(marginBottom = "L")
-			)
-
-			(element ModalWindowShortHeader	_header = "'IDS_CONFIRMATION'")
+		(style
+			(width = "SNOWFLAKES_CONFIRMATION_CONTENT_WIDTH")
+			(align = "center")
 		)
 
 		(block
 			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1)
+			(style (width = 100%))
+
+			(element ModalWindowShortHeader
+				_header = 'IDS_CONFIRMATION'
+				_hasDivider = false
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 1.5)
+			(style (marginBottom = 11px))
+			(element CurrenciesPanel
+				_width = "SNOWFLAKES_CONFIRMATION_CONTENT_WIDTH"
+				_priceInfo = "[
+					{
+						currency: SC.Common.CURRENCIES.BONUS_SNOWFLAKE,
+						finalPrice: currentSnowflakeRewardsCount,
+						priceSum: currentSnowflakeRewardsCount - selectedShips.length
+					}
+				]"
+			)
+		)
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
 			(style (width = 100%))
 
 			
@@ -42,7 +60,7 @@
 
 				(style
 					(width = 100%)
-					(maxHeight = "SHIP_ROW_HEIGHT * 5")
+					(maxHeight = "SNOWFLAKES_SHIP_ROW_HEIGHT * 5")
 				)
 
 				(scrollPerItem = true)
@@ -51,68 +69,96 @@
 				(content
 					(style
 						(width = 100%)
-						(vgap = "XXS")
+						(marginLeft = "M")
+						(paddingRight = "M")
+						(flow = "tile_horizontal")
+						(hgap = "SXS")
+						(vgap = "S")
 					)
 
-					(controller $DynamicRepeat renderer='SelectShipForSnowflakeReward' name='snowflakeShipController'
+					(controller $DynamicRepeat renderer='ShipWithSnowflake' name='snowflakeShipController'
 						(bind items "selectedShips")
 						(args
 							_shipId = "getEntity(selectedShips[$index]).ship.id"
-							_isViewOnly = true
-							_isMaxBonusesPicked = false
-							_isNotEnoughShips = false
 						)
-
-						(itemHeight = "SHIP_ROW_HEIGHT")
-						(itemOffset = "SHIP_ROW_HEIGHT * 3")
+						(itemWidth = "SNOWFLAKES_CONFIRMATION_CONTENT_SHIP_WIDTH")
+						(itemHeight = "SNOWFLAKES_CONFIRMATION_CONTENT_SHIP_HEIGHT")
+						(itemOffset = "SNOWFLAKES_CONFIRMATION_CONTENT_SHIP_HEIGHT * 3")
 					)
 				)
 			)
 		)
 
 		
-		(block
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2)
+		(hblock
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 3.5)
 			(style
 				(width = 100%)
-				(height = 185px)
+				(marginTop = "M")
+				(marginBottom = "MS")
 				(align = "center")
 			)
 
-			(controller $Instance renderer='ModalSnowflakeRewards'
-				(bind enabled "isAnyBonusesPicked")
+			(controller $Repeat renderer='RewardItemAdapter'
+				(bind count "rewards.length")
 				(args
-					_rewards = "rewards"
+					_entityId = "rewards[$index]"
+
 				)
+			)
+		)
+
+
+		(block
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4)
+			(style
+				(width = 100%)
+				(marginBottom = "MS")
+			)
+			(element ModalWindowSystemPurchaseItemPriceAndInfo
+				_questionString = 'IDS_SNOWFLAKES_CONFIRMATION_QUESTION'
+				_priceInfo = "{
+					finalPrice: selectedShips.length,
+					currency: SC.Common.CURRENCIES.BONUS_SNOWFLAKE
+				}"
 			)
 		)
 
 		(block
-			(macro DEFAULT_MODAL_WINDOW_ANIMATION 2.5)
-			(style (width = 100%))
+			(macro DEFAULT_MODAL_WINDOW_ANIMATION 4.5)
 
-			(element HorizontalDividerTwoPx)
-
-			(block
-				(style
-					(width = 100%)
-					(paddingTop = "MS")
-					(align = "center")
-				)
-
-				(element ModalWindowSystemYesNoButtons
-					_btnOkWidth = 154px
-					_btnOkFocusIndex = 1
-					_btnOkMethods =	"[	{	type: 'inputMapping.onAction',
-											name: 'SSEProxyCommonUSS.dropBonusSnowflakes',
-											args: {}},
-										{	type: 'inputMapping.onRequest',
-											name: 'closeSnowflakesModal',
-											args: {}}]"
-					_btnNoFocusIndex = 2
-					_btnNoWidth = 154px
-				)
+			(element ModalWindowSystemPurchaseItemYesNoCloseButtons
+				_okMethods = "[
+					{
+						type: 'inputMapping.onAction',
+						name: 'SSEProxyCommonUSS.dropBonusSnowflakes',
+						args: {}
+					},
+					{
+						type: 'inputMapping.onRequest',
+						name: 'openRewardsModalWithoutAnimation',
+						args: { rewardsEntityId: bonusTagSeasonEntity.id}
+					},
+					{
+						type: 'inputMapping.onRequest',
+						name: 'closeSnowflakesModal',
+						args: {}
+					}
+				]"
 			)
 		)
+	)
+)
+
+(def element ShipWithSnowflake (_shipId:number)
+	(style
+		(width = "SNOWFLAKES_CONFIRMATION_CONTENT_SHIP_WIDTH")
+		(height = "SNOWFLAKES_CONFIRMATION_CONTENT_SHIP_HEIGHT")
+		(align = "middle")
+	)
+	(element ShipLineItemNM
+		_withFlag = true
+		_shipId = "_shipId"
+		_width = '100%'
 	)
 )

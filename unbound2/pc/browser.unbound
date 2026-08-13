@@ -22,8 +22,7 @@
 		(var url:str = '') 
 		(var isFullscreen:bool = "true") 
 
-		(var browserWindowEntity:dhEntity = "getSingleEntity(CC.webBrowser)")
-		(var webBrowserComponent:dhComponent = "browserWindowEntity.webBrowser")
+		(var webBrowserComponent:dhComponent = "getSingleComponent(CC.webBrowser)")
 
 		(var browserTextureName:str =	"webBrowserComponent.browserTextureName")
 		(var isTextureReady:bool =		"webBrowserComponent.isTextureReady"	(event "webBrowserComponent.evIsTextureReadyChanged"))
@@ -32,8 +31,6 @@
 	)
 
 	(macro HIDE_UI_ON_SHIPOVERVIEW)
-	
-	(bindcall externalCall 'direct.action' "['browserUp', [$event.localX, $event.localY, $event.buttonIdx]]" watch=false on='click')
 	(bindcall externalCall 'sound.playSetSoundDirect' "['window', 'close_muted']" (event "startHide"))
 
 	(controller $Instance
@@ -58,6 +55,8 @@
 
 		(var routeEntityisInClanBase:dhEntity = "getPrimaryEntity(CC.route, SC.Ui_windows.ROUTE.CLAN)")
 		(var isInClanBase:bool = "routeEntityisInClanBase.route.isActive" (event "routeEntityisInClanBase.route.evIsActiveChanged"))
+		(var heightOffset:number = "isInClanBase ? 60 : 0")
+
 		(macro GET_PREF 'isBlurOptionEnabled' "'graphics.GUI.blur'")
 		(macro GET_PREF 'isUIContrastOptionEnabled' "'graphics.GUI.contrast'")
 
@@ -66,11 +65,11 @@
 
 		(var isShowCloseIcon:bool = false)
 		(bind isShowCloseIcon "!_browserHasControl && !_isLoadFailed && !isInClanBase")
-
-		(struct browserShipPreviewRoute = PULL_ROUTE(_id = "SC.Ui_windows.ROUTE.BROWSER_SHIP_PREVIEW"))
 	)
 	(class $Fullsize)
-	(style (bind paddingTop "isInClanBase ? 60px : 0px"))
+	(style (bind paddingTop "heightOffset"))
+
+	(bindcall externalCall 'direct.action' "[SC.Ui_methods.BROWSER_METHODS.SET_TEXTURE_OFFSET, [heightOffset]]" (event "startShow"))
 
 	(dispatch evShowCloseIcon (bind enabled "isShowCloseIcon") (bind trigger "isShowCloseIcon"))
 	(dispatch evHideCloseIcon (bind enabled "!isShowCloseIcon") (bind trigger "isShowCloseIcon"))
@@ -83,12 +82,16 @@
 	(block
 		(macro DEFAULT_MODAL_WINDOW_ANIMATION_ALPHA 0)
 		(class $FullsizeAbsolute)
-		(style (bind paddingTop "isInClanBase ? -60px : 0px"))
+		(style (bind paddingTop "-heightOffset"))
 
 		(block
 			(class $FullsizeAbsolute)
 			(bind visible "!isBlurVisible")
-			(style (backgroundImage = 'url:../bg/nations_tree_v2.jpg') (backgroundSize = "cover"))
+			(style
+				(backgroundImage = 'url:../bg/nations_tree_v2.jpg')
+				(backgroundSize = "cover")
+				(bind hitTest "!isContentReady")
+			)
 			(controller $Animation
 				(bindcall play duration=1 delay=0.2 to={alpha: 0} action="kill" (bind enabled "isContentReady"))
 			)
@@ -99,21 +102,22 @@
 			(class $FullsizeAbsolute)
 
 			(block
+				(visible = false)
 				(class $FullsizeAbsolute)
 				(alpha = 0)
 
 				(controller $Animation
 					(bindcall play
 						duration = 0.15
-						to = "{ alpha: 1 }"
+						to = "{ alpha: 1, visible: true }"
 						easing = "Easing.quad_in"
 						action = "kill"
 						(event "evBlurStartShow")
 					)
-					(bindcall play 
+					(bindcall play
 						delay = 0.2
 						duration = 0.25
-						to = "{ alpha: 0 }"
+						to = "{ alpha: 0, visible: false }"
 						easing = "Easing.quad_in"
 						action = "kill"
 						(event "evBlurStartHide")
@@ -124,21 +128,15 @@
 			)
 
 			(block
+				(visible = false)
 				(class $FullsizeAbsolute)
 				(style (backgroundColor = 0x80000700) (alpha = 0))
 				(controller $Animation
-					(bindcall play duration=1 delay=0.2 to={alpha: 0} action="kill" (bind enabled "isContentReady"))
-					(bindcall play duration=1 delay=0.2 to={alpha: 1} action="kill" (bind enabled "!isContentReady"))
+					(bindcall play duration=1 delay=0.2 to={alpha: 0, visible: false} action="kill" (bind enabled "isContentReady"))
+					(bindcall play duration=1 delay=0.2 to={alpha: 1, visible: true} action="kill" (bind enabled "!isContentReady"))
 				)
 			)
 		)
-	)
-
-	(block
-		(class $FullsizeAbsolute)
-		(controller $Instance renderer = 'ModalWindowBrowserPreviewMarkup'
-			(bind enabled "browserShipPreviewRoute.isActive")
-		) 
 	)
 
 	(block
@@ -260,6 +258,9 @@
 		
 		(var widgetEntity:dhEntity = "getSingleEntity(CC.webBrowserIMEInputWidget)")
 		(var widgetEnabled:bool = "widgetEntity.webBrowserIMEInputWidget.enabled" (event "widgetEntity.webBrowserIMEInputWidget.evIsEnabledChanged"))
+
+		(var webBrowserComponent:dhComponent = "getSingleComponent(CC.webBrowser)")
+		(var isOverBrowserArea:bool = "webBrowserComponent.isOverBrowserArea" (event "webBrowserComponent.evIsOverBrowserAreaChanged"))
 	)
 	(bind name "_isTextureReady ? 'BrowserIsLoaded' : 'BrowserIsNotLoaded'")
 
@@ -283,6 +284,7 @@
 			(bind visible "!_isLoadFailed")
 			(style
 				(backgroundSize = "fill")
+				(bind hitTest "isOverBrowserArea")
 				(bind backgroundImage "_browserTextureName ? 'img://embedded:' + _browserTextureName : null")
 			)
 			(alpha = "_isTextureReady ? 1 : 0")
@@ -292,11 +294,10 @@
 				(bindcall play id='textureAnim' duration=0.15 to={alpha: 0, visible:false} action="kill" (bind enabled "!_isTextureReady"))
 			)
 
-			(bindcall externalCall 'direct.action' "['browserMove', [$event.localX, $event.localY]]" watch=false on='mouseMove')
-			(bindcall externalCall 'direct.action' "['browserWheel', [$event.localX, $event.localY, $event.delta]]" watch=false on='mouseWheel')
-			(bindcall externalCall 'direct.action' "['browserDown', [$event.localX, $event.localY, $event.buttonIdx]]" watch=false on='mouseDown')
-			(bindcall externalCall 'direct.action' "['rollOverUnderTextureChanged', [rollOver]]" watch=false (bind trigger "rollOver"))
-			(bindcall externalCall 'direct.action' "['browserTextureSizeChanged', [$globalLayoutBounds[2], $globalLayoutBounds[3]]]" watch=false (event "$evLayoutBoundsChanged"))
+			
+			
+			(bindcall externalCall "'direct.action' " "[SC.Ui_methods.BROWSER_METHODS.ROLL_OVER_TEXTURE, [rollOver || !isOverBrowserArea]]"  (event "startShow"))
+			(bindcall externalCall 'direct.action' "[SC.Ui_methods.BROWSER_METHODS.SET_TEXTURE_SIZE, [$globalLayoutBounds[2], $globalLayoutBounds[3]]]" watch=false (event "$evLayoutBoundsChanged"))
 		)
 
 		(controller $Instance renderer='BrowserIMEInput'

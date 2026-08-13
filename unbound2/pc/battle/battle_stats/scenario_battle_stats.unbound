@@ -29,15 +29,8 @@
 		(var battleInfoComponent:dhComponent = "getSingleComponent(CC.battleInfo)")
 		(var gameModeId:number = "battleInfoComponent.gameModeId")
 
-		(var extraDescriptionsCount:number = "	gameModeId == SC.Battle.GAME_MODE.ARMS_RACE 			? 4 :
-												gameModeId == SC.Battle.GAME_MODE.PORTAL_2021 			? 4 :
-												gameModeId == SC.Battle.GAME_MODE.CONVOY_EVENT 			? 2 :
-												gameModeId == SC.Battle.GAME_MODE.CONVOY_AIRSHIP 		? 4 :
-												gameModeId == SC.Battle.GAME_MODE.TEAM_BATTLE_ROYALE 	? 2 :
-												isDreadnoughtCustomisation 								? 6 :
-												isSubEventCustomization 								? 1
-																										: 0"
-		)
+		(var isDeathmatch:bool = "gameModeId == SC.Battle.GAME_MODE.DEATHMATCH")
+
 		(var gameModeDescriptionItemsAmount:number = "	gameModeId == SC.Battle.GAME_MODE.ANTI_STANDARD 		? 2:
 														gameModeId == SC.Battle.GAME_MODE.ATTACK_DEFENSE 		? 5:
 														gameModeId == SC.Battle.GAME_MODE.TEAM_BATTLE_ROYALE 	? 3:
@@ -50,15 +43,25 @@
 																												: 0"
 		)
 
-		(var localWeatherEntity:dhEntity = "getSingleEntity(CC.localWeather)")
-		(var isLocalWeatherVisible:bool = "localWeatherEntity != null && extraDescriptionsCount == 0 && gameModeId != SC.Battle.GAME_MODE.PVE")
+		(struct extraDescriptionItemsAmount = GET_BATTLE_RULES_EXTRA_DESCRIPTION_ITEMS_AMOUNT(
+			_gameModeId = "gameModeId"
+			_isDreadnoughtCustomisation = "isDreadnoughtCustomisation"
+			_isSubEventCustomization = "isSubEventCustomization"
+		))
 
-		(var holdingPointsMessageCollection:dhCollection = "getCollection(CC.holdingPointsMessage)")
+		(var localWeatherEntity:dhEntity = "getSingleEntity(CC.localWeather)")
+		(var isLocalWeatherVisible:bool = "localWeatherEntity != null && extraDescriptionItemsAmount.value.length == 0 && gameModeId != SC.Battle.GAME_MODE.PVE && !isDeathmatch")
 
 		(var gameModeName:str = "	isDreadnoughtCustomisation 	? 'DREADNOUGHT' :
 									isSubEventCustomization 	? 'SUB_EVENT_2026'
 																: battleInfoComponent.gameMode"
 		)
+
+		(var winPointsRewardCollection:dhCollection = "getCollectionByPath(CC.winPointsRewardForDestroyingEnemyShip, 'sorted')")
+		(var winPointsPenaltyCollection:dhCollection = "getCollectionByPath(CC.winPointsPenaltyForDestroyingAllyShip, 'sorted')")
+		(var holdingPointsMessageCollection:dhCollection = "getCollectionByPath(CC.holdingPointsMessage, 'sorted')")
+
+		(var isPointChargeVisible:bool = "holdingPointsMessageCollection.length > 0 || winPointsRewardCollection.length > 0 || winPointsPenaltyCollection.length > 0")
 	)
 	(style
 		(height = 100%)
@@ -146,24 +149,29 @@
 
 			
 			(block
-				(bind visible "extraDescriptionsCount > 0")
+				(bind visible "extraDescriptionItemsAmount.value.length > 0")
 				(style
 					(width = 100%)
 					(marginBottom = "LS")
+					(vgap = "LS")
 				)
 
-				(controller $Instance renderer='GameModeRulesDescriptionWithIconsBlock'
-					(bind enabled "extraDescriptionsCount > 0")
+				(controller $Repeat renderer='GameModeRulesDescriptionWithIconsBlock'
+					(bind count "extraDescriptionItemsAmount.value.length")
 					(args
-						_bulletsCount = "extraDescriptionsCount"
+						_bulletsCount = "extraDescriptionItemsAmount.value[$index]"
 						_gameModeName = "gameModeName"
+						_isIconSvg = "isDeathmatch"
+						_isRepeat = "isDeathmatch"
 					)
 				)
 			)
 
 			
 			(block
-				(bind visible "holdingPointsMessageCollection.length > 0")
+				(bind visible "isPointChargeVisible")
+				(style (width = 100%))
+
 				(tf
 					(class $TextDefaultBold28NM)
 					(style
@@ -176,7 +184,12 @@
 
 				(block
 					(controller $Instance renderer='PointsCharge'
-						(bind enabled "holdingPointsMessageCollection.length > 0")
+						(bind enabled "isPointChargeVisible")
+						(args
+							_winPointsRewardCollection = "winPointsRewardCollection"
+							_winPointsPenaltyCollection = "winPointsPenaltyCollection"
+							_holdingPointsMessageCollection = "holdingPointsMessageCollection"
+						)
 					)
 				)
 			)
@@ -242,7 +255,7 @@
 	)
 )
 
-(def element LocalWeatherDescription ()
+(def element LocalWeatherDescription (_isLoading:bool=false)
 	(scope
 		(var localWeatherComponent:dhComponent = "getSingleComponent(CC.localWeather)")
 		(var gpName:str = "localWeatherComponent.gpName" (event "localWeatherComponent.evChanged"))
@@ -251,7 +264,7 @@
 
 	(style
 		(width = 100%)
-		(vgap = "MS")
+		(vgap = "_isLoading ? { 720:SXS, 1080:MS } : MS")
 	)
 
 	(tf
